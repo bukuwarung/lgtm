@@ -1,0 +1,249 @@
+import { storage } from './platform.ts';
+
+export const CLIENT_ID: string | undefined = import.meta.env.VITE_GITHUB_CLIENT_ID || undefined;
+
+export type PR = {
+  number: number;
+  title: string;
+  body: string | null;
+  html_url: string;
+  node_id: string;
+  user: { login: string };
+  head: { sha: string; repo: { full_name: string } | null };
+};
+export type PRFile = {
+  filename: string;
+  previous_filename?: string;
+  status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+  additions: number;
+  deletions: number;
+  patch?: string;
+  blob_url: string;
+};
+export type Comment = { databaseId: number; body: string; createdAt: string; author: { login: string } | null };
+export type Thread = {
+  id: string;
+  path: string;
+  line: number | null;
+  diffSide: 'LEFT' | 'RIGHT';
+  subjectType: 'LINE' | 'FILE';
+  isResolved: boolean;
+  isOutdated: boolean;
+  comments: { nodes: Comment[] };
+};
+export type Draft = { id: string; path: string; body: string; side: 'LEFT' | 'RIGHT'; line?: number; startLine?: number };
+export type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
+export type ReviewState = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
+export type QueueItem = {
+  id: string;
+  number: number;
+  title: string;
+  updatedAt: string;
+  isDraft: boolean;
+  repo: string;
+  author: string;
+  reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  requested: boolean; // my review is currently requested (including re-requests)
+  myState: ReviewState | null; // my latest submitted review
+};
+export type ConversationItem = { id: string; author: string; body: string; at: string; url: string; state?: ReviewState };
+
+// --- auth ---
+
+let token: string | undefined;
+let onUnauthorized = () => {};
+export const setUnauthorizedHandler = (f: () => void) => (onUnauthorized = f);
+
+export async function loadToken() {
+  token = await storage.get<string>('token');
+  return !!token;
+}
+export async function saveToken(t: string) {
+  token = t;
+  await storage.set('token', t);
+}
+export async function signOut() {
+  token = undefined;
+  await storage.remove('token');
+}
+
+async function form(url: string, body: Record<string, string>) {
+  const res = await fetch(url, { method: 'POST', headers: { Accept: 'application/json' }, body: new URLSearchParams(body) });
+  return res.json();
+}
+
+export type DeviceCode = { device_code: string; user_code: string; verification_uri: string; expires_in: number; interval: number };
+
+export async function startDeviceFlow(): Promise<DeviceCode> {
+  const d = await form('https://github.com/login/device/code', { client_id: CLIENT_ID!, scope: 'repo' });
+  if (d.error) throw new Error(d.error_description ?? d.error);
+  return d;
+}
+
+export async function pollDeviceFlow(d: DeviceCode, signal: AbortSignal): Promise<string> {
+  let interval = d.interval;
+  const deadline = Date.now() + d.expires_in * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, interval * 1000));
+    if (signal.aborted) throw new Error('Cancelled');
+    const t = await form('https://github.com/login/oauth/access_token', {
+      client_id: CLIENT_ID!,
+      device_code: d.device_code,
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    });
+    if (t.access_token) return t.access_token;
+    if (t.error === 'slow_down') interval = t.interval ?? interval + 5;
+    else if (t.error !== 'authorization_pending') throw new Error(t.error_description ?? t.error);
+  }
+  throw new Error('The code expired before it was authorized.');
+}
+
+// --- API ---
+
+async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') {
+  const res = await fetch(path.startsWith('https://') ? path : `https://api.github.com${path}`, {
+    ...init,
+    headers: {
+      Accept: accept,
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+  });
+  if (res.status === 401) {
+    await signOut();
+    onUnauthorized();
+    throw new Error('GitHub rejected the token. Sign in again.');
+  }
+  return res;
+}
+
+async function ok(res: Response) {
+  if (res.ok) return res;
+  const msg = (await res.json().catch(() => null))?.message;
+  throw new Error(`GitHub ${res.status}: ${msg ?? res.statusText}`);
+}
+
+const json = async (path: string, init?: RequestInit) => (await ok(await gh(path, init))).json();
+
+async function paginate<T>(path: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let url: string | undefined = path; url; ) {
+    const res = await ok(await gh(url));
+    out.push(...(await res.json()));
+    url = res.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+  }
+  return out;
+}
+
+async function graphql<T = any>(query: string, variables: Record<string, unknown>): Promise<T> {
+  const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query, variables }) });
+  if (r.errors?.length) throw new Error(r.errors[0].message);
+  return r.data;
+}
+
+// Two searches: GitHub drops a PR from review-requested:@me once you review it, so reviewed-by:@me covers the rest.
+const QUEUE = `query{viewer{login}
+  requested:search(query:"is:open is:pr archived:false review-requested:@me",type:ISSUE,first:100){nodes{...F}}
+  reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}}
+fragment F on PullRequest{id number title updatedAt isDraft reviewDecision author{login} repository{nameWithOwner}
+  latestReviews(first:100){nodes{state author{login}}}}`;
+
+export async function getReviewQueue(): Promise<QueueItem[]> {
+  const d = await graphql(QUEUE, {});
+  const me = d.viewer.login;
+  const requested = new Set(d.requested.nodes.map((p: any) => p.id));
+  const all = new Map<string, any>([...d.reviewed.nodes, ...d.requested.nodes].map((p: any) => [p.id, p]));
+  return [...all.values()]
+    .map((p) => ({
+      id: p.id,
+      number: p.number,
+      title: p.title,
+      updatedAt: p.updatedAt,
+      isDraft: p.isDraft,
+      repo: p.repository.nameWithOwner,
+      author: p.author?.login ?? 'ghost',
+      reviewDecision: p.reviewDecision,
+      requested: requested.has(p.id),
+      myState: p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ?? null,
+    }))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+// Top-level PR comments plus submitted reviews that carry a verdict or a summary.
+export async function getConversation(repo: string, n: number): Promise<ConversationItem[]> {
+  const [comments, reviews] = await Promise.all([
+    paginate<any>(`/repos/${repo}/issues/${n}/comments?per_page=100`),
+    paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`),
+  ]);
+  return [
+    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', body: c.body ?? '', at: c.created_at, url: c.html_url })),
+    ...reviews
+      .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
+      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', body: r.body ?? '', at: r.submitted_at, url: r.html_url, state: r.state })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+}
+
+export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`);
+
+export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);
+
+export async function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
+  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, {}, 'application/vnd.github.raw');
+  if (res.status === 404) return null;
+  return (await ok(res)).text();
+}
+
+const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
+  reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
+    nodes{id path line diffSide subjectType isResolved isOutdated comments(first:100){nodes{databaseId body createdAt author{login}}}}}}}}`;
+
+export async function getThreads(repo: string, n: number): Promise<Thread[]> {
+  const [owner, name] = repo.split('/');
+  const out: Thread[] = [];
+  for (let after: string | null = null; ; ) {
+    const d: any = await graphql(THREADS, { owner, name, n, after });
+    const page = d.repository.pullRequest.reviewThreads;
+    out.push(...page.nodes);
+    if (!page.pageInfo.hasNextPage) return out;
+    after = page.pageInfo.endCursor;
+  }
+}
+
+export const reply = (repo: string, n: number, commentId: number, body: string) =>
+  json(`/repos/${repo}/pulls/${n}/comments/${commentId}/replies`, { method: 'POST', body: JSON.stringify({ body }) });
+
+// GraphQL rather than REST: only addPullRequestReviewThread supports file-level comments inside a review.
+export async function submitReview(prId: string, commitOID: string, event: ReviewEvent, body: string, drafts: Draft[]) {
+  const d = await graphql(
+    `mutation($pr:ID!,$c:GitObjectID!){addPullRequestReview(input:{pullRequestId:$pr,commitOID:$c}){pullRequestReview{id}}}`,
+    { pr: prId, c: commitOID },
+  );
+  const reviewId = d.addPullRequestReview.pullRequestReview.id;
+  try {
+    for (const x of drafts) {
+      await graphql(
+        `mutation($r:ID!,$path:String!,$body:String!,$line:Int,$start:Int,$side:DiffSide,$startSide:DiffSide,$subject:PullRequestReviewThreadSubjectType){
+          addPullRequestReviewThread(input:{pullRequestReviewId:$r,path:$path,body:$body,line:$line,startLine:$start,side:$side,startSide:$startSide,subjectType:$subject}){thread{id}}}`,
+        {
+          r: reviewId,
+          path: x.path,
+          body: x.body,
+          line: x.line ?? null,
+          start: x.startLine ?? null,
+          side: x.line ? x.side : null,
+          startSide: x.startLine ? x.side : null,
+          subject: x.line ? 'LINE' : 'FILE',
+        },
+      );
+    }
+    await graphql(
+      `mutation($r:ID!,$e:PullRequestReviewEvent!,$b:String){submitPullRequestReview(input:{pullRequestReviewId:$r,event:$e,body:$b}){clientMutationId}}`,
+      { r: reviewId, e: event, b: body || null },
+    );
+  } catch (e) {
+    // Don't leave a half-built pending review behind; it would block the retry.
+    await graphql(`mutation($r:ID!){deletePullRequestReview(input:{pullRequestReviewId:$r}){clientMutationId}}`, { r: reviewId }).catch(() => {});
+    throw e;
+  }
+}

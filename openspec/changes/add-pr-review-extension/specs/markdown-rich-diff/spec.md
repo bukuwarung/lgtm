@@ -1,0 +1,58 @@
+## ADDED Requirements
+
+### Requirement: Markdown files first
+The system SHALL order changed files with extensions `.md`, `.mdx`, or `.markdown` (case-insensitive) before all other files, preserving GitHub's path order within each group.
+
+#### Scenario: Mixed PR
+- **WHEN** a PR changes `src/a.ts`, `docs/z.md`, and `README.md`
+- **THEN** the view order is `README.md`, `docs/z.md`, `src/a.ts`
+
+### Requirement: Rich diff by default
+The system SHALL render added or modified markdown files as rendered markdown of the head version by default, highlight blocks containing added lines, and mark positions where lines were removed. The user SHALL be able to toggle any markdown file to the source diff.
+
+#### Scenario: Modified paragraph
+- **WHEN** a markdown file's patch adds a line inside a paragraph
+- **THEN** that paragraph is rendered and highlighted as changed, and unchanged blocks render without highlight
+
+#### Scenario: New file
+- **WHEN** a markdown file is added in the PR
+- **THEN** it renders without any "changed" tint
+
+#### Scenario: Removal only
+- **WHEN** a hunk removes lines and adds none
+- **THEN** a "removed" marker appears at that position showing the removed source text struck through
+
+#### Scenario: Toggle to source
+- **WHEN** the user toggles a markdown file to source view
+- **THEN** the standard line diff for that file is shown, and toggling back restores the rich view
+
+#### Scenario: Raw HTML in markdown
+- **WHEN** a markdown file contains raw HTML such as `<script>` or `<img onerror>`
+- **THEN** it is rendered as escaped text, not as HTML
+
+#### Scenario: Deleted markdown file
+- **WHEN** a markdown file is deleted in the PR
+- **THEN** it is shown as a source diff
+
+### Requirement: Line-anchored comments on rendered blocks
+The system SHALL let the user comment on any rendered block, anchoring the comment to that block's source line range on the head side, and SHALL show existing threads after the top-level block containing their line.
+
+#### Scenario: Comment on a changed list item
+- **WHEN** the user comments on a rendered list item spanning head lines 12–14, all inside a hunk
+- **THEN** the draft is a multi-line comment with `start_line` 12, `line` 14, side `RIGHT`
+
+#### Scenario: Block partially inside a hunk
+- **WHEN** a block spans lines 20–30 and only lines 25–40 are inside a hunk
+- **THEN** the comment range is clamped to 25–30
+
+#### Scenario: Block outside any hunk
+- **WHEN** the user comments on a block with no lines inside any hunk
+- **THEN** the draft is a file-level comment whose body starts with a quote of the block's first source line
+
+#### Scenario: Front matter
+- **WHEN** a markdown file starts with a YAML front matter block
+- **THEN** the front matter is shown as a code block and the rest renders with correct line anchors
+
+#### Scenario: Existing thread
+- **WHEN** a review thread exists on head line 13
+- **THEN** it is shown right after the top-level rendered block (paragraph, list, table, …) whose range contains line 13

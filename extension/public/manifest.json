@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "lgtm",
+  "version": "0.1.0",
+  "description": "Fast, markdown-first GitHub pull request review.",
+  "action": { "default_title": "Review in lgtm" },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["https://github.com/*", "https://api.github.com/*"],
+  "minimum_chrome_version": "121",
+  "browser_specific_settings": {
+    "gecko": { "id": "lgtm-pr-review@local", "strict_min_version": "128.0" }
+  }
+}

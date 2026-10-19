@@ -1,0 +1,60 @@
+## 1. Scaffold
+
+- [x] 1.1 `extension/` with Vite + TypeScript + Preact, one MV3 `manifest.json` for both browsers (`service_worker` + `scripts` background, `gecko.id`, host permissions `github.com`, `api.github.com`; `storage`, `tabs`)
+- [x] 1.2 Toolbar button opens `review.html`, passing the active tab URL if it is a PR
+- [x] 1.3 `src/platform.ts`: storage get/set/remove + open tab via `globalThis.browser ?? chrome` (only file touching extension APIs)
+- [x] 1.4 `web-ext run` (Firefox) and `web-ext run --target chromium` scripts; `web-ext build` produces the zip for both stores
+
+## 2. GitHub auth
+
+- [ ] 2.1 Register OAuth App with device flow enabled; build with `VITE_GITHUB_CLIENT_ID` (code done; app registration is a manual step)
+- [x] 2.2 Device flow: request code, show code + link, poll honoring `interval`/`slow_down`/`expired_token`
+- [x] 2.3 Host-permission check + "Grant GitHub access" button when missing (Firefox)
+- [x] 2.4 Token storage, sign-out, `401` → signed-out (drafts untouched)
+- [x] 2.5 `api.ts`: REST + GraphQL fetch wrapper with auth header and pagination via `Link`
+
+## 3. PR inbox and loading
+
+- [x] 3.1 Inbox from search `review-requested:@me`; open-by-URL input
+- [x] 3.2 Load PR meta, all file pages, review threads (GraphQL)
+
+## 4. Scrolling diff view
+
+- [x] 4.1 Hunk parser (`@@` headers → typed lines with old/new line numbers) + check
+- [x] 4.2 File sections with sticky headers, `content-visibility: auto`, outline sidebar with jump
+- [x] 4.3 Placeholder row for files without `patch`
+- [x] 4.4 Inline threads (collapsed when resolved/outdated) and reply
+
+## 5. Generated filter
+
+- [x] 5.1 `.gitattributes` parser + glob→RegExp, last-match-wins + check covering spec scenarios
+- [x] 5.2 Fetch root `.gitattributes` at head; hide matches; "N generated files hidden" reveal row
+
+## 6. Markdown rich diff
+
+- [x] 6.1 Sort markdown files first
+- [x] 6.2 Lazy-fetch head content on near-viewport; render with markdown-it (`html: false`), `data-src` ranges on block tokens
+- [x] 6.3 Changed-block highlight from added lines; removed-only markers
+- [x] 6.4 Block → comment anchor (clamp to hunk lines, file-level fallback) + check
+- [x] 6.5 Place existing threads on innermost containing block; LEFT threads on removed marker/header
+- [x] 6.6 Per-file rich/source toggle
+
+## 7. Review drafting and submit
+
+- [x] 7.1 Draft line / range / file comments in both views; persist under `drafts:{repo}#{n}` with the head SHA
+- [x] 7.2 Submit dialog (body + Comment/Approve/Request changes); clear drafts only on success; show GitHub error on failure
+- [x] 7.3 Head-moved warning before submit
+
+## 8. Review feedback round 1
+
+- [x] 8.1 PR sidebar: requested + reviewed-by-me searches, grouped by my latest review, re-request and overall-decision pills, refresh after submit
+- [x] 8.2 File tree with collapsed single-child folders and comment counts
+- [x] 8.3 Conversation section (description, comments, reviews)
+- [x] 8.4 Syntax highlighting for diffs and markdown fences (+ check)
+- [x] 8.5 Hover "+" on code lines
+- [x] 8.6 No "changed" tint on added markdown files
+
+## 9. Verify
+
+- [ ] 9.1 Manual run in both Firefox and Chrome against a real PR containing markdown, generated files, and a 500+ file diff (done so far: UI against captured real-PR data in a mocked harness; Firefox install + background script)
+- [x] 9.2 `openspec validate add-pr-review-extension` (if OpenSpec CLI is installed)
