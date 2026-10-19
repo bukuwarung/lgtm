@@ -1,15 +1,21 @@
 import MarkdownIt from 'markdown-it';
 import { highlightCode, languageFor } from './highlight.ts';
 
-// html: false — PR content never reaches the DOM as raw HTML.
+// Raw HTML is parsed (so it's recognized) but rendered escaped; PR content never reaches the DOM as HTML.
 export const md = new MarkdownIt({
-  html: false,
+  html: true,
   linkify: true,
   highlight: (code, info) => {
     const lang = info && languageFor('x.' + info.split(/\s/)[0]);
     return lang ? highlightCode(code, lang) : '';
   },
 });
+
+// HTML comments are invisible on GitHub; drop them instead of showing them as text.
+const escapeHtml = (tokens: { content: string }[], i: number) =>
+  /^\s*<!--[\s\S]*?-->\s*$/.test(tokens[i].content) ? '' : md.utils.escapeHtml(tokens[i].content);
+md.renderer.rules.html_block = escapeHtml;
+md.renderer.rules.html_inline = escapeHtml;
 
 const defaultLink = md.renderer.rules.link_open ?? ((t, i, o, _e, s) => s.renderToken(t, i, o));
 md.renderer.rules.link_open = (tokens, i, opts, env, self) => {

@@ -73,6 +73,11 @@ test('renderChunks maps blocks to lines, marks changes, escapes HTML', () => {
   assert.deepEqual(fm.map((c) => [c.start, c.end]), [[1, 3], [4, 4]]);
   assert.match(fm[0].html, /^<pre data-src="1-3" data-chg=""><code>---\na: 1\n---<\/code><\/pre>$/);
   assert.match(fm[1].html, /<h1 data-src="4-4">/);
+  const cm = renderChunks('<!-- hidden -->\nText <!-- inline --> here <b>x</b>\n\n```html\n<!-- kept in code -->\n```\n', new Set());
+  const html = cm.map((c) => c.html).join('');
+  assert.doesNotMatch(html, /hidden|inline/);
+  assert.match(html, /&lt;b&gt;x&lt;\/b&gt;/);
+  assert.match(html, /&lt;!-- kept in code --&gt;/);
   assert.ok(isMarkdown('docs/A.MD') && isMarkdown('x.mdx') && !isMarkdown('x.mdc'));
 });
 

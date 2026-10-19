@@ -430,14 +430,14 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   return (
     <details class="thread" open={!t.isResolved && !t.isOutdated}>
       <summary>
-        <b>{first?.author?.login ?? 'ghost'}</b> {first?.body.split('\n')[0].replace(/[*_`#>]/g, '').slice(0, 80)}
+        <b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}
         {t.isResolved && <span class="badge"> · resolved</span>}
         {t.isOutdated && <span class="badge"> · outdated</span>}
       </summary>
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
           <b>{c.author?.login ?? 'ghost'}</b> <time>{new Date(c.createdAt).toLocaleString()}</time>
-          <div class="md" dangerouslySetInnerHTML={{ __html: md.render(c.body) }} />
+          <div class="md" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
         </div>
       ))}
       <textarea rows={2} placeholder="Reply…" value={body} onInput={(e) => setBody(e.currentTarget.value)} />
@@ -562,13 +562,13 @@ function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
       </summary>
       <div class="comment">
         <b>{pr.user.login}</b> <span class="badge">opened this pull request</span>
-        {pr.body ? <div class="md" dangerouslySetInnerHTML={{ __html: md.render(pr.body) }} /> : <p class="note">No description.</p>}
+        {pr.body_html ? <div class="md" dangerouslySetInnerHTML={{ __html: pr.body_html }} /> : <p class="note">No description.</p>}
       </div>
       {items.map((c) => (
         <div class="comment" key={c.id}>
           <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}>{STATE_LABEL[c.state] ?? c.state}</span>}{' '}
           <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a>
-          {c.body && <div class="md" dangerouslySetInnerHTML={{ __html: md.render(c.body) }} />}
+          {c.html && <div class="md" dangerouslySetInnerHTML={{ __html: c.html }} />}
         </div>
       ))}
     </details>

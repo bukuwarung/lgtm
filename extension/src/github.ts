@@ -6,6 +6,7 @@ export type PR = {
   number: number;
   title: string;
   body: string | null;
+  body_html?: string; // GitHub-rendered and sanitized (full+json media type)
   html_url: string;
   node_id: string;
   user: { login: string };
@@ -20,7 +21,8 @@ export type PRFile = {
   patch?: string;
   blob_url: string;
 };
-export type Comment = { databaseId: number; body: string; createdAt: string; author: { login: string } | null };
+// bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
+export type Comment = { databaseId: number; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string } | null };
 export type Thread = {
   id: string;
   path: string;
@@ -46,7 +48,7 @@ export type QueueItem = {
   requested: boolean; // my review is currently requested (including re-requests)
   myState: ReviewState | null; // my latest submitted review
 };
-export type ConversationItem = { id: string; author: string; body: string; at: string; url: string; state?: ReviewState };
+export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState };
 
 // --- auth ---
 
@@ -124,12 +126,15 @@ async function ok(res: Response) {
   throw new Error(`GitHub ${res.status}: ${msg ?? res.statusText}`);
 }
 
-const json = async (path: string, init?: RequestInit) => (await ok(await gh(path, init))).json();
+// Adds body_html: GitHub-rendered, sanitized comment HTML.
+const FULL = 'application/vnd.github.full+json';
 
-async function paginate<T>(path: string): Promise<T[]> {
+const json = async (path: string, init?: RequestInit, accept?: string) => (await ok(await gh(path, init, accept))).json();
+
+async function paginate<T>(path: string, accept?: string): Promise<T[]> {
   const out: T[] = [];
   for (let url: string | undefined = path; url; ) {
-    const res = await ok(await gh(url));
+    const res = await ok(await gh(url, {}, accept));
     out.push(...(await res.json()));
     url = res.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
   }
@@ -173,18 +178,18 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
 // Top-level PR comments plus submitted reviews that carry a verdict or a summary.
 export async function getConversation(repo: string, n: number): Promise<ConversationItem[]> {
   const [comments, reviews] = await Promise.all([
-    paginate<any>(`/repos/${repo}/issues/${n}/comments?per_page=100`),
-    paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`),
+    paginate<any>(`/repos/${repo}/issues/${n}/comments?per_page=100`, FULL),
+    paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`, FULL),
   ]);
   return [
-    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', body: c.body ?? '', at: c.created_at, url: c.html_url })),
+    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', html: c.body_html ?? '', at: c.created_at, url: c.html_url })),
     ...reviews
       .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
-      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', body: r.body ?? '', at: r.submitted_at, url: r.html_url, state: r.state })),
+      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 }
 
-export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`);
+export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`, undefined, FULL);
 
 export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);
 
@@ -196,7 +201,7 @@ export async function getRaw(repo: string, path: string, ref: string): Promise<s
 
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
-    nodes{id path line diffSide subjectType isResolved isOutdated comments(first:100){nodes{databaseId body createdAt author{login}}}}}}}}`;
+    nodes{id path line diffSide subjectType isResolved isOutdated comments(first:100){nodes{databaseId bodyHTML bodyText createdAt author{login}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');
