@@ -30,7 +30,9 @@ function App() {
   if (typeof state === 'object')
     return (
       <div class="signin">
-        <h1>lgtm</h1>
+        <h1 class="brand">
+          <img src="/favicon.png" alt="" width="32" height="32" /> lgtm
+        </h1>
         <p class="error">{state.error}</p>
         <p class="note">lgtm signs in with the GitHub CLI. Start it with the <code>lgtm</code> command, not by opening the file directly.</p>
       </div>
@@ -41,7 +43,9 @@ function App() {
     <>
       <nav class="top">
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
-        <a href="#">lgtm</a>
+        <a href="#" class="brand">
+          <img src="/favicon.png" alt="" width="22" height="22" /> lgtm
+        </a>
         <span class="spacer" />
         <ThemeToggle />
       </nav>

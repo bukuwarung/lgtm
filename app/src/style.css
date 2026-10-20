@@ -40,6 +40,8 @@ code, pre { font-family: var(--mono); }
 
 .top { display: flex; align-items: center; gap: 12px; padding: 6px 16px; border-bottom: 1px solid var(--border); }
 .top a { font-weight: 600; color: var(--fg); }
+.brand { display: inline-flex; align-items: center; gap: 6px; }
+.brand:hover { text-decoration: none; }
 .spacer { flex: 1; }
 .signin, .inbox { max-width: 720px; margin: 48px auto; padding: 0 16px; }
 .repo { color: var(--muted); margin-right: 4px; }
