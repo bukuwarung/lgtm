@@ -1,12 +1,15 @@
 import MarkdownIt from 'markdown-it';
 import { highlightCode, languageFor, splitLines } from './highlight.ts';
 
+// A fence with no language is assumed to be Kotlin (the team's main language).
+const fenceLanguage = (info: string) => languageFor('x.' + (info.trim().split(/\s+/)[0] || 'kt'));
+
 // Raw HTML is parsed (so it's recognized) but rendered escaped; PR content never reaches the DOM as HTML.
 export const md = new MarkdownIt({
   html: true,
   linkify: true,
   highlight: (code, info) => {
-    const lang = info && languageFor('x.' + info.split(/\s/)[0]);
+    const lang = fenceLanguage(info);
     return lang ? highlightCode(code, lang) : '';
   },
 });
@@ -50,7 +53,7 @@ md.renderer.rules.fence = (tokens, i, opts, env, self) => {
   const diagram = `<div class="mermaid-svg" data-code="${md.utils.escapeHtml(t.content)}"></div>`;
   if (!src || !t.map) return info === 'mermaid' ? diagram : fence(tokens, i, opts, env, self);
   const added: Set<number> = env.added;
-  const lang = info ? languageFor('x.' + info) : undefined;
+  const lang = fenceLanguage(info);
   const code = t.content.replace(/\n$/, '');
   const lines = lang ? splitLines(highlightCode(code, lang)) : code.split('\n').map((l) => md.utils.escapeHtml(l));
   const first = t.map[0] + 2; // the opening ``` is line map[0] + 1

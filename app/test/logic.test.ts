@@ -99,6 +99,9 @@ test('highlight: language lookup and line splitting', () => {
   const fenced = renderChunks('```js\nconst a = 1;\n```\n', new Set([2])).map((c) => c.html).join('');
   assert.match(fenced, /hljs-keyword/);
   assert.match(fenced, /^<pre data-src="1-3" data-chg=""><code class="language-js"><span class="cl" data-src="2-2" data-chg="">/); // block and each line commentable
+  const plain = renderChunks('```\nval x = listOf(1)\n```\n', new Set())[0].html;
+  assert.match(plain, /<span class="hljs-keyword">val<\/span>/); // unmarked fence → Kotlin
+  assert.match(md.render('```\nfun f() = 1\n```\n'), /<span class="hljs-keyword">fun<\/span>/);
   const mmd = renderChunks('```mermaid\ngraph TD\n  A-->B\n```\n', new Set([3]))[0].html;
   assert.match(mmd, /^<div class="mermaid-block" data-src="1-4" data-chg=""><div class="mermaid-svg" data-code="graph TD\n  A--&gt;B\n"><\/div>/);
   assert.match(mmd, /<span class="cl" data-src="3-3" data-chg="">  A--&gt;B<\/span>/); // source lines still commentable
