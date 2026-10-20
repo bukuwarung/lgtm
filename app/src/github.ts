@@ -52,6 +52,10 @@ export type QueueItem = {
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   requested: boolean; // my review is currently requested (including re-requests)
   myState: ReviewState | null; // my latest submitted review
+  reviewing: boolean; // in my review queue: requested, or I've reviewed it
+  mine: boolean; // I opened it, or it's assigned to me and not in my review queue
+  assigned: boolean; // assigned to me
+  authored: boolean; // I opened it
 };
 export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState };
 
@@ -105,10 +109,13 @@ async function graphql<T = any>(query: string, variables: Record<string, unknown
   return r.data;
 }
 
-// Two searches: GitHub drops a PR from review-requested:@me once you review it, so reviewed-by:@me covers the rest.
+// Review queue: GitHub drops a PR from review-requested:@me once you review it, so reviewed-by:@me covers the rest.
+// Plus my own PRs and the ones assigned to me.
 const QUEUE = `query{viewer{login}
   requested:search(query:"is:open is:pr archived:false review-requested:@me",type:ISSUE,first:100){nodes{...F}}
-  reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}}
+  reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}
+  authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
+  assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}}
 fragment F on PullRequest{id number title updatedAt isDraft reviewDecision author{login} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner}
   latestReviews(first:100){nodes{state author{login}}}}`;
@@ -116,8 +123,9 @@ fragment F on PullRequest{id number title updatedAt isDraft reviewDecision autho
 export async function getReviewQueue(): Promise<QueueItem[]> {
   const d = await graphql(QUEUE, {});
   const me = d.viewer.login;
-  const requested = new Set(d.requested.nodes.map((p: any) => p.id));
-  const all = new Map<string, any>([...d.reviewed.nodes, ...d.requested.nodes].map((p: any) => [p.id, p]));
+  const ids = (k: string) => new Set<string>(d[k].nodes.map((p: any) => p.id));
+  const [requested, reviewed, authored, assigned] = ['requested', 'reviewed', 'authored', 'assigned'].map(ids);
+  const all = new Map<string, any>(['authored', 'assigned', 'reviewed', 'requested'].flatMap((k) => d[k].nodes.map((p: any) => [p.id, p])));
   return [...all.values()]
     .map((p) => ({
       id: p.id,
@@ -133,6 +141,11 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       reviewDecision: p.reviewDecision,
       requested: requested.has(p.id),
       myState: p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ?? null,
+      // An assigned PR that's waiting on my review belongs in the review queue, not twice.
+      reviewing: !authored.has(p.id) && (requested.has(p.id) || reviewed.has(p.id)),
+      mine: authored.has(p.id) || (assigned.has(p.id) && !requested.has(p.id) && !reviewed.has(p.id)),
+      assigned: assigned.has(p.id),
+      authored: authored.has(p.id),
     }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }

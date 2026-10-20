@@ -98,6 +98,22 @@ const GROUPS: [Group, string][] = [
 const groupOf = (i: QueueItem): Group =>
   i.requested ? 'needs' : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
 
+// A sidebar section: its groups in priority order, and which group a PR falls in.
+type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string };
+const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
+// My own PRs (and ones assigned to me), by where they stand.
+const MINE: Kind = {
+  name: 'Your PRs',
+  groups: [
+    ['m-changes', 'Changes requested'],
+    ['m-approved', 'Approved'],
+    ['m-waiting', 'Waiting for review'],
+    ['m-draft', 'Draft'],
+  ],
+  groupOf: (i) =>
+    i.isDraft ? 'm-draft' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'm-changes' : i.reviewDecision === 'APPROVED' ? 'm-approved' : 'm-waiting',
+};
+
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 const UNITS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]] as const;
 function ago(iso: string) {
@@ -124,7 +140,7 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   const seen = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!items) return;
-    const waiting = items.filter((i) => groupOf(i) === 'needs' && !i.isDraft);
+    const waiting = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);
     document.title = waiting.length ? `(${waiting.length}) lgtm` : 'lgtm';
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     if (seen.current && notify && Notification.permission === 'granted')
@@ -137,35 +153,63 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
       }
     seen.current = new Set(waiting.map((i) => i.id));
   }, [items]);
-  // Draft PRs are hidden unless asked for (the one you're viewing always shows).
+  // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
-  const draftCount = items?.filter((i) => i.isDraft && !isCurrent(i)).length ?? 0;
-  const shown = items?.filter((i) => showDrafts || !i.isDraft || isCurrent(i));
-  // A stack sits in the group of its most urgent layer; each layer keeps its own status color.
-  const stacks = shown ? findStacks(shown) : [];
-  const stackOf = new Map(stacks.flatMap((s) => s.map((i) => [i.id, s] as const)));
-  const rank = (i: QueueItem) => GROUPS.findIndex(([g]) => g === groupOf(i));
-  const entries = shown?.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
-  const groups = entries && Map.groupBy(entries, (e) => (Array.isArray(e) ? GROUPS[Math.min(...e.map(rank))][0] : groupOf(e)));
-  const item = (i: QueueItem, layer?: string) => (
-    <a
-      key={i.id}
-      class={`pr-item g-${groupOf(i)}${current?.repo === i.repo && current.n === i.number ? ' cur' : ''}`}
-      href={`#/${i.repo}/pull/${i.number}`}
-    >
+  const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
+  const shown = items?.filter((i) => i.mine || showDrafts || !i.isDraft || isCurrent(i));
+
+  const item = (kind: Kind, i: QueueItem, layer?: string) => (
+    <a key={i.id} class={`pr-item g-${kind.groupOf(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
         {layer && <b class="layer">{layer} </b>}
         {i.repo}#{i.number} · {i.author} · {ago(i.updatedAt)}
       </span>
       <span class="pills">
-        {i.isDraft && <span class="pill">draft</span>}
+        {i.isDraft && kind === REVIEWING && <span class="pill">draft</span>}
+        {i.assigned && !i.authored && <span class="pill">assigned to you</span>}
         {i.requested && i.myState && <span class="pill">re-requested</span>}
-        {i.reviewDecision === 'APPROVED' && <span class="pill p-ok">PR approved</span>}
-        {i.reviewDecision === 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
+        {kind === REVIEWING && i.reviewDecision === 'APPROVED' && <span class="pill p-ok">PR approved</span>}
+        {kind === REVIEWING && i.reviewDecision === 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
       </span>
     </a>
   );
+
+  // One section: PRs grouped by status. A stack sits in the group of its most urgent layer; each layer keeps its own color.
+  const section = (kind: Kind, list: QueueItem[]) => {
+    const stackOf = new Map(findStacks(list).flatMap((st) => st.map((i) => [i.id, st] as const)));
+    const rank = (i: QueueItem) => kind.groups.findIndex(([g]) => g === kind.groupOf(i));
+    const entries = list.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
+    const groups = Map.groupBy(entries, (e) => (Array.isArray(e) ? kind.groups[Math.min(...e.map(rank))][0] : kind.groupOf(e)));
+    return (
+      <details open class="pr-section">
+        <summary>
+          {kind.name} <span class="count">{list.length}</span>
+        </summary>
+        {kind.groups.map(([g, label]) => {
+          const inGroup = groups.get(g) ?? [];
+          const count = inGroup.reduce((n, e) => n + (Array.isArray(e) ? e.length : 1), 0);
+          return (
+            <details key={g} open={!g.endsWith('approved') || count < 10} class={'pr-group g-' + g}>
+              <summary>
+                <span class="gdot" /> {label} <span class="count">{count}</span>
+              </summary>
+              {inGroup.map((e) =>
+                Array.isArray(e) ? (
+                  <div class="stack" key={e[0].id}>
+                    <div class="stack-h">⧉ Stack of {e.length} · bottom first</div>
+                    {e.map((i, k) => item(kind, i, `${k + 1}/${e.length}`))}
+                  </div>
+                ) : (
+                  item(kind, e)
+                ),
+              )}
+            </details>
+          );
+        })}
+      </details>
+    );
+  };
 
   return (
     <aside class="side prs">
@@ -202,30 +246,13 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
           {showDrafts ? `Hide ${draftCount} draft PR${draftCount > 1 ? 's' : ''}` : `${draftCount} draft PR${draftCount > 1 ? 's' : ''} hidden · show`}
         </button>
       )}
-      {!groups ? (
+      {!shown ? (
         !err && <p class="note">Loading…</p>
       ) : (
-        GROUPS.map(([g, label]) => {
-          const list = groups.get(g) ?? [];
-          const count = list.reduce((n, e) => n + (Array.isArray(e) ? e.length : 1), 0);
-          return (
-            <details key={g} open={g !== 'approved' || count < 10} class={'pr-group g-' + g}>
-              <summary>
-                <span class="gdot" /> {label} <span class="count">{count}</span>
-              </summary>
-              {list.map((e) =>
-                Array.isArray(e) ? (
-                  <div class="stack" key={e[0].id}>
-                    <div class="stack-h">⧉ Stack of {e.length} · bottom first</div>
-                    {e.map((i, k) => item(i, `${k + 1}/${e.length}`))}
-                  </div>
-                ) : (
-                  item(e)
-                ),
-              )}
-            </details>
-          );
-        })
+        <>
+          {section(REVIEWING, shown.filter((i) => i.reviewing))}
+          {section(MINE, shown.filter((i) => i.mine))}
+        </>
       )}
       </div>
       <Resizer name="prs" label="pull request list" />

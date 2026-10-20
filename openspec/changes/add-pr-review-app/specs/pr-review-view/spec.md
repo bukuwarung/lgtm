@@ -23,8 +23,12 @@ The system SHALL show, in a collapsible sidebar, every open PR where the signed-
 - **THEN** the item shows that state in addition to the user's own
 
 #### Scenario: Draft PRs hidden by default
-- **WHEN** the list includes draft PRs
+- **WHEN** the review queue includes other people's draft PRs
 - **THEN** they are hidden behind a "N draft PRs hidden · show" toggle that is remembered, except the PR currently open
+
+#### Scenario: Your PRs
+- **WHEN** the user has open PRs they authored or are assigned to
+- **THEN** a "Your PRs" section lists them grouped as Changes requested, Approved, Waiting for review, and Draft (their own drafts always shown), and an assigned PR that also needs their review stays only in the review queue
 
 #### Scenario: Stacked PRs
 - **WHEN** PR #2's base branch is PR #1's head branch and both are in the list

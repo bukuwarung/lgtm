@@ -2,7 +2,7 @@
 
 Fast, markdown-first GitHub PR review in your own browser, signed in with your GitHub CLI login.
 
-- Sidebar of every open PR you're asked to review or have reviewed, grouped: needs your review, you requested changes, you commented, you approved. Draft PRs are hidden until you ask for them. It refreshes every 3 minutes, shows the waiting count in the tab title, and can send a desktop notification for new review requests (🔔).
+- Sidebar of every open PR you're asked to review or have reviewed, grouped: needs your review, you requested changes, you commented, you approved. Below it, "Your PRs" lists the PRs you opened or are assigned to: changes requested, approved, waiting for review, draft. Other people's draft PRs are hidden until you ask for them; yours always show. It refreshes every 3 minutes, shows the waiting count in the tab title, and can send a desktop notification for new review requests (🔔).
 - Every changed file in one scrolling page with syntax highlighting; file bodies render as they near the viewport. "Show more lines" expands unchanged code between hunks.
 - Re-reviews open on only the changes since your last review (toggle back to the full diff), and stacked PRs get "‹ Layer 2/4 ›" navigation.
 - Mark files Viewed (synced with GitHub), resolve conversations, and edit pending comments.
