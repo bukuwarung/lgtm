@@ -189,7 +189,9 @@ main { padding: 16px; }
 .md pre { color: var(--code-fg); padding: 12px; background: var(--soft); border-radius: 6px; overflow: auto; }
 /* A commentable code block can't clip (that would hide the "+" gutter drawn outside it), so its code scrolls instead. */
 .md pre[data-src] { overflow: visible; }
-.md pre[data-src] > code { display: block; overflow-x: auto; }
+/* Lines wrap rather than scroll: a scrolling <code> would clip each line's "+" gutter too. */
+.md pre[data-src] > code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+.md pre[data-src] .cl { display: block; }
 .md code { padding: .1em .3em; background: var(--soft); border-radius: 4px; font-size: 85%; }
 .md pre code { padding: 0; background: none; }
 .md table { border-collapse: collapse; }
@@ -197,17 +199,21 @@ main { padding: 16px; }
 .md blockquote { margin: 0; padding: 0 1em; color: var(--muted); border-left: 3px solid var(--border); }
 .chunk [data-src], .chunk tr[data-src] > :first-child { position: relative; }
 .chunk [data-chg]:not(:has([data-chg])) { background: var(--add); box-shadow: -6px 0 0 var(--add), 6px 0 0 var(--add); }
-.chunk [data-src]:not(tr):hover:not(:has([data-src]:hover))::before,
+.chunk [data-src]:not(tr):hover:not(:has([data-src]:hover)):not(:has(.note-host:hover))::before,
 .chunk tr[data-src]:hover > :first-child::before {
   content: "+"; position: absolute; left: -36px; top: 0; width: 20px; height: 20px;
   font: bold 14px/20px var(--sans); text-align: center; color: #fff; background: var(--accent); border-radius: 4px; cursor: pointer;
 }
 /* Invisible bridge from the block to its "+", so moving the mouse across the gap (often the parent list's
    indent) keeps this block hovered instead of handing the "+" to the parent. */
-.chunk [data-src]:not(tr):hover:not(:has([data-src]:hover))::after,
+.chunk [data-src]:not(tr):hover:not(:has([data-src]:hover)):not(:has(.note-host:hover))::after,
 .chunk tr[data-src]:hover > :first-child::after {
   content: ""; position: absolute; left: -16px; top: 0; width: 16px; height: 20px; cursor: pointer;
 }
+/* Comments mounted inside rendered markdown (under a list item, table row, or code line) shed the block's styling. */
+.note-host { margin: 6px 0; white-space: normal; font: 14px/1.5 var(--sans); color: var(--fg); text-decoration: none; }
+.note-host .notes { margin: 0; }
+.md .note-tr > td { padding: 6px 8px; background: var(--bg); }
 .removed { position: relative; margin: 8px 0; padding: 4px 8px; background: var(--del); border-left: 3px solid var(--delfg); }
 .removed pre { margin: 0; white-space: pre-wrap; text-decoration: line-through; color: var(--muted); font-size: 12px; }
 .removed-c { position: absolute; left: -36px; top: 4px; width: 20px; height: 20px; padding: 0; line-height: 18px; }

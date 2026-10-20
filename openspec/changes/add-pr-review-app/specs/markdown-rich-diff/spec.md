@@ -42,8 +42,12 @@ The system SHALL let the user comment on any rendered block, anchoring the comme
 - **THEN** the draft is a multi-line comment with `start_line` 12, `line` 14, side `RIGHT`
 
 #### Scenario: Nested list items, table rows, and code blocks
-- **WHEN** the user moves from a nested list item, a table row, or a fenced code block to its "+" gutter
-- **THEN** the "+" stays on that item (not its parent list or table) and the comment anchors to that item's source lines
+- **WHEN** the user moves from a nested list item, a table row, or a line of a fenced code block to its "+" gutter
+- **THEN** the "+" stays on that item (not its parent list, table, or whole code block) and the comment anchors to that item's source lines
+
+#### Scenario: Comment shown under its line
+- **WHEN** a comment or comment form belongs to a list item, table row, or code line inside a larger block
+- **THEN** it renders directly under that item (inside the list item before any sub-list, in a new row after the table row, after the code line), not after the whole list, table, or code block
 
 #### Scenario: Block partially inside a hunk
 - **WHEN** a block spans lines 20–30 and only lines 25–40 are inside a hunk
@@ -59,4 +63,4 @@ The system SHALL let the user comment on any rendered block, anchoring the comme
 
 #### Scenario: Existing thread
 - **WHEN** a review thread exists on head line 13
-- **THEN** it is shown right after the top-level rendered block (paragraph, list, table, …) whose range contains line 13
+- **THEN** it is shown right under the deepest rendered block (list item, table row, code line, paragraph, …) whose range contains line 13

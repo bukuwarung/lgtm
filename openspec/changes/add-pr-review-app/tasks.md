@@ -89,6 +89,7 @@
 - [x] 12.10 "Your PRs" sidebar section (authored/assigned), own drafts always visible
 - [x] 12.11 Hide renamed/copied/mode-only files without content changes by default
 - [x] 12.12 Space comments at the hovered (or top-of-view) line
+- [x] 12.13 Per-line comments in code blocks; comments render under their list item / table row / code line
 
 ## 13. Verify
 

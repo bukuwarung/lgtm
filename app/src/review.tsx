@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { render, type VNode } from 'preact';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { addedLines, anchor, gaps, parsePatch, removedRuns, type Gap, type Hunk, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
@@ -247,7 +248,8 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   // It reuses the click paths: a diff row's line-number cell, or a block's "+" gutter just left of it.
   function commentAtCurrentLine() {
     const lines = '.diff tr.ln, .chunk [data-src]';
-    const hovered = [...document.querySelectorAll(':hover')].at(-1)?.closest(lines);
+    const top = [...document.querySelectorAll(':hover')].at(-1);
+    const hovered = top?.closest('.note-host, .notes') ? null : top?.closest(lines);
     const el = hovered ?? [...document.querySelectorAll(lines)].find((x) => { const t = x.getBoundingClientRect().top; return t >= 100 && t < innerHeight; });
     if (!el) return false;
     if (el.matches('tr')) el.querySelector('td.num:nth-child(2)')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -691,6 +693,7 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const orphanD = leftD.filter((x) => !removed.some((r) => inRun(r, x.line)));
 
   function onChunkClick(e: MouseEvent) {
+    if ((e.target as Element).closest('.note-host')) return; // a click inside a comment placed in the block
     const el = (e.target as Element).closest('[data-src]');
     // Only the "+" gutter (drawn left of the block) starts a comment, so text stays selectable.
     if (!el || e.clientX >= el.getBoundingClientRect().left) return;
@@ -724,21 +727,98 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   return (
     <div class="rich">
       <Notes ctx={ctx} threads={orphanT} drafts={orphanD} form={t?.side === 'LEFT' && !removed.some((r) => inRun(r, t.line))} />
-      {chunks.map((c, i) => (
-        <>
-          {removed.filter((r) => markerSlot(r) === i).map(marker)}
-          <div class="md chunk" onClick={onChunkClick} dangerouslySetInnerHTML={{ __html: c.html }} />
+      {chunks.map((c, i) => {
+        // Notes on a line inside this block render right under that line (see ChunkView); a line between
+        // blocks (blank lines) falls back to after the block.
+        const formLine = t?.side === 'RIGHT' ? t.line ?? t.near : undefined;
+        const lines = [...new Set([...rightT.map((x) => x.line!), ...rightD.map((x) => x.line!), ...(formLine != null ? [formLine] : [])])]
+          .filter((l) => chunkOf(l) === i)
+          .sort((a, b) => a - b);
+        const notesAt = (l: number) => (
           <Notes
+            key={l}
             ctx={ctx}
-            threads={rightT.filter((x) => chunkOf(x.line!) === i)}
-            drafts={rightD.filter((x) => chunkOf(x.line!) === i)}
-            form={t?.side === 'RIGHT' && (t.line ?? t.near) != null && chunkOf((t.line ?? t.near)!) === i}
+            threads={rightT.filter((x) => x.line === l)}
+            drafts={rightD.filter((x) => x.line === l)}
+            form={formLine === l}
           />
-        </>
-      ))}
+        );
+        const inside = lines.filter((l) => l >= c.start && l <= c.end);
+        return (
+          <>
+            {removed.filter((r) => markerSlot(r) === i).map(marker)}
+            <ChunkView html={c.html} onClick={onChunkClick} placed={inside.map((l) => ({ line: l, node: notesAt(l) }))} />
+            {lines.filter((l) => !inside.includes(l)).map(notesAt)}
+          </>
+        );
+      })}
       {removed.filter((r) => markerSlot(r) === chunks.length).map(marker)}
     </div>
   );
+}
+
+// A rendered markdown block (raw HTML) with comments mounted inside it, right under the line they're on: in the
+// deepest block covering the line. A list item gets them under its own text (before any sub-list), a table row
+// in a new row after it, a code line right after that line, anything else right after the block.
+function ChunkView({ html, placed, onClick }: { html: string; placed: { line: number; node: VNode }[]; onClick: (e: MouseEvent) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const hosts = useRef(new Map<Element, { host: HTMLElement; outer: HTMLElement }>());
+
+  useLayoutEffect(() => {
+    const blocks = [...ref.current!.querySelectorAll('[data-src]')];
+    const covers = (b: Element, line: number) => {
+      const [s, e] = b.getAttribute('data-src')!.split('-').map(Number);
+      return line >= s && line <= e;
+    };
+    // Sibling blocks don't overlap, so the last block in document order that covers a line is the deepest one.
+    const groups = new Map<Element, VNode[]>();
+    for (const p of placed) {
+      const el = blocks.filter((b) => covers(b, p.line)).at(-1);
+      if (el) groups.set(el, [...(groups.get(el) ?? []), p.node]);
+    }
+    for (const [el, h] of hosts.current)
+      if (!groups.has(el) || !h.outer.isConnected) {
+        render(null, h.host);
+        h.outer.remove();
+        hosts.current.delete(el);
+      }
+    for (const [el, nodes] of groups) {
+      let h = hosts.current.get(el);
+      if (!h) {
+        const host = document.createElement('div');
+        host.className = 'note-host';
+        let outer: HTMLElement = host;
+        if (el.matches('tr')) {
+          const tr = document.createElement('tr');
+          const td = document.createElement('td');
+          td.colSpan = el.children.length;
+          td.append(host);
+          tr.append(td);
+          tr.className = 'note-tr';
+          el.after(tr);
+          outer = tr;
+        } else if (el.matches('li')) {
+          const sub = [...el.children].find((c) => c.matches('ul, ol'));
+          if (sub) sub.before(host);
+          else el.append(host);
+        } else el.after(host);
+        hosts.current.set(el, (h = { host, outer }));
+      }
+      render(<>{nodes}</>, h.host);
+    }
+  });
+
+  useEffect(
+    () => () => {
+      for (const h of hosts.current.values()) {
+        render(null, h.host);
+        h.outer.remove();
+      }
+    },
+    [],
+  );
+
+  return <div ref={ref} class="md chunk" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 const where = (d: { side: Side; line?: number; startLine?: number }) =>

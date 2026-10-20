@@ -98,7 +98,9 @@ test('highlight: language lookup and line splitting', () => {
   assert.doesNotMatch(table, /<td data-src/);
   const fenced = renderChunks('```js\nconst a = 1;\n```\n', new Set([2])).map((c) => c.html).join('');
   assert.match(fenced, /hljs-keyword/);
-  assert.match(fenced, /^<pre data-src="1-3" data-chg=""><code class="language-js">/); // gutter anchor on <pre>, not <code>
+  assert.match(fenced, /^<pre data-src="1-3" data-chg=""><code class="language-js"><span class="cl" data-src="2-2" data-chg="">/); // block and each line commentable
+  const twoLines = renderChunks('- item\n\n  ```\n  a <b>\n\n  c\n  ```\n', new Set()).map((c) => c.html).join('');
+  assert.match(twoLines, /<span class="cl" data-src="4-4">a &lt;b&gt;<\/span><span class="cl" data-src="5-5"> <\/span><span class="cl" data-src="6-6">c<\/span>/);
 });
 
 test('findStacks links base → head chains within a repo', () => {
