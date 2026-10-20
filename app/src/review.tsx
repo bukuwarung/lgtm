@@ -15,7 +15,8 @@ import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; quote pre-fills the body;
 // near = head line to show a file-level form at (rich view blocks outside the diff); editId = the draft being edited.
-type Target = { path: string; side: Side; line?: number; startLine?: number; quote?: string; near?: number; editId?: string; body?: string };
+// atEnd = a file-level comment started from the file's footer, so its form opens there.
+type Target = { path: string; side: Side; line?: number; startLine?: number; quote?: string; near?: number; editId?: string; body?: string; atEnd?: boolean };
 type Ctx = {
   pr: PR;
   headRepo: string;
@@ -490,7 +491,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         ctx={ctx}
         threads={threads.filter(isFileLevel)}
         drafts={drafts.filter((d) => !d.line)}
-        form={t?.path === path && t.line == null && t.near == null}
+        form={t?.path === path && t.line == null && t.near == null && !t.atEnd}
       />
       {!file.patch ? (
         <p class="note pad">
@@ -504,6 +505,23 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
       ) : (
         <DiffView {...body} />
       )}
+          <Notes ctx={ctx} threads={[]} drafts={[]} form={t?.path === path && !!t.atEnd} />
+          <footer class="file-f">
+            <span class="file-f-name" title={path}>{path.split('/').pop()}</span>
+            <button onClick={() => ctx.setTarget({ path, side: 'RIGHT', atEnd: true })}>Comment</button>
+            <label class="viewed-box" title="Mark as viewed and go to the next file">
+              <input
+                type="checkbox"
+                checked={viewed}
+                onChange={() => {
+                  onToggleViewed();
+                  // Done with this file: collapse it and bring the next one up.
+                  if (!viewed) requestAnimationFrame(() => (ref.current?.nextElementSibling as HTMLElement | null)?.scrollIntoView());
+                }}
+              />{' '}
+              Viewed
+            </label>
+          </footer>
         </>
       )}
     </section>
@@ -783,7 +801,7 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
 
   function save() {
     if (!body.trim()) return;
-    const { quote: _q, near: _n, editId, body: _b, ...rest } = target;
+    const { quote: _q, near: _n, editId, body: _b, atEnd: _e, ...rest } = target;
     if (editId) ctx.updateDraft(editId, { ...rest, body });
     else ctx.addDraft({ ...rest, body });
     ctx.setTarget(null);
