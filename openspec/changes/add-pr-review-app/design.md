@@ -67,7 +67,17 @@ Emails come from GitHub's `organizationVerifiedDomainEmails`, then the public em
 The file-tree column became an index of everything worth jumping to, in collapsible sections: Conversation (description, each comment and review), Checks (GraphQL `statusCheckRollup` on the head commit: Actions runs and commit statuses, failures → running → passed; cancelled/skipped copies of re-run checks are hidden; each links to its run; refreshable), Review threads (pending drafts first, then threads in diff order, resolved/outdated dimmed), and Files (the tree). A jump scrolls the file into view first when the target isn't rendered yet (lazy file bodies), waits up to 2 s for it, opens any collapsed `<details>` around it, and flashes it; `scroll-margin-top` keeps targets below the sticky bars.
 Both sidebars have a drag handle (pointer capture, no library) that sets `--prs-w` / `--index-w` on `<html>`, which the grids read; widths persist in `localStorage`. The handle is a focusable `role="separator"` (arrow keys resize) and double-click resets.
 
-### 13. Stack
+### 13. Review flow improvements
+- **Viewed:** GraphQL `viewerViewedState` / `markFileAsViewed` / `unmarkFileAsViewed`, so the state is GitHub's own and carries over to github.com. Optimistic toggle, rolled back on error. Viewed files collapse (a row expands them) and the index shows "N/M viewed".
+- **Since my last review:** the commit of my latest submitted review (REST reviews) vs. head via the compare API, limited to files in the PR (after a rebase the comparison also contains the base branch's changes); `status: diverged` shows a warning. On by default when such a commit exists. Old-side threads and comments are off in this mode, because its old side is my last reviewed commit, not the PR base.
+- **Stack navigation:** walk open PRs by branch: down while some PR's head is our base, up while exactly one PR is based on our head (≤10 layers; forks and branching stacks stop the walk). `[`/`]` move.
+- **Show more lines:** `gaps()` computes the unchanged new-file ranges before, between and after hunks plus the old-line offset (zero-length hunk headers point at the line *before* the hunk). Lines come from the head file, fetched on first expand, and aren't commentable.
+- **Keyboard:** one window listener, reassigned each render so it sees current state; ignored while typing. `⌘F` turns off lazy rendering for all files so the browser's find covers the whole PR.
+- **Threads and drafts:** `resolveReviewThread` / `unresolveReviewThread` (per `viewerCanResolve`); drafts edit in place through the same comment form.
+- **Live queue:** the sidebar refetches every 3 minutes; the tab title shows the waiting count; optional desktop notifications (permission asked on the 🔔 click) for review requests that appear after the page opened.
+- **Failing job logs:** `GET /job-log` on the local server runs `gh api …/actions/jobs/{id}/logs` (the API redirects to storage the page can't read cross-origin), strips terminal escape codes and timestamps, and returns up to 60 lines ending at the last `##[error]`. Same-origin guard as `/token`; repo and job id are validated. Only GitHub Actions checks (`checkSuite.app.slug`) have a job id; Jenkins and other statuses just link out.
+
+### 14. Stack
 TypeScript, Vite, Preact, markdown-it, highlight.js; the server is plain Node. Hunk parsing and glob matching are hand-written (~50 lines each) rather than pulled in as deps.
 
 ## Risks / Trade-offs

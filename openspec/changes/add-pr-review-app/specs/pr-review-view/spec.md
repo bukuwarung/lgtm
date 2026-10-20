@@ -30,6 +30,10 @@ The system SHALL show, in a collapsible sidebar, every open PR where the signed-
 - **WHEN** PR #2's base branch is PR #1's head branch and both are in the list
 - **THEN** they appear together as one stack, #1 then #2, in the group of the more urgent one, each with its own status
 
+#### Scenario: Live queue
+- **WHEN** a new review request arrives while the page is open
+- **THEN** it appears within 3 minutes, the tab title count updates, and with notifications on a desktop notification opens that PR when clicked
+
 #### Scenario: Refresh after submit
 - **WHEN** the user submits a review
 - **THEN** the sidebar reloads and the PR moves to its new group
@@ -72,6 +76,10 @@ The system SHALL show, beside the diff, an index linking to the PR description, 
 - **WHEN** the head commit has failing, running, and passing checks
 - **THEN** the index lists failures first with a failing count, and each check links to its run
 
+#### Scenario: Failed job log
+- **WHEN** the user clicks "log" on a failed GitHub Actions check
+- **THEN** the end of that job's log up to its last error is shown in the index
+
 #### Scenario: Long paths
 - **WHEN** files live under deep folders
 - **THEN** the tree shows them nested by folder with single-child folder chains collapsed into one row, and folders can be collapsed
@@ -79,6 +87,45 @@ The system SHALL show, beside the diff, an index linking to the PR description, 
 #### Scenario: Highlighting
 - **WHEN** a changed file is TypeScript, Python, Go, YAML, or another common language
 - **THEN** its diff lines are syntax highlighted, including lines inside multi-line strings or comments
+
+### Requirement: Viewed files
+The system SHALL let the user mark each file viewed, using GitHub's own viewed state, collapse viewed files, and show viewed progress in the index.
+
+#### Scenario: Mark viewed
+- **WHEN** the user checks "Viewed" on a file (or presses `v`)
+- **THEN** GitHub records it as viewed, the file collapses, and the index count goes up by one
+
+### Requirement: Changes since my last review
+When the user has reviewed an earlier commit of the PR, the system SHALL show by default only the changes between that commit and the current head, limited to the PR's files, with a toggle to the full diff.
+
+#### Scenario: Re-review after new commits
+- **WHEN** the user opens a PR they reviewed at commit A and the head is now B
+- **THEN** the diff shows A → B for the PR's files, says so, and offers "Show all changes"
+
+#### Scenario: Rebased since
+- **WHEN** A is not an ancestor of B
+- **THEN** the banner warns that the files may also include changes from the base branch
+
+### Requirement: Stack navigation
+The system SHALL show a PR's position in its stack and link to the layers below and above it.
+
+#### Scenario: Middle layer
+- **WHEN** the user opens layer 3 of a 4-PR stack
+- **THEN** the PR bar shows "‹ Layer 3/4 ›" linking to layers 2 and 4, and `[` / `]` navigate
+
+### Requirement: Show more lines
+The system SHALL let the user expand unchanged lines before, between, and after hunks, with correct old and new line numbers.
+
+#### Scenario: Expand a gap
+- **WHEN** the user clicks "Show 34 unchanged lines" above a hunk starting at line 35
+- **THEN** lines 1–34 of the head file appear, highlighted, and are not commentable
+
+### Requirement: Keyboard shortcuts
+The system SHALL support `j`/`k` files, `n`/`p` threads, `v` viewed, `c` comment, `[`/`]` stack, `i` index, `⌘↵` finish review, `?` help, and SHALL ignore them while the user is typing.
+
+#### Scenario: Find in unrendered files
+- **WHEN** the user presses ⌘F
+- **THEN** every file renders so the browser's find covers the whole PR
 
 ### Requirement: Line comments on code
 The system SHALL let the user start a comment on any diff line from a "+" shown on hover, and extend it to a range with shift-click.
@@ -95,7 +142,7 @@ The system SHALL show the PR description, top-level comments, and submitted revi
 - **THEN** all three appear in the conversation, the review labeled as approved
 
 ### Requirement: Inline review threads
-The system SHALL show existing review threads inline at their line, with resolved and outdated threads collapsed, and SHALL allow replying to a thread.
+The system SHALL show existing review threads inline at their line, with resolved and outdated threads collapsed, and SHALL allow replying to, resolving, and unresolving a thread.
 
 #### Scenario: Reply to a thread
 - **WHEN** the user submits a reply in an existing thread
@@ -103,6 +150,10 @@ The system SHALL show existing review threads inline at their line, with resolve
 
 ### Requirement: Draft and submit a review
 The system SHALL let the user draft line, multi-line, and file-level comments, keep drafts across page reloads, and submit them as a single review with event Comment, Approve, or Request changes.
+
+#### Scenario: Edit a pending comment
+- **WHEN** the user clicks Edit on a pending comment
+- **THEN** it reopens in the comment form at the same place and Update replaces it
 
 #### Scenario: Drafts survive reload
 - **WHEN** the user has unsent draft comments and reloads the page

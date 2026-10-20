@@ -97,6 +97,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ck { display: inline-block; width: 1.1em; text-align: center; font-weight: 700; }
 .ck-failure { color: var(--delfg); } .ck-pending { color: var(--modfg); } .ck-success { color: var(--addfg); } .ck-neutral { color: var(--muted); }
 .ck-sum { font-size: 11px; font-weight: 400; }
+.ix-check { display: flex; align-items: center; }
+.ix-check .ix-item { flex: 1; min-width: 0; }
+.ix-log-btn { flex: none; margin-right: 8px; padding: 0 6px; font-size: 11px; }
+.ix-log { margin: 2px 8px 8px 14px; padding: 6px 8px; max-height: 320px; overflow: auto; background: var(--soft); border-radius: 4px; font: 11px/1.4 var(--mono); white-space: pre; }
+.prs form button.on { border-color: var(--accent); }
 /* Jump targets land below the sticky bars, and flash briefly. */
 .file { scroll-margin-top: var(--bar); }
 .thread, .draft, .comment { scroll-margin-top: calc(var(--bar) + 48px); }

@@ -75,7 +75,18 @@
 - [x] 11.2 PR Shortcut Index: conversation, checks, review threads, files; jump with lazy-render wait
 - [x] 11.3 Hide draft PRs in the sidebar by default (remembered toggle)
 
-## 12. Verify
+## 12. Improvement round
 
-- [ ] 12.1 Manual review session on a real PR containing markdown, generated files, and a 500+ file diff (done so far: live read-only load of a real PR)
-- [x] 12.2 `openspec validate add-pr-review-app` (if OpenSpec CLI is installed)
+- [x] 12.1 Viewed state synced with GitHub; collapse + N/M viewed
+- [x] 12.2 Keyboard shortcuts + help; ⌘F renders all files
+- [x] 12.3 Resolve/unresolve threads; edit pending drafts
+- [x] 12.4 Stack navigation (‹ Layer n/N ›, [ ])
+- [x] 12.5 Changes since my last review (compare, PR files only, rebase warning)
+- [x] 12.6 Show more lines (`gaps()` + check)
+- [x] 12.7 Live queue: 3-minute refresh, title count, desktop notifications
+- [x] 12.8 Failed GitHub Actions job log excerpt via `/job-log`
+
+## 13. Verify
+
+- [ ] 13.1 Manual review session on a real PR containing markdown, generated files, and a 500+ file diff (done so far: live read-only load of a real PR)
+- [x] 13.2 `openspec validate add-pr-review-app` (if OpenSpec CLI is installed)

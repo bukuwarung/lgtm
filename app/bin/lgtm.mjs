@@ -88,6 +88,28 @@ async function readJson(req) {
   return JSON.parse(body);
 }
 
+// Tail of a GitHub Actions job log, via gh (the logs API redirects to storage the page can't read cross-origin).
+function jobLog(repo, job) {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(job)) return Promise.reject(new Error('Bad job'));
+  // Newer gh refuses to print escape sequences without --allow-escape-sequences; older gh doesn't know the flag.
+  const run = (extra) =>
+    new Promise((resolve, reject) =>
+      execFile('gh', ['api', ...extra, `repos/${repo}/actions/jobs/${job}/logs`], { maxBuffer: 1 << 27, timeout: 30000 }, (err, stdout, stderr) =>
+        err ? reject(new Error(stderr.trim().split('\n').pop() || err.message)) : resolve(stdout),
+      ),
+    );
+  return run(['--allow-escape-sequences'])
+    .catch((e) => (/unknown flag/.test(e.message) ? run([]) : Promise.reject(e)))
+    .then((stdout) => {
+      // Drop terminal colour/control sequences (CSI and OSC) that CI tools print.
+      const plain = stdout.replace(/\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '').replace(/\r/g, '');
+      const lines = plain.trimEnd().split('\n').map((l) => l.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z ?/, ''));
+      // End at the last error GitHub marked, not at the post-job cleanup that follows it.
+      const end = lines.findLastIndex((l) => l.startsWith('##[error]')) + 1 || lines.length;
+      return lines.slice(Math.max(0, end - 60), end).join('\n');
+    });
+}
+
 const json = (res, status, value) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(value));
 
 function open(url) {
@@ -111,9 +133,16 @@ const server = createServer(async (req, res) => {
   const path = new URL(req.url ?? '/', ORIGIN).pathname;
 
   if (path === '/lgtm') return res.end('lgtm');
-  // /token and /slack act with your credentials: only our own page may call them
+  // /token, /slack and /job-log act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if ((path === '/token' || path === '/slack') && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (path === '/job-log') {
+    const q = new URL(req.url ?? '/', ORIGIN).searchParams;
+    return jobLog(q.get('repo') ?? '', q.get('job') ?? '').then(
+      (text) => res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }).end(text),
+      (e) => res.writeHead(500, { 'Content-Type': 'text/plain' }).end(e.message),
+    );
+  }
   if (path === '/slack') {
     try {
       if (req.method === 'GET') return json(res, 200, { configured: (await slackcli(['auth', 'whoami'])).ok });

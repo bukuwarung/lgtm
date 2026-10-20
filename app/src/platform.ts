@@ -49,3 +49,11 @@ export async function notifySlack(recipients: { login: string; emails: string[] 
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;
 }
+
+// Last lines of a failed GitHub Actions job's log, fetched by the local server with gh.
+export async function fetchJobLog(repo: string, job: number): Promise<string> {
+  const res = await fetch(`/job-log?repo=${encodeURIComponent(repo)}&job=${job}`);
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || 'Could not load the log');
+  return text;
+}

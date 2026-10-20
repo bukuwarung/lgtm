@@ -1,6 +1,6 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { getReviewQueue, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
@@ -112,6 +112,27 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
     getReviewQueue().then(setItems, (e) => setErr(e.message));
   };
   useEffect(load, [version]);
+  useEffect(() => {
+    const t = setInterval(load, 3 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+  const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!items) return;
+    const waiting = items.filter((i) => groupOf(i) === 'needs' && !i.isDraft);
+    document.title = waiting.length ? `(${waiting.length}) lgtm` : 'lgtm';
+    // Notify about review requests that appeared since the last refresh (not the ones already there on open).
+    if (seen.current && notify && Notification.permission === 'granted')
+      for (const i of waiting.filter((i) => !seen.current!.has(i.id))) {
+        const note = new Notification(`Review requested: ${i.title}`, { body: `${i.repo}#${i.number} by ${i.author}`, tag: i.id });
+        note.onclick = () => {
+          focus();
+          location.hash = `/${i.repo}/pull/${i.number}`;
+        };
+      }
+    seen.current = new Set(waiting.map((i) => i.id));
+  }, [items]);
   // Draft PRs are hidden unless asked for (the one you're viewing always shows).
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.isDraft && !isCurrent(i)).length ?? 0;
@@ -157,7 +178,19 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         }}
       >
         <input placeholder="Open PR URL…" value={url} onInput={(e) => setUrl(e.currentTarget.value)} />
-        <button type="button" title="Refresh" onClick={load}>↻</button>
+        <button type="button" title="Refresh (also refreshes every 3 minutes)" onClick={load}>↻</button>
+        <button
+          type="button"
+          title={notify ? 'Desktop notifications for new review requests: on' : 'Notify me about new review requests'}
+          aria-pressed={notify}
+          class={notify ? 'on' : ''}
+          onClick={async () => {
+            if (!notify && (await Notification.requestPermission()) !== 'granted') return setErr('Notifications are blocked for this page in your browser settings.');
+            toggleNotify();
+          }}
+        >
+          {notify ? '🔔' : '🔕'}
+        </button>
       </form>
       {err && <p class="error">{err}</p>}
       {draftCount > 0 && (

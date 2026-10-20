@@ -2,9 +2,11 @@
 
 Fast, markdown-first GitHub PR review in your own browser, signed in with your GitHub CLI login.
 
-- Sidebar of every open PR you're asked to review or have reviewed, grouped: needs your review, you requested changes, you commented, you approved. Draft PRs are hidden until you ask for them.
-- Every changed file in one scrolling page with syntax highlighting; file bodies render as they near the viewport.
-- A PR Shortcut Index beside the diff: jump to the description, any comment or review, CI checks (failures first, linking to their runs), review threads, or a file in a GitHub-style tree.
+- Sidebar of every open PR you're asked to review or have reviewed, grouped: needs your review, you requested changes, you commented, you approved. Draft PRs are hidden until you ask for them. It refreshes every 3 minutes, shows the waiting count in the tab title, and can send a desktop notification for new review requests (🔔).
+- Every changed file in one scrolling page with syntax highlighting; file bodies render as they near the viewport. "Show more lines" expands unchanged code between hunks.
+- Re-reviews open on only the changes since your last review (toggle back to the full diff), and stacked PRs get "‹ Layer 2/4 ›" navigation.
+- Mark files Viewed (synced with GitHub), resolve conversations, and edit pending comments.
+- A PR Shortcut Index beside the diff: jump to the description, any comment or review, CI checks (failures first, linking to their runs; failed GitHub Actions jobs show the end of their log), review threads, or a file in a GitHub-style tree.
 - Drag the sidebars' edges to resize them (double-click to reset).
 - The PR conversation (description, comments, review verdicts) above the files; review threads inline.
 - Markdown files first, rendered as rich diff by default. Hover a block and click the `+` gutter to comment on its source lines.
@@ -56,6 +58,20 @@ lgtm
 It serves the UI on `http://127.0.0.1:4517` and opens it in your default browser. Pass a PR URL to open it directly, e.g. `lgtm https://github.com/owner/repo/pull/123`. Running `lgtm` again reuses the running instance. Set `LGTM_PORT` to change the port; drafts are stored per port.
 
 To update: `git pull && npm run build` in `app/` (restart `lgtm` only if `app/bin/lgtm.mjs` changed).
+
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `j` / `k` | Next / previous file |
+| `n` / `p` | Next / previous review thread |
+| `v` | Mark the current file viewed |
+| `c` | Comment on the current file |
+| `[` / `]` | Previous / next PR in the stack |
+| `i` | Show / hide the index |
+| `⌘↵` | Finish review (submit inside the panel) |
+| `⌘F` | Find, in every file |
+| `?` | Shortcut help |
 
 ## Slack: who is who
 

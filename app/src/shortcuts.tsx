@@ -1,4 +1,5 @@
-import { useMemo } from 'preact/hooks';
+import { useMemo, useState } from 'preact/hooks';
+import { fetchJobLog } from './platform.ts';
 import type { ComponentChildren } from 'preact';
 import type { Check, ConversationItem, Draft, PR, PRFile, Thread } from './github.ts';
 
@@ -64,7 +65,35 @@ function Entry({ label, meta, sub, dim, onClick }: { label: string; meta?: strin
   );
 }
 
+function CheckEntry({ c, repo }: { c: Check; repo: string }) {
+  const [log, setLog] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const toggle = () => {
+    setOpen(!open);
+    if (log === null) fetchJobLog(repo, c.jobId!).then(setLog, (e) => setLog(`Couldn't load the log: ${e.message}`));
+  };
+  return (
+    <>
+      <div class="ix-check">
+        <a class="ix-item" href={c.url ?? undefined} target="_blank" rel="noopener" title={`${c.name}: ${c.summary}`}>
+          <span class="ix-label">
+            <span class={'ck ck-' + c.state}>{CHECK_ICON[c.state]}</span> {c.name}
+          </span>
+          {c.summary && <span class="ix-sub">{c.summary}</span>}
+        </a>
+        {c.state === 'failure' && c.jobId && (
+          <button class="ix-log-btn" title="Show the end of the job log" onClick={toggle}>
+            {open ? 'hide log' : 'log'}
+          </button>
+        )}
+      </div>
+      {open && <pre class="ix-log">{log ?? 'Loading…'}</pre>}
+    </>
+  );
+}
+
 type IndexProps = {
+  repo: string;
   pr: PR;
   conversation: ConversationItem[];
   threads: Thread[];
@@ -77,7 +106,7 @@ type IndexProps = {
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts }: IndexProps) {
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
@@ -120,14 +149,7 @@ export function ShortcutIndex({ pr, conversation, threads, drafts, checks, onRef
         ) : !checks.length ? (
           <p class="note ix-pad">No checks.</p>
         ) : (
-          checks.map((c) => (
-            <a class="ix-item" href={c.url ?? undefined} target="_blank" rel="noopener" title={`${c.name}: ${c.summary}`}>
-              <span class="ix-label">
-                <span class={'ck ck-' + c.state}>{CHECK_ICON[c.state]}</span> {c.name}
-              </span>
-              {c.summary && <span class="ix-sub">{c.summary}</span>}
-            </a>
-          ))
+          checks.map((c) => <CheckEntry key={c.name + c.url} c={c} repo={repo} />)
         )}
       </Section>
 

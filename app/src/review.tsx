@@ -275,6 +275,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
         <aside class="side tree">
           <div class="side-scroll">
             <ShortcutIndex
+              repo={repo}
               pr={pr}
               conversation={conversation}
               threads={shownThreads}
