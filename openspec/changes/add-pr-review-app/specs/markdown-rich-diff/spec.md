@@ -41,6 +41,10 @@ The system SHALL let the user comment on any rendered block, anchoring the comme
 - **WHEN** the user comments on a rendered list item spanning head lines 12–14, all inside a hunk
 - **THEN** the draft is a multi-line comment with `start_line` 12, `line` 14, side `RIGHT`
 
+#### Scenario: Nested list items, table rows, and code blocks
+- **WHEN** the user moves from a nested list item, a table row, or a fenced code block to its "+" gutter
+- **THEN** the "+" stays on that item (not its parent list or table) and the comment anchors to that item's source lines
+
 #### Scenario: Block partially inside a hunk
 - **WHEN** a block spans lines 20–30 and only lines 25–40 are inside a hunk
 - **THEN** the comment range is clamped to 25–30

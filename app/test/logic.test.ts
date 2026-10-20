@@ -93,7 +93,12 @@ test('highlight: language lookup and line splitting', () => {
   assert.match(h[0][1], /hljs-string/); // removed line still inside the template string
   assert.match(h[0][2], /hljs-string/);
   assert.equal(highlightHunks(parsePatch('@@ -1 +1 @@\n+x'), 'a.zzz'), null);
-  assert.match(renderChunks('```js\nconst a = 1;\n```\n', new Set()).map((c) => c.html).join(''), /hljs-keyword/);
+  const table = renderChunks('| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n', new Set([4]))[0].html;
+  assert.match(table, /<tr data-src="4-4" data-chg="">/); // rows are commentable
+  assert.doesNotMatch(table, /<td data-src/);
+  const fenced = renderChunks('```js\nconst a = 1;\n```\n', new Set([2])).map((c) => c.html).join('');
+  assert.match(fenced, /hljs-keyword/);
+  assert.match(fenced, /^<pre data-src="1-3" data-chg=""><code class="language-js">/); // gutter anchor on <pre>, not <code>
 });
 
 test('findStacks links base → head chains within a repo', () => {

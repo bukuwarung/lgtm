@@ -24,8 +24,8 @@ md.renderer.rules.link_open = (tokens, i, opts, env, self) => {
   return defaultLink(tokens, i, opts, env, self);
 };
 
-// Table internals can't host the comment gutter (::before on <tr> breaks layout); the table itself does.
-const SKIP = new Set(['thead_open', 'tbody_open', 'tr_open', 'th_open', 'td_open']);
+// Rows are commentable (their "+" is drawn on the first cell); sections and cells aren't.
+const SKIP = new Set(['thead_open', 'tbody_open', 'th_open', 'td_open']);
 
 // When rendering a diffed file, tag every block with its 1-based head line range and whether it has added lines.
 md.core.ruler.push('src_map', (state) => {
@@ -38,6 +38,17 @@ md.core.ruler.push('src_map', (state) => {
     for (let i = s; i <= e; i++) if (added.has(i)) { t.attrSet('data-chg', ''); break; }
   }
 });
+
+// markdown-it puts a fence's attributes on its inner <code>; the comment gutter needs them on <pre>.
+const fence = md.renderer.rules.fence!;
+md.renderer.rules.fence = (tokens, i, opts, env, self) => {
+  const t = tokens[i];
+  const src = t.attrGet('data-src');
+  if (!src) return fence(tokens, i, opts, env, self);
+  const chg = t.attrGet('data-chg') != null;
+  t.attrs = (t.attrs ?? []).filter(([k]) => k !== 'data-src' && k !== 'data-chg');
+  return fence(tokens, i, opts, env, self).replace('<pre', `<pre data-src="${src}"${chg ? ' data-chg=""' : ''}`);
+};
 
 export type Chunk = { start: number; end: number; html: string };
 
