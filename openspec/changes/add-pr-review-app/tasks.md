@@ -73,6 +73,7 @@
 
 - [x] 11.1 Drag-resizable PR list and index columns (remembered, keyboard, double-click reset)
 - [x] 11.2 PR Shortcut Index: conversation, checks, review threads, files; jump with lazy-render wait
+- [x] 11.3 Hide draft PRs in the sidebar by default (remembered toggle)
 
 ## 12. Verify
 

@@ -50,6 +50,7 @@ code, pre { font-family: var(--mono); }
 .side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
 .side-scroll { flex: 1; min-height: 0; overflow: auto; }
 .prs .side-scroll { padding: 8px; }
+.drafts-toggle { width: 100%; margin-bottom: 6px; padding: 2px 8px; border-style: dashed; font-size: 12px; color: var(--muted); }
 .resizer { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; z-index: 5; cursor: col-resize; }
 .resizer:hover, .resizer:focus-visible, body.resizing .resizer { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: none; }
 body.resizing { cursor: col-resize; user-select: none; }

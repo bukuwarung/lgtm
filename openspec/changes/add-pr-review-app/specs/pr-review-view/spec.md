@@ -22,6 +22,10 @@ The system SHALL show, in a collapsible sidebar, every open PR where the signed-
 - **WHEN** a PR's overall review decision is approved or changes requested
 - **THEN** the item shows that state in addition to the user's own
 
+#### Scenario: Draft PRs hidden by default
+- **WHEN** the list includes draft PRs
+- **THEN** they are hidden behind a "N draft PRs hidden · show" toggle that is remembered, except the PR currently open
+
 #### Scenario: Stacked PRs
 - **WHEN** PR #2's base branch is PR #1's head branch and both are in the list
 - **THEN** they appear together as one stack, #1 then #2, in the group of the more urgent one, each with its own status

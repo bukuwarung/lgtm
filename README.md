@@ -2,7 +2,7 @@
 
 Fast, markdown-first GitHub PR review in your own browser, signed in with your GitHub CLI login.
 
-- Sidebar of every open PR you're asked to review or have reviewed, grouped: needs your review, you requested changes, you commented, you approved.
+- Sidebar of every open PR you're asked to review or have reviewed, grouped: needs your review, you requested changes, you commented, you approved. Draft PRs are hidden until you ask for them.
 - Every changed file in one scrolling page with syntax highlighting; file bodies render as they near the viewport.
 - A PR Shortcut Index beside the diff: jump to the description, any comment or review, CI checks (failures first, linking to their runs), review threads, or a file in a GitHub-style tree.
 - Drag the sidebars' edges to resize them (double-click to reset).

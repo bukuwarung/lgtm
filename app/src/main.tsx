@@ -105,16 +105,21 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [err, setErr] = useState('');
   const [url, setUrl] = useState('');
+  const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
   const load = () => {
     setErr('');
     getReviewQueue().then(setItems, (e) => setErr(e.message));
   };
   useEffect(load, [version]);
+  // Draft PRs are hidden unless asked for (the one you're viewing always shows).
+  const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
+  const draftCount = items?.filter((i) => i.isDraft && !isCurrent(i)).length ?? 0;
+  const shown = items?.filter((i) => showDrafts || !i.isDraft || isCurrent(i));
   // A stack sits in the group of its most urgent layer; each layer keeps its own status color.
-  const stacks = items ? findStacks(items) : [];
+  const stacks = shown ? findStacks(shown) : [];
   const stackOf = new Map(stacks.flatMap((s) => s.map((i) => [i.id, s] as const)));
   const rank = (i: QueueItem) => GROUPS.findIndex(([g]) => g === groupOf(i));
-  const entries = items?.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
+  const entries = shown?.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
   const groups = entries && Map.groupBy(entries, (e) => (Array.isArray(e) ? GROUPS[Math.min(...e.map(rank))][0] : groupOf(e)));
   const item = (i: QueueItem, layer?: string) => (
     <a
@@ -154,6 +159,11 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         <button type="button" title="Refresh" onClick={load}>↻</button>
       </form>
       {err && <p class="error">{err}</p>}
+      {draftCount > 0 && (
+        <button class="drafts-toggle" onClick={toggleDrafts}>
+          {showDrafts ? `Hide ${draftCount} draft PR${draftCount > 1 ? 's' : ''}` : `${draftCount} draft PR${draftCount > 1 ? 's' : ''} hidden · show`}
+        </button>
+      )}
       {!groups ? (
         !err && <p class="note">Loading…</p>
       ) : (
