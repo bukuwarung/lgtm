@@ -188,10 +188,16 @@ main { padding: 16px; }
 .md img { max-width: 100%; }
 .md pre { color: var(--code-fg); padding: 12px; background: var(--soft); border-radius: 6px; overflow: auto; }
 /* A commentable code block can't clip (that would hide the "+" gutter drawn outside it), so its code scrolls instead. */
-.md pre[data-src] { overflow: visible; }
+.md pre:has(.cl) { overflow: visible; }
 /* Lines wrap rather than scroll: a scrolling <code> would clip each line's "+" gutter too. */
-.md pre[data-src] > code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
-.md pre[data-src] .cl { display: block; }
+.md pre:has(.cl) > code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+.md .cl { display: block; }
+.mermaid-block { margin: 12px 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; }
+.mermaid-block[data-chg] { border-left: 3px solid var(--addfg); }
+.mermaid-svg { overflow-x: auto; text-align: center; }
+.mermaid-svg svg { max-width: 100%; height: auto; }
+.mermaid-error { text-align: left; font-size: 12px; color: var(--delfg); }
+.mermaid-source > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .md code { padding: .1em .3em; background: var(--soft); border-radius: 4px; font-size: 85%; }
 .md pre code { padding: 0; background: none; }
 .md table { border-collapse: collapse; }

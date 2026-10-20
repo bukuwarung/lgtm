@@ -57,6 +57,10 @@ The system SHALL let the user comment on any rendered block, anchoring the comme
 - **WHEN** the user comments on a block with no lines inside any hunk
 - **THEN** the draft is a file-level comment whose body starts with a quote of the block's first source line
 
+#### Scenario: Mermaid diagram
+- **WHEN** a markdown file (or a PR comment) contains a ```mermaid block
+- **THEN** the diagram is drawn; in a file it stays commentable as a whole, its source is available collapsed below with per-line comments, and a diagram that fails to parse shows the parse error instead
+
 #### Scenario: Front matter
 - **WHEN** a markdown file starts with a YAML front matter block
 - **THEN** the front matter is shown as a code block and the rest renders with correct line anchors

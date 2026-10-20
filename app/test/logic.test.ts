@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { addedLines, anchor, gaps, parsePatch, removedRuns } from '../src/diff.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightHunks, languageFor, splitLines } from '../src/highlight.ts';
-import { isMarkdown, renderChunks } from '../src/markdown.ts';
+import { isMarkdown, md, renderChunks } from '../src/markdown.ts';
 import { findStacks } from '../src/stacks.ts';
 
 const patch = [
@@ -99,6 +99,10 @@ test('highlight: language lookup and line splitting', () => {
   const fenced = renderChunks('```js\nconst a = 1;\n```\n', new Set([2])).map((c) => c.html).join('');
   assert.match(fenced, /hljs-keyword/);
   assert.match(fenced, /^<pre data-src="1-3" data-chg=""><code class="language-js"><span class="cl" data-src="2-2" data-chg="">/); // block and each line commentable
+  const mmd = renderChunks('```mermaid\ngraph TD\n  A-->B\n```\n', new Set([3]))[0].html;
+  assert.match(mmd, /^<div class="mermaid-block" data-src="1-4" data-chg=""><div class="mermaid-svg" data-code="graph TD\n  A--&gt;B\n"><\/div>/);
+  assert.match(mmd, /<span class="cl" data-src="3-3" data-chg="">  A--&gt;B<\/span>/); // source lines still commentable
+  assert.equal(md.render('```mermaid\ngraph TD\n```\n'), '<div class="mermaid-svg" data-code="graph TD\n"></div>'); // comments/drafts
   const twoLines = renderChunks('- item\n\n  ```\n  a <b>\n\n  c\n  ```\n', new Set()).map((c) => c.html).join('');
   assert.match(twoLines, /<span class="cl" data-src="4-4">a &lt;b&gt;<\/span><span class="cl" data-src="5-5"> <\/span><span class="cl" data-src="6-6">c<\/span>/);
 });

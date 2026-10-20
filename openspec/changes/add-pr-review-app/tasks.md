@@ -90,6 +90,7 @@
 - [x] 12.11 Hide renamed/copied/mode-only files without content changes by default
 - [x] 12.12 Space comments at the hovered (or top-of-view) line
 - [x] 12.13 Per-line comments in code blocks; comments render under their list item / table row / code line
+- [x] 12.14 Mermaid diagrams in markdown files and comments (lazy-loaded, strict mode)
 
 ## 13. Verify
 

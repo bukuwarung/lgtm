@@ -9,6 +9,7 @@ import {
 } from './github.ts';
 import { highlightCode, highlightHunks, languageFor, splitLines } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
+import { renderMermaid } from './mermaid.ts';
 import { notifySlack, slackConfigured, storage, useStoredFlag } from './platform.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -144,6 +145,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   // In "since" mode old-side line numbers refer to my last reviewed commit, so old-side threads would sit on the wrong lines.
   const shownThreads = since && sinceData ? threads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : threads;
   const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
+  useEffect(() => void renderMermaid(document.querySelector('main'))); // conversation, threads, drafts
 
   if (error) return <p class="error page">{error}</p>;
   if (!data) return <p class="note page">Loading pull request…</p>;
@@ -802,10 +804,13 @@ function ChunkView({ html, placed, onClick }: { html: string; placed: { line: nu
           if (sub) sub.before(host);
           else el.append(host);
         } else el.after(host);
+        // A comment on a line inside collapsed content (a diagram's source) opens it.
+        for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) d.open = true;
         hosts.current.set(el, (h = { host, outer }));
       }
       render(<>{nodes}</>, h.host);
     }
+    renderMermaid(ref.current);
   });
 
   useEffect(
