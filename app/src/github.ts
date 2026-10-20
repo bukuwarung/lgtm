@@ -190,6 +190,42 @@ export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   }
 }
 
+export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string };
+
+const CHECKS = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
+  commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename
+    ... on CheckRun{name status conclusion detailsUrl title checkSuite{workflowRun{workflow{name}}}}
+    ... on StatusContext{context state targetUrl description}}}}}}}}}}`;
+
+const RUN_STATE: Record<string, Check['state']> = {
+  SUCCESS: 'success', FAILURE: 'failure', TIMED_OUT: 'failure', ACTION_REQUIRED: 'failure', STARTUP_FAILURE: 'failure',
+  CANCELLED: 'neutral', NEUTRAL: 'neutral', SKIPPED: 'neutral', STALE: 'neutral',
+};
+const STATUS_STATE: Record<string, Check['state']> = { SUCCESS: 'success', FAILURE: 'failure', ERROR: 'failure', PENDING: 'pending', EXPECTED: 'pending' };
+const CHECK_ORDER = ['failure', 'pending', 'success', 'neutral'];
+
+// CI checks (GitHub Actions runs and commit statuses) on the PR's head commit, failures first.
+export async function getChecks(repo: string, n: number): Promise<Check[]> {
+  const [owner, name] = repo.split('/');
+  const d: any = await graphql(CHECKS, { owner, name, n });
+  const nodes = d.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? [];
+  const checks: Check[] = nodes.map((c: any): Check =>
+      c.__typename === 'CheckRun'
+        ? {
+            name: [c.checkSuite?.workflowRun?.workflow?.name, c.name].filter(Boolean).join(' / '),
+            state: c.status === 'COMPLETED' ? RUN_STATE[c.conclusion] ?? 'neutral' : 'pending',
+            url: c.detailsUrl,
+            summary: c.title || (c.status === 'COMPLETED' ? c.conclusion : c.status).toLowerCase(),
+          }
+        : { name: c.context, state: STATUS_STATE[c.state] ?? 'neutral', url: c.targetUrl, summary: c.description ?? '' },
+  );
+  // Re-runs leave a cancelled/skipped copy next to the real result; hide the copy.
+  const decided = new Set(checks.filter((c) => c.state !== 'neutral').map((c) => c.name));
+  return checks
+    .filter((c) => c.state !== 'neutral' || !decided.has(c.name))
+    .sort((a: Check, b: Check) => CHECK_ORDER.indexOf(a.state) - CHECK_ORDER.indexOf(b.state) || a.name.localeCompare(b.name));
+}
+
 export const reply = (repo: string, n: number, commentId: number, body: string) =>
   json(`/repos/${repo}/pulls/${n}/comments/${commentId}/replies`, { method: 'POST', body: JSON.stringify({ body }) });
 

@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { addedLines, anchor, parsePatch, removedRuns, type Hunk, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getConversation, getEmails, getFiles, getPR, getRaw, getThreads, getViewer, reply, submitReview,
-  type ConversationItem, type Draft, type PR, type PRFile, type ReviewEvent, type Thread,
+  getChecks, getConversation, getEmails, getFiles, getPR, getRaw, getThreads, getViewer, reply, submitReview,
+  type Check, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightHunks } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { notifySlack, slackConfigured, storage, useStoredFlag } from './platform.ts';
+import { Resizer } from './resizer.tsx';
+import { ShortcutIndex, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; quote pre-fills the body;
@@ -22,7 +24,6 @@ type Ctx = {
   removeDraft: (id: string) => void;
   reply: (t: Thread, body: string) => Promise<void>;
 };
-type File = PRFile & { generated: boolean };
 type Saved = { sha: string; drafts: Draft[] };
 
 const slackEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -43,14 +44,22 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const [saved, setSaved] = useState<Saved>({ sha: '', drafts: [] });
   const [target, setTarget] = useState<Target | null>(null);
   const [showGenerated, setShowGenerated] = useState(false);
-  const [showTree, toggleTree] = useStoredFlag('showFiles', true);
+  const [showIndex, toggleIndex] = useStoredFlag('showIndex', true);
+  const [checks, setChecks] = useState<Check[] | null>(null);
   const [error, setError] = useState('');
   // Who gets a Slack DM after submitting (author + assignees, minus me and bots); null = Slack not set up.
   const [slackTo, setSlackTo] = useState<string[] | null>(null);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const key = `drafts:${repo}#${n}`;
 
+  // Checks are secondary: a failure here shouldn't block the review.
+  const loadChecks = () => {
+    setChecks(null);
+    getChecks(repo, n).then(setChecks, () => setChecks([]));
+  };
+
   useEffect(() => {
+    loadChecks();
     (async () => {
       const pr = await getPR(repo, n);
       const headRepo = pr.head.repo?.full_name ?? repo;
@@ -140,16 +149,28 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   );
 
   return (
-    <div class={showTree ? 'review' : 'review no-tree'}>
-      {showTree && (
-        <aside class="tree">
-          <FileTree files={shown} counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length} />
+    <div class={showIndex ? 'review' : 'review no-index'}>
+      {showIndex && (
+        <aside class="side tree">
+          <div class="side-scroll">
+            <ShortcutIndex
+              pr={pr}
+              conversation={conversation}
+              threads={threads}
+              drafts={drafts}
+              checks={checks}
+              onRefreshChecks={loadChecks}
+              files={shown}
+              counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length}
+            />
+          </div>
+          <Resizer name="index" label="PR index" />
         </aside>
       )}
       <div>
         <div class="bar">
-          <button title={showTree ? 'Hide file tree' : 'Show file tree'} onClick={toggleTree}>
-            {showTree ? '⇤' : '⇥'} Files
+          <button title={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
+            {showIndex ? '⇤' : '⇥'} Index
           </button>
           <h1>
             {pr.title} <a href={pr.html_url} target="_blank" rel="noopener">{repo}#{n}</a>
@@ -445,7 +466,7 @@ function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; dr
         <ThreadView key={t.id} t={t} ctx={ctx} />
       ))}
       {drafts.map((d) => (
-        <div class="draft" key={d.id}>
+        <div class="draft" key={d.id} id={'d-' + d.id}>
           <div class="badge">Pending · {where(d)}</div>
           <div class="md" dangerouslySetInnerHTML={{ __html: md.render(d.body) }} />
           <button onClick={() => ctx.removeDraft(d.id)}>Delete</button>
@@ -475,7 +496,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   }
 
   return (
-    <details class="thread" open={!t.isResolved && !t.isOutdated}>
+    <details class="thread" id={'t-' + t.id} open={!t.isResolved && !t.isOutdated}>
       <summary>
         <b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}
         {t.isResolved && <span class="badge"> · resolved</span>}
@@ -534,85 +555,20 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
   );
 }
 
-type TreeNode = { name: string; dirs: Map<string, TreeNode>; files: File[] };
-
-function buildTree(files: File[]): TreeNode {
-  const root: TreeNode = { name: '', dirs: new Map(), files: [] };
-  for (const f of files) {
-    let node = root;
-    for (const part of f.filename.split('/').slice(0, -1)) {
-      if (!node.dirs.has(part)) node.dirs.set(part, { name: part, dirs: new Map(), files: [] });
-      node = node.dirs.get(part)!;
-    }
-    node.files.push(f);
-  }
-  return root;
-}
-
-const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
-
-type Counts = (path: string) => number;
-
-function FileTree({ files, counts }: { files: File[]; counts: Counts }) {
-  const root = useMemo(() => buildTree(files), [files]);
-  return <TreeChildren node={root} depth={0} counts={counts} />;
-}
-
-function TreeChildren({ node, depth, counts }: { node: TreeNode; depth: number; counts: Counts }) {
-  return (
-    <>
-      {[...node.dirs.values()].sort((a, b) => byName(a.name, b.name)).map((d) => (
-        <TreeDir key={d.name} node={d} depth={depth} counts={counts} />
-      ))}
-      {[...node.files].sort((a, b) => byName(a.filename, b.filename)).map((f) => {
-        const c = counts(f.filename);
-        return (
-          <button
-            key={f.filename}
-            class="tree-file"
-            style={{ paddingLeft: `${8 + depth * 14}px` }}
-            title={f.filename}
-            onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}
-          >
-            <span class={'fdot s-' + f.status} title={f.status} />
-            <span class="tree-name">{f.filename.split('/').pop()}</span>
-            {c > 0 && <span class="badge">💬{c}</span>}
-          </button>
-        );
-      })}
-    </>
-  );
-}
-
-function TreeDir({ node, depth, counts }: { node: TreeNode; depth: number; counts: Counts }) {
-  // Collapse single-child folder chains into one row ("src/core/utils"), as GitHub does.
-  let n = node, name = node.name;
-  while (!n.files.length && n.dirs.size === 1) {
-    n = [...n.dirs.values()][0];
-    name += '/' + n.name;
-  }
-  return (
-    <details open class="tree-dir">
-      <summary style={{ paddingLeft: `${8 + depth * 14}px` }} title={name}>{name}</summary>
-      <TreeChildren node={n} depth={depth + 1} counts={counts} />
-    </details>
-  );
-}
-
 const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', COMMENTED: 'reviewed', DISMISSED: 'review dismissed' };
 
 function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
   return (
-    <details class="conversation" open>
+    <details class="conversation" id="conversation" open>
       <summary>
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
-      <div class="comment">
+      <div class="comment" id="pr-description">
         <b>{pr.user.login}</b> <span class="badge">opened this pull request</span>
         {pr.body_html ? <div class="md" dangerouslySetInnerHTML={{ __html: pr.body_html }} /> : <p class="note">No description.</p>}
       </div>
       {items.map((c) => (
-        <div class="comment" key={c.id}>
+        <div class="comment" key={c.id} id={'cv-' + c.id}>
           <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}>{STATE_LABEL[c.state] ?? c.state}</span>}{' '}
           <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a>
           {c.html && <div class="md" dangerouslySetInnerHTML={{ __html: c.html }} />}

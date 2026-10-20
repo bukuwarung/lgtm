@@ -69,7 +69,12 @@
 - [x] 10.4 Switch Slack sending to slackcli (no Slack app/token); dry-run checked against the real workspace
 - [x] 10.5 Commit the team GitHub → Slack mapping (`app/slack-users.json`); README setup for gh + slackcli
 
-## 11. Verify
+## 11. Review feedback round 3
 
-- [ ] 11.1 Manual review session on a real PR containing markdown, generated files, and a 500+ file diff (done so far: live read-only load of a real PR)
-- [x] 11.2 `openspec validate add-pr-review-app` (if OpenSpec CLI is installed)
+- [x] 11.1 Drag-resizable PR list and index columns (remembered, keyboard, double-click reset)
+- [x] 11.2 PR Shortcut Index: conversation, checks, review threads, files; jump with lazy-render wait
+
+## 12. Verify
+
+- [ ] 12.1 Manual review session on a real PR containing markdown, generated files, and a 500+ file diff (done so far: live read-only load of a real PR)
+- [x] 12.2 `openspec validate add-pr-review-app` (if OpenSpec CLI is installed)

@@ -39,17 +39,20 @@ code, pre { font-family: var(--mono); }
 .top a { font-weight: 600; color: var(--fg); }
 .spacer { flex: 1; }
 .signin, .inbox { max-width: 720px; margin: 48px auto; padding: 0 16px; }
-.prs { list-style: none; padding: 0; }
-.prs li { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .repo { color: var(--muted); margin-right: 4px; }
 .meta { display: block; color: var(--muted); font-size: 12px; }
 
 /* Layout: the document scrolls (IntersectionObserver relies on it); sidebars and bars are sticky. */
-.shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+.shell { display: grid; grid-template-columns: var(--prs-w, 300px) minmax(0, 1fr); }
 .shell.no-prs { grid-template-columns: minmax(0, 1fr); }
 .empty { margin-top: 48px; }
-.prs, .tree { position: sticky; top: 0; height: 100vh; overflow: auto; border-right: 1px solid var(--border); }
-.prs { padding: 8px; }
+/* Sidebars: sticky full-height columns; content scrolls inside, the resize handle stays on the edge. */
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+.side-scroll { flex: 1; min-height: 0; overflow: auto; }
+.prs .side-scroll { padding: 8px; }
+.resizer { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; z-index: 5; cursor: col-resize; }
+.resizer:hover, .resizer:focus-visible, body.resizing .resizer { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }
 .prs form { margin-bottom: 8px; }
 .prs input { padding: 3px 8px; }
 .pr-group { margin-bottom: 4px; }
@@ -71,9 +74,30 @@ code, pre { font-family: var(--mono); }
 .pill.p-ok { color: var(--addfg); border-color: currentColor; }
 .pill.p-bad { color: var(--delfg); border-color: currentColor; }
 
-.review { display: grid; grid-template-columns: 260px minmax(0, 1fr); }
-.review.no-tree { grid-template-columns: minmax(0, 1fr); }
-.tree { padding: 6px 0; font-size: 13px; }
+.review { display: grid; grid-template-columns: var(--index-w, 280px) minmax(0, 1fr); }
+.review.no-index { grid-template-columns: minmax(0, 1fr); }
+.tree { font-size: 13px; }
+
+/* PR Shortcut Index */
+.index { padding: 4px 0 24px; }
+.ix-sec > summary { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg); font-weight: 600; font-size: 12px; cursor: pointer; }
+.ix-item { display: grid; gap: 1px; width: 100%; padding: 3px 8px 3px 14px; border: 0; border-radius: 0; background: none; text-align: left; font-size: 12px; color: var(--fg); text-decoration: none; }
+.ix-item:hover { background: var(--soft); text-decoration: none; }
+.ix-item.dim { opacity: .6; }
+.ix-label, .ix-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ix-meta, .ix-sub { color: var(--muted); font-weight: 400; }
+.ix-sub { font-size: 11px; }
+.ix-pad { margin: 2px 14px; font-size: 12px; }
+.ix-refresh { margin-left: auto; padding: 0 4px; color: var(--muted); font-weight: 400; cursor: pointer; }
+.ix-refresh:hover { color: var(--accent); }
+.ck { display: inline-block; width: 1.1em; text-align: center; font-weight: 700; }
+.ck-failure { color: var(--delfg); } .ck-pending { color: var(--modfg); } .ck-success { color: var(--addfg); } .ck-neutral { color: var(--muted); }
+.ck-sum { font-size: 11px; font-weight: 400; }
+/* Jump targets land below the sticky bars, and flash briefly. */
+.file { scroll-margin-top: var(--bar); }
+.thread, .draft, .comment { scroll-margin-top: calc(var(--bar) + 48px); }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
+.flash { animation: flash 1.6s ease-out; }
 .tree-dir > summary { padding: 2px 8px; cursor: pointer; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tree-file { display: flex; align-items: center; gap: 6px; width: 100%; padding: 2px 8px; border: 0; border-radius: 0; background: none; text-align: left; }
 .tree-file:hover, .tree-dir > summary:hover { background: var(--soft); }
@@ -82,8 +106,8 @@ code, pre { font-family: var(--mono); }
 .fdot.s-added { background: var(--addfg); }
 .fdot.s-removed { background: var(--delfg); }
 .fdot.s-renamed, .fdot.s-copied { background: var(--accent); }
-@media (max-width: 1100px) { .shell { grid-template-columns: 240px minmax(0, 1fr); } .review { grid-template-columns: 200px minmax(0, 1fr); } }
-@media (max-width: 800px) { .shell, .review { grid-template-columns: minmax(0, 1fr); } .prs, .tree { display: none; } }
+@media (max-width: 1100px) { .shell { grid-template-columns: var(--prs-w, 240px) minmax(0, 1fr); } .review { grid-template-columns: var(--index-w, 220px) minmax(0, 1fr); } }
+@media (max-width: 800px) { .shell, .review { grid-template-columns: minmax(0, 1fr); } .side { display: none; } }
 .bar { position: sticky; top: 0; z-index: 3; height: var(--bar); display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
 .bar h1 { flex: 1; margin: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .submit { position: relative; }

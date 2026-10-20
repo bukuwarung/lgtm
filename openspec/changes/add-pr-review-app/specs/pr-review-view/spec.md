@@ -49,9 +49,24 @@ The system SHALL render every visible changed file of a PR in one continuous scr
 - **WHEN** the user clicks a file in the tree
 - **THEN** the view scrolls to that file's header
 
-#### Scenario: Collapse the file tree
-- **WHEN** the user clicks "Files" in the PR bar
-- **THEN** the file tree hides and the diff takes the full width, and the choice is remembered
+#### Scenario: Collapse the index
+- **WHEN** the user clicks "Index" in the PR bar
+- **THEN** the PR Shortcut Index hides and the diff takes the full width, and the choice is remembered
+
+#### Scenario: Resize a column
+- **WHEN** the user drags the right edge of the PR list or the index
+- **THEN** the column resizes, keeps that width after reload, and double-click restores the default
+
+### Requirement: PR Shortcut Index
+The system SHALL show, beside the diff, an index linking to the PR description, each conversation comment and review, each CI check, each review thread and pending draft, and each changed file.
+
+#### Scenario: Jump to a thread in an unrendered file
+- **WHEN** the user clicks a review thread whose file hasn't rendered yet
+- **THEN** the view scrolls to it once the file renders, expands it if collapsed, and highlights it
+
+#### Scenario: Checks
+- **WHEN** the head commit has failing, running, and passing checks
+- **THEN** the index lists failures first with a failing count, and each check links to its run
 
 #### Scenario: Long paths
 - **WHEN** files live under deep folders

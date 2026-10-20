@@ -63,7 +63,11 @@ Optional: available when [slackcli](https://github.com/shaharia-lab/slackcli) is
 *Alternative tried first:* calling Slack's Web API with a user token from a self-made Slack app; replaced because it needed an app install (likely admin approval) and a token in a config file.
 Emails come from GitHub's `organizationVerifiedDomainEmails`, then the public email; for bukuwarung both are empty, so the mapping is what works. The team mapping is committed as `app/slack-users.json` (repo is private) so teammates get it on clone; `~/.config/lgtm/config.json` `slackUsers` overrides or adds entries per person.
 
-### 12. Stack
+### 12. PR Shortcut Index and resizable columns
+The file-tree column became an index of everything worth jumping to, in collapsible sections: Conversation (description, each comment and review), Checks (GraphQL `statusCheckRollup` on the head commit: Actions runs and commit statuses, failures → running → passed; cancelled/skipped copies of re-run checks are hidden; each links to its run; refreshable), Review threads (pending drafts first, then threads in diff order, resolved/outdated dimmed), and Files (the tree). A jump scrolls the file into view first when the target isn't rendered yet (lazy file bodies), waits up to 2 s for it, opens any collapsed `<details>` around it, and flashes it; `scroll-margin-top` keeps targets below the sticky bars.
+Both sidebars have a drag handle (pointer capture, no library) that sets `--prs-w` / `--index-w` on `<html>`, which the grids read; widths persist in `localStorage`. The handle is a focusable `role="separator"` (arrow keys resize) and double-click resets.
+
+### 13. Stack
 TypeScript, Vite, Preact, markdown-it, highlight.js; the server is plain Node. Hunk parsing and glob matching are hand-written (~50 lines each) rather than pulled in as deps.
 
 ## Risks / Trade-offs

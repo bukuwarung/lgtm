@@ -4,6 +4,7 @@ import { getReviewQueue, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { useStoredFlag } from './platform.ts';
+import { Resizer } from './resizer.tsx';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
 export function parseRoute(s: string) {
@@ -136,7 +137,8 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   );
 
   return (
-    <aside class="prs">
+    <aside class="side prs">
+      <div class="side-scroll">
       <form
         class="row"
         onSubmit={(e) => {
@@ -177,6 +179,8 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
           );
         })
       )}
+      </div>
+      <Resizer name="prs" label="pull request list" />
     </aside>
   );
 }
