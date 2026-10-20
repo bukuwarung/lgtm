@@ -91,6 +91,7 @@
 - [x] 12.12 Space comments at the hovered (or top-of-view) line
 - [x] 12.13 Per-line comments in code blocks; comments render under their list item / table row / code line
 - [x] 12.14 Mermaid diagrams in markdown files and comments (lazy-loaded, strict mode)
+- [x] 12.15 Rich diff shows only sections in the diff; others fold, read-only; quote fallback removed; unmarked fences = Kotlin
 
 ## 13. Verify
 

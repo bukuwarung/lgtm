@@ -15,10 +15,9 @@ import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
-// Where the (single) open comment form is. No line = file-level; quote pre-fills the body;
-// near = head line to show a file-level form at (rich view blocks outside the diff); editId = the draft being edited.
+// Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
 // atEnd = a file-level comment started from the file's footer, so its form opens there.
-type Target = { path: string; side: Side; line?: number; startLine?: number; quote?: string; near?: number; editId?: string; body?: string; atEnd?: boolean };
+type Target = { path: string; side: Side; line?: number; startLine?: number; editId?: string; body?: string; atEnd?: boolean };
 type Ctx = {
   pr: PR;
   headRepo: string;
@@ -249,7 +248,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.
   // It reuses the click paths: a diff row's line-number cell, or a block's "+" gutter just left of it.
   function commentAtCurrentLine() {
-    const lines = '.diff tr.ln, .chunk [data-src]';
+    const lines = '.diff tr.ln, .chunk [data-src]:not([data-nd])';
     const top = [...document.querySelectorAll(':hover')].at(-1);
     const hovered = top?.closest('.note-host, .notes') ? null : top?.closest(lines);
     const el = hovered ?? [...document.querySelectorAll(lines)].find((x) => { const t = x.getBoundingClientRect().top; return t >= 100 && t < innerHeight; });
@@ -522,7 +521,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         ctx={ctx}
         threads={threads.filter(isFileLevel)}
         drafts={drafts.filter((d) => !d.line)}
-        form={t?.path === path && t.line == null && t.near == null && !t.atEnd}
+        form={t?.path === path && t.line == null && !t.atEnd}
       />
       {!file.patch ? (
         <p class="note pad">
@@ -669,7 +668,10 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   useEffect(() => {
     getRaw(ctx.headRepo, path, ctx.pr.head.sha).then(setSrc, () => setSrc(null));
   }, []);
-  const chunks = useMemo(() => (src ? renderChunks(src, file.status === 'added' ? new Set() : addedLines(hunks)) : []), [src, hunks]);
+  // Only diff lines take line comments, so sections outside the diff fold away (expandable, read-only).
+  const inDiff = useMemo(() => new Set(hunks.flatMap((h) => h.lines.flatMap((l) => l.new ?? []))), [hunks]);
+  const chunks = useMemo(() => (src ? renderChunks(src, file.status === 'added' ? new Set() : addedLines(hunks), inDiff) : []), [src, hunks]);
+  const [openRuns, setOpenRuns] = useState<Set<number>>(new Set());
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
   if (src === undefined) return <p class="note pad">Loading…</p>;
@@ -693,15 +695,25 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const leftD = drafts.filter((x) => x.side === 'LEFT');
   const orphanT = leftT.filter((x) => !removed.some((r) => inRun(r, x.line)));
   const orphanD = leftD.filter((x) => !removed.some((r) => inRun(r, x.line)));
+  const formLine = t?.side === 'RIGHT' ? t.line : undefined;
+  const linesWithNotes = [...new Set([...rightT.map((x) => x.line!), ...rightD.map((x) => x.line!), ...(formLine != null ? [formLine] : [])])].sort((a, b) => a - b);
+  // A section outside the diff is folded unless it holds a comment or its run was opened.
+  const holdsNote = (i: number) => linesWithNotes.some((l) => chunkOf(l) === i);
+  const runStart = (i: number) => {
+    while (i > 0 && !chunks[i - 1].inDiff && !holdsNote(i - 1)) i--;
+    return i;
+  };
+  const hidden = (i: number) => !chunks[i].inDiff && !holdsNote(i) && !openRuns.has(runStart(i));
 
   function onChunkClick(e: MouseEvent) {
     if ((e.target as Element).closest('.note-host')) return; // a click inside a comment placed in the block
     const el = (e.target as Element).closest('[data-src]');
-    // Only the "+" gutter (drawn left of the block) starts a comment, so text stays selectable.
-    if (!el || e.clientX >= el.getBoundingClientRect().left) return;
+    // Only the "+" gutter (drawn left of the block) starts a comment, so text stays selectable; context outside
+    // the diff (data-nd) has none.
+    if (!el || el.hasAttribute('data-nd') || e.clientX >= el.getBoundingClientRect().left) return;
     const [s, end] = el.getAttribute('data-src')!.split('-').map(Number);
     const a = anchor(hunks, s, end);
-    ctx.setTarget(a ? { path, side: 'RIGHT', ...a } : { path, side: 'RIGHT', quote: src!.split('\n')[s - 1], near: s });
+    if (a) ctx.setTarget({ path, side: 'RIGHT', ...a });
   }
 
   const marker = (r: Removed) => {
@@ -730,12 +742,23 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     <div class="rich">
       <Notes ctx={ctx} threads={orphanT} drafts={orphanD} form={t?.side === 'LEFT' && !removed.some((r) => inRun(r, t.line))} />
       {chunks.map((c, i) => {
+        if (hidden(i)) {
+          // The first of a run of folded sections stands in for the whole run.
+          if (i > 0 && hidden(i - 1)) return removed.filter((r) => markerSlot(r) === i).map(marker);
+          let j = i;
+          while (j < chunks.length && hidden(j)) j++;
+          return (
+            <>
+              {removed.filter((r) => markerSlot(r) === i).map(marker)}
+              <button class="md-gap" onClick={() => setOpenRuns((s) => new Set(s).add(i))}>
+                ↕ Show {j - i} unchanged section{j - i === 1 ? '' : 's'}
+              </button>
+            </>
+          );
+        }
         // Notes on a line inside this block render right under that line (see ChunkView); a line between
         // blocks (blank lines) falls back to after the block.
-        const formLine = t?.side === 'RIGHT' ? t.line ?? t.near : undefined;
-        const lines = [...new Set([...rightT.map((x) => x.line!), ...rightD.map((x) => x.line!), ...(formLine != null ? [formLine] : [])])]
-          .filter((l) => chunkOf(l) === i)
-          .sort((a, b) => a - b);
+        const lines = linesWithNotes.filter((l) => chunkOf(l) === i);
         const notesAt = (l: number) => (
           <Notes
             key={l}
@@ -907,13 +930,13 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
 
 function DraftForm({ ctx }: { ctx: Ctx }) {
   const target = ctx.target!;
-  const [body, setBody] = useState(target.body ?? (target.quote != null ? `> ${target.quote}\n\n` : ''));
+  const [body, setBody] = useState(target.body ?? '');
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus(), []);
 
   function save() {
     if (!body.trim()) return;
-    const { quote: _q, near: _n, editId, body: _b, atEnd: _e, ...rest } = target;
+    const { editId, body: _b, atEnd: _e, ...rest } = target;
     if (editId) ctx.updateDraft(editId, { ...rest, body });
     else ctx.addDraft({ ...rest, body });
     ctx.setTarget(null);

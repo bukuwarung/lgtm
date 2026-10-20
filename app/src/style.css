@@ -205,21 +205,25 @@ main { padding: 16px; }
 .md blockquote { margin: 0; padding: 0 1em; color: var(--muted); border-left: 3px solid var(--border); }
 .chunk [data-src], .chunk tr[data-src] > :first-child { position: relative; }
 .chunk [data-chg]:not(:has([data-chg])) { background: var(--add); box-shadow: -6px 0 0 var(--add), 6px 0 0 var(--add); }
-.chunk [data-src]:not(tr):hover:not(:has([data-src]:hover)):not(:has(.note-host:hover))::before,
-.chunk tr[data-src]:hover > :first-child::before {
+.chunk [data-src]:not(tr, [data-nd]):hover:not(:has([data-src]:hover)):not(:has(.note-host:hover))::before,
+.chunk tr[data-src]:not([data-nd]):hover > :first-child::before {
   content: "+"; position: absolute; left: -36px; top: 0; width: 20px; height: 20px;
   font: bold 14px/20px var(--sans); text-align: center; color: #fff; background: var(--accent); border-radius: 4px; cursor: pointer;
 }
 /* Invisible bridge from the block to its "+", so moving the mouse across the gap (often the parent list's
    indent) keeps this block hovered instead of handing the "+" to the parent. */
-.chunk [data-src]:not(tr):hover:not(:has([data-src]:hover)):not(:has(.note-host:hover))::after,
-.chunk tr[data-src]:hover > :first-child::after {
+.chunk [data-src]:not(tr, [data-nd]):hover:not(:has([data-src]:hover)):not(:has(.note-host:hover))::after,
+.chunk tr[data-src]:not([data-nd]):hover > :first-child::after {
   content: ""; position: absolute; left: -16px; top: 0; width: 16px; height: 20px; cursor: pointer;
 }
 /* Comments mounted inside rendered markdown (under a list item, table row, or code line) shed the block's styling. */
 .note-host { margin: 6px 0; white-space: normal; font: 14px/1.5 var(--sans); color: var(--fg); text-decoration: none; }
 .note-host .notes { margin: 0; }
 .md .note-tr > td { padding: 6px 8px; background: var(--bg); }
+.md-gap { display: block; width: 100%; margin: 8px 0; padding: 3px 12px; border: 1px dashed var(--border); background: var(--soft); text-align: left; font-size: 12px; color: var(--accent); }
+/* Context outside the diff (shown by opening a folded run): read-only, slightly dimmed. */
+.chunk [data-nd] { opacity: .75; }
+.chunk [data-nd] [data-nd] { opacity: 1; }
 .removed { position: relative; margin: 8px 0; padding: 4px 8px; background: var(--del); border-left: 3px solid var(--delfg); }
 .removed pre { margin: 0; white-space: pre-wrap; text-decoration: line-through; color: var(--muted); font-size: 12px; }
 .removed-c { position: absolute; left: -36px; top: 4px; width: 20px; height: 20px; padding: 0; line-height: 18px; }

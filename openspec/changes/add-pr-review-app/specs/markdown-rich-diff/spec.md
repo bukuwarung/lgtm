@@ -53,9 +53,9 @@ The system SHALL let the user comment on any rendered block, anchoring the comme
 - **WHEN** a block spans lines 20–30 and only lines 25–40 are inside a hunk
 - **THEN** the comment range is clamped to 25–30
 
-#### Scenario: Block outside any hunk
-- **WHEN** the user comments on a block with no lines inside any hunk
-- **THEN** the draft is a file-level comment whose body starts with a quote of the block's first source line
+#### Scenario: Sections outside the diff
+- **WHEN** a markdown file has top-level sections with no line inside any hunk
+- **THEN** runs of them fold into "Show N unchanged sections" rows (unless one holds a comment), and once shown they are read-only context without a "+" gutter, as are list items and code lines outside the diff inside a section that is shown
 
 #### Scenario: Mermaid diagram
 - **WHEN** a markdown file (or a PR comment) contains a ```mermaid block
