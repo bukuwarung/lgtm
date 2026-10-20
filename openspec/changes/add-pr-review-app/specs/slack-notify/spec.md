@@ -5,7 +5,7 @@ When Slack is configured, the system SHALL offer to message the PR author and as
 
 #### Scenario: Approve with Slack on
 - **WHEN** the user approves with "Message @author on Slack" checked
-- **THEN** the review is submitted and the author gets a DM like "✅ Approved <link|org/repo#12 Title> · 2 comments"
+- **THEN** the review is submitted and the author gets a DM like ":approved: Approved <link|org/repo#12 Title> · 2 comments" (":request-changes:" for requested changes; both are workspace emoji)
 
 #### Scenario: Later reviews reply in the same thread
 - **WHEN** the user reviews a PR they already sent a Slack DM about

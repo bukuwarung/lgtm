@@ -40,7 +40,8 @@ type Saved = { sha: string; drafts: Draft[] };
 const slackEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function slackText(pr: PR, ref: string, event: ReviewEvent, body: string, comments: number) {
-  const verb = { APPROVE: '✅ Approved', REQUEST_CHANGES: '🔴 Requested changes on', COMMENT: '💬 Reviewed' }[event];
+  // :approved: and :request-changes: are the workspace's custom Slack emoji.
+  const verb = { APPROVE: ':approved: Approved', REQUEST_CHANGES: ':request-changes: Requested changes on', COMMENT: '💬 Reviewed' }[event];
   const extra = comments ? ` · ${comments} comment${comments > 1 ? 's' : ''}` : '';
   const quote = body.trim() ? '\n' + slackEscape(body.trim().slice(0, 1000)).replace(/^/gm, '>') : '';
   return `${verb} <${pr.html_url}|${slackEscape(`${ref} ${pr.title}`)}>${extra}${quote}`;
