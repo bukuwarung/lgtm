@@ -9,7 +9,8 @@ export type PR = {
   node_id: string;
   user: { login: string; type: string };
   assignees: { login: string; type: string }[];
-  head: { sha: string; repo: { full_name: string } | null };
+  head: { sha: string; ref: string; repo: { full_name: string; owner: { login: string } } | null };
+  base: { ref: string };
 };
 export type PRFile = {
   filename: string;
@@ -30,6 +31,8 @@ export type Thread = {
   subjectType: 'LINE' | 'FILE';
   isResolved: boolean;
   isOutdated: boolean;
+  viewerCanResolve: boolean;
+  viewerCanUnresolve: boolean;
   comments: { nodes: Comment[] };
 };
 export type Draft = { id: string; path: string; body: string; side: 'LEFT' | 'RIGHT'; line?: number; startLine?: number };
@@ -176,7 +179,7 @@ export async function getRaw(repo: string, path: string, ref: string): Promise<s
 
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
-    nodes{id path line diffSide subjectType isResolved isOutdated comments(first:100){nodes{databaseId bodyHTML bodyText createdAt author{login}}}}}}}}`;
+    nodes{id path line diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve comments(first:100){nodes{databaseId bodyHTML bodyText createdAt author{login}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');
@@ -190,11 +193,12 @@ export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   }
 }
 
-export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string };
+// jobId: the GitHub Actions job, whose log the local server can fetch.
+export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string; jobId?: number };
 
 const CHECKS = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
   commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename
-    ... on CheckRun{name status conclusion detailsUrl title checkSuite{workflowRun{workflow{name}}}}
+    ... on CheckRun{databaseId name status conclusion detailsUrl title checkSuite{app{slug} workflowRun{workflow{name}}}}
     ... on StatusContext{context state targetUrl description}}}}}}}}}}`;
 
 const RUN_STATE: Record<string, Check['state']> = {
@@ -215,6 +219,7 @@ export async function getChecks(repo: string, n: number): Promise<Check[]> {
             name: [c.checkSuite?.workflowRun?.workflow?.name, c.name].filter(Boolean).join(' / '),
             state: c.status === 'COMPLETED' ? RUN_STATE[c.conclusion] ?? 'neutral' : 'pending',
             url: c.detailsUrl,
+            jobId: c.checkSuite?.app?.slug === 'github-actions' ? c.databaseId : undefined,
             summary: c.title || (c.status === 'COMPLETED' ? c.conclusion : c.status).toLowerCase(),
           }
         : { name: c.context, state: STATUS_STATE[c.state] ?? 'neutral', url: c.targetUrl, summary: c.description ?? '' },
@@ -224,6 +229,76 @@ export async function getChecks(repo: string, n: number): Promise<Check[]> {
   return checks
     .filter((c) => c.state !== 'neutral' || !decided.has(c.name))
     .sort((a: Check, b: Check) => CHECK_ORDER.indexOf(a.state) - CHECK_ORDER.indexOf(b.state) || a.name.localeCompare(b.name));
+}
+
+// Files I've marked "Viewed" on GitHub (GitHub's own per-user state, so it carries over to github.com).
+export async function getViewed(repo: string, n: number): Promise<Set<string>> {
+  const [owner, name] = repo.split('/');
+  const viewed = new Set<string>();
+  for (let after: string | null = null; ; ) {
+    const d: any = await graphql(
+      `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
+        files(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{path viewerViewedState}}}}}`,
+      { owner, name, n, after },
+    );
+    const page = d.repository.pullRequest.files;
+    for (const f of page.nodes) if (f.viewerViewedState === 'VIEWED') viewed.add(f.path);
+    if (!page.pageInfo.hasNextPage) return viewed;
+    after = page.pageInfo.endCursor;
+  }
+}
+
+export const setViewed = (prId: string, path: string, viewed: boolean) =>
+  graphql(
+    viewed
+      ? `mutation($pr:ID!,$path:String!){markFileAsViewed(input:{pullRequestId:$pr,path:$path}){clientMutationId}}`
+      : `mutation($pr:ID!,$path:String!){unmarkFileAsViewed(input:{pullRequestId:$pr,path:$path}){clientMutationId}}`,
+    { pr: prId, path },
+  );
+
+export const resolveThread = (threadId: string, resolve: boolean) =>
+  graphql(
+    resolve
+      ? `mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){clientMutationId}}`
+      : `mutation($id:ID!){unresolveReviewThread(input:{threadId:$id}){clientMutationId}}`,
+    { id: threadId },
+  );
+
+export type StackLayer = { number: number; title: string };
+
+// The whole stack around a PR, bottom → top: follow base branches down to PRs whose head is our base, and
+// head branches up to the single PR based on our head. Stops at forks, branching stacks, or 10 layers.
+export async function getStack(repo: string, pr: PR): Promise<StackLayer[]> {
+  const owner = repo.split('/')[0];
+  if (pr.head.repo?.full_name !== repo) return [];
+  const open = (q: string) => json(`/repos/${repo}/pulls?state=open&per_page=10&${q}`) as Promise<PR[]>;
+  const layer = (p: PR) => ({ number: p.number, title: p.title });
+  const stack = [layer(pr)];
+  for (let cur = pr; stack.length < 10; ) {
+    const [below] = await open(`head=${owner}:${encodeURIComponent(cur.base.ref)}`);
+    if (!below || stack.some((l) => l.number === below.number)) break;
+    stack.unshift(layer(below));
+    cur = below;
+  }
+  for (let cur = pr; stack.length < 10; ) {
+    const above = await open(`base=${encodeURIComponent(cur.head.ref)}`);
+    if (above.length !== 1 || stack.some((l) => l.number === above[0].number)) break;
+    stack.push(layer(above[0]));
+    cur = above[0];
+  }
+  return stack.length > 1 ? stack : [];
+}
+
+// The commit my latest submitted review was on, if any.
+export async function getMyLastReviewCommit(repo: string, n: number): Promise<string | null> {
+  const [me, reviews] = await Promise.all([getViewer(), paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`)]);
+  return reviews.filter((r) => r.user?.login === me && r.state !== 'PENDING').at(-1)?.commit_id ?? null;
+}
+
+// Files changed between two commits. status 'diverged' means `base` isn't an ancestor (the PR was rebased).
+export async function getCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[] }> {
+  const d = await json(`/repos/${repo}/compare/${base}...${head}`);
+  return { status: d.status, files: d.files ?? [] };
 }
 
 export const reply = (repo: string, n: number, commentId: number, body: string) =>

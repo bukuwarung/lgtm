@@ -17,11 +17,21 @@ export function jumpTo(id: string, near?: string) {
     }
     for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) d.open = true;
     el.scrollIntoView({ block: 'center' });
+    // Files above may finish rendering and push it down; settle once more.
+    setTimeout(() => el.scrollIntoView({ block: 'center' }), 400);
     el.classList.remove('flash');
     void el.offsetWidth; // restart the animation
     el.classList.add('flash');
   };
   go();
+}
+
+// Drafts first, then threads in diff order: the order the index lists them and n/p walks them.
+export function threadOrder(threads: Thread[], drafts: Draft[], files: File[]) {
+  const order = new Map(files.map((f, i) => [f.filename, i]));
+  const sorted = [...threads].sort((a, b) => (order.get(a.path) ?? 1e9) - (order.get(b.path) ?? 1e9) || (a.line ?? 0) - (b.line ?? 0));
+  type Item = { id: string; path: string; t?: Thread };
+  return [...drafts.map((d): Item => ({ id: 'd-' + d.id, path: d.path })), ...sorted.map((t): Item => ({ id: 't-' + t.id, path: t.path, t }))];
 }
 
 const textOf = (html: string) => new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '';
@@ -62,14 +72,15 @@ type IndexProps = {
   checks: Check[] | null;
   onRefreshChecks: () => void;
   files: File[];
+  viewed: Set<string>;
   counts: Counts;
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ pr, conversation, threads, drafts, checks, onRefreshChecks, files, counts }: IndexProps) {
+export function ShortcutIndex({ pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts }: IndexProps) {
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
-  const order = new Map(files.map((f, i) => [f.filename, i]));
-  const sortedThreads = [...threads].sort((a, b) => (order.get(a.path) ?? 1e9) - (order.get(b.path) ?? 1e9) || (a.line ?? 0) - (b.line ?? 0));
+  const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
+  const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
   const failing = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
 
@@ -146,8 +157,8 @@ export function ShortcutIndex({ pr, conversation, threads, drafts, checks, onRef
         {!threads.length && !drafts.length && <p class="note ix-pad">No review threads.</p>}
       </Section>
 
-      <Section title="Files" count={files.length}>
-        <FileTree files={files} counts={counts} />
+      <Section title="Files" count={files.length} extra={<span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>
+        <FileTree files={files} counts={counts} viewed={viewed} />
       </Section>
     </div>
   );
@@ -172,29 +183,32 @@ const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric
 
 type Counts = (path: string) => number;
 
-export function FileTree({ files, counts }: { files: File[]; counts: Counts }) {
+export function FileTree({ files, counts, viewed }: { files: File[]; counts: Counts; viewed: Set<string> }) {
   const root = useMemo(() => buildTree(files), [files]);
-  return <TreeChildren node={root} depth={0} counts={counts} />;
+  return <TreeChildren node={root} depth={0} counts={counts} viewed={viewed} />;
 }
 
-function TreeChildren({ node, depth, counts }: { node: TreeNode; depth: number; counts: Counts }) {
+type TreeProps = { node: TreeNode; depth: number; counts: Counts; viewed: Set<string> };
+
+function TreeChildren({ node, depth, counts, viewed }: TreeProps) {
   return (
     <>
       {[...node.dirs.values()].sort((a, b) => byName(a.name, b.name)).map((d) => (
-        <TreeDir key={d.name} node={d} depth={depth} counts={counts} />
+        <TreeDir key={d.name} node={d} depth={depth} counts={counts} viewed={viewed} />
       ))}
       {[...node.files].sort((a, b) => byName(a.filename, b.filename)).map((f) => {
         const c = counts(f.filename);
         return (
           <button
             key={f.filename}
-            class="tree-file"
+            class={viewed.has(f.filename) ? 'tree-file dim' : 'tree-file'}
             style={{ paddingLeft: `${8 + depth * 14}px` }}
             title={f.filename}
             onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}
           >
             <span class={'fdot s-' + f.status} title={f.status} />
             <span class="tree-name">{f.filename.split('/').pop()}</span>
+            {viewed.has(f.filename) && <span class="ck ck-success" title="Viewed">✓</span>}
             {c > 0 && <span class="badge">💬{c}</span>}
           </button>
         );
@@ -203,7 +217,7 @@ function TreeChildren({ node, depth, counts }: { node: TreeNode; depth: number; 
   );
 }
 
-function TreeDir({ node, depth, counts }: { node: TreeNode; depth: number; counts: Counts }) {
+function TreeDir({ node, depth, counts, viewed }: TreeProps) {
   // Collapse single-child folder chains into one row ("src/core/utils"), as GitHub does.
   let n = node, name = node.name;
   while (!n.files.length && n.dirs.size === 1) {
@@ -213,7 +227,7 @@ function TreeDir({ node, depth, counts }: { node: TreeNode; depth: number; count
   return (
     <details open class="tree-dir">
       <summary style={{ paddingLeft: `${8 + depth * 14}px` }} title={name}>{name}</summary>
-      <TreeChildren node={n} depth={depth + 1} counts={counts} />
+      <TreeChildren node={n} depth={depth + 1} counts={counts} viewed={viewed} />
     </details>
   );
 }

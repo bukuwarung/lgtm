@@ -102,6 +102,13 @@ body.resizing { cursor: col-resize; user-select: none; }
 .thread, .draft, .comment { scroll-margin-top: calc(var(--bar) + 48px); }
 @keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
 .flash { animation: flash 1.6s ease-out; }
+.viewed-box { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.file.viewed .file-h { opacity: .75; }
+.collapsed-row { width: 100%; padding: 6px 10px; border: 0; border-radius: 0 0 6px 6px; background: none; text-align: left; font-size: 12px; color: var(--muted); }
+.tree-file.dim { opacity: .55; }
+.help { position: sticky; top: var(--bar); z-index: 4; margin: 8px 16px; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
+.help td { padding: 3px 12px 3px 0; }
+kbd { padding: 1px 6px; font: 12px var(--mono); background: var(--soft); border: 1px solid var(--border); border-radius: 4px; }
 .tree-dir > summary { padding: 2px 8px; cursor: pointer; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tree-file { display: flex; align-items: center; gap: 6px; width: 100%; padding: 2px 8px; border: 0; border-radius: 0; background: none; text-align: left; }
 .tree-file:hover, .tree-dir > summary:hover { background: var(--soft); }

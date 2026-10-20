@@ -2,27 +2,30 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { addedLines, anchor, parsePatch, removedRuns, type Hunk, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getConversation, getEmails, getFiles, getPR, getRaw, getThreads, getViewer, reply, submitReview,
+  getChecks, getConversation, getEmails, getFiles, getPR, getRaw, getThreads, getViewed, getViewer, reply, resolveThread, setViewed, submitReview,
   type Check, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightHunks } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { notifySlack, slackConfigured, storage, useStoredFlag } from './platform.ts';
 import { Resizer } from './resizer.tsx';
-import { ShortcutIndex, type File } from './shortcuts.tsx';
+import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; quote pre-fills the body;
-// near = head line to show a file-level form at (rich view blocks outside the diff).
-type Target = { path: string; side: Side; line?: number; startLine?: number; quote?: string; near?: number };
+// near = head line to show a file-level form at (rich view blocks outside the diff); editId = the draft being edited.
+type Target = { path: string; side: Side; line?: number; startLine?: number; quote?: string; near?: number; editId?: string; body?: string };
 type Ctx = {
   pr: PR;
   headRepo: string;
   target: Target | null;
   setTarget: (t: Target | null) => void;
   addDraft: (d: Omit<Draft, 'id'>) => void;
+  updateDraft: (id: string, d: Omit<Draft, 'id'>) => void;
   removeDraft: (id: string) => void;
   reply: (t: Thread, body: string) => Promise<void>;
+  resolve: (t: Thread, resolve: boolean) => Promise<void>;
+  renderAll: boolean; // set by ⌘F so the browser's find can see every file
 };
 type Saved = { sha: string; drafts: Draft[] };
 
@@ -50,6 +53,12 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   // Who gets a Slack DM after submitting (author + assignees, minus me and bots); null = Slack not set up.
   const [slackTo, setSlackTo] = useState<string[] | null>(null);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const [viewed, setViewedPaths] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
+  const [renderAll, setRenderAll] = useState(false);
+  const [help, setHelp] = useState(false);
+  const threadCursor = useRef(-1);
+  const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   const key = `drafts:${repo}#${n}`;
 
   // Checks are secondary: a failure here shouldn't block the review.
@@ -59,7 +68,14 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   };
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keys.current(e);
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
     loadChecks();
+    getViewed(repo, n).then(setViewedPaths, () => {});
     (async () => {
       const pr = await getPR(repo, n);
       const headRepo = pr.head.repo?.full_name ?? repo;
@@ -134,19 +150,83 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     target,
     setTarget,
     addDraft: (d) => saveDrafts([...drafts, { ...d, id: crypto.randomUUID() }]),
+    updateDraft: (id, d) => saveDrafts(drafts.map((x) => (x.id === id ? { ...d, id } : x))),
     removeDraft: (id) => saveDrafts(drafts.filter((d) => d.id !== id)),
     reply: async (t, body) => {
       await reply(repo, n, t.comments.nodes[0].databaseId, body);
       setThreads(await getThreads(repo, n));
     },
+    resolve: async (t, resolve) => {
+      await resolveThread(t.id, resolve);
+      setThreads(await getThreads(repo, n));
+    },
+    renderAll,
   };
+
+  // Optimistic; GitHub's state is the source of truth, so a failure puts it back.
+  function toggleViewed(path: string) {
+    const on = !viewed.has(path);
+    const flip = (v: boolean) => setViewedPaths((s) => { const x = new Set(s); v ? x.add(path) : x.delete(path); return x; });
+    flip(on);
+    setExpanded((s) => { const x = new Set(s); x.delete(path); return x; });
+    setViewed(pr.node_id, path, on).catch((e) => {
+      flip(!on);
+      setNotice({ ok: false, text: `Couldn't update "Viewed" on GitHub: ${e.message}` });
+    });
+  }
 
   const visible = files.filter((f) => !f.generated);
   const generated = files.filter((f) => f.generated);
   const shown = showGenerated ? [...visible, ...generated] : visible;
   const section = (f: File) => (
-    <FileSection key={f.filename} file={f} ctx={ctx} threads={byPath.get(f.filename) ?? []} drafts={drafts.filter((d) => d.path === f.filename)} />
+    <FileSection
+      key={f.filename}
+      file={f}
+      ctx={ctx}
+      threads={byPath.get(f.filename) ?? []}
+      drafts={drafts.filter((d) => d.path === f.filename)}
+      viewed={viewed.has(f.filename)}
+      collapsed={viewed.has(f.filename) && !expanded.has(f.filename)}
+      onToggleViewed={() => toggleViewed(f.filename)}
+      onExpand={() => setExpanded((s) => new Set(s).add(f.filename))}
+    />
   );
+
+  // Keyboard shortcuts (see the ⌨ help). Reassigned every render so it sees current state.
+  keys.current = (e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') return setRenderAll(true); // then the browser's find opens
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      if ((e.target as Element).closest('textarea, input')) return; // forms handle their own ⌘↵
+      e.preventDefault();
+      return dispatchEvent(new Event('lgtm:finish'));
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest('input, textarea, select, [contenteditable]')) return;
+    const sections = [...document.querySelectorAll<HTMLElement>('main > .file')];
+    const top = 44 + 60;
+    const cur = sections.reduce((c, s, i) => (s.getBoundingClientRect().top <= top ? i : c), -1);
+    const path = sections[Math.max(cur, 0)]?.id.slice(2);
+    const ordered = threadOrder(threads, drafts, shown);
+    const act: Record<string, () => void> = {
+      j: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
+      k: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
+      n: () => ordered.length && go(Math.min(threadCursor.current + 1, ordered.length - 1)),
+      p: () => ordered.length && go(Math.max(threadCursor.current - 1, 0)),
+      v: () => path && toggleViewed(path),
+      c: () => path && ctx.setTarget({ path, side: 'RIGHT' }),
+      i: toggleIndex,
+      '?': () => setHelp(!help),
+      Escape: () => setHelp(false),
+    };
+    function go(i: number) {
+      threadCursor.current = i;
+      jumpTo(ordered[i].id, 'f-' + ordered[i].path);
+    }
+    const k = e.key === '/' && e.shiftKey ? '?' : e.key;
+    if (act[k]) {
+      e.preventDefault();
+      act[k]();
+    }
+  };
 
   return (
     <div class={showIndex ? 'review' : 'review no-index'}>
@@ -161,6 +241,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
               checks={checks}
               onRefreshChecks={loadChecks}
               files={shown}
+              viewed={viewed}
               counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length}
             />
           </div>
@@ -175,8 +256,10 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
           <h1>
             {pr.title} <a href={pr.html_url} target="_blank" rel="noopener">{repo}#{n}</a>
           </h1>
+          <button title="Keyboard shortcuts (?)" onClick={() => setHelp(!help)}>⌨</button>
           <SubmitPanel count={drafts.length} slackTo={slackTo} onSubmit={submit} />
         </div>
+        {help && <Help onClose={() => setHelp(false)} />}
         <main>
           {notice && <p class={notice.ok ? 'notice' : 'warn'}>{notice.text}</p>}
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
@@ -206,6 +289,15 @@ function SubmitPanel({ count, slackTo, onSubmit }: SubmitProps) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const labels: Record<ReviewEvent, string> = { COMMENT: 'Comment', APPROVE: 'Approve', REQUEST_CHANGES: 'Request changes' };
+  const area = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const show = () => {
+      setOpen(true);
+      setTimeout(() => area.current?.focus());
+    };
+    addEventListener('lgtm:finish', show);
+    return () => removeEventListener('lgtm:finish', show);
+  }, []);
 
   async function go() {
     setBusy(true);
@@ -228,7 +320,17 @@ function SubmitPanel({ count, slackTo, onSubmit }: SubmitProps) {
       </button>
       {open && (
         <div class="panel">
-          <textarea rows={4} placeholder="Leave a comment" value={body} onInput={(e) => setBody(e.currentTarget.value)} />
+          <textarea
+            ref={area}
+            rows={4}
+            placeholder="Leave a comment (⌘↵ to submit)"
+            value={body}
+            onInput={(e) => setBody(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !busy) go();
+              if (e.key === 'Escape') setOpen(false);
+            }}
+          />
           {(Object.keys(labels) as ReviewEvent[]).map((v) => (
             <label>
               <input type="radio" name="event" checked={event === v} onChange={() => setEvent(v)} /> {labels[v]}
@@ -271,7 +373,18 @@ function useNear<T extends Element>() {
 
 type BodyProps = { file: File; hunks: Hunk[]; ctx: Ctx; threads: Thread[]; drafts: Draft[] };
 
-function FileSection({ file, ctx, threads, drafts }: { file: File; ctx: Ctx; threads: Thread[]; drafts: Draft[] }) {
+type SectionProps = {
+  file: File;
+  ctx: Ctx;
+  threads: Thread[];
+  drafts: Draft[];
+  viewed: boolean;
+  collapsed: boolean;
+  onToggleViewed: () => void;
+  onExpand: () => void;
+};
+
+function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand }: SectionProps) {
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
   const [rich, setRich] = useState(canRich);
   const [ref, near] = useNear<HTMLElement>();
@@ -281,7 +394,7 @@ function FileSection({ file, ctx, threads, drafts }: { file: File; ctx: Ctx; thr
   const body: BodyProps = { file, hunks, ctx, threads: threads.filter((x) => !isFileLevel(x)), drafts: drafts.filter((d) => d.line) };
 
   return (
-    <section class="file" id={'f-' + path} ref={ref}>
+    <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref}>
       <header class="file-h">
         <span class="st">{file.status}</span>
         <a href={file.blob_url} target="_blank" rel="noopener">
@@ -294,7 +407,16 @@ function FileSection({ file, ctx, threads, drafts }: { file: File; ctx: Ctx; thr
         {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
+        <label class="viewed-box" title="Mark as viewed on GitHub (v)">
+          <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
+        </label>
       </header>
+      {collapsed ? (
+        <button class="collapsed-row" onClick={onExpand}>
+          Viewed. Show {file.additions + file.deletions} changed line{file.additions + file.deletions === 1 ? '' : 's'}
+        </button>
+      ) : (
+        <>
       <Notes
         ctx={ctx}
         threads={threads.filter(isFileLevel)}
@@ -306,12 +428,14 @@ function FileSection({ file, ctx, threads, drafts }: { file: File; ctx: Ctx; thr
           No diff to show (binary, too large, or renamed without changes).{' '}
           <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a>
         </p>
-      ) : !near ? (
+      ) : !near && !ctx.renderAll ? (
         <div style={{ height: `${hunks.reduce((s, h) => s + h.lines.length + 1, 0) * 20}px` }} />
       ) : rich ? (
         <RichView {...body} />
       ) : (
         <DiffView {...body} />
+      )}
+        </>
       )}
     </section>
   );
@@ -465,13 +589,18 @@ function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; dr
       {threads.map((t) => (
         <ThreadView key={t.id} t={t} ctx={ctx} />
       ))}
-      {drafts.map((d) => (
-        <div class="draft" key={d.id} id={'d-' + d.id}>
-          <div class="badge">Pending · {where(d)}</div>
-          <div class="md" dangerouslySetInnerHTML={{ __html: md.render(d.body) }} />
-          <button onClick={() => ctx.removeDraft(d.id)}>Delete</button>
-        </div>
-      ))}
+      {drafts
+        .filter((d) => d.id !== ctx.target?.editId)
+        .map((d) => (
+          <div class="draft" key={d.id} id={'d-' + d.id}>
+            <div class="badge">Pending · {where(d)}</div>
+            <div class="md" dangerouslySetInnerHTML={{ __html: md.render(d.body) }} />
+            <div class="row">
+              <button onClick={() => ctx.setTarget({ path: d.path, side: d.side, line: d.line, startLine: d.startLine, editId: d.id, body: d.body })}>Edit</button>
+              <button onClick={() => ctx.removeDraft(d.id)}>Delete</button>
+            </div>
+          </div>
+        ))}
       {form && <DraftForm key={JSON.stringify(ctx.target)} ctx={ctx} />}
     </div>
   );
@@ -483,17 +612,20 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const [err, setErr] = useState('');
   const first = t.comments.nodes[0];
 
-  async function send() {
+  async function act(f: () => Promise<void>) {
     setBusy(true);
     setErr('');
     try {
-      await ctx.reply(t, body);
-      setBody('');
+      await f();
     } catch (e: any) {
       setErr(e.message);
     }
     setBusy(false);
   }
+  const send = () => act(async () => {
+    await ctx.reply(t, body);
+    setBody('');
+  });
 
   return (
     <details class="thread" id={'t-' + t.id} open={!t.isResolved && !t.isOutdated}>
@@ -509,11 +641,18 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         </div>
       ))}
       <textarea rows={2} placeholder="Reply…" value={body} onInput={(e) => setBody(e.currentTarget.value)} />
-      {body.trim() && (
-        <button disabled={busy} onClick={send}>
-          Reply
-        </button>
-      )}
+      <div class="row">
+        {body.trim() && (
+          <button disabled={busy} onClick={send}>
+            Reply
+          </button>
+        )}
+        {(t.isResolved ? t.viewerCanUnresolve : t.viewerCanResolve) && (
+          <button disabled={busy} onClick={() => act(() => ctx.resolve(t, !t.isResolved))}>
+            {t.isResolved ? 'Unresolve' : 'Resolve conversation'}
+          </button>
+        )}
+      </div>
       {err && <p class="error">{err}</p>}
     </details>
   );
@@ -521,14 +660,15 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
 
 function DraftForm({ ctx }: { ctx: Ctx }) {
   const target = ctx.target!;
-  const [body, setBody] = useState(target.quote != null ? `> ${target.quote}\n\n` : '');
+  const [body, setBody] = useState(target.body ?? (target.quote != null ? `> ${target.quote}\n\n` : ''));
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus(), []);
 
   function save() {
     if (!body.trim()) return;
-    const { quote: _q, near: _n, ...rest } = target;
-    ctx.addDraft({ ...rest, body });
+    const { quote: _q, near: _n, editId, body: _b, ...rest } = target;
+    if (editId) ctx.updateDraft(editId, { ...rest, body });
+    else ctx.addDraft({ ...rest, body });
     ctx.setTarget(null);
   }
 
@@ -547,7 +687,7 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
       />
       <div class="row">
         <button class="primary" disabled={!body.trim()} onClick={save}>
-          Add to review
+          {target.editId ? 'Update comment' : 'Add to review'}
         </button>
         <button onClick={() => ctx.setTarget(null)}>Cancel</button>
       </div>
@@ -575,5 +715,39 @@ function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
         </div>
       ))}
     </details>
+  );
+}
+
+const SHORTCUTS: [string, string][] = [
+  ['j / k', 'Next / previous file'],
+  ['n / p', 'Next / previous review thread'],
+  ['v', 'Mark the current file viewed'],
+  ['c', 'Comment on the current file'],
+  ['[ / ]', 'Previous / next PR in the stack'],
+  ['i', 'Show / hide the index'],
+  ['⌘↵', 'Finish review (submit inside the panel)'],
+  ['⌘F', 'Find, in every file'],
+  ['?', 'This help'],
+];
+
+function Help({ onClose }: { onClose: () => void }) {
+  return (
+    <div class="help" role="dialog" aria-label="Keyboard shortcuts">
+      <div class="row">
+        <b>Keyboard shortcuts</b>
+        <span class="spacer" />
+        <button onClick={onClose}>Close</button>
+      </div>
+      <table>
+        <tbody>
+          {SHORTCUTS.map(([k, d]) => (
+            <tr key={k}>
+              <td><kbd>{k}</kbd></td>
+              <td>{d}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
