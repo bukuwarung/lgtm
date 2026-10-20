@@ -26,6 +26,10 @@ The system SHALL exclude generated files from the scrolling view and outline, an
 - **WHEN** a PR changes 10 files of which 3 are generated
 - **THEN** 7 files are shown and a row reads "3 generated files hidden"
 
+#### Scenario: Renamed without changes
+- **WHEN** a PR renames or moves 5 files without changing their content
+- **THEN** they are hidden behind a "5 files renamed or moved without changes hidden" row, while binary or too-large files that did change stay visible
+
 #### Scenario: Reveal
 - **WHEN** the user clicks the hidden-files row
 - **THEN** the generated files are shown at the end of the view

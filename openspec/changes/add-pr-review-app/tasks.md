@@ -87,6 +87,7 @@
 - [x] 12.8 Failed GitHub Actions job log excerpt via `/job-log`
 - [x] 12.9 One Slack thread per PR and person (`slack-threads.json`, fallback to a new DM)
 - [x] 12.10 "Your PRs" sidebar section (authored/assigned), own drafts always visible
+- [x] 12.11 Hide renamed/copied/mode-only files without content changes by default
 
 ## 13. Verify
 

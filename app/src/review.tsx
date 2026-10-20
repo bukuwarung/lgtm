@@ -41,10 +41,15 @@ function slackText(pr: PR, ref: string, event: ReviewEvent, body: string, commen
   return `${verb} <${pr.html_url}|${slackEscape(`${ref} ${pr.title}`)}>${extra}${quote}`;
 }
 
-// Mark generated files and put markdown first (stable sort keeps GitHub's order within each group).
+// Mark generated and content-free files, and put markdown first (stable sort keeps GitHub's order within each group).
+// Binary and too-large files also come without a patch but did change, so only renames/copies/mode changes count.
 const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>): File[] =>
   files
-    .map((f) => ({ ...f, generated: isGenerated(rules, f.filename) }))
+    .map((f) => ({
+      ...f,
+      generated: isGenerated(rules, f.filename),
+      noDiff: ['renamed', 'copied', 'changed'].includes(f.status) && !f.additions && !f.deletions,
+    }))
     .sort((a, b) => +isMarkdown(b.filename) - +isMarkdown(a.filename));
 
 const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
@@ -61,6 +66,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const [saved, setSaved] = useState<Saved>({ sha: '', drafts: [] });
   const [target, setTarget] = useState<Target | null>(null);
   const [showGenerated, setShowGenerated] = useState(false);
+  const [showNoDiff, setShowNoDiff] = useState(false);
   const [showIndex, toggleIndex] = useStoredFlag('showIndex', true);
   const [checks, setChecks] = useState<Check[] | null>(null);
   const [error, setError] = useState('');
@@ -216,9 +222,10 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     });
   }
 
-  const visible = files.filter((f) => !f.generated);
+  const visible = files.filter((f) => !f.generated && !f.noDiff);
   const generated = files.filter((f) => f.generated);
-  const shown = showGenerated ? [...visible, ...generated] : visible;
+  const noDiff = files.filter((f) => f.noDiff && !f.generated);
+  const shown = [...visible, ...(showGenerated ? generated : []), ...(showNoDiff ? noDiff : [])];
   const section = (f: File) => (
     <FileSection
       key={f.filename}
@@ -341,6 +348,12 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
             (showGenerated ? generated.map(section) : (
               <button class="gen-row" onClick={() => setShowGenerated(true)}>
                 {generated.length} generated file{generated.length > 1 ? 's' : ''} hidden. Show
+              </button>
+            ))}
+          {noDiff.length > 0 &&
+            (showNoDiff ? noDiff.map(section) : (
+              <button class="gen-row" onClick={() => setShowNoDiff(true)}>
+                {noDiff.length} file{noDiff.length > 1 ? 's' : ''} renamed or moved without changes hidden. Show
               </button>
             ))}
         </main>

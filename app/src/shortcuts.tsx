@@ -3,7 +3,8 @@ import { fetchJobLog } from './platform.ts';
 import type { ComponentChildren } from 'preact';
 import type { Check, ConversationItem, Draft, PR, PRFile, Thread } from './github.ts';
 
-export type File = PRFile & { generated: boolean };
+// noDiff: renamed/copied/mode-changed with no content change, so there's nothing to review.
+export type File = PRFile & { generated: boolean; noDiff: boolean };
 
 // Scroll to an element by id, opening any collapsed <details> around it and flashing it. `near` is scrolled to
 // first when the target isn't in the DOM yet (file bodies render lazily), then we wait for it to appear.

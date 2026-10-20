@@ -10,7 +10,7 @@ Fast, markdown-first GitHub PR review in your own browser, signed in with your G
 - Drag the sidebars' edges to resize them (double-click to reset).
 - The PR conversation (description, comments, review verdicts) above the files; review threads inline.
 - Markdown files first, rendered as rich diff by default. Hover a block and click the `+` gutter to comment on its source lines.
-- Files marked `linguist-generated` in the root `.gitattributes` are hidden behind one "N generated files hidden" row.
+- Files marked `linguist-generated` in the root `.gitattributes`, and files only renamed or moved without changes, are hidden behind "N … hidden · Show" rows.
 - Stacked PRs (one's base branch is another's head) are grouped in the sidebar, bottom layer first.
 - Draft comments survive reloads and are submitted as one review (Comment / Approve / Request changes), optionally with a Slack DM to the author and assignees.
 
