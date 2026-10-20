@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { addedLines, anchor, parsePatch, removedRuns, type Hunk, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getConversation, getEmails, getFiles, getPR, getRaw, getThreads, getViewed, getViewer, reply, resolveThread, setViewed, submitReview,
-  type Check, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
+  getChecks, getCompare, getConversation, getEmails, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
+  reply, resolveThread, setViewed, submitReview,
+  type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightHunks } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
@@ -26,6 +27,7 @@ type Ctx = {
   reply: (t: Thread, body: string) => Promise<void>;
   resolve: (t: Thread, resolve: boolean) => Promise<void>;
   renderAll: boolean; // set by ⌘F so the browser's find can see every file
+  since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
 };
 type Saved = { sha: string; drafts: Draft[] };
 
@@ -38,10 +40,21 @@ function slackText(pr: PR, ref: string, event: ReviewEvent, body: string, commen
   return `${verb} <${pr.html_url}|${slackEscape(`${ref} ${pr.title}`)}>${extra}${quote}`;
 }
 
+// Mark generated files and put markdown first (stable sort keeps GitHub's order within each group).
+const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>): File[] =>
+  files
+    .map((f) => ({ ...f, generated: isGenerated(rules, f.filename) }))
+    .sort((a, b) => +isMarkdown(b.filename) - +isMarkdown(a.filename));
+
 const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
 export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSubmitted: () => void }) {
-  const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[] } | null>(null);
+  const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
+  const [stack, setStack] = useState<StackLayer[]>([]);
+  // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
+  const [lastReviewed, setLastReviewed] = useState<string | null>(null);
+  const [since, setSince] = useState(false);
+  const [sinceData, setSinceData] = useState<{ status: string; files: File[] } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [conversation, setConversation] = useState<ConversationItem[]>([]);
   const [saved, setSaved] = useState<Saved>({ sha: '', drafts: [] });
@@ -91,21 +104,43 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
         setSlackTo(ready ? [...new Set(people)] : null);
       }, () => setSlackTo(null));
       const rules = parseGeneratedRules(attrs ?? '');
-      const sorted = files
-        .map((f) => ({ ...f, generated: isGenerated(rules, f.filename) }))
-        .sort((a, b) => +isMarkdown(b.filename) - +isMarkdown(a.filename)); // stable: keeps GitHub order within groups
+      getStack(repo, pr).then(setStack, () => {});
+      getMyLastReviewCommit(repo, n).then((sha) => {
+        if (sha && sha !== pr.head.sha) {
+          setLastReviewed(sha);
+          setSince(true); // re-review: start with just what changed
+        }
+      }, () => {});
       setThreads(threads);
       setConversation(conversation);
       setSaved(stored ?? { sha: pr.head.sha, drafts: [] });
-      setData({ pr, headRepo, files: sorted });
+      setData({ pr, headRepo, files: prepare(files, rules), rules });
     })().catch((e) => setError(e.message));
   }, []);
 
-  const byPath = useMemo(() => Map.groupBy(threads, (t) => t.path), [threads]);
+  useEffect(() => {
+    if (!since || !lastReviewed || !data || sinceData) return;
+    getCompare(repo, lastReviewed, data.pr.head.sha).then(
+      // After a rebase the comparison also carries the base branch's changes; keep only files this PR touches.
+      (d) => {
+        const inPR = new Set(data.files.map((f) => f.filename));
+        setSinceData({ status: d.status, files: prepare(d.files.filter((f) => inPR.has(f.filename)), data.rules) });
+      },
+      (e) => {
+        setSince(false);
+        setNotice({ ok: false, text: `Couldn't load changes since your last review: ${e.message}` });
+      },
+    );
+  }, [since, lastReviewed, data]);
+
+  // In "since" mode old-side line numbers refer to my last reviewed commit, so old-side threads would sit on the wrong lines.
+  const shownThreads = since && sinceData ? threads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : threads;
+  const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
 
   if (error) return <p class="error page">{error}</p>;
   if (!data) return <p class="note page">Loading pull request…</p>;
-  const { pr, headRepo, files } = data;
+  const { pr, headRepo } = data;
+  const files = since && sinceData ? sinceData.files : data.files;
   const { drafts } = saved;
 
   // Drafts remember the commit they were written on, so a push mid-review doesn't orphan them.
@@ -161,6 +196,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
       setThreads(await getThreads(repo, n));
     },
     renderAll,
+    since: since && !!sinceData,
   };
 
   // Optimistic; GitHub's state is the source of truth, so a failure puts it back.
@@ -192,6 +228,9 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     />
   );
 
+  const layer = stack.findIndex((l) => l.number === n);
+  const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
+
   // Keyboard shortcuts (see the ⌨ help). Reassigned every render so it sees current state.
   keys.current = (e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') return setRenderAll(true); // then the browser's find opens
@@ -205,7 +244,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     const top = 44 + 60;
     const cur = sections.reduce((c, s, i) => (s.getBoundingClientRect().top <= top ? i : c), -1);
     const path = sections[Math.max(cur, 0)]?.id.slice(2);
-    const ordered = threadOrder(threads, drafts, shown);
+    const ordered = threadOrder(shownThreads, drafts, shown);
     const act: Record<string, () => void> = {
       j: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
       k: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
@@ -214,6 +253,8 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
       v: () => path && toggleViewed(path),
       c: () => path && ctx.setTarget({ path, side: 'RIGHT' }),
       i: toggleIndex,
+      '[': () => stackAt(-1) && (location.hash = `/${repo}/pull/${stackAt(-1)!.number}`),
+      ']': () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
       '?': () => setHelp(!help),
       Escape: () => setHelp(false),
     };
@@ -236,7 +277,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
             <ShortcutIndex
               pr={pr}
               conversation={conversation}
-              threads={threads}
+              threads={shownThreads}
               drafts={drafts}
               checks={checks}
               onRefreshChecks={loadChecks}
@@ -256,12 +297,35 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
           <h1>
             {pr.title} <a href={pr.html_url} target="_blank" rel="noopener">{repo}#{n}</a>
           </h1>
+          {layer >= 0 && (
+            <span class="stack-nav" title="This PR's stack ([ and ] to move)">
+              {stackAt(-1) ? <a href={`#/${repo}/pull/${stackAt(-1)!.number}`} title={`#${stackAt(-1)!.number} ${stackAt(-1)!.title}`}>‹</a> : <span class="off">‹</span>}
+              <span>Layer {layer + 1}/{stack.length}</span>
+              {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
+            </span>
+          )}
           <button title="Keyboard shortcuts (?)" onClick={() => setHelp(!help)}>⌨</button>
           <SubmitPanel count={drafts.length} slackTo={slackTo} onSubmit={submit} />
         </div>
         {help && <Help onClose={() => setHelp(false)} />}
         <main>
           {notice && <p class={notice.ok ? 'notice' : 'warn'}>{notice.text}</p>}
+          {lastReviewed && (
+            <div class={since ? 'since on' : 'since'}>
+              {since ? (
+                <>
+                  Showing changes since your last review (<code>{lastReviewed.slice(0, 7)}</code> → <code>{pr.head.sha.slice(0, 7)}</code>)
+                  {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
+                  {sinceData?.status === 'diverged' && <b> · rebased since then, so these files may also show changes from the base branch</b>}
+                  <button onClick={() => setSince(false)}>Show all changes</button>
+                </>
+              ) : (
+                <>
+                  New commits since your last review. <button onClick={() => setSince(true)}>Show only those changes</button>
+                </>
+              )}
+            </div>
+          )}
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
@@ -447,6 +511,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const t = ctx.target?.path === path ? ctx.target : null;
 
   const pick = (e: MouseEvent, side: Side, line: number) => {
+    if (side === 'LEFT' && ctx.since) return;
     if (e.shiftKey && t?.side === side && t.line) {
       const start = Math.min(t.startLine ?? t.line, line), end = Math.max(t.line, line);
       ctx.setTarget({ path, side, line: end, startLine: start === end ? undefined : start });
@@ -541,13 +606,13 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     const last = r.oldStart + r.lines.length - 1;
     return (
       <div class="removed">
-        <button
+        {!ctx.since && <button
           class="removed-c"
           title="Comment on removed lines"
           onClick={() => ctx.setTarget({ path, side: 'LEFT', line: last, startLine: last > r.oldStart ? r.oldStart : undefined })}
         >
           +
-        </button>
+        </button>}
         <pre>{r.lines.join('\n')}</pre>
         <Notes
           ctx={ctx}

@@ -106,6 +106,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .file.viewed .file-h { opacity: .75; }
 .collapsed-row { width: 100%; padding: 6px 10px; border: 0; border-radius: 0 0 6px 6px; background: none; text-align: left; font-size: 12px; color: var(--muted); }
 .tree-file.dim { opacity: .55; }
+.stack-nav { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.stack-nav a, .stack-nav .off { padding: 0 6px; font-size: 16px; }
+.stack-nav .off { opacity: .3; }
+.since { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.since.on { background: var(--warn); }
+.since button { margin-left: auto; }
 .help { position: sticky; top: var(--bar); z-index: 4; margin: 8px 16px; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
 .help td { padding: 3px 12px 3px 0; }
 kbd { padding: 1px 6px; font: 12px var(--mono); background: var(--soft); border: 1px solid var(--border); border-radius: 4px; }
