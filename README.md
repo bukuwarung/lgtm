@@ -30,17 +30,20 @@ It serves the UI on `http://127.0.0.1:4517` and opens it in your default browser
 
 ## Slack notifications (optional)
 
-When configured, the submit panel offers "Message @author on Slack" (author and assignees, not you or bots). The DM is sent by the local server, so the token never reaches the page.
+When [slackcli](https://github.com/shaharia-lab/slackcli) is installed and signed in, the submit panel offers "Message @author on Slack" (author and assignees, not you or bots). Messages are sent as you; no Slack app is needed.
 
-1. Create a Slack app at https://api.slack.com/apps (From scratch, in your workspace).
-2. Under **OAuth & Permissions → User Token Scopes**, add `chat:write`, `im:write`, `users:read`, `users:read.email`. Install it to the workspace (an admin may need to approve).
-3. Put the **User OAuth Token** in `~/.config/lgtm/config.json` and keep the file private (`chmod 600`):
-
-```json
-{ "slackToken": "xoxp-…" }
+```bash
+brew install shaharia-lab/tap/slackcli
+slackcli auth login-auto
 ```
 
-Messages are sent as you. People are found on Slack by their company email on GitHub; if someone isn't found, map them by hand with `"slackUsers": { "github-login": "U012ABC" }` (their Slack member ID). Changes apply without restarting.
+GitHub doesn't expose bukuwarung members' emails, so tell lgtm who is who in `~/.config/lgtm/config.json` (Slack user ID, `@handle`, or email; `slackcli search people "name"` finds them):
+
+```json
+{ "slackUsers": { "github-login": "@their-slack-handle" } }
+```
+
+Changes apply without restarting. Run with `LGTM_SLACK_DRY_RUN=1 lgtm` to check recipients without sending.
 
 ## Develop
 

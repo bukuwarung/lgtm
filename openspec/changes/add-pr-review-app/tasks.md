@@ -66,6 +66,8 @@
 - [x] 10.2 Group stacked PRs in the sidebar (`findStacks` + check)
 - [x] 10.3 Slack DM on submit: `/slack` endpoint (config token, email lookup, mapping, validation), submit-panel checkbox, result notice; checked against Slack's API with a fake token
 
+- [x] 10.4 Switch Slack sending to slackcli (no Slack app/token); dry-run checked against the real workspace
+
 ## 11. Verify
 
 - [ ] 11.1 Manual review session on a real PR containing markdown, generated files, and a 500+ file diff (done so far: live read-only load of a real PR)

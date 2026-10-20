@@ -38,7 +38,7 @@ export function useStoredFlag(key: string, initial: boolean) {
   return [on, toggle] as const;
 }
 
-// Slack DMs go through the local server, which holds the token (~/.config/lgtm/config.json).
+// Slack DMs go through the local server, which runs slackcli (it holds the Slack sign-in).
 export const slackConfigured = (): Promise<boolean> =>
   fetch('/slack').then((r) => r.json()).then((d) => !!d.configured, () => false);
 

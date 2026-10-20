@@ -13,7 +13,7 @@ const PORT = Number(process.env.LGTM_PORT ?? 4517);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
-// Optional: { "slackToken": "xoxp-…", "slackUsers": { "github-login": "U012ABC" } }
+// Optional: { "slackUsers": { "github-login": <Slack user ID, @handle, or email> } }
 const CONFIG = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'config.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 
@@ -29,39 +29,50 @@ async function readConfig() {
   }
 }
 
-async function slack(token, method, params) {
-  const res = await fetch(`https://slack.com/api/${method}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: new URLSearchParams(params),
+// Slack goes through slackcli (https://github.com/shaharia-lab/slackcli), which owns the sign-in:
+// `slackcli auth login-auto`. LGTM_SLACK_DRY_RUN=1 resolves recipients without sending.
+const DRY_RUN = process.env.LGTM_SLACK_DRY_RUN === '1';
+
+function slackcli(args, input) {
+  return new Promise((resolve) => {
+    const child = execFile('slackcli', args, { timeout: 30000 }, (err, stdout, stderr) => {
+      if (!err) return resolve({ ok: true, stdout });
+      if (err.code === 'ENOENT') return resolve({ ok: false, error: 'slackcli is not installed (brew install shaharia-lab/tap/slackcli)' });
+      // With --json, slackcli puts one JSON error object on the last stderr line.
+      const last = stderr.trim().split('\n').pop() ?? '';
+      let error = last || err.message;
+      try {
+        const e = JSON.parse(last).error;
+        error = e.hint ? `${e.message} (${e.hint})` : e.message;
+      } catch {
+        // not JSON; keep the raw line
+      }
+      resolve({ ok: false, error });
+    });
+    child.stdin.end(input ?? '');
   });
-  const d = await res.json();
-  if (!d.ok) throw new Error(`${method}: ${d.error}`);
-  return d;
 }
 
-// DM each recipient. Slack user = config mapping, else looked up by one of their GitHub emails.
+// User ID, @handle or email: the forms slackcli resolves to a person. Also keeps flags out of the argument.
+const SLACK_TARGET = /^(U[A-Z0-9]+|@[\w.-]+|[^\s@-][^\s@]*@[^\s@]+)$/;
+
+// DM each recipient: their slackUsers mapping first, then their GitHub emails.
 async function notify({ recipients, text }) {
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
     recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string'));
   if (!valid) throw new Error('Bad Slack request');
   const cfg = await readConfig();
-  if (!cfg.slackToken) throw new Error(`No slackToken in ${CONFIG}`);
   return Promise.all(
     recipients.map(async ({ login, emails }) => {
-      try {
-        let user = cfg.slackUsers?.[login];
-        for (const email of user ? [] : emails) {
-          user = await slack(cfg.slackToken, 'users.lookupByEmail', { email }).then((d) => d.user.id, () => undefined);
-          if (user) break;
-        }
-        if (!user) throw new Error(`no Slack user found (add "${login}" to slackUsers in ${CONFIG})`);
-        const { channel } = await slack(cfg.slackToken, 'conversations.open', { users: user });
-        await slack(cfg.slackToken, 'chat.postMessage', { channel: channel.id, text, unfurl_links: 'false' });
-        return { login, ok: true };
-      } catch (e) {
-        return { login, ok: false, error: e.message };
+      const targets = [cfg.slackUsers?.[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
+      if (!targets.length) return { login, ok: false, error: `no Slack user known: add "${login}": "@their-slack-handle" to slackUsers in ${CONFIG}` };
+      let error = '';
+      for (const target of targets) {
+        const r = await slackcli(['messages', 'send', `--recipient-id=${target}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
+        if (r.ok) return { login, ok: true, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
+        error = r.error;
       }
+      return { login, ok: false, error };
     }),
   );
 }
@@ -103,7 +114,7 @@ const server = createServer(async (req, res) => {
   if ((path === '/token' || path === '/slack') && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/slack') {
     try {
-      if (req.method === 'GET') return json(res, 200, { configured: !!(await readConfig()).slackToken });
+      if (req.method === 'GET') return json(res, 200, { configured: (await slackcli(['auth', 'whoami'])).ok });
       if (req.method === 'POST') return json(res, 200, await notify(await readJson(req)));
       return res.writeHead(405).end();
     } catch (e) {
@@ -139,6 +150,6 @@ server.on('error', async (e) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`lgtm running at ${ORIGIN} (Ctrl-C to stop)`);
+  console.log(`lgtm running at ${ORIGIN}${DRY_RUN ? ' (Slack dry run)' : ''} (Ctrl-C to stop)`);
   open(url);
 });
