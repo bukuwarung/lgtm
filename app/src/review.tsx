@@ -243,6 +243,18 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const layer = stack.findIndex((l) => l.number === n);
   const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
 
+  // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.
+  // It reuses the click paths: a diff row's line-number cell, or a block's "+" gutter just left of it.
+  function commentAtCurrentLine() {
+    const lines = '.diff tr.ln, .chunk [data-src]';
+    const hovered = [...document.querySelectorAll(':hover')].at(-1)?.closest(lines);
+    const el = hovered ?? [...document.querySelectorAll(lines)].find((x) => { const t = x.getBoundingClientRect().top; return t >= 100 && t < innerHeight; });
+    if (!el) return false;
+    if (el.matches('tr')) el.querySelector('td.num:nth-child(2)')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    else el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: el.getBoundingClientRect().left - 10 }));
+    return true;
+  }
+
   // Keyboard shortcuts (see the ⌨ help). Reassigned every render so it sees current state.
   keys.current = (e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') return setRenderAll(true); // then the browser's find opens
@@ -252,6 +264,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
       return dispatchEvent(new Event('lgtm:finish'));
     }
     if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest('input, textarea, select, [contenteditable]')) return;
+    if (e.key === ' ' && (e.target as Element).closest('button, a, summary, label')) return; // Space presses a focused control
     const sections = [...document.querySelectorAll<HTMLElement>('main > .file')];
     const top = 44 + 60;
     const cur = sections.reduce((c, s, i) => (s.getBoundingClientRect().top <= top ? i : c), -1);
@@ -264,6 +277,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
       p: () => ordered.length && go(Math.max(threadCursor.current - 1, 0)),
       v: () => path && toggleViewed(path),
       c: () => path && ctx.setTarget({ path, side: 'RIGHT' }),
+      ' ': () => commentAtCurrentLine() || scrollBy({ top: innerHeight * 0.85 }), // nothing to comment on: Space scrolls as usual
       i: toggleIndex,
       '[': () => stackAt(-1) && (location.hash = `/${repo}/pull/${stackAt(-1)!.number}`),
       ']': () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
@@ -627,7 +641,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
               const num = side === 'LEFT' ? l.old! : l.new!;
               return (
                 <>
-                  <tr class={l.kind === '+' ? 'a' : l.kind === '-' ? 'd' : ''}>
+                  <tr class={l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln'}>
                     <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.new ?? ''}</td>
                     {hl ? <td class="code" dangerouslySetInnerHTML={{ __html: hl[hi][li] }} /> : <td class="code">{l.text}</td>}
@@ -870,6 +884,7 @@ const SHORTCUTS: [string, string][] = [
   ['j / k', 'Next / previous file'],
   ['n / p', 'Next / previous review thread'],
   ['v', 'Mark the current file viewed'],
+  ['Space', 'Comment on the line under the mouse (or at the top of the view)'],
   ['c', 'Comment on the current file'],
   ['[ / ]', 'Previous / next PR in the stack'],
   ['i', 'Show / hide the index'],

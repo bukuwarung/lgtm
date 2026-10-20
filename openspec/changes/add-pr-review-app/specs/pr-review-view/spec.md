@@ -127,6 +127,10 @@ The system SHALL let the user expand unchanged lines before, between, and after 
 ### Requirement: Keyboard shortcuts
 The system SHALL support `j`/`k` files, `n`/`p` threads, `v` viewed, `c` comment, `[`/`]` stack, `i` index, `⌘↵` finish review, `?` help, and SHALL ignore them while the user is typing.
 
+#### Scenario: Space comments at the current line
+- **WHEN** the user presses Space with the mouse over a diff line or rendered markdown block
+- **THEN** the comment form opens for that line or block, exactly as clicking its "+" would; with nothing under the mouse it uses the first line at the top of the view, and with nothing commentable Space scrolls as usual
+
 #### Scenario: Find in unrendered files
 - **WHEN** the user presses ⌘F
 - **THEN** every file renders so the browser's find covers the whole PR

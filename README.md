@@ -66,6 +66,7 @@ To update: `git pull && npm run build` in `app/` (restart `lgtm` only if `app/bi
 | `j` / `k` | Next / previous file |
 | `n` / `p` | Next / previous review thread |
 | `v` | Mark the current file viewed |
+| `Space` | Comment on the line under the mouse (or at the top of the view) |
 | `c` | Comment on the current file |
 | `[` / `]` | Previous / next PR in the stack |
 | `i` | Show / hide the index |
