@@ -1,3 +1,4 @@
+import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { getReviewQueue, loadToken, type QueueItem } from './github.ts';

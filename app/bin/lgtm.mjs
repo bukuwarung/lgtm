@@ -17,7 +17,7 @@ const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 const TEAM = fileURLToPath(new URL('../slack-users.json', import.meta.url));
 // Optional personal additions/overrides: { "slackUsers": { "github-login": "U…" } }
 const CONFIG = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'config.json');
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 
 // Read per request so `gh auth login` / `gh auth switch` take effect on reload.
 const ghToken = () => execFileSync('gh', ['auth', 'token'], { encoding: 'utf8' }).trim();

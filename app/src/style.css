@@ -14,7 +14,8 @@
   --g-needs: var(--accent); --g-changes: var(--delfg); --g-commented: light-dark(#8c959f, #808080); --g-approved: var(--addfg);
   --bar: 44px;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Bundled first so everyone gets the same font with ligatures (a local "NL" install would have none). */
+  --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -27,6 +28,8 @@ button.primary { background: var(--primary); border-color: var(--primary); color
 button:disabled { opacity: .5; cursor: default; }
 input:not([type=radio]):not([type=checkbox]), textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; width: 100%; }
 code, pre { font-family: var(--mono); }
+/* Code ligatures (=>, !=, ===, ->) via the font's contextual alternates. */
+.diff .code, pre, code { font-variant-ligatures: contextual; font-feature-settings: "calt" 1; }
 .row { display: flex; gap: 8px; align-items: center; }
 .note { color: var(--muted); }
 .error { color: var(--delfg); }
