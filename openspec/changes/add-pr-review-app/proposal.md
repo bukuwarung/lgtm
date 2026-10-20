@@ -4,9 +4,9 @@ Reviewing PRs on github.com is slow on large diffs, buries the prose (READMEs, A
 
 ## What Changes
 
-- New browser extension (MV3) for **Firefox and Chrome** from one codebase and one build, opening a full-tab review UI (`review.html`). No backend.
-- Sign in with GitHub via OAuth device flow; token kept in extension-local storage.
-- PR sidebar: every open PR I'm asked to review or have reviewed, grouped by my status (needs review, I requested changes, I commented, I approved), plus "open by URL". Toolbar button on a GitHub PR tab opens that PR directly.
+- New local app: the `lgtm` command serves the review UI on `127.0.0.1` and opens it in your default browser. No browser extension, no hosted backend.
+- Signs in with your existing GitHub CLI login (`gh auth token`); nothing to paste.
+- PR sidebar: every open PR I'm asked to review or have reviewed, grouped by my status (needs review, I requested changes, I commented, I approved), plus "open by URL". `lgtm <PR URL>` opens that PR directly.
 - Single continuous scrolling view of every changed file (no tabs, no pagination), like GitHub's "Files changed" but faster, with a GitHub-style file tree and syntax highlighting.
 - PR conversation (description, comments, review verdicts) shown above the files.
 - Markdown files (`.md`, `.mdx`, `.markdown`) sorted to the top and shown as **rich diff by default**, with line comments still possible (comments anchor to the source lines of the rendered block). Toggle per file to source diff.
@@ -21,7 +21,7 @@ Reviewing PRs on github.com is slow on large diffs, buries the prose (READMEs, A
 ## Capabilities
 
 ### New Capabilities
-- `github-auth`: Sign in/out with GitHub via device flow, persist and use the token.
+- `github-auth`: Use the GitHub CLI's login; keep the token away from other websites.
 - `pr-review-view`: PR inbox, continuous scrolling diff of all files, inline threads, drafting and submitting a review.
 - `markdown-rich-diff`: Markdown-first ordering, rendered rich diff by default, line-anchored commenting on rendered blocks.
 - `generated-file-filter`: Detect `linguist-generated` files from `.gitattributes` and hide them.
@@ -31,8 +31,6 @@ None (greenfield).
 
 ## Impact
 
-- New code under `extension/`. Repo currently has only a README.
-- Requires registering a GitHub OAuth App with device flow enabled (public `client_id` shipped in the extension; no secret).
-- Requires host permissions for `https://github.com/*` and `https://api.github.com/*`.
-- Published to both addons.mozilla.org and the Chrome Web Store (same zip).
-- Runtime deps kept to: `preact`, `markdown-it`, `highlight.js` (common languages + Dockerfile). Build: `vite`, `typescript`, `web-ext`.
+- New code under `app/`. Repo currently has only a README.
+- Requires the GitHub CLI (`gh`) signed in, and Node to run the server.
+- Runtime deps kept to: `preact`, `markdown-it`, `highlight.js` (common languages + Dockerfile). Build: `vite`, `typescript`.

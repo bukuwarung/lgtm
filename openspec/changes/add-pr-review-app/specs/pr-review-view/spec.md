@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
-### Requirement: Firefox and Chrome support
-The system SHALL run from a single build on Firefox 128+ and Chrome 121+ with identical behavior.
+### Requirement: Runs in the user's own browser
+The system SHALL serve its UI from a local server and work in current Firefox and Chrome without installing anything into the browser.
 
-#### Scenario: Same package in both browsers
-- **WHEN** the built zip is loaded in Firefox and in Chrome
-- **THEN** sign-in, PR inbox, review view, and submit all work in both
+#### Scenario: Launch
+- **WHEN** the user runs `lgtm`
+- **THEN** the review UI opens in the default browser
 
 ### Requirement: PR sidebar grouped by review status
 The system SHALL show, in a collapsible sidebar, every open PR where the signed-in user's review is requested or that they have reviewed (excluding their own), grouped as: Needs your review, You requested changes, You commented, You approved. It SHALL open any PR from a pasted `github.com/{owner}/{repo}/pull/{n}` URL.
@@ -26,9 +26,9 @@ The system SHALL show, in a collapsible sidebar, every open PR where the signed-
 - **WHEN** the user submits a review
 - **THEN** the sidebar reloads and the PR moves to its new group
 
-#### Scenario: Open from toolbar on a PR tab
-- **WHEN** the user clicks the toolbar button while the active tab is a GitHub PR URL
-- **THEN** the review page opens directly on that PR
+#### Scenario: Open a PR from the command line
+- **WHEN** the user runs `lgtm https://github.com/owner/repo/pull/123`
+- **THEN** the UI opens directly on that PR
 
 ### Requirement: Continuous scrolling diff
 The system SHALL render every visible changed file of a PR in one continuous scrolling page, each file under a sticky header showing path, status, and +/- counts, with syntax highlighting for recognized languages, and a GitHub-style file tree for jump navigation.

@@ -1,10 +1,6 @@
 import { render } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
-import {
-  CLIENT_ID, getReviewQueue, loadToken, pollDeviceFlow, saveToken, setUnauthorizedHandler, signOut, startDeviceFlow,
-  type DeviceCode, type QueueItem,
-} from './github.ts';
-import { hasHostAccess, requestHostAccess } from './platform.ts';
+import { useEffect, useState } from 'preact/hooks';
+import { getReviewQueue, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
@@ -14,7 +10,7 @@ export function parseRoute(s: string) {
 }
 
 function App() {
-  const [state, setState] = useState<'loading' | 'noaccess' | 'signedout' | 'in'>('loading');
+  const [state, setState] = useState<'loading' | 'in' | { error: string }>('loading');
   const [route, setRoute] = useState(location.hash);
   const [queueVersion, setQueueVersion] = useState(0);
   const [showPRs, setShowPRs] = useState(() => {
@@ -33,27 +29,22 @@ function App() {
     }
   };
 
-  const check = async () => setState(!(await hasHostAccess()) ? 'noaccess' : (await loadToken()) ? 'in' : 'signedout');
   useEffect(() => {
-    setUnauthorizedHandler(() => setState('signedout'));
     const onHash = () => setRoute(location.hash);
     addEventListener('hashchange', onHash);
-    check();
+    loadToken().then(() => setState('in'), (e) => setState({ error: e.message }));
     return () => removeEventListener('hashchange', onHash);
   }, []);
 
   if (state === 'loading') return null;
-  if (state === 'noaccess')
+  if (typeof state === 'object')
     return (
       <div class="signin">
         <h1>lgtm</h1>
-        <p>lgtm needs access to github.com and api.github.com to load pull requests.</p>
-        <button class="primary" onClick={() => requestHostAccess().then((ok) => { if (ok) check(); })}>
-          Grant GitHub access
-        </button>
+        <p class="error">{state.error}</p>
+        <p class="note">lgtm signs in with the GitHub CLI. Start it with the <code>lgtm</code> command, not by opening the file directly.</p>
       </div>
     );
-  if (state === 'signedout') return <SignIn onDone={() => setState('in')} />;
 
   const r = parseRoute(route);
   return (
@@ -62,7 +53,6 @@ function App() {
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
         <a href="#">lgtm</a>
         <span class="spacer" />
-        <button onClick={() => signOut().then(() => setState('signedout'))}>Sign out</button>
       </nav>
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
         {showPRs && <PRList current={r} version={queueVersion} />}
@@ -73,63 +63,6 @@ function App() {
         )}
       </div>
     </>
-  );
-}
-
-function SignIn({ onDone }: { onDone: () => void }) {
-  const [code, setCode] = useState<DeviceCode | null>(null);
-  const [err, setErr] = useState('');
-  const [pat, setPat] = useState('');
-  const abort = useRef<AbortController>(null);
-  useEffect(() => () => abort.current?.abort(), []);
-
-  async function start() {
-    setErr('');
-    try {
-      const d = await startDeviceFlow();
-      setCode(d);
-      abort.current = new AbortController();
-      await saveToken(await pollDeviceFlow(d, abort.current.signal));
-      onDone();
-    } catch (e: any) {
-      setCode(null);
-      setErr(e.message);
-    }
-  }
-
-  return (
-    <div class="signin">
-      <h1>lgtm</h1>
-      {!CLIENT_ID ? (
-        <p class="note">This build has no GitHub OAuth client ID (VITE_GITHUB_CLIENT_ID). Use a token below.</p>
-      ) : code ? (
-        <div>
-          <p>Enter this code on GitHub:</p>
-          <p class="device-code">{code.user_code}</p>
-          <a href={code.verification_uri} target="_blank" rel="noopener">{code.verification_uri}</a>
-          <p class="note">Waiting for authorization…</p>
-        </div>
-      ) : (
-        <button class="primary" onClick={start}>Sign in with GitHub</button>
-      )}
-      {err && <p class="error">{err}</p>}
-      <details open={!CLIENT_ID}>
-        <summary>Use a personal access token</summary>
-        <form
-          class="row"
-          onSubmit={(e) => {
-            e.preventDefault();
-            saveToken(pat.trim()).then(onDone);
-          }}
-        >
-          <input type="password" autocomplete="off" placeholder="ghp_… or github_pat_…" value={pat} onInput={(e) => setPat(e.currentTarget.value)} />
-          <button disabled={!pat.trim()}>Save</button>
-        </form>
-        <p class="note">
-          Classic token with <code>repo</code> scope, or fine-grained with Pull requests (read &amp; write) and Contents (read).
-        </p>
-      </details>
-    </div>
   );
 }
 

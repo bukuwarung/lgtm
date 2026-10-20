@@ -36,8 +36,6 @@ code, pre { font-family: var(--mono); }
 .top a { font-weight: 600; color: var(--fg); }
 .spacer { flex: 1; }
 .signin, .inbox { max-width: 720px; margin: 48px auto; padding: 0 16px; }
-.device-code { font: 600 28px var(--mono); letter-spacing: .15em; }
-.signin details { margin-top: 24px; }
 .prs { list-style: none; padding: 0; }
 .prs li { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .repo { color: var(--muted); margin-right: 4px; }

@@ -5,9 +5,7 @@
   "scripts": {
     "build": "tsc && vite build",
     "test": "node --test test/*.test.ts",
-    "firefox": "web-ext run -s dist",
-    "chrome": "web-ext run -s dist -t chromium",
-    "package": "web-ext build -s dist -a artifacts --overwrite-dest"
+    "start": "vite build && node bin/lgtm.mjs"
   },
   "dependencies": {
     "highlight.js": "^11.12.0",
@@ -17,7 +15,9 @@
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",
     "typescript": "^5.9.3",
-    "vite": "^7.3.7",
-    "web-ext": "^10.8.0"
+    "vite": "^7.3.7"
+  },
+  "bin": {
+    "lgtm": "bin/lgtm.mjs"
   }
 }

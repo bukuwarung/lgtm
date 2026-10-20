@@ -7,7 +7,7 @@
 
 ## 2. GitHub auth
 
-- [ ] 2.1 Register OAuth App with device flow enabled; build with `VITE_GITHUB_CLIENT_ID` (code done; app registration is a manual step)
+- [x] 2.1 ~~Register OAuth App~~ superseded by 9 (gh CLI login)
 - [x] 2.2 Device flow: request code, show code + link, poll honoring `interval`/`slow_down`/`expired_token`
 - [x] 2.3 Host-permission check + "Grant GitHub access" button when missing (Firefox)
 - [x] 2.4 Token storage, sign-out, `401` → signed-out (drafts untouched)
@@ -54,7 +54,13 @@
 - [x] 8.5 Hover "+" on code lines
 - [x] 8.6 No "changed" tint on added markdown files
 
-## 9. Verify
+## 9. Local app instead of extension
 
-- [ ] 9.1 Manual run in both Firefox and Chrome against a real PR containing markdown, generated files, and a 500+ file diff (done so far: UI against captured real-PR data in a mocked harness; Firefox install + background script)
-- [x] 9.2 `openspec validate add-pr-review-extension` (if OpenSpec CLI is installed)
+- [x] 9.1 `bin/lgtm.mjs`: serve `dist/` on 127.0.0.1:4517, `/token` from `gh auth token` with Host + Sec-Fetch-Site guards, reuse a running instance, open the browser (optional PR URL argument)
+- [x] 9.2 `platform.ts` → `localStorage` + `fetchToken`; remove manifest, background script, host-permission and sign-in screens, device flow, web-ext
+- [x] 9.3 Check guards with curl; load a real PR against live GitHub
+
+## 10. Verify
+
+- [ ] 10.1 Manual review session on a real PR containing markdown, generated files, and a 500+ file diff (done so far: live read-only load of a real PR)
+- [x] 10.2 `openspec validate add-pr-review-app` (if OpenSpec CLI is installed)

@@ -1,6 +1,4 @@
-import { storage } from './platform.ts';
-
-export const CLIENT_ID: string | undefined = import.meta.env.VITE_GITHUB_CLIENT_ID || undefined;
+import { fetchToken } from './platform.ts';
 
 export type PR = {
   number: number;
@@ -53,51 +51,8 @@ export type ConversationItem = { id: string; author: string; html: string; at: s
 // --- auth ---
 
 let token: string | undefined;
-let onUnauthorized = () => {};
-export const setUnauthorizedHandler = (f: () => void) => (onUnauthorized = f);
-
 export async function loadToken() {
-  token = await storage.get<string>('token');
-  return !!token;
-}
-export async function saveToken(t: string) {
-  token = t;
-  await storage.set('token', t);
-}
-export async function signOut() {
-  token = undefined;
-  await storage.remove('token');
-}
-
-async function form(url: string, body: Record<string, string>) {
-  const res = await fetch(url, { method: 'POST', headers: { Accept: 'application/json' }, body: new URLSearchParams(body) });
-  return res.json();
-}
-
-export type DeviceCode = { device_code: string; user_code: string; verification_uri: string; expires_in: number; interval: number };
-
-export async function startDeviceFlow(): Promise<DeviceCode> {
-  const d = await form('https://github.com/login/device/code', { client_id: CLIENT_ID!, scope: 'repo' });
-  if (d.error) throw new Error(d.error_description ?? d.error);
-  return d;
-}
-
-export async function pollDeviceFlow(d: DeviceCode, signal: AbortSignal): Promise<string> {
-  let interval = d.interval;
-  const deadline = Date.now() + d.expires_in * 1000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, interval * 1000));
-    if (signal.aborted) throw new Error('Cancelled');
-    const t = await form('https://github.com/login/oauth/access_token', {
-      client_id: CLIENT_ID!,
-      device_code: d.device_code,
-      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-    });
-    if (t.access_token) return t.access_token;
-    if (t.error === 'slow_down') interval = t.interval ?? interval + 5;
-    else if (t.error !== 'authorization_pending') throw new Error(t.error_description ?? t.error);
-  }
-  throw new Error('The code expired before it was authorized.');
+  token = await fetchToken();
 }
 
 // --- API ---
@@ -112,11 +67,7 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
     },
   });
-  if (res.status === 401) {
-    await signOut();
-    onUnauthorized();
-    throw new Error('GitHub rejected the token. Sign in again.');
-  }
+  if (res.status === 401) throw new Error('GitHub rejected the gh token. Run `gh auth login`, then reload.');
   return res;
 }
 
