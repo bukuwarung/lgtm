@@ -10,17 +10,42 @@ Fast, markdown-first GitHub PR review in your own browser, signed in with your G
 - Stacked PRs (one's base branch is another's head) are grouped in the sidebar, bottom layer first.
 - Draft comments survive reloads and are submitted as one review (Comment / Approve / Request changes), optionally with a Slack DM to the author and assignees.
 
+lgtm signs in through the GitHub CLI and slackcli; see [Setup](#setup).
+
 Design and specs: [`openspec/changes/add-pr-review-app`](openspec/changes/add-pr-review-app).
 
-## Use
+## Setup
 
-Needs Node 22+ and the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`).
+You need Node 22+, plus two CLIs that lgtm signs in through. It never asks for a password or token itself.
+
+**1. GitHub CLI** (required): lgtm reads PRs and submits reviews as you.
 
 ```bash
-cd app && npm install && npm run build && npm link
+brew install gh
+gh auth login            # GitHub.com → HTTPS → log in with a web browser
+gh auth status           # should show you logged in to github.com
 ```
 
-Then, from anywhere:
+If bukuwarung enforces SSO, authorize the gh token for the org when GitHub asks.
+
+**2. slackcli** (for Slack DMs): lgtm messages the PR author and assignees as you when you finish a review. No Slack app needed.
+
+```bash
+brew install shaharia-lab/tap/slackcli
+slackcli auth login-auto # sign in to the bukuwarung Slack workspace in the browser that opens
+slackcli auth whoami     # should show "Credentials verified"
+```
+
+Without slackcli, lgtm still works; the Slack option just doesn't appear.
+
+**3. lgtm**
+
+```bash
+git clone https://github.com/bukuwarung/lgtm.git
+cd lgtm/app && npm install && npm run build && npm link
+```
+
+## Use
 
 ```bash
 lgtm
@@ -28,22 +53,23 @@ lgtm
 
 It serves the UI on `http://127.0.0.1:4517` and opens it in your default browser. Pass a PR URL to open it directly, e.g. `lgtm https://github.com/owner/repo/pull/123`. Running `lgtm` again reuses the running instance. Set `LGTM_PORT` to change the port; drafts are stored per port.
 
-## Slack notifications (optional)
+To update: `git pull && npm run build` in `app/` (restart `lgtm` only if `app/bin/lgtm.mjs` changed).
 
-When [slackcli](https://github.com/shaharia-lab/slackcli) is installed and signed in, the submit panel offers "Message @author on Slack" (author and assignees, not you or bots). Messages are sent as you; no Slack app is needed.
+## Slack: who is who
+
+GitHub doesn't expose our emails, so [`app/slack-users.json`](app/slack-users.json) maps GitHub logins to Slack user IDs for the team. New teammate? Add them there and open a PR:
 
 ```bash
-brew install shaharia-lab/tap/slackcli
-slackcli auth login-auto
+slackcli search people "their name"   # shows their Slack user ID (U…)
 ```
 
-GitHub doesn't expose bukuwarung members' emails, so tell lgtm who is who in `~/.config/lgtm/config.json` (Slack user ID, `@handle`, or email; `slackcli search people "name"` finds them):
+Values can be a Slack user ID (preferred: survives handle renames), `@handle`, or email. For a personal addition or override without committing, use `~/.config/lgtm/config.json`:
 
 ```json
-{ "slackUsers": { "github-login": "@their-slack-handle" } }
+{ "slackUsers": { "github-login": "U012ABC" } }
 ```
 
-Changes apply without restarting. Run with `LGTM_SLACK_DRY_RUN=1 lgtm` to check recipients without sending.
+Both are read on every send, so no restart is needed. `LGTM_SLACK_DRY_RUN=1 lgtm` checks recipients without sending.
 
 ## Develop
 

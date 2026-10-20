@@ -13,7 +13,9 @@ const PORT = Number(process.env.LGTM_PORT ?? 4517);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
-// Optional: { "slackUsers": { "github-login": <Slack user ID, @handle, or email> } }
+// Team GitHub login → Slack user (ID, @handle or email), committed so everyone shares it.
+const TEAM = fileURLToPath(new URL('../slack-users.json', import.meta.url));
+// Optional personal additions/overrides: { "slackUsers": { "github-login": "U…" } }
 const CONFIG = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'config.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 
@@ -56,16 +58,16 @@ function slackcli(args, input) {
 // User ID, @handle or email: the forms slackcli resolves to a person. Also keeps flags out of the argument.
 const SLACK_TARGET = /^(U[A-Z0-9]+|@[\w.-]+|[^\s@-][^\s@]*@[^\s@]+)$/;
 
-// DM each recipient: their slackUsers mapping first, then their GitHub emails.
+// DM each recipient: the team/personal mapping first, then their GitHub emails.
 async function notify({ recipients, text }) {
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
     recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string'));
   if (!valid) throw new Error('Bad Slack request');
-  const cfg = await readConfig();
+  const users = { ...JSON.parse(await readFile(TEAM, 'utf8')), ...(await readConfig()).slackUsers };
   return Promise.all(
     recipients.map(async ({ login, emails }) => {
-      const targets = [cfg.slackUsers?.[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
-      if (!targets.length) return { login, ok: false, error: `no Slack user known: add "${login}": "@their-slack-handle" to slackUsers in ${CONFIG}` };
+      const targets = [users[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
+      if (!targets.length) return { login, ok: false, error: `no Slack user known: add "${login}": "U…" to app/slack-users.json (or slackUsers in ${CONFIG})` };
       let error = '';
       for (const target of targets) {
         const r = await slackcli(['messages', 'send', `--recipient-id=${target}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);

@@ -67,6 +67,7 @@
 - [x] 10.3 Slack DM on submit: `/slack` endpoint (config token, email lookup, mapping, validation), submit-panel checkbox, result notice; checked against Slack's API with a fake token
 
 - [x] 10.4 Switch Slack sending to slackcli (no Slack app/token); dry-run checked against the real workspace
+- [x] 10.5 Commit the team GitHub → Slack mapping (`app/slack-users.json`); README setup for gh + slackcli
 
 ## 11. Verify
 
