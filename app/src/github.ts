@@ -1,3 +1,4 @@
+import { setEmojiMap } from './emoji.ts';
 import { fetchToken } from './platform.ts';
 
 export type PR = {
@@ -9,6 +10,7 @@ export type PR = {
   node_id: string;
   user: { login: string; type: string };
   assignees: { login: string; type: string }[];
+  requested_reviewers?: { login: string }[];
   head: { sha: string; ref: string; repo: { full_name: string; owner: { login: string } } | null };
   base: { ref: string };
 };
@@ -312,6 +314,20 @@ export async function getMyLastReviewCommit(repo: string, n: number): Promise<st
 export async function getCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[] }> {
   const d = await json(`/repos/${repo}/compare/${base}...${head}`);
   return { status: d.status, files: d.files ?? [] };
+}
+
+// GitHub's emoji shortcodes (name → image URL), cached for the session.
+let emojis: Promise<Record<string, string>> | undefined;
+export const getEmojis = () =>
+  (emojis ??= json('/emojis').then((m: Record<string, string>) => {
+    setEmojiMap(m);
+    return m;
+  }));
+
+// Markdown rendered by GitHub itself (emoji, @mentions, #refs, mermaid…), exactly as the comment will look there.
+export async function renderGfm(text: string, repo: string): Promise<string> {
+  const res = await ok(await gh('/markdown', { method: 'POST', body: JSON.stringify({ text, mode: 'gfm', context: repo }) }, 'text/html'));
+  return res.text();
 }
 
 export const reply = (repo: string, n: number, commentId: number, body: string) =>

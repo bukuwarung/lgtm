@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it';
+import { emojiMap } from './emoji.ts';
 import { highlightCode, languageFor, splitLines } from './highlight.ts';
 
 // A fence with no language is assumed to be Kotlin (the team's main language).
@@ -60,7 +61,12 @@ md.renderer.rules.fence = (tokens, i, opts, env, self) => {
   const info = t.info.trim().split(/\s+/)[0];
   // Mermaid: a placeholder that mermaid.ts turns into the diagram (the source is escaped into an attribute).
   const diagram = `<div class="mermaid-svg" data-code="${md.utils.escapeHtml(t.content)}"></div>`;
-  if (!src || !t.map) return info === 'mermaid' ? diagram : fence(tokens, i, opts, env, self);
+  if (!src || !t.map) {
+    if (info === 'mermaid') return diagram;
+    // A GitHub suggested change in a pending comment, labelled the way GitHub shows it.
+    if (info === 'suggestion') return `<div class="suggestion"><div class="badge">Suggested change</div>${fence(tokens, i, opts, env, self)}</div>`;
+    return fence(tokens, i, opts, env, self);
+  }
   const added: Set<number> = env.added;
   const inDiff: Set<number> | undefined = env.inDiff;
   const lang = fenceLanguage(info);
@@ -83,6 +89,33 @@ md.renderer.rules.fence = (tokens, i, opts, env, self) => {
 };
 
 // inDiff: whether any line of this top-level block is part of the diff (always true when no diff lines are given).
+// :shortcode: → GitHub's emoji image, once the emoji list is loaded (GitHub does the same when it renders).
+md.core.ruler.push('emoji', (state) => {
+  if (!emojiMap) return;
+  for (const block of state.tokens) {
+    if (block.type !== 'inline' || !block.children) continue;
+    block.children = block.children.flatMap((t) => {
+      if (t.type !== 'text' || !t.content.includes(':')) return [t];
+      const out = [];
+      let last = 0;
+      for (const m of t.content.matchAll(/:([a-z0-9_+-]+):/g)) {
+        const url = emojiMap![m[1]];
+        if (!url) continue;
+        if (m.index > last) out.push(Object.assign(new state.Token('text', '', 0), { content: t.content.slice(last, m.index) }));
+        out.push(Object.assign(new state.Token('emoji', '', 0), { content: m[1], meta: url }));
+        last = m.index + m[0].length;
+      }
+      if (!out.length) return [t];
+      if (last < t.content.length) out.push(Object.assign(new state.Token('text', '', 0), { content: t.content.slice(last) }));
+      return out;
+    });
+  }
+});
+md.renderer.rules.emoji = (tokens, i) => {
+  const name = md.utils.escapeHtml(tokens[i].content);
+  return `<img class="emoji" alt=":${name}:" title=":${name}:" src="${md.utils.escapeHtml(tokens[i].meta)}">`;
+};
+
 export type Chunk = { start: number; end: number; html: string; inDiff: boolean };
 
 // Split into top-level blocks so threads and drafts can be rendered between them. `inDiff` = head lines inside the

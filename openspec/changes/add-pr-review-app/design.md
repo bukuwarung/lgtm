@@ -78,7 +78,10 @@ Both sidebars have a drag handle (pointer capture, no library) that sets `--prs-
 - **Live queue:** the sidebar refetches every 3 minutes; the tab title shows the waiting count; optional desktop notifications (permission asked on the 🔔 click) for review requests that appear after the page opened.
 - **Failing job logs:** `GET /job-log` on the local server runs `gh api …/actions/jobs/{id}/logs` (the API redirects to storage the page can't read cross-origin), strips terminal escape codes and timestamps, and returns up to 60 lines ending at the last `##[error]`. Same-origin guard as `/token`; repo and job id are validated. Only GitHub Actions checks (`checkSuite.app.slug`) have a job id; Jenkins and other statuses just link out.
 
-### 14. Stack
+### 14. Comment editor
+One `Editor` component for line comments, replies, and the review summary. Preview uses GitHub's `POST /markdown` (gfm, repo context) so it matches the posted result; emoji come from `GET /emojis` (cached; also used to draw `:shortcodes:` in locally rendered pending drafts); mentions are the PR's author, assignees, requested reviewers, and commenters. Completion triggers on `:xx`/`@x` before the caret (list under the textarea, arrows + Enter/Tab). "Suggest" inserts a ```suggestion block with the target's head-side lines, taken from the patch (commentable lines are always in a hunk). Toolbar buttons act on mousedown so the textarea keeps its selection.
+
+### 15. Stack
 TypeScript, Vite, Preact, markdown-it, highlight.js; the server is plain Node. Hunk parsing and glob matching are hand-written (~50 lines each) rather than pulled in as deps.
 
 ## Risks / Trade-offs

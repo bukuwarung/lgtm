@@ -3,13 +3,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, anchor, gaps, parsePatch, removedRuns, type Gap, type Hunk, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getCompare, getConversation, getEmails, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
+  getChecks, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
   reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightCode, highlightHunks, languageFor, splitLines } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
+import { Editor } from './editor.tsx';
 import { notifySlack, slackConfigured, storage, useStoredFlag } from './platform.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -29,6 +30,9 @@ type Ctx = {
   reply: (t: Thread, body: string) => Promise<void>;
   resolve: (t: Thread, resolve: boolean) => Promise<void>;
   renderAll: boolean; // set by ⌘F so the browser's find can see every file
+  repo: string;
+  mentions: string[]; // people on this PR, for @-completion
+  suggestion: (t: Target) => string | null; // the target's lines, for a ```suggestion block
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
 };
 type Saved = { sha: string; drafts: Draft[] };
@@ -94,7 +98,9 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     return () => removeEventListener('keydown', onKey);
   }, []);
 
+  const [, setEmojiReady] = useState(false);
   useEffect(() => {
+    getEmojis().then(() => setEmojiReady(true), () => {});
     loadChecks();
     getViewed(repo, n).then(setViewedPaths, () => {});
     (async () => {
@@ -210,6 +216,26 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     },
     renderAll,
     since: since && !!sinceData,
+    repo,
+    mentions: [
+      ...new Set(
+        [pr.user, ...pr.assignees, ...(pr.requested_reviewers ?? [])].map((u) => u.login)
+          .concat(conversation.map((c) => c.author), threads.flatMap((t) => t.comments.nodes.map((c) => c.author?.login ?? '')))
+          .filter((l) => l && !l.endsWith('[bot]') && l !== 'ghost'),
+      ),
+    ],
+    // GitHub suggestions replace head-side lines, which (being commentable) are all in the diff's hunks.
+    suggestion: (t) => {
+      const f = files.find((x) => x.filename === t.path);
+      if (t.side !== 'RIGHT' || !t.line || !f?.patch) return null;
+      const text = new Map(parsePatch(f.patch).flatMap((h) => h.lines.flatMap((l) => (l.new ? [[l.new, l.text] as const] : []))));
+      const lines = [];
+      for (let n = t.startLine ?? t.line; n <= t.line; n++) {
+        if (!text.has(n)) return null;
+        lines.push(text.get(n));
+      }
+      return lines.join('\n');
+    },
   };
 
   // Optimistic; GitHub's state is the source of truth, so a failure puts it back.
@@ -335,7 +361,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
             </span>
           )}
           <button title="Keyboard shortcuts (?)" onClick={() => setHelp(!help)}>⌨</button>
-          <SubmitPanel count={drafts.length} slackTo={slackTo} onSubmit={submit} />
+          <SubmitPanel count={drafts.length} slackTo={slackTo} onSubmit={submit} repo={repo} mentions={ctx.mentions} />
         </div>
         {help && <Help onClose={() => setHelp(false)} />}
         <main>
@@ -379,9 +405,15 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   );
 }
 
-type SubmitProps = { count: number; slackTo: string[] | null; onSubmit: (e: ReviewEvent, body: string, notify: boolean) => Promise<boolean> };
+type SubmitProps = {
+  count: number;
+  slackTo: string[] | null;
+  onSubmit: (e: ReviewEvent, body: string, notify: boolean) => Promise<boolean>;
+  repo: string;
+  mentions: string[];
+};
 
-function SubmitPanel({ count, slackTo, onSubmit }: SubmitProps) {
+function SubmitPanel({ count, slackTo, onSubmit, repo, mentions }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [body, setBody] = useState('');
@@ -389,11 +421,10 @@ function SubmitPanel({ count, slackTo, onSubmit }: SubmitProps) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const labels: Record<ReviewEvent, string> = { COMMENT: 'Comment', APPROVE: 'Approve', REQUEST_CHANGES: 'Request changes' };
-  const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const show = () => {
       setOpen(true);
-      setTimeout(() => area.current?.focus());
+      setTimeout(() => document.querySelector<HTMLTextAreaElement>('.panel textarea')?.focus());
     };
     addEventListener('lgtm:finish', show);
     return () => removeEventListener('lgtm:finish', show);
@@ -420,16 +451,15 @@ function SubmitPanel({ count, slackTo, onSubmit }: SubmitProps) {
       </button>
       {open && (
         <div class="panel">
-          <textarea
-            ref={area}
-            rows={4}
-            placeholder="Leave a comment (⌘↵ to submit)"
+          <Editor
             value={body}
-            onInput={(e) => setBody(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !busy) go();
-              if (e.key === 'Escape') setOpen(false);
-            }}
+            onInput={setBody}
+            onSubmit={() => !busy && go()}
+            onCancel={() => setOpen(false)}
+            repo={repo}
+            mentions={mentions}
+            autoFocus
+            placeholder="Leave a review summary (optional) · ⌘↵ to submit"
           />
           {(Object.keys(labels) as ReviewEvent[]).map((v) => (
             <label>
@@ -910,7 +940,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
           <div class="md" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
         </div>
       ))}
-      <textarea rows={2} placeholder="Reply…" value={body} onInput={(e) => setBody(e.currentTarget.value)} />
+      <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && !busy && send()} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder="Reply… (⌘↵ to send)" />
       <div class="row">
         {body.trim() && (
           <button disabled={busy} onClick={send}>
@@ -931,8 +961,6 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
 function DraftForm({ ctx }: { ctx: Ctx }) {
   const target = ctx.target!;
   const [body, setBody] = useState(target.body ?? '');
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => ref.current?.focus(), []);
 
   function save() {
     if (!body.trim()) return;
@@ -945,15 +973,15 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
   return (
     <div class="draft-form">
       <div class="badge">{where(target)}</div>
-      <textarea
-        ref={ref}
-        rows={4}
+      <Editor
         value={body}
-        onInput={(e) => setBody(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save();
-          if (e.key === 'Escape') ctx.setTarget(null);
-        }}
+        onInput={setBody}
+        onSubmit={save}
+        onCancel={() => ctx.setTarget(null)}
+        repo={ctx.repo}
+        mentions={ctx.mentions}
+        suggestion={ctx.suggestion(target)}
+        autoFocus
       />
       <div class="row">
         <button class="primary" disabled={!body.trim()} onClick={save}>

@@ -249,3 +249,25 @@ time { color: var(--muted); font-size: 12px; }
 .hljs-section { color: var(--hl-const); font-weight: 600; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
+
+/* Comment editor */
+.editor { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+.editor:focus-within { border-color: var(--accent); }
+.ed-bar { display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-bottom: 1px solid var(--border); background: var(--soft); border-radius: 6px 6px 0 0; flex-wrap: wrap; }
+.ed-tab { border: 0; background: none; padding: 2px 10px; font-size: 12px; color: var(--muted); border-radius: 4px; }
+.ed-tab.on { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--border); }
+.ed-tool { border: 0; background: none; padding: 2px 6px; font-size: 12px; color: var(--muted); border-radius: 4px; }
+.ed-tool:hover { background: var(--bg); color: var(--fg); }
+.ed-write { position: relative; }
+.editor textarea { display: block; border: 0; border-radius: 0 0 6px 6px; resize: vertical; min-height: 3.5em; }
+.editor textarea:focus { outline: none; }
+.ed-preview { min-height: 4em; padding: 8px 12px; }
+.ed-preview > div > :first-child { margin-top: 0; }
+.ed-ac { position: absolute; left: 8px; top: 100%; z-index: 6; min-width: 220px; margin: 2px 0 0; padding: 4px 0; list-style: none; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px var(--shadow); font-size: 13px; }
+.ed-ac li { display: flex; align-items: center; gap: 8px; padding: 3px 10px; cursor: pointer; }
+.ed-ac li.on { background: var(--soft); color: var(--accent); }
+.ed-at { width: 18px; text-align: center; color: var(--muted); }
+img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
+.suggestion { margin: 6px 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.suggestion > .badge { padding: 3px 10px; background: var(--soft); border-bottom: 1px solid var(--border); }
+.suggestion pre { margin: 0; border-radius: 0; background: var(--add); }

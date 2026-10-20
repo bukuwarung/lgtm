@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { addedLines, anchor, gaps, parsePatch, removedRuns } from '../src/diff.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightHunks, languageFor, splitLines } from '../src/highlight.ts';
+import { setEmojiMap } from '../src/emoji.ts';
 import { isMarkdown, md, renderChunks } from '../src/markdown.ts';
 import { findStacks } from '../src/stacks.ts';
 
@@ -108,6 +109,7 @@ test('highlight: language lookup and line splitting', () => {
   const plain = renderChunks('```\nval x = listOf(1)\n```\n', new Set())[0].html;
   assert.match(plain, /<span class="hljs-keyword">val<\/span>/); // unmarked fence → Kotlin
   assert.match(md.render('```\nfun f() = 1\n```\n'), /<span class="hljs-keyword">fun<\/span>/);
+  assert.match(md.render('```suggestion\nval a = 2\n```\n'), /^<div class="suggestion"><div class="badge">Suggested change<\/div><pre>/);
   const mmd = renderChunks('```mermaid\ngraph TD\n  A-->B\n```\n', new Set([3]))[0].html;
   assert.match(mmd, /^<div class="mermaid-block" data-src="1-4" data-chg=""><div class="mermaid-svg" data-code="graph TD\n  A--&gt;B\n"><\/div>/);
   assert.match(mmd, /<span class="cl" data-src="3-3" data-chg="">  A--&gt;B<\/span>/); // source lines still commentable
@@ -143,4 +145,11 @@ test('gaps: unchanged stretches between hunks, with old-line offsets', () => {
   ]);
   // pure addition at the top
   assert.deepEqual(gaps(parsePatch('@@ -0,0 +1,2 @@\n+a\n+b')), [{ before: 1, from: 3, to: null, offset: -2 }]);
+});
+
+test('emoji shortcodes render as GitHub emoji images, not inside code', () => {
+  setEmojiMap({ tada: 'https://e/tada.png', '+1': 'https://e/plus.png' });
+  const html = md.render('Nice :tada: and :+1: but :nope: and `:tada:`');
+  assert.match(html, /Nice <img class="emoji" alt=":tada:" title=":tada:" src="https:\/\/e\/tada.png"> and <img class="emoji" alt=":\+1:"/);
+  assert.match(html, /but :nope: and <code>:tada:<\/code>/);
 });

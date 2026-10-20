@@ -92,6 +92,7 @@
 - [x] 12.13 Per-line comments in code blocks; comments render under their list item / table row / code line
 - [x] 12.14 Mermaid diagrams in markdown files and comments (lazy-loaded, strict mode)
 - [x] 12.15 Rich diff shows only sections in the diff; others fold, read-only; quote fallback removed; unmarked fences = Kotlin
+- [x] 12.16 Comment editor: GitHub preview, :emoji:/@mention completion, toolbar + shortcuts, Suggest
 
 ## 13. Verify
 

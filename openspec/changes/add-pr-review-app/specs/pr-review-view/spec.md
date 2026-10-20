@@ -142,6 +142,21 @@ The system SHALL let the user start a comment on any diff line from a "+" shown 
 - **WHEN** the user hovers a line of a `.ts` file and clicks the "+"
 - **THEN** a comment form opens under that line, anchored to it
 
+### Requirement: Comment editor
+The system SHALL provide, for line comments, replies, and the review summary, an editor with a GitHub-rendered preview, completion for emoji shortcodes and for @mentions of people on the PR, formatting shortcuts, and (for line comments) insertion of a suggested-change block prefilled with the commented lines.
+
+#### Scenario: Emoji and mention completion
+- **WHEN** the user types ":tad" or "@gag"
+- **THEN** matching emoji (with their images) or PR participants are offered, and Enter or Tab inserts ":tada: " or "@gagandeep-buku "
+
+#### Scenario: Preview
+- **WHEN** the user switches to Preview
+- **THEN** the text is shown as GitHub renders it (emoji, mention links, suggestion blocks)
+
+#### Scenario: Suggest a change
+- **WHEN** the user clicks "Suggest" in a comment on lines 39–40
+- **THEN** a ```suggestion block containing lines 39–40 is inserted
+
 ### Requirement: Conversation
 The system SHALL show the PR description, top-level comments, and submitted reviews with a verdict or summary above the files, in time order.
 
