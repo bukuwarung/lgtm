@@ -4,6 +4,7 @@ import { addedLines, anchor, parsePatch, removedRuns } from '../src/diff.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightHunks, languageFor, splitLines } from '../src/highlight.ts';
 import { isMarkdown, renderChunks } from '../src/markdown.ts';
+import { findStacks } from '../src/stacks.ts';
 
 const patch = [
   '@@ -1,4 +1,5 @@',
@@ -93,4 +94,18 @@ test('highlight: language lookup and line splitting', () => {
   assert.match(h[0][2], /hljs-string/);
   assert.equal(highlightHunks(parsePatch('@@ -1 +1 @@\n+x'), 'a.zzz'), null);
   assert.match(renderChunks('```js\nconst a = 1;\n```\n', new Set()).map((c) => c.html).join(''), /hljs-keyword/);
+});
+
+test('findStacks links base → head chains within a repo', () => {
+  const pr = (id: string, base: string, head: string, repo = 'o/r', headRepo = repo) => ({ id, repo, headRepo, base, head });
+  const items = [
+    pr('3', 'feat-b', 'feat-c'),
+    pr('1', 'main', 'feat-a'),
+    pr('x', 'main', 'solo'),
+    pr('2', 'feat-a', 'feat-b'),
+    pr('other', 'feat-a', 'z', 'o/other'), // same branch name, different repo
+    pr('fork', 'main', 'feat-a', 'o/r', 'someone/r'), // a fork's feat-a is not o/r's feat-a
+  ];
+  assert.deepEqual(findStacks(items).map((s) => s.map((i) => i.id)), [['1', '2', '3']]);
+  assert.deepEqual(findStacks([pr('a', 'main', 'x')]), []);
 });

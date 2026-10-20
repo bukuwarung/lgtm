@@ -60,7 +60,13 @@
 - [x] 9.2 `platform.ts` → `localStorage` + `fetchToken`; remove manifest, background script, host-permission and sign-in screens, device flow, web-ext
 - [x] 9.3 Check guards with curl; load a real PR against live GitHub
 
-## 10. Verify
+## 10. Review feedback round 2
 
-- [ ] 10.1 Manual review session on a real PR containing markdown, generated files, and a 500+ file diff (done so far: live read-only load of a real PR)
-- [x] 10.2 `openspec validate add-pr-review-app` (if OpenSpec CLI is installed)
+- [x] 10.1 Collapsible file tree (remembered)
+- [x] 10.2 Group stacked PRs in the sidebar (`findStacks` + check)
+- [x] 10.3 Slack DM on submit: `/slack` endpoint (config token, email lookup, mapping, validation), submit-panel checkbox, result notice; checked against Slack's API with a fake token
+
+## 11. Verify
+
+- [ ] 11.1 Manual review session on a real PR containing markdown, generated files, and a 500+ file diff (done so far: live read-only load of a real PR)
+- [x] 11.2 `openspec validate add-pr-review-app` (if OpenSpec CLI is installed)

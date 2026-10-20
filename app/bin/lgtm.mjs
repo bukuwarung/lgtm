@@ -4,6 +4,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { homedir } from 'node:os';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,10 +13,69 @@ const PORT = Number(process.env.LGTM_PORT ?? 4517);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
+// Optional: { "slackToken": "xoxp-…", "slackUsers": { "github-login": "U012ABC" } }
+const CONFIG = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'config.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 
 // Read per request so `gh auth login` / `gh auth switch` take effect on reload.
 const ghToken = () => execFileSync('gh', ['auth', 'token'], { encoding: 'utf8' }).trim();
+
+async function readConfig() {
+  try {
+    return JSON.parse(await readFile(CONFIG, 'utf8'));
+  } catch (e) {
+    if (e.code === 'ENOENT') return {};
+    throw new Error(`Can't read ${CONFIG}: ${e.message}`);
+  }
+}
+
+async function slack(token, method, params) {
+  const res = await fetch(`https://slack.com/api/${method}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: new URLSearchParams(params),
+  });
+  const d = await res.json();
+  if (!d.ok) throw new Error(`${method}: ${d.error}`);
+  return d;
+}
+
+// DM each recipient. Slack user = config mapping, else looked up by one of their GitHub emails.
+async function notify({ recipients, text }) {
+  const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
+    recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string'));
+  if (!valid) throw new Error('Bad Slack request');
+  const cfg = await readConfig();
+  if (!cfg.slackToken) throw new Error(`No slackToken in ${CONFIG}`);
+  return Promise.all(
+    recipients.map(async ({ login, emails }) => {
+      try {
+        let user = cfg.slackUsers?.[login];
+        for (const email of user ? [] : emails) {
+          user = await slack(cfg.slackToken, 'users.lookupByEmail', { email }).then((d) => d.user.id, () => undefined);
+          if (user) break;
+        }
+        if (!user) throw new Error(`no Slack user found (add "${login}" to slackUsers in ${CONFIG})`);
+        const { channel } = await slack(cfg.slackToken, 'conversations.open', { users: user });
+        await slack(cfg.slackToken, 'chat.postMessage', { channel: channel.id, text, unfurl_links: 'false' });
+        return { login, ok: true };
+      } catch (e) {
+        return { login, ok: false, error: e.message };
+      }
+    }),
+  );
+}
+
+async function readJson(req) {
+  let body = '';
+  for await (const chunk of req) {
+    body += chunk;
+    if (body.length > 65536) throw new Error('Request too large');
+  }
+  return JSON.parse(body);
+}
+
+const json = (res, status, value) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(value));
 
 function open(url) {
   const [cmd, args] = process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
@@ -38,9 +98,19 @@ const server = createServer(async (req, res) => {
   const path = new URL(req.url ?? '/', ORIGIN).pathname;
 
   if (path === '/lgtm') return res.end('lgtm');
+  // /token and /slack act with your credentials: only our own page may call them
+  // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
+  if ((path === '/token' || path === '/slack') && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (path === '/slack') {
+    try {
+      if (req.method === 'GET') return json(res, 200, { configured: !!(await readConfig()).slackToken });
+      if (req.method === 'POST') return json(res, 200, await notify(await readJson(req)));
+      return res.writeHead(405).end();
+    } catch (e) {
+      return json(res, 500, { error: e.message });
+    }
+  }
   if (path === '/token') {
-    // Only our own page may read it (browsers set Sec-Fetch-Site on every fetch).
-    if (req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
     try {
       return res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }).end(ghToken());
     } catch {

@@ -7,7 +7,8 @@ export type PR = {
   body_html?: string; // GitHub-rendered and sanitized (full+json media type)
   html_url: string;
   node_id: string;
-  user: { login: string };
+  user: { login: string; type: string };
+  assignees: { login: string; type: string }[];
   head: { sha: string; repo: { full_name: string } | null };
 };
 export type PRFile = {
@@ -41,6 +42,9 @@ export type QueueItem = {
   updatedAt: string;
   isDraft: boolean;
   repo: string;
+  headRepo: string;
+  head: string; // branch names, for stack detection
+  base: string;
   author: string;
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   requested: boolean; // my review is currently requested (including re-requests)
@@ -103,6 +107,7 @@ const QUEUE = `query{viewer{login}
   requested:search(query:"is:open is:pr archived:false review-requested:@me",type:ISSUE,first:100){nodes{...F}}
   reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}}
 fragment F on PullRequest{id number title updatedAt isDraft reviewDecision author{login} repository{nameWithOwner}
+  headRefName baseRefName headRepository{nameWithOwner}
   latestReviews(first:100){nodes{state author{login}}}}`;
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
@@ -118,6 +123,9 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       updatedAt: p.updatedAt,
       isDraft: p.isDraft,
       repo: p.repository.nameWithOwner,
+      headRepo: p.headRepository?.nameWithOwner ?? '',
+      head: p.headRefName,
+      base: p.baseRefName,
       author: p.author?.login ?? 'ghost',
       reviewDecision: p.reviewDecision,
       requested: requested.has(p.id),
@@ -138,6 +146,22 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
       .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
       .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state })),
   ].sort((a, b) => a.at.localeCompare(b.at));
+}
+
+let viewer: Promise<string> | undefined;
+export const getViewer = () => (viewer ??= json('/user').then((u) => u.login as string));
+
+// Emails to find someone on Slack: their verified company addresses for the org, then their public email.
+export async function getEmails(org: string, logins: string[]): Promise<Record<string, string[]>> {
+  const vars = Object.fromEntries(logins.map((l, i) => [`l${i}`, l]));
+  const fields = (withOrg: boolean) =>
+    logins.map((_, i) => `u${i}:user(login:$l${i}){email${withOrg ? ' organizationVerifiedDomainEmails(login:$org)' : ''}}`).join(' ');
+  const decl = (withOrg: boolean) => [...logins.map((_, i) => `$l${i}:String!`), ...(withOrg ? ['$org:String!'] : [])].join(',');
+  // The org field needs org membership; fall back to public emails only if it errors.
+  const d = await graphql(`query(${decl(true)}){${fields(true)}}`, { ...vars, org }).catch(() => graphql(`query(${decl(false)}){${fields(false)}}`, vars));
+  return Object.fromEntries(
+    logins.map((l, i) => [l, [...(d[`u${i}`]?.organizationVerifiedDomainEmails ?? []), d[`u${i}`]?.email].filter(Boolean)]),
+  );
 }
 
 export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`, undefined, FULL);

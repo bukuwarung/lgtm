@@ -2,6 +2,8 @@ import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { getReviewQueue, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
+import { findStacks } from './stacks.ts';
+import { useStoredFlag } from './platform.ts';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
 export function parseRoute(s: string) {
@@ -13,21 +15,7 @@ function App() {
   const [state, setState] = useState<'loading' | 'in' | { error: string }>('loading');
   const [route, setRoute] = useState(location.hash);
   const [queueVersion, setQueueVersion] = useState(0);
-  const [showPRs, setShowPRs] = useState(() => {
-    try {
-      return localStorage.getItem('hidePRs') !== '1';
-    } catch {
-      return true;
-    }
-  });
-  const togglePRs = () => {
-    setShowPRs(!showPRs);
-    try {
-      localStorage.setItem('hidePRs', showPRs ? '1' : '0');
-    } catch {
-      // per-viewer convenience only
-    }
-  };
+  const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
 
   useEffect(() => {
     const onHash = () => setRoute(location.hash);
@@ -121,7 +109,31 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
     getReviewQueue().then(setItems, (e) => setErr(e.message));
   };
   useEffect(load, [version]);
-  const groups = items && Map.groupBy(items, groupOf);
+  // A stack sits in the group of its most urgent layer; each layer keeps its own status color.
+  const stacks = items ? findStacks(items) : [];
+  const stackOf = new Map(stacks.flatMap((s) => s.map((i) => [i.id, s] as const)));
+  const rank = (i: QueueItem) => GROUPS.findIndex(([g]) => g === groupOf(i));
+  const entries = items?.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
+  const groups = entries && Map.groupBy(entries, (e) => (Array.isArray(e) ? GROUPS[Math.min(...e.map(rank))][0] : groupOf(e)));
+  const item = (i: QueueItem, layer?: string) => (
+    <a
+      key={i.id}
+      class={`pr-item g-${groupOf(i)}${current?.repo === i.repo && current.n === i.number ? ' cur' : ''}`}
+      href={`#/${i.repo}/pull/${i.number}`}
+    >
+      <span class="pr-title">{i.title}</span>
+      <span class="meta">
+        {layer && <b class="layer">{layer} </b>}
+        {i.repo}#{i.number} · {i.author} · {ago(i.updatedAt)}
+      </span>
+      <span class="pills">
+        {i.isDraft && <span class="pill">draft</span>}
+        {i.requested && i.myState && <span class="pill">re-requested</span>}
+        {i.reviewDecision === 'APPROVED' && <span class="pill p-ok">PR approved</span>}
+        {i.reviewDecision === 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
+      </span>
+    </a>
+  );
 
   return (
     <aside class="prs">
@@ -145,29 +157,22 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
       ) : (
         GROUPS.map(([g, label]) => {
           const list = groups.get(g) ?? [];
+          const count = list.reduce((n, e) => n + (Array.isArray(e) ? e.length : 1), 0);
           return (
-            <details key={g} open={g !== 'approved' || list.length < 10} class={'pr-group g-' + g}>
+            <details key={g} open={g !== 'approved' || count < 10} class={'pr-group g-' + g}>
               <summary>
-                <span class="gdot" /> {label} <span class="count">{list.length}</span>
+                <span class="gdot" /> {label} <span class="count">{count}</span>
               </summary>
-              {list.map((i) => (
-                <a
-                  key={i.id}
-                  class={current?.repo === i.repo && current.n === i.number ? 'pr-item cur' : 'pr-item'}
-                  href={`#/${i.repo}/pull/${i.number}`}
-                >
-                  <span class="pr-title">{i.title}</span>
-                  <span class="meta">
-                    {i.repo}#{i.number} · {i.author} · {ago(i.updatedAt)}
-                  </span>
-                  <span class="pills">
-                    {i.isDraft && <span class="pill">draft</span>}
-                    {i.requested && i.myState && <span class="pill">re-requested</span>}
-                    {i.reviewDecision === 'APPROVED' && <span class="pill p-ok">PR approved</span>}
-                    {i.reviewDecision === 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
-                  </span>
-                </a>
-              ))}
+              {list.map((e) =>
+                Array.isArray(e) ? (
+                  <div class="stack" key={e[0].id}>
+                    <div class="stack-h">⧉ Stack of {e.length} · bottom first</div>
+                    {e.map((i, k) => item(i, `${k + 1}/${e.length}`))}
+                  </div>
+                ) : (
+                  item(e)
+                ),
+              )}
             </details>
           );
         })

@@ -55,7 +55,13 @@ highlight.js `common` bundle (+ Dockerfile), language from extension or basename
 ### 9. File tree and line comments
 The sidebar groups files into folders, collapsing single-child chains (`src/core/utils`) like GitHub; native `<details>` handles collapsing. Files show a status dot and a thread/draft count. Code lines get a GitHub-style hover `+` (a CSS pseudo-element on the line-number cell, so no per-line DOM).
 
-### 10. Stack
+### 10. PR stacks
+A PR is stacked on another when its `baseRefName` equals the other's `headRefName` and its repo equals the other's head repo (so forks don't link by accident). Chains are found among the sidebar's PRs only, ordered bottom → top; a stack sits in the group of its most urgent layer (needs review > changes requested > commented > approved), and each layer keeps its own status color. A layer missing from your list splits the stack; fetching outside PRs wasn't worth an extra query per stack.
+
+### 11. Slack DM on submit
+Optional, off until `~/.config/lgtm/config.json` has a `slackToken` (a Slack user token, so DMs come from you). After a successful submit, the page sends `{recipients: [{login, emails}], text}` to the local server's `POST /slack`; the server maps each person to a Slack user (config `slackUsers` first, then `users.lookupByEmail`), opens a DM, and posts. Emails come from GitHub's `organizationVerifiedDomainEmails` for the repo's org, then the public email. The token stays in the server; `/slack` has the same Host and `Sec-Fetch-Site: same-origin` guards as `/token`, and validates the body. A Slack failure is reported next to the submitted review, never undoes it. A remembered checkbox in the submit panel turns it off per review.
+
+### 12. Stack
 TypeScript, Vite, Preact, markdown-it, highlight.js; the server is plain Node. Hunk parsing and glob matching are hand-written (~50 lines each) rather than pulled in as deps.
 
 ## Risks / Trade-offs

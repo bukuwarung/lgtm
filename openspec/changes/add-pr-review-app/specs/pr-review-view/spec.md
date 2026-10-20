@@ -22,6 +22,10 @@ The system SHALL show, in a collapsible sidebar, every open PR where the signed-
 - **WHEN** a PR's overall review decision is approved or changes requested
 - **THEN** the item shows that state in addition to the user's own
 
+#### Scenario: Stacked PRs
+- **WHEN** PR #2's base branch is PR #1's head branch and both are in the list
+- **THEN** they appear together as one stack, #1 then #2, in the group of the more urgent one, each with its own status
+
 #### Scenario: Refresh after submit
 - **WHEN** the user submits a review
 - **THEN** the sidebar reloads and the PR moves to its new group
@@ -44,6 +48,10 @@ The system SHALL render every visible changed file of a PR in one continuous scr
 #### Scenario: Jump to file
 - **WHEN** the user clicks a file in the tree
 - **THEN** the view scrolls to that file's header
+
+#### Scenario: Collapse the file tree
+- **WHEN** the user clicks "Files" in the PR bar
+- **THEN** the file tree hides and the diff takes the full width, and the choice is remembered
 
 #### Scenario: Long paths
 - **WHEN** files live under deep folders

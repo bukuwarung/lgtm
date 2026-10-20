@@ -24,6 +24,7 @@ Reviewing PRs on github.com is slow on large diffs, buries the prose (READMEs, A
 - `github-auth`: Use the GitHub CLI's login; keep the token away from other websites.
 - `pr-review-view`: PR inbox, continuous scrolling diff of all files, inline threads, drafting and submitting a review.
 - `markdown-rich-diff`: Markdown-first ordering, rendered rich diff by default, line-anchored commenting on rendered blocks.
+- `slack-notify`: Optional Slack DM to the author and assignees when a review is submitted.
 - `generated-file-filter`: Detect `linguist-generated` files from `.gitattributes` and hide them.
 
 ### Modified Capabilities

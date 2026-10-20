@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { addedLines, anchor, parsePatch, removedRuns, type Hunk, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getConversation, getFiles, getPR, getRaw, getThreads, reply, submitReview,
+  getConversation, getEmails, getFiles, getPR, getRaw, getThreads, getViewer, reply, submitReview,
   type ConversationItem, type Draft, type PR, type PRFile, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightHunks } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
-import { storage } from './platform.ts';
+import { notifySlack, slackConfigured, storage, useStoredFlag } from './platform.ts';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; quote pre-fills the body;
@@ -25,6 +25,15 @@ type Ctx = {
 type File = PRFile & { generated: boolean };
 type Saved = { sha: string; drafts: Draft[] };
 
+const slackEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function slackText(pr: PR, ref: string, event: ReviewEvent, body: string, comments: number) {
+  const verb = { APPROVE: '✅ Approved', REQUEST_CHANGES: '🔴 Requested changes on', COMMENT: '💬 Reviewed' }[event];
+  const extra = comments ? ` · ${comments} comment${comments > 1 ? 's' : ''}` : '';
+  const quote = body.trim() ? '\n' + slackEscape(body.trim().slice(0, 1000)).replace(/^/gm, '>') : '';
+  return `${verb} <${pr.html_url}|${slackEscape(`${ref} ${pr.title}`)}>${extra}${quote}`;
+}
+
 const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
 export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSubmitted: () => void }) {
@@ -34,7 +43,11 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const [saved, setSaved] = useState<Saved>({ sha: '', drafts: [] });
   const [target, setTarget] = useState<Target | null>(null);
   const [showGenerated, setShowGenerated] = useState(false);
+  const [showTree, toggleTree] = useStoredFlag('showFiles', true);
   const [error, setError] = useState('');
+  // Who gets a Slack DM after submitting (author + assignees, minus me and bots); null = Slack not set up.
+  const [slackTo, setSlackTo] = useState<string[] | null>(null);
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const key = `drafts:${repo}#${n}`;
 
   useEffect(() => {
@@ -48,6 +61,10 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
         getRaw(headRepo, '.gitattributes', pr.head.sha),
         storage.get<Saved>(key),
       ]);
+      Promise.all([slackConfigured(), getViewer()]).then(([ready, me]) => {
+        const people = [pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login);
+        setSlackTo(ready ? [...new Set(people)] : null);
+      }, () => setSlackTo(null));
       const rules = parseGeneratedRules(attrs ?? '');
       const sorted = files
         .map((f) => ({ ...f, generated: isGenerated(rules, f.filename) }))
@@ -73,13 +90,29 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     (next.length ? storage.set(key, s) : storage.remove(key)).catch((e) => setError(e.message));
   }
 
-  async function submit(event: ReviewEvent, body: string) {
+  async function submit(event: ReviewEvent, body: string, notify: boolean) {
     const head = (await getPR(repo, n)).head.sha;
     const sha = drafts.length ? saved.sha : head;
     if (sha !== head && !confirm('New commits were pushed after you started this review. Submit your comments against the older commit?')) return false;
     await submitReview(pr.node_id, sha, event, body, drafts);
     saveDrafts([]);
     onSubmitted();
+    setNotice(null);
+    if (notify && slackTo?.length) {
+      // The review is in; a Slack failure is reported, not thrown.
+      try {
+        const emails = await getEmails(repo.split('/')[0], slackTo);
+        const results = await notifySlack(slackTo.map((login) => ({ login, emails: emails[login] })), slackText(pr, `${repo}#${n}`, event, body, drafts.length));
+        const failed = results.filter((r) => !r.ok);
+        const sent = results.filter((r) => r.ok).map((r) => '@' + r.login);
+        setNotice({
+          ok: !failed.length,
+          text: [sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${r.error}`)].filter(Boolean).join(' '),
+        });
+      } catch (e: any) {
+        setNotice({ ok: false, text: `Review submitted, but Slack failed: ${e.message}` });
+      }
+    }
     const [t, c] = await Promise.all([getThreads(repo, n), getConversation(repo, n)]);
     setThreads(t);
     setConversation(c);
@@ -107,18 +140,24 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   );
 
   return (
-    <div class="review">
-      <aside class="tree">
-        <FileTree files={shown} counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length} />
-      </aside>
+    <div class={showTree ? 'review' : 'review no-tree'}>
+      {showTree && (
+        <aside class="tree">
+          <FileTree files={shown} counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length} />
+        </aside>
+      )}
       <div>
         <div class="bar">
+          <button title={showTree ? 'Hide file tree' : 'Show file tree'} onClick={toggleTree}>
+            {showTree ? '⇤' : '⇥'} Files
+          </button>
           <h1>
             {pr.title} <a href={pr.html_url} target="_blank" rel="noopener">{repo}#{n}</a>
           </h1>
-          <SubmitPanel count={drafts.length} onSubmit={submit} />
+          <SubmitPanel count={drafts.length} slackTo={slackTo} onSubmit={submit} />
         </div>
         <main>
+          {notice && <p class={notice.ok ? 'notice' : 'warn'}>{notice.text}</p>}
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
@@ -136,8 +175,11 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   );
 }
 
-function SubmitPanel({ count, onSubmit }: { count: number; onSubmit: (e: ReviewEvent, body: string) => Promise<boolean> }) {
+type SubmitProps = { count: number; slackTo: string[] | null; onSubmit: (e: ReviewEvent, body: string, notify: boolean) => Promise<boolean> };
+
+function SubmitPanel({ count, slackTo, onSubmit }: SubmitProps) {
   const [open, setOpen] = useState(false);
+  const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [body, setBody] = useState('');
   const [event, setEvent] = useState<ReviewEvent>('COMMENT');
   const [busy, setBusy] = useState(false);
@@ -148,7 +190,7 @@ function SubmitPanel({ count, onSubmit }: { count: number; onSubmit: (e: ReviewE
     setBusy(true);
     setErr('');
     try {
-      if (await onSubmit(event, body)) {
+      if (await onSubmit(event, body, notify)) {
         setOpen(false);
         setBody('');
       }
@@ -171,6 +213,11 @@ function SubmitPanel({ count, onSubmit }: { count: number; onSubmit: (e: ReviewE
               <input type="radio" name="event" checked={event === v} onChange={() => setEvent(v)} /> {labels[v]}
             </label>
           ))}
+          {slackTo && slackTo.length > 0 && (
+            <label>
+              <input type="checkbox" checked={notify} onChange={toggleNotify} /> Message {slackTo.map((l) => '@' + l).join(', ')} on Slack
+            </label>
+          )}
           <button class="primary" disabled={busy} onClick={go}>
             {busy ? 'Submitting…' : 'Submit review'}
           </button>
