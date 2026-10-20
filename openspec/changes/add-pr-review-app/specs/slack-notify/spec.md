@@ -7,6 +7,10 @@ When Slack is configured, the system SHALL offer to message the PR author and as
 - **WHEN** the user approves with "Message @author on Slack" checked
 - **THEN** the review is submitted and the author gets a DM like "✅ Approved <link|org/repo#12 Title> · 2 comments"
 
+#### Scenario: Later reviews reply in the same thread
+- **WHEN** the user reviews a PR they already sent a Slack DM about
+- **THEN** the new message is a reply in that DM's thread, and if the thread no longer exists a new DM starts a new thread
+
 #### Scenario: Slack not set up
 - **WHEN** slackcli isn't installed or isn't signed in
 - **THEN** the submit panel shows no Slack option

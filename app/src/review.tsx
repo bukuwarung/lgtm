@@ -162,9 +162,13 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
       // The review is in; a Slack failure is reported, not thrown.
       try {
         const emails = await getEmails(repo.split('/')[0], slackTo);
-        const results = await notifySlack(slackTo.map((login) => ({ login, emails: emails[login] })), slackText(pr, `${repo}#${n}`, event, body, drafts.length));
+        const results = await notifySlack(
+          slackTo.map((login) => ({ login, emails: emails[login] })),
+          slackText(pr, `${repo}#${n}`, event, body, drafts.length),
+          `${repo}#${n}`,
+        );
         const failed = results.filter((r) => !r.ok);
-        const sent = results.filter((r) => r.ok).map((r) => '@' + r.login);
+        const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : ''));
         setNotice({
           ok: !failed.length,
           text: [sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${r.error}`)].filter(Boolean).join(' '),

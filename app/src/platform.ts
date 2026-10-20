@@ -42,9 +42,10 @@ export function useStoredFlag(key: string, initial: boolean) {
 export const slackConfigured = (): Promise<boolean> =>
   fetch('/slack').then((r) => r.json()).then((d) => !!d.configured, () => false);
 
-export type SlackResult = { login: string; ok: boolean; error?: string };
-export async function notifySlack(recipients: { login: string; emails: string[] }[], text: string): Promise<SlackResult[]> {
-  const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text }) });
+export type SlackResult = { login: string; ok: boolean; threaded?: boolean; error?: string };
+// `thread` ("owner/repo#12") keeps one Slack thread per PR and person; later reviews reply in it.
+export async function notifySlack(recipients: { login: string; emails: string[] }[], text: string, thread: string): Promise<SlackResult[]> {
+  const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text, thread }) });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;

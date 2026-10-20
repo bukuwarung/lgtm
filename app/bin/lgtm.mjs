@@ -2,10 +2,10 @@
 // lgtm: serve the review UI on 127.0.0.1 and hand it the GitHub CLI's token.
 // Usage: lgtm [https://github.com/owner/repo/pull/123]
 import { execFile, execFileSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
-import { extname, join, normalize, sep } from 'node:path';
+import { dirname, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Fixed port: drafts live in localStorage, which is per origin.
@@ -17,6 +17,8 @@ const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 const TEAM = fileURLToPath(new URL('../slack-users.json', import.meta.url));
 // Optional personal additions/overrides: { "slackUsers": { "github-login": "U…" } }
 const CONFIG = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'config.json');
+// Slack DM thread per PR and person, so later reviews of a PR reply in the same thread: { "o/r#12:login": { channel, ts } }
+const THREADS = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'slack-threads.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 
 // Read per request so `gh auth login` / `gh auth switch` take effect on reload.
@@ -58,25 +60,57 @@ function slackcli(args, input) {
 // User ID, @handle or email: the forms slackcli resolves to a person. Also keeps flags out of the argument.
 const SLACK_TARGET = /^(U[A-Z0-9]+|@[\w.-]+|[^\s@-][^\s@]*@[^\s@]+)$/;
 
-// DM each recipient: the team/personal mapping first, then their GitHub emails.
-async function notify({ recipients, text }) {
+async function readThreads() {
+  try {
+    return JSON.parse(await readFile(THREADS, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+async function saveThreads(threads) {
+  await mkdir(dirname(THREADS), { recursive: true });
+  await writeFile(THREADS + '.tmp', JSON.stringify(threads, null, 2));
+  await rename(THREADS + '.tmp', THREADS); // atomic: a crash mid-write can't leave half a file
+}
+
+// DM each recipient: the team/personal mapping first, then their GitHub emails. Each PR gets one thread per person;
+// later reviews reply in it (a fresh DM starts a new thread if the old one is gone).
+async function notify({ recipients, text, thread }) {
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
+    typeof thread === 'string' && /^[\w.-]+\/[\w.-]+#\d+$/.test(thread) &&
     recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string'));
   if (!valid) throw new Error('Bad Slack request');
   const users = { ...JSON.parse(await readFile(TEAM, 'utf8')), ...(await readConfig()).slackUsers };
-  return Promise.all(
+  const threads = await readThreads();
+  const send = (args) => slackcli(['messages', 'send', ...args, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
+  const results = await Promise.all(
     recipients.map(async ({ login, emails }) => {
+      const key = `${thread}:${login}`;
+      const prev = threads[key];
+      if (prev && /^[CDG][A-Z0-9]+$/.test(prev.channel) && /^\d+\.\d+$/.test(prev.ts)) {
+        const r = await send([`--recipient-id=${prev.channel}`, `--thread-ts=${prev.ts}`]);
+        if (r.ok) return { login, ok: true, threaded: true, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
+      }
       const targets = [users[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
       if (!targets.length) return { login, ok: false, error: `no Slack user known: add "${login}": "U…" to app/slack-users.json (or slackUsers in ${CONFIG})` };
       let error = '';
       for (const target of targets) {
-        const r = await slackcli(['messages', 'send', `--recipient-id=${target}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
-        if (r.ok) return { login, ok: true, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
+        const r = await send([`--recipient-id=${target}`]);
+        if (r.ok) {
+          if (!DRY_RUN) {
+            const sent = JSON.parse(r.stdout);
+            threads[key] = { channel: sent.channel_id, ts: sent.ts };
+          }
+          return { login, ok: true, threaded: false, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
+        }
         error = r.error;
       }
       return { login, ok: false, error };
     }),
   );
+  if (!DRY_RUN) await saveThreads(threads);
+  return results;
 }
 
 async function readJson(req) {

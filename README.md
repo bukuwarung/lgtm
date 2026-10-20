@@ -87,7 +87,7 @@ Values can be a Slack user ID (preferred: survives handle renames), `@handle`, o
 { "slackUsers": { "github-login": "U012ABC" } }
 ```
 
-Both are read on every send, so no restart is needed. `LGTM_SLACK_DRY_RUN=1 lgtm` checks recipients without sending.
+Both are read on every send, so no restart is needed. Each PR gets one Slack thread per person: your first review of a PR starts a DM, later reviews of that PR reply in the same thread (remembered in `~/.config/lgtm/slack-threads.json`). `LGTM_SLACK_DRY_RUN=1 lgtm` checks recipients without sending.
 
 ## Develop
 

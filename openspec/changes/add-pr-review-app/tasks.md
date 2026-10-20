@@ -85,6 +85,7 @@
 - [x] 12.6 Show more lines (`gaps()` + check)
 - [x] 12.7 Live queue: 3-minute refresh, title count, desktop notifications
 - [x] 12.8 Failed GitHub Actions job log excerpt via `/job-log`
+- [x] 12.9 One Slack thread per PR and person (`slack-threads.json`, fallback to a new DM)
 
 ## 13. Verify
 
