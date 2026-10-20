@@ -1,27 +1,29 @@
+/* Each token is light-dark(light, dark). The theme toggle sets color-scheme; "auto" follows the OS.
+   Dark is JetBrains Darcula: softer greys and muted syntax colors instead of near-black. */
 :root {
   color-scheme: light dark;
-  --bg: #fff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0; --soft: #f6f8fa;
-  --add: #dafbe1; --del: #ffebe9; --addfg: #1a7f37; --delfg: #d1242f; --accent: #0969da; --warn: #fff8c5;
+  --bg: light-dark(#fff, #2b2b2b); --soft: light-dark(#f6f8fa, #313335); --border: light-dark(#d1d9e0, #45484a);
+  --fg: light-dark(#1f2328, #bbbbbb); --code-fg: light-dark(#1f2328, #a9b7c6); --muted: light-dark(#59636e, #808080);
+  --add: light-dark(#dafbe1, #294436); --del: light-dark(#ffebe9, #4a3536); --warn: light-dark(#fff8c5, #52503a);
+  --addfg: light-dark(#1a7f37, #629755); --delfg: light-dark(#d1242f, #c75450); --modfg: light-dark(#bf8700, #6897bb);
+  --accent: light-dark(#0969da, #589df6); --primary: light-dark(#1f883d, #3d6b45); --on-primary: light-dark(#fff, #e6e6e6);
+  --shadow: light-dark(#0003, #0008);
+  --hl-kw: light-dark(#cf222e, #cc7832); --hl-fn: light-dark(#8250df, #ffc66d); --hl-const: light-dark(#0550ae, #6897bb);
+  --hl-str: light-dark(#0a3069, #6a8759); --hl-builtin: light-dark(#953800, #9876aa); --hl-com: light-dark(#59636e, #808080);
+  --hl-tag: light-dark(#116329, #e8bf6a);
+  --g-needs: var(--accent); --g-changes: var(--delfg); --g-commented: light-dark(#8c959f, #808080); --g-approved: var(--addfg);
   --bar: 44px;
-  --hl-kw: #cf222e; --hl-fn: #8250df; --hl-const: #0550ae; --hl-str: #0a3069; --hl-builtin: #953800; --hl-com: #59636e; --hl-tag: #116329;
-  --g-needs: #0969da; --g-changes: #d1242f; --g-commented: #8c959f; --g-approved: #1a7f37;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #3d444d; --soft: #151b23;
-    --add: #12261e; --del: #25171c; --addfg: #3fb950; --delfg: #f85149; --accent: #4493f8; --warn: #2e2a14;
-    --hl-kw: #ff7b72; --hl-fn: #d2a8ff; --hl-const: #79c0ff; --hl-str: #a5d6ff; --hl-builtin: #ffa657; --hl-com: #9198a1; --hl-tag: #7ee787;
-    --g-needs: #4493f8; --g-changes: #f85149; --g-commented: #9198a1; --g-approved: #3fb950;
-  }
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 14px/1.5 var(--sans); background: var(--bg); color: var(--fg); }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 button { font: inherit; padding: 3px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); color: var(--fg); cursor: pointer; }
-button.primary { background: #1f883d; border-color: #1f883d; color: #fff; }
+button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 button:disabled { opacity: .5; cursor: default; }
 input:not([type=radio]), textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; width: 100%; }
 code, pre { font-family: var(--mono); }
@@ -71,7 +73,7 @@ code, pre { font-family: var(--mono); }
 .tree-file { display: flex; align-items: center; gap: 6px; width: 100%; padding: 2px 8px; border: 0; border-radius: 0; background: none; text-align: left; }
 .tree-file:hover, .tree-dir > summary:hover { background: var(--soft); }
 .tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fdot { flex: none; width: 8px; height: 8px; border-radius: 2px; background: #bf8700; }
+.fdot { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--modfg); }
 .fdot.s-added { background: var(--addfg); }
 .fdot.s-removed { background: var(--delfg); }
 .fdot.s-renamed, .fdot.s-copied { background: var(--accent); }
@@ -80,7 +82,7 @@ code, pre { font-family: var(--mono); }
 .bar { position: sticky; top: 0; z-index: 3; height: var(--bar); display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
 .bar h1 { flex: 1; margin: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .submit { position: relative; }
-.panel { position: absolute; right: 0; top: calc(100% + 6px); width: 420px; display: grid; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px #0003; }
+.panel { position: absolute; right: 0; top: calc(100% + 6px); width: 420px; display: grid; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
 main { padding: 16px; }
 .conversation { margin-bottom: 16px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; }
 .conversation > summary { cursor: pointer; font-weight: 600; }
@@ -97,7 +99,7 @@ main { padding: 16px; }
 .counts .a { color: var(--addfg); }
 .counts .d { color: var(--delfg); }
 
-.diff { width: 100%; border-collapse: collapse; font: 12px/20px var(--mono); }
+.diff { width: 100%; border-collapse: collapse; color: var(--code-fg); font: 12px/20px var(--mono); }
 .diff td { padding: 0 8px; vertical-align: top; }
 .diff .num { width: 1%; min-width: 48px; text-align: right; color: var(--muted); cursor: pointer; user-select: none; }
 .diff .num { position: relative; }
@@ -120,7 +122,7 @@ main { padding: 16px; }
 .rich { padding: 8px 24px 8px 44px; }
 .md { overflow-wrap: anywhere; }
 .md img { max-width: 100%; }
-.md pre { padding: 12px; background: var(--soft); border-radius: 6px; overflow: auto; }
+.md pre { color: var(--code-fg); padding: 12px; background: var(--soft); border-radius: 6px; overflow: auto; }
 .md pre > code[data-src] { display: block; }
 .md code { padding: .1em .3em; background: var(--soft); border-radius: 4px; font-size: 85%; }
 .md pre code { padding: 0; background: none; }

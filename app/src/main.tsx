@@ -53,6 +53,7 @@ function App() {
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
         <a href="#">lgtm</a>
         <span class="spacer" />
+        <ThemeToggle />
       </nav>
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
         {showPRs && <PRList current={r} version={queueVersion} />}
@@ -63,6 +64,33 @@ function App() {
         )}
       </div>
     </>
+  );
+}
+
+const THEMES = [['', '◐ Auto'], ['light', '☀ Light'], ['dark', '☾ Dark']] as const;
+
+// Cycles auto → light → dark; index.html applies the saved choice before first paint.
+function ThemeToggle() {
+  const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? '');
+  const i = THEMES.findIndex(([t]) => t === theme);
+  const next = THEMES[(i + 1) % THEMES.length][0];
+  return (
+    <button
+      title={`Theme: ${THEMES[i][1].slice(2)} (click for ${THEMES[(i + 1) % THEMES.length][1].slice(2)})`}
+      onClick={() => {
+        if (next) document.documentElement.dataset.theme = next;
+        else delete document.documentElement.dataset.theme;
+        try {
+          if (next) localStorage.setItem('theme', next);
+          else localStorage.removeItem('theme');
+        } catch {
+          // per-viewer convenience only
+        }
+        setTheme(next);
+      }}
+    >
+      {THEMES[i][1]}
+    </button>
   );
 }
 

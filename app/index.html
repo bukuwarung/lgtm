@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <title>lgtm</title>
+  <script>
+    // Apply the saved theme before first paint (no flash).
+    try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
