@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, anchor, parsePatch, removedRuns } from '../src/diff.ts';
+import { addedLines, anchor, gaps, parsePatch, removedRuns } from '../src/diff.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightHunks, languageFor, splitLines } from '../src/highlight.ts';
 import { isMarkdown, renderChunks } from '../src/markdown.ts';
@@ -108,4 +108,19 @@ test('findStacks links base → head chains within a repo', () => {
   ];
   assert.deepEqual(findStacks(items).map((s) => s.map((i) => i.id)), [['1', '2', '3']]);
   assert.deepEqual(findStacks([pr('a', 'main', 'x')]), []);
+});
+
+test('gaps: unchanged stretches between hunks, with old-line offsets', () => {
+  // the shared patch: hunk 1 covers new 1-5 (old 1-4), hunk 2 new 21-22 (old 20-22)
+  assert.deepEqual(gaps(parsePatch(patch)), [
+    { before: 1, from: 6, to: 20, offset: -1 },
+    { before: 2, from: 23, to: null, offset: 0 },
+  ]);
+  // pure deletion: "+4,0" means the hunk sits after new line 4
+  assert.deepEqual(gaps(parsePatch('@@ -5,2 +4,0 @@\n-a\n-b')), [
+    { before: 0, from: 1, to: 4, offset: 0 },
+    { before: 1, from: 5, to: null, offset: 2 },
+  ]);
+  // pure addition at the top
+  assert.deepEqual(gaps(parsePatch('@@ -0,0 +1,2 @@\n+a\n+b')), [{ before: 1, from: 3, to: null, offset: -2 }]);
 });

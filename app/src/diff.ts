@@ -59,3 +59,23 @@ export function removedRuns(hunks: Hunk[]): Removed[] {
   }
   return out;
 }
+
+// Unchanged stretches of the new file around the hunks, for "show more lines". A gap sits before hunk `before`
+// (hunks.length = after the last hunk, running to the end of the file: `to` null). Old line = new line + offset.
+// In a hunk with no new lines (pure deletion) the header's new start is the line *before* the hunk.
+export type Gap = { before: number; from: number; to: number | null; offset: number };
+
+export function gaps(hunks: Hunk[]): Gap[] {
+  const out: Gap[] = [];
+  let next = 1;
+  let offset = 0;
+  hunks.forEach((h, i) => {
+    const news = h.lines.flatMap((l) => l.new ?? []);
+    const first = news.length ? news[0] : h.newStart + 1;
+    if (first - 1 >= next) out.push({ before: i, from: next, to: first - 1, offset });
+    next = (news.length ? news[news.length - 1] : h.newStart) + 1;
+    offset += h.lines.filter((l) => l.kind !== '+').length - news.length;
+  });
+  out.push({ before: hunks.length, from: next, to: null, offset });
+  return out;
+}

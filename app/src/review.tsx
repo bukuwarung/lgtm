@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, parsePatch, removedRuns, type Hunk, type Removed } from './diff.ts';
+import { addedLines, anchor, gaps, parsePatch, removedRuns, type Gap, type Hunk, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getCompare, getConversation, getEmails, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
   reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
-import { highlightHunks } from './highlight.ts';
+import { highlightCode, highlightHunks, languageFor, splitLines } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { notifySlack, slackConfigured, storage, useStoredFlag } from './platform.ts';
 import { Resizer } from './resizer.tsx';
@@ -508,6 +508,51 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
 function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const path = file.filename;
   const hl = useMemo(() => highlightHunks(hunks, path), [hunks]);
+  // "Show more lines": unchanged stretches come from the head version of the file, fetched on first use.
+  const gapList = useMemo(() => (file.status === 'added' || file.status === 'removed' ? [] : gaps(hunks)), [hunks]);
+  const [head, setHead] = useState<string[] | null>(null);
+  const [openGaps, setOpenGaps] = useState<Set<number>>(new Set());
+  const [gapErr, setGapErr] = useState('');
+  const expand = async (g: Gap) => {
+    setGapErr('');
+    try {
+      if (!head) {
+        const src = await getRaw(ctx.headRepo, path, ctx.pr.head.sha);
+        if (src == null) throw new Error('file not found at the head commit');
+        setHead(src.replace(/\n$/, '').split('\n'));
+      }
+      setOpenGaps((s) => new Set(s).add(g.before));
+    } catch (e: any) {
+      setGapErr(e.message);
+    }
+  };
+  const gapRows = (g: Gap) => {
+    if (!openGaps.has(g.before) || !head) {
+      if (g.to === null && head && g.from > head.length) return null; // nothing after the last hunk
+      const count = g.to === null ? null : g.to - g.from + 1;
+      return (
+        <tr class="gap">
+          <td colSpan={3}>
+            <button onClick={() => expand(g)}>
+              {count === null ? '↓ Show the rest of the file' : `↕ Show ${count} unchanged line${count === 1 ? '' : 's'}`}
+            </button>
+            {gapErr && <span class="error"> {gapErr}</span>}
+          </td>
+        </tr>
+      );
+    }
+    const lines = head.slice(g.from - 1, g.to ?? head.length);
+    const lang = languageFor(path);
+    const html = lang ? splitLines(highlightCode(lines.join('\n'), lang)) : null;
+    return lines.map((text, i) => (
+      <tr class="x">
+        <td class="num">{g.from + i + g.offset}</td>
+        <td class="num">{g.from + i}</td>
+        {html ? <td class="code" dangerouslySetInnerHTML={{ __html: html[i] }} /> : <td class="code">{text}</td>}
+      </tr>
+    ));
+  };
+  const gapBefore = (i: number) => gapList.find((g) => g.before === i);
   const t = ctx.target?.path === path ? ctx.target : null;
 
   const pick = (e: MouseEvent, side: Side, line: number) => {
@@ -537,6 +582,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
       <tbody>
         {hunks.map((h, hi) => (
           <>
+            {gapBefore(hi) && gapRows(gapBefore(hi)!)}
             <tr class="hunk">
               <td colSpan={3}>{h.header}</td>
             </tr>
@@ -557,6 +603,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
             })}
           </>
         ))}
+        {gapBefore(hunks.length) && gapRows(gapBefore(hunks.length)!)}
       </tbody>
     </table>
   );

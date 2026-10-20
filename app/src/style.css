@@ -162,6 +162,12 @@ main { padding: 16px; }
 .diff tr.d { background: var(--del); }
 .diff tr.d .code::before { content: "-"; }
 .diff tr.hunk td { padding: 4px 8px; background: var(--soft); color: var(--muted); }
+.diff tr.gap td { padding: 0; background: var(--soft); }
+.diff tr.gap button { width: 100%; padding: 2px 12px; border: 0; border-radius: 0; background: none; text-align: left; font: 12px var(--sans); color: var(--accent); }
+.diff tr.gap button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Expanded lines aren't part of the PR diff, so GitHub won't take comments on them. */
+.diff tr.x .num { cursor: default; }
+.diff tr.x:hover > .num + .num::after { content: none; }
 .diff .notes-cell { padding: 4px 16px 4px 112px; }
 
 /* Rich markdown: the left padding hosts the "+" comment gutter. */
