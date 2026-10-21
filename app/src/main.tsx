@@ -114,6 +114,15 @@ const MINE: Kind = {
     i.isDraft ? 'm-draft' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'm-changes' : i.reviewDecision === 'APPROVED' ? 'm-approved' : 'm-waiting',
 };
 
+// On my PRs: where merging stands (BLOCKED is already told by the group: waiting for review / changes requested).
+const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string]>> = {
+  CLEAN: ['ready to merge', 'p-ok'],
+  HAS_HOOKS: ['ready to merge', 'p-ok'],
+  UNSTABLE: ['mergeable, checks failing', 'p-ok'],
+  BEHIND: ['behind base', ''],
+  DIRTY: ['conflicts', 'p-bad'],
+};
+
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 const UNITS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]] as const;
 function ago(iso: string) {
@@ -171,6 +180,8 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         {i.requested && i.myState && <span class="pill">re-requested</span>}
         {kind === REVIEWING && i.reviewDecision === 'APPROVED' && <span class="pill p-ok">PR approved</span>}
         {kind === REVIEWING && i.reviewDecision === 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
+        {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}>{MERGE_PILL[i.mergeState]![0]}</span>}
+        {kind === MINE && i.autoMerge && <span class="pill">auto-merge on</span>}
       </span>
     </a>
   );

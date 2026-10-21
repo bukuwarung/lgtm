@@ -52,6 +52,8 @@ export type QueueItem = {
   base: string;
   author: string;
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  mergeState: MergeState['mergeStateStatus'];
+  autoMerge: boolean;
   requested: boolean; // my review is currently requested (including re-requests)
   myState: ReviewState | null; // my latest submitted review
   reviewing: boolean; // in my review queue: requested, or I've reviewed it
@@ -118,7 +120,7 @@ const QUEUE = `query{viewer{login}
   reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}}
-fragment F on PullRequest{id number title updatedAt isDraft reviewDecision author{login} repository{nameWithOwner}
+fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{login} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner}
   latestReviews(first:100){nodes{state author{login}}}}`;
 
@@ -141,6 +143,8 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       base: p.baseRefName,
       author: p.author?.login ?? 'ghost',
       reviewDecision: p.reviewDecision,
+      mergeState: p.mergeStateStatus,
+      autoMerge: !!p.autoMergeRequest,
       requested: requested.has(p.id),
       myState: p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ?? null,
       // An assigned PR that's waiting on my review belongs in the review queue, not twice.
@@ -367,3 +371,60 @@ export async function submitReview(prId: string, commitOID: string, event: Revie
     throw e;
   }
 }
+
+// --- merging (my own PRs) ---
+
+export type MergeMethod = 'MERGE' | 'SQUASH' | 'REBASE';
+export type MergeState = {
+  id: string;
+  state: 'OPEN' | 'CLOSED' | 'MERGED';
+  isDraft: boolean;
+  mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+  // GitHub's verdict: CLEAN/HAS_HOOKS/UNSTABLE can merge; BEHIND, BLOCKED, DIRTY, DRAFT can't; UNKNOWN is still computing.
+  mergeStateStatus: 'BEHIND' | 'BLOCKED' | 'CLEAN' | 'DIRTY' | 'DRAFT' | 'HAS_HOOKS' | 'UNKNOWN' | 'UNSTABLE';
+  reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  headRefOid: string;
+  mergedBy: { login: string } | null;
+  autoMergeRequest: { mergeMethod: MergeMethod; enabledBy: { login: string } | null } | null;
+  viewerCanMergeAsAdmin: boolean;
+  viewerCanEnableAutoMerge: boolean;
+  viewerCanDisableAutoMerge: boolean;
+  viewerCanUpdateBranch: boolean;
+  methods: MergeMethod[]; // allowed in this repo, the viewer's usual one first
+  message: Record<MergeMethod, { title: string; body: string }>; // GitHub's default commit message per method
+};
+
+const MERGE_STATE = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){
+  mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod
+  pullRequest(number:$n){id state isDraft mergeable mergeStateStatus reviewDecision headRefOid mergedBy{login}
+    autoMergeRequest{mergeMethod enabledBy{login}}
+    viewerCanMergeAsAdmin viewerCanEnableAutoMerge viewerCanDisableAutoMerge viewerCanUpdateBranch
+    mt:viewerMergeHeadlineText(mergeType:MERGE) mb:viewerMergeBodyText(mergeType:MERGE)
+    st:viewerMergeHeadlineText(mergeType:SQUASH) sb:viewerMergeBodyText(mergeType:SQUASH)}}}`;
+
+export async function getMergeState(repo: string, n: number): Promise<MergeState> {
+  const [owner, name] = repo.split('/');
+  const r = (await graphql(MERGE_STATE, { owner, name, n })).repository;
+  const { mt, mb, st, sb, ...pr } = r.pullRequest;
+  const allowed = (['MERGE', 'SQUASH', 'REBASE'] as const).filter((m) => r[`${m.toLowerCase()}${m === 'MERGE' ? 'Commit' : 'Merge'}Allowed`]);
+  return {
+    ...pr,
+    methods: allowed.sort((a, b) => +(b === r.viewerDefaultMergeMethod) - +(a === r.viewerDefaultMergeMethod)),
+    message: { MERGE: { title: mt, body: mb }, SQUASH: { title: st, body: sb }, REBASE: { title: '', body: '' } },
+  };
+}
+
+// expectedHeadOid: refuse if commits were pushed after the state I looked at.
+export const mergePR = (s: MergeState, method: MergeMethod, title: string, body: string, auto: boolean) =>
+  graphql(
+    auto
+      ? `mutation($id:ID!,$m:PullRequestMergeMethod,$t:String,$b:String,$oid:GitObjectID){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:$m,commitHeadline:$t,commitBody:$b,expectedHeadOid:$oid}){clientMutationId}}`
+      : `mutation($id:ID!,$m:PullRequestMergeMethod,$t:String,$b:String,$oid:GitObjectID){mergePullRequest(input:{pullRequestId:$id,mergeMethod:$m,commitHeadline:$t,commitBody:$b,expectedHeadOid:$oid}){clientMutationId}}`,
+    { id: s.id, m: method, t: method === 'REBASE' ? null : title, b: method === 'REBASE' ? null : body, oid: s.headRefOid },
+  );
+export const disableAutoMerge = (id: string) =>
+  graphql(`mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}`, { id });
+export const updateBranch = (s: MergeState) =>
+  graphql(`mutation($id:ID!,$oid:GitObjectID){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}`, { id: s.id, oid: s.headRefOid });
+export const markReady = (id: string) =>
+  graphql(`mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}`, { id });

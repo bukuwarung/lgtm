@@ -93,6 +93,7 @@
 - [x] 12.14 Mermaid diagrams in markdown files and comments (lazy-loaded, strict mode)
 - [x] 12.15 Rich diff shows only sections in the diff; others fold, read-only; quote fallback removed; unmarked fences = Kotlin
 - [x] 12.16 Comment editor: GitHub preview, :emoji:/@mention completion, toolbar + shortcuts, Suggest
+- [x] 12.17 Merge box on my PRs (status + reasons, ready for review, update branch, merge/auto-merge, admin bypass) and merge pills in "Your PRs"
 
 ## 13. Verify
 

@@ -13,6 +13,7 @@ Fast, markdown-first GitHub PR review in your own browser, signed in with your G
 - Markdown files first, rendered as rich diff by default. Hover a block and click the `+` gutter to comment on its source lines. Mermaid diagrams are drawn, in files and in comments.
 - Files marked `linguist-generated` in the root `.gitattributes`, and files only renamed or moved without changes, are hidden behind "N … hidden · Show" rows.
 - Stacked PRs (one's base branch is another's head) are grouped in the sidebar, bottom layer first.
+- On your own PRs, a merge box shows whether it can merge and why not (draft, review required, failing checks, behind, conflicts), with Ready for review, Update branch, merge (commit message editable before confirming), auto-merge, and the admin bypass. "Your PRs" in the sidebar shows ready to merge / behind base / conflicts.
 - Draft comments survive reloads and are submitted as one review (Comment / Approve / Request changes), optionally with a Slack DM to the author and assignees.
 
 lgtm signs in through the GitHub CLI and slackcli; see [Setup](#setup).

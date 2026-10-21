@@ -193,3 +193,18 @@ The system SHALL let the user draft line, multi-line, and file-level comments, k
 #### Scenario: New commits pushed while reviewing
 - **WHEN** the PR head SHA changed since drafts were created
 - **THEN** the user is warned before submitting, and the review is submitted against the SHA the drafts were written on
+
+### Requirement: Merge my own PRs
+On a PR the user opened or is assigned to, the system SHALL show GitHub's merge status with the reasons it can't merge yet, and offer the matching controls: Ready for review (draft), Update branch (behind the base), merge with the repo's allowed methods, enable or disable auto-merge, and an admin bypass when the user may merge as admin. The sidebar's "Your PRs" entries SHALL show a merge pill (ready to merge, behind base, conflicts, auto-merge on).
+
+#### Scenario: Blocked PR
+- **WHEN** the user's PR is a draft with a required review and a failing check
+- **THEN** the box reads "Not ready to merge: This is a draft · Review required · 1 failing check", offers Ready for review, and the merge button is disabled
+
+#### Scenario: Merge with confirmation
+- **WHEN** the user clicks "Squash and merge" on a mergeable PR
+- **THEN** an editable commit title and message prefilled with GitHub's defaults appear, and only "Confirm squash and merge" merges, refusing if the head moved since the status loaded
+
+#### Scenario: Someone else's PR
+- **WHEN** the user reviews a PR they didn't open and aren't assigned to
+- **THEN** no merge box is shown

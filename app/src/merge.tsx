@@ -1,0 +1,132 @@
+import { useEffect, useState } from 'preact/hooks';
+import { disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
+
+const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
+
+// Why a PR can't merge yet, from GitHub's merge state plus the checks the index already loaded.
+export function blockers(s: MergeState, checks: Check[] | null): string[] {
+  const failing = checks?.filter((c) => c.state === 'failure').length ?? 0;
+  const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
+  const out = [
+    s.isDraft && 'This is a draft',
+    (s.mergeable === 'CONFLICTING' || s.mergeStateStatus === 'DIRTY') && 'Conflicts with the base branch',
+    s.mergeStateStatus === 'BEHIND' && 'Behind the base branch',
+    s.reviewDecision === 'CHANGES_REQUESTED' && 'Changes requested',
+    s.reviewDecision === 'REVIEW_REQUIRED' && 'Review required',
+    failing > 0 && `${failing} failing check${failing > 1 ? 's' : ''}`,
+    pending > 0 && `${pending} check${pending > 1 ? 's' : ''} running`,
+  ].filter((x): x is string => !!x);
+  return s.mergeStateStatus === 'BLOCKED' && !out.length ? ['Blocked by branch rules'] : out;
+}
+
+const canMerge = (s: MergeState) => !s.isDraft && ['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus);
+
+// Merge status and controls, shown on my own PRs: ready for review, update branch, merge (or auto-merge), with the
+// commit message editable before confirming, like GitHub's merge box.
+export function MergeBox({ repo, n, url, checks, onChange }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void }) {
+  const [s, setS] = useState<MergeState | null>(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('');
+  const [method, setMethod] = useState<MergeMethod | null>(null);
+  const [confirm, setConfirm] = useState<'merge' | 'auto' | null>(null);
+  const [msg, setMsg] = useState({ title: '', body: '' });
+  const [bypass, setBypass] = useState(false);
+
+  const load = (tries = 0) =>
+    getMergeState(repo, n).then((x) => {
+      setS(x);
+      // GitHub computes mergeability in the background after a push; ask again shortly.
+      if (x.state === 'OPEN' && x.mergeStateStatus === 'UNKNOWN' && tries < 5) setTimeout(() => load(tries + 1), 3000);
+    }, (e) => setErr(e.message));
+  useEffect(() => void load(), [repo, n, checks]); // checks reloaded: the merge state may have moved too
+
+  if (!s) return err ? <p class="warn">Couldn't load the merge status: {err}</p> : null;
+  if (s.state !== 'OPEN')
+    return <div class={`merge m-${s.state.toLowerCase()}`}><b>{s.state === 'MERGED' ? `Merged${s.mergedBy ? ` by ${s.mergedBy.login}` : ''}` : 'Closed'}</b></div>;
+
+  const m = method && s.methods.includes(method) ? method : s.methods[0];
+  const ready = canMerge(s);
+  const why = blockers(s, checks);
+  const conflict = s.mergeable === 'CONFLICTING' || s.mergeStateStatus === 'DIRTY';
+  const tone = conflict ? 'bad' : ready ? 'ok' : 'wait';
+  const headline =
+    s.mergeStateStatus === 'UNKNOWN' ? 'Checking mergeability…'
+    : ready ? (s.mergeStateStatus === 'UNSTABLE' ? 'Can merge, but some checks are failing' : 'Ready to merge')
+    : 'Not ready to merge';
+
+  async function run(label: string, f: () => Promise<unknown>) {
+    setBusy(label);
+    setErr('');
+    try {
+      await f();
+      setConfirm(null);
+      setBypass(false);
+      onChange();
+    } catch (e: any) {
+      setErr(e.message);
+    }
+    setBusy('');
+    load();
+  }
+  const open = (kind: 'merge' | 'auto') => {
+    setMsg(s.message[m]);
+    setConfirm(kind);
+  };
+
+  return (
+    <div class={`merge m-${tone}`}>
+      <div class="merge-head">
+        <b>{headline}</b>
+        {!ready && why.length > 0 && <span class="merge-why">{why.join(' · ')}</span>}
+        {conflict && <a href={`${url}/conflicts`} target="_blank" rel="noopener">Resolve conflicts on GitHub</a>}
+      </div>
+      {s.autoMergeRequest && (
+        <div class="merge-row">
+          Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{s.autoMergeRequest.enabledBy ? `, enabled by ${s.autoMergeRequest.enabledBy.login}` : ''}: it merges once requirements are met.
+          {s.viewerCanDisableAutoMerge && <button disabled={!!busy} onClick={() => run('disable', () => disableAutoMerge(s.id))}>Disable auto-merge</button>}
+        </div>
+      )}
+      <div class="merge-row">
+        {s.isDraft && <button disabled={!!busy} onClick={() => run('ready', () => markReady(s.id))}>{busy === 'ready' ? 'Marking…' : 'Ready for review'}</button>}
+        {s.mergeStateStatus === 'BEHIND' && s.viewerCanUpdateBranch && (
+          <button disabled={!!busy} onClick={() => run('update', () => updateBranch(s))}>{busy === 'update' ? 'Updating…' : 'Update branch'}</button>
+        )}
+        {s.methods.length > 1 && (
+          <select value={m} onChange={(e) => setMethod(e.currentTarget.value as MergeMethod)} title="Merge method">
+            {s.methods.map((x) => <option value={x}>{VERB[x]}</option>)}
+          </select>
+        )}
+        <button class="primary" disabled={!!busy || !(ready || bypass)} onClick={() => open('merge')}>{VERB[m]}</button>
+        {!ready && !s.autoMergeRequest && s.viewerCanEnableAutoMerge && (
+          <button disabled={!!busy} onClick={() => open('auto')}>Enable auto-merge</button>
+        )}
+        {!ready && !s.isDraft && !conflict && s.viewerCanMergeAsAdmin && (
+          <label title="You're an admin here: merge even though requirements aren't met">
+            <input type="checkbox" checked={bypass} onChange={() => setBypass(!bypass)} /> Merge without waiting for requirements
+          </label>
+        )}
+      </div>
+      {confirm && (
+        <div class="merge-confirm">
+          {m !== 'REBASE' && (
+            <>
+              <input value={msg.title} onInput={(e) => setMsg({ ...msg, title: e.currentTarget.value })} aria-label="Commit title" />
+              <textarea rows={5} value={msg.body} onInput={(e) => setMsg({ ...msg, body: e.currentTarget.value })} aria-label="Commit message" />
+            </>
+          )}
+          <div class="merge-row">
+            <button
+              class="primary"
+              disabled={!!busy}
+              onClick={() => run('merge', () => mergePR(s, m, msg.title, msg.body, confirm === 'auto'))}
+            >
+              {busy === 'merge' ? 'Working…' : confirm === 'auto' ? `Enable auto-merge (${VERB[m].toLowerCase()})` : `Confirm ${VERB[m].toLowerCase()}`}
+            </button>
+            <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {err && <p class="error">{err}</p>}
+    </div>
+  );
+}

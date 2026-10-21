@@ -11,6 +11,7 @@ import { highlightCode, highlightHunks, languageFor, splitLines } from './highli
 import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
+import { MergeBox } from './merge.tsx';
 import { notifySlack, slackConfigured, storage, useStoredFlag } from './platform.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -83,6 +84,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
   const [renderAll, setRenderAll] = useState(false);
   const [help, setHelp] = useState(false);
+  const [mine, setMine] = useState(false); // I opened it or it's assigned to me: show the merge box
   const threadCursor = useRef(-1);
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   const key = `drafts:${repo}#${n}`;
@@ -118,6 +120,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
         const people = [pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login);
         setSlackTo(ready ? [...new Set(people)] : null);
       }, () => setSlackTo(null));
+      getViewer().then((me) => setMine([pr.user, ...pr.assignees].some((u) => u.login === me)), () => {});
       const rules = parseGeneratedRules(attrs ?? '');
       getStack(repo, pr).then(setStack, () => {});
       getMyLastReviewCommit(repo, n).then((sha) => {
@@ -386,6 +389,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
+          {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
           <Conversation pr={pr} items={conversation} />
           {visible.map(section)}
           {generated.length > 0 &&

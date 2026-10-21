@@ -271,3 +271,15 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .suggestion { margin: 6px 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .suggestion > .badge { padding: 3px 10px; background: var(--soft); border-bottom: 1px solid var(--border); }
 .suggestion pre { margin: 0; border-radius: 0; background: var(--add); }
+
+/* Merge box (my own PRs) */
+.merge { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 6px; font-size: 13px; display: grid; gap: 8px; }
+.merge.m-ok, .merge.m-merged { border-left-color: var(--addfg); }
+.merge.m-bad, .merge.m-closed { border-left-color: var(--delfg); }
+.merge.m-wait { border-left-color: light-dark(#bf8700, #cc7832); }
+.merge-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.merge-why { color: var(--muted); }
+.merge-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.merge-confirm { display: grid; gap: 6px; }
+.merge-confirm input, .merge-confirm textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.merge .error { margin: 0; }
