@@ -258,3 +258,10 @@ The PR Shortcut Index SHALL fold the conversation's bot posts into one collapsed
 #### Scenario: Busy PR
 - **WHEN** a PR has 5 threads the user is in, 1 open cubic thread, 7 resolved cubic threads, and 3 bot conversation posts
 - **THEN** the index lists the user's 5 threads (open ones first), then "🤖 1 from bots", then a collapsed "✓ 7 resolved", and the conversation shows a collapsed "🤖 3 from bots"
+
+### Requirement: Team monitoring tab
+The PR list SHALL offer a "Team" tab where the user picks a GitHub team (from their organizations' teams, remembered) and sees each member's open PRs in that organization, one group per member, each PR showing its status: draft, awaiting review, approved, or changes requested, plus failing CI, conflicts and size. It refreshes with the rest of the list.
+
+#### Scenario: Watch the Android team
+- **WHEN** the user picks `bukuwarung/android-team`
+- **THEN** the tab lists its six members with their open PRs (stacks kept together, layers labelled), and the tab shows the total count

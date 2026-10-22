@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getReviewQueue, getThreadStatus, loadToken, type QueueItem } from './github.ts';
+import { getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { useStoredFlag } from './platform.ts';
@@ -104,8 +104,8 @@ const groupOf = (i: QueueItem): Group =>
   i.requested || backToMe(i) ? 'needs'
   : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
 
-// A sidebar section: its groups in priority order, and which group a PR falls in.
-type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string };
+// A sidebar section: its groups in priority order, which group a PR falls in, and (if not the group's) its colour.
+type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string };
 const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 // My own PRs (and ones assigned to me), by where they stand.
 const MINE: Kind = {
@@ -119,6 +119,9 @@ const MINE: Kind = {
   groupOf: (i) =>
     i.isDraft ? 'm-draft' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'm-changes' : i.reviewDecision === 'APPROVED' ? 'm-approved' : 'm-waiting',
 };
+// A team's open PRs, one group per member, coloured by where each PR stands (as in "Your PRs").
+const teamKind = (members: string[]): Kind => ({ name: 'Team', groups: members.map((m) => [m, m]), groupOf: (i) => i.author, colorOf: MINE.groupOf });
+type Tab = 'reviewing' | 'mine' | 'team';
 
 // On my PRs: where merging stands (BLOCKED is already told by the group: waiting for review / changes requested).
 const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string]>> = {
@@ -142,12 +145,55 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   const [err, setErr] = useState('');
   const [url, setUrl] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
-  const [mineTab, toggleTab] = useStoredFlag('mineTab', false); // which tab: Reviewing or Your PRs
+  // Which tab, remembered (an older version stored only "Your PRs or not").
+  const [tab, setTabState] = useState<Tab>(() => {
+    try {
+      return (localStorage.getItem('prTab') as Tab | null) ?? (localStorage.getItem('mineTab') === '1' ? 'mine' : 'reviewing');
+    } catch {
+      return 'reviewing';
+    }
+  });
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    try {
+      localStorage.setItem('prTab', t);
+    } catch {}
+  };
+  // Team tab: a GitHub team ("org/slug") and its members' open PRs.
+  const [team, setTeamState] = useState(() => {
+    try {
+      return localStorage.getItem('team') ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const [teams, setTeams] = useState<string[] | null>(null);
+  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[] } | null>(null);
+  const [teamErr, setTeamErr] = useState('');
+  const teamRef = useRef(team); // the 3-minute refresh closes over the first render; read the current team here
+  teamRef.current = team;
+  const loadTeam = (t = teamRef.current) => {
+    if (!t) return;
+    setTeamErr('');
+    getTeamPRs(t).then((d) => setTeamData({ team: t, ...d }), (e) => setTeamErr(e.message));
+  };
+  const setTeam = (t: string) => {
+    setTeamState(t);
+    setTeamData(null);
+    try {
+      localStorage.setItem('team', t);
+    } catch {}
+    loadTeam(t);
+  };
+  useEffect(() => {
+    if (tab === 'team' && !teams) getTeams().then(setTeams, (e) => setTeamErr(e.message));
+  }, [tab]);
   // The list shows as soon as it loads; thread status (replies awaiting me, my comments resolved) follows. `settled`
   // marks the second step done, so notifications compare complete lists.
   const [settled, setSettled] = useState(false);
   const load = () => {
     setErr('');
+    loadTeam();
     getReviewQueue().then(async (items) => {
       setSettled(false);
       setItems(items);
@@ -198,7 +244,7 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   const shown = items?.filter((i) => i.mine || showDrafts || !i.isDraft || isCurrent(i));
 
   const item = (kind: Kind, i: QueueItem, layer?: string) => (
-    <a key={i.id} class={`pr-item g-${kind.groupOf(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
+    <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
         {layer && <b class="layer">{layer} </b>}
@@ -211,8 +257,13 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}>↻ re-review</span>
         )}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad">CI failing</span>}
-        {kind === REVIEWING && i.mergeState === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
-        {i.isDraft && kind === REVIEWING && <span class="pill">draft</span>}
+        {kind !== MINE && i.mergeState === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
+        {i.isDraft && kind !== MINE && <span class="pill">draft</span>}
+        {kind.colorOf && !i.isDraft && (
+          <span class={'pill ' + { APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad', REVIEW_REQUIRED: '' }[i.reviewDecision ?? 'REVIEW_REQUIRED']}>
+            {{ APPROVED: 'approved', CHANGES_REQUESTED: 'changes requested', REVIEW_REQUIRED: 'awaiting review' }[i.reviewDecision ?? 'REVIEW_REQUIRED']}
+          </span>
+        )}
         {i.assigned && !i.authored && <span class="pill">assigned to you</span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok">PR approved</span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
@@ -289,14 +340,14 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
       {err && <p class="error">{err}</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {[REVIEWING, MINE].map((k) => (
-            <button role="tab" aria-selected={(k === MINE) === mineTab} onClick={() => (k === MINE) !== mineTab && toggleTab()}>
-              {k.name} <span class="count">{shown.filter((i) => (k === MINE ? i.mine : i.reviewing)).length}</span>
+          {([['reviewing', 'Reviewing', shown.filter((i) => i.reviewing).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData?.items.length]] as const).map(([t, name, n]) => (
+            <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+              {name} {n != null && <span class="count">{n}</span>}
             </button>
           ))}
         </div>
       )}
-      {!mineTab && draftCount > 0 && (
+      {tab === 'reviewing' && draftCount > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
           {showDrafts ? `Hide ${draftCount} draft PR${draftCount > 1 ? 's' : ''}` : `${draftCount} draft PR${draftCount > 1 ? 's' : ''} hidden · show`}
         </button>
@@ -305,7 +356,19 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         !err && <p class="note">Loading…</p>
       ) : (
         <>
-          {mineTab ? section(MINE, shown.filter((i) => i.mine)) : section(REVIEWING, shown.filter((i) => i.reviewing))}
+          {tab === 'mine' && section(MINE, shown.filter((i) => i.mine))}
+          {tab === 'reviewing' && section(REVIEWING, shown.filter((i) => i.reviewing))}
+          {tab === 'team' && (
+            <>
+              <select class="team-pick" value={team} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="GitHub team">
+                <option value="">Pick a GitHub team…</option>
+                {[...new Set([...(team ? [team] : []), ...(teams ?? [])])].map((t) => <option value={t}>{t}</option>)}
+              </select>
+              {teamErr && <p class="error">{teamErr}</p>}
+              {team && !teamData && !teamErr && <p class="note">Loading…</p>}
+              {teamData?.team === team && section(teamKind(teamData.members), teamData.items)}
+            </>
+          )}
         </>
       )}
       </div>

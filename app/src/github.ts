@@ -140,6 +140,21 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
   const all = new Map<string, any>(['authored', 'assigned', 'reviewed', 'requested'].flatMap((k) => d[k].nodes.map((p: any) => [p.id, p])));
   return [...all.values()]
     .map((p) => ({
+      ...toItem(p),
+      requested: requested.has(p.id),
+      myState: p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ?? null,
+      // An assigned PR that's waiting on my review belongs in the review queue, not twice.
+      reviewedBefore: reviewed.has(p.id),
+      reviewing: !authored.has(p.id) && (requested.has(p.id) || reviewed.has(p.id)),
+      mine: authored.has(p.id) || (assigned.has(p.id) && !requested.has(p.id) && !reviewed.has(p.id)),
+      assigned: assigned.has(p.id),
+      authored: authored.has(p.id),
+    }))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+// The PR fields every list shows (fragment F); the my-relation flags default to "none".
+const toItem = (p: any): QueueItem => ({
       id: p.id,
       number: p.number,
       title: p.title,
@@ -157,16 +172,39 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       deletions: p.deletions,
       files: p.changedFiles,
       autoMerge: !!p.autoMergeRequest,
-      requested: requested.has(p.id),
-      myState: p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ?? null,
-      // An assigned PR that's waiting on my review belongs in the review queue, not twice.
-      reviewedBefore: reviewed.has(p.id),
-      reviewing: !authored.has(p.id) && (requested.has(p.id) || reviewed.has(p.id)),
-      mine: authored.has(p.id) || (assigned.has(p.id) && !requested.has(p.id) && !reviewed.has(p.id)),
-      assigned: assigned.has(p.id),
-      authored: authored.has(p.id),
-    }))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      requested: false,
+      myState: null,
+      reviewedBefore: false,
+      reviewing: false,
+      mine: false,
+      assigned: false,
+      authored: false,
+});
+
+// Teams in my organizations, as "org/slug", for the Team tab.
+export async function getTeams(): Promise<string[]> {
+  const d = await graphql(`{viewer{organizations(first:20){nodes{login teams(first:100){nodes{slug}}}}}}`, {});
+  return d.viewer.organizations.nodes.flatMap((o: any) => o.teams.nodes.map((t: any) => `${o.login}/${t.slug}`));
+}
+
+// A team's members and their open PRs in the team's organization. Search ORs repeated author: filters; members go
+// in chunks so each query stays under GitHub's search length limit.
+export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[] }> {
+  const [org, slug] = team.split('/');
+  const t = (await graphql(`query($org:String!,$slug:String!){organization(login:$org){team(slug:$slug){members(first:100){nodes{login}}}}}`, { org, slug }))
+    .organization?.team;
+  if (!t) throw new Error(`No team ${team}, or you can't see it.`);
+  const members: string[] = t.members.nodes.map((m: any) => m.login).sort((a: string, b: string) => a.localeCompare(b));
+  const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
+  if (!chunks.length) return { members, items: [] };
+  const vars = Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`]));
+  const d = await graphql(
+    `query(${chunks.map((_, k) => `$q${k}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){nodes{...F}}`).join(' ')}}
+    ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+    vars,
+  );
+  const items = chunks.flatMap((_, k) => d[`s${k}`].nodes.map(toItem)) as QueueItem[];
+  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
 }
 
 // Top-level PR comments plus submitted reviews that carry a verdict or a summary.
