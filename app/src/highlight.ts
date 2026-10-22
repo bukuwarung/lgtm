@@ -16,7 +16,7 @@ hljs.registerLanguage('kotlin', (h) => {
     { scope: 'kt-it', match: /\bit\b/ },
   ];
   // Kotlin-only colours for these (IntelliJ: types plain, annotations yellow), leaving other languages alone.
-  k.classNameAliases = { ...k.classNameAliases, type: 'kt-type', meta: 'kt-ann' };
+  k.classNameAliases = { ...k.classNameAliases, type: 'kt-type', built_in: 'kt-type', meta: 'kt-ann' };
   return k;
 });
 
