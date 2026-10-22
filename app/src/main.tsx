@@ -209,7 +209,7 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         {kind === REVIEWING && i.mergeState === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
         {i.isDraft && kind === REVIEWING && <span class="pill">draft</span>}
         {i.assigned && !i.authored && <span class="pill">assigned to you</span>}
-        {i.requested && i.myState && <span class="pill">re-requested</span>}
+        {i.requested && (i.myState || i.reviewedBefore) && <span class="pill">re-requested</span>}
         {kind === REVIEWING && i.reviewDecision === 'APPROVED' && <span class="pill p-ok">PR approved</span>}
         {kind === REVIEWING && i.reviewDecision === 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}>{MERGE_PILL[i.mergeState]![0]}</span>}

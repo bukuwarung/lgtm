@@ -61,6 +61,7 @@ export type QueueItem = {
   autoMerge: boolean;
   requested: boolean; // my review is currently requested (including re-requests)
   myState: ReviewState | null; // my latest submitted review
+  reviewedBefore: boolean; // I've reviewed it (a re-request drops my review from latestReviews, but not from this)
   reviewing: boolean; // in my review queue: requested, or I've reviewed it
   mine: boolean; // I opened it, or it's assigned to me and not in my review queue
   assigned: boolean; // assigned to me
@@ -159,6 +160,7 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       requested: requested.has(p.id),
       myState: p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ?? null,
       // An assigned PR that's waiting on my review belongs in the review queue, not twice.
+      reviewedBefore: reviewed.has(p.id),
       reviewing: !authored.has(p.id) && (requested.has(p.id) || reviewed.has(p.id)),
       mine: authored.has(p.id) || (assigned.has(p.id) && !requested.has(p.id) && !reviewed.has(p.id)),
       assigned: assigned.has(p.id),
