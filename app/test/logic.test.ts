@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { reviewOrder } from '../src/files.ts';
@@ -213,4 +213,9 @@ test('importFolds folds a changed import block and names packages new to the fil
   ].join('\n'));
   assert.deepEqual(importFolds(h), [{ hunk: 0, start: 2, end: 6, added: 3, removed: 1, newPackages: ['retrofit2', 'kotlinx.coroutines.flow'] }]);
   assert.deepEqual(importFolds(parsePatch('@@ -1,2 +1,2 @@\n import a.B\n-val x = 1\n+val x = 2')), []);
+});
+
+test('ownRoot reads the project package from a source path', () => {
+  assert.equal(ownRoot('app/src/main/java/com/bukuwarung/edc/Foo.kt'), 'com.bukuwarung');
+  assert.equal(ownRoot('build.gradle.kts'), null);
 });

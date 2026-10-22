@@ -216,6 +216,9 @@ export function movedLines(files: { filename: string; hunks: Hunk[] }[]): Map<st
 export type ImportFold = { hunk: number; start: number; end: number; added: number; removed: number; newPackages: string[] };
 const IMPORT = /^\s*import\s+(?:static\s+)?([\w.]+)(\.\*)?/;
 export const isJvm = (path: string) => /\.(kt|kts|java)$/.test(path);
+// The project's own package root from a source path (…/java/com/acme/… → com.acme): new imports from inside it are
+// everyday wiring, so only packages outside it are called out as new.
+export const ownRoot = (path: string) => path.match(/\/(?:java|kotlin)\/(\w+)\/(\w+)\//)?.slice(1).join('.') ?? null;
 const packageOf = (text: string) => {
   const m = text.match(IMPORT);
   if (!m) return null;
