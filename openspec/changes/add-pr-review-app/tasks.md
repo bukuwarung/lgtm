@@ -96,6 +96,7 @@
 - [x] 12.17 Merge box on my PRs (status + reasons, ready for review, update branch, merge/auto-merge, admin bypass) and merge pills in "Your PRs"
 - [x] 12.18 Deleted files collapse to one row until shown (expanded if they carry line comments)
 - [x] 12.19 Every comment (description, conversation, review threads) links to github.com and has a copy-link button
+- [x] 12.20 Open review threads drop the header row; "Reviewing" and "Your PRs" are tabs (choice remembered)
 
 ## 13. Verify
 

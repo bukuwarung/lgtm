@@ -28,7 +28,7 @@ The system SHALL show, in a collapsible sidebar, every open PR where the signed-
 
 #### Scenario: Your PRs
 - **WHEN** the user has open PRs they authored or are assigned to
-- **THEN** a "Your PRs" section lists them grouped as Changes requested, Approved, Waiting for review, and Draft (their own drafts always shown), and an assigned PR that also needs their review stays only in the review queue
+- **THEN** a "Your PRs" tab (beside the "Reviewing" tab, the choice remembered) lists them grouped as Changes requested, Approved, Waiting for review, and Draft (their own drafts always shown), and an assigned PR that also needs their review stays only in the review queue
 
 #### Scenario: Stacked PRs
 - **WHEN** PR #2's base branch is PR #1's head branch and both are in the list

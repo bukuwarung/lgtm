@@ -136,6 +136,7 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   const [err, setErr] = useState('');
   const [url, setUrl] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
+  const [mineTab, toggleTab] = useStoredFlag('mineTab', false); // which tab: Reviewing or Your PRs
   const load = () => {
     setErr('');
     getReviewQueue().then(setItems, (e) => setErr(e.message));
@@ -193,10 +194,7 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
     const entries = list.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
     const groups = Map.groupBy(entries, (e) => (Array.isArray(e) ? kind.groups[Math.min(...e.map(rank))][0] : kind.groupOf(e)));
     return (
-      <details open class="pr-section">
-        <summary>
-          {kind.name} <span class="count">{list.length}</span>
-        </summary>
+      <>
         {kind.groups.map(([g, label]) => {
           const inGroup = groups.get(g) ?? [];
           const count = inGroup.reduce((n, e) => n + (Array.isArray(e) ? e.length : 1), 0);
@@ -218,7 +216,7 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
             </details>
           );
         })}
-      </details>
+      </>
     );
   };
 
@@ -252,7 +250,16 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         </button>
       </form>
       {err && <p class="error">{err}</p>}
-      {draftCount > 0 && (
+      {shown && (
+        <div class="pr-tabs" role="tablist">
+          {[REVIEWING, MINE].map((k) => (
+            <button role="tab" aria-selected={(k === MINE) === mineTab} onClick={() => (k === MINE) !== mineTab && toggleTab()}>
+              {k.name} <span class="count">{shown.filter((i) => (k === MINE ? i.mine : i.reviewing)).length}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {!mineTab && draftCount > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
           {showDrafts ? `Hide ${draftCount} draft PR${draftCount > 1 ? 's' : ''}` : `${draftCount} draft PR${draftCount > 1 ? 's' : ''} hidden · show`}
         </button>
@@ -261,8 +268,7 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         !err && <p class="note">Loading…</p>
       ) : (
         <>
-          {section(REVIEWING, shown.filter((i) => i.reviewing))}
-          {section(MINE, shown.filter((i) => i.mine))}
+          {mineTab ? section(MINE, shown.filter((i) => i.mine)) : section(REVIEWING, shown.filter((i) => i.reviewing))}
         </>
       )}
       </div>
