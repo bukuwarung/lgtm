@@ -522,6 +522,9 @@ type SectionProps = {
 function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand }: SectionProps) {
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
   const [rich, setRich] = useState(canRich);
+  // A deleted file's old contents are mostly noise: one row until asked for, unless a line comment is already on it.
+  const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
+  const hideDeleted = file.status === 'removed' && !showDeleted;
   const [ref, near] = useNear<HTMLElement>();
   const hunks = useMemo(() => parsePatch(file.patch ?? ''), [file.patch]);
   const path = file.filename;
@@ -563,6 +566,10 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           No diff to show (binary, too large, or renamed without changes).{' '}
           <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a>
         </p>
+      ) : hideDeleted ? (
+        <button class="collapsed-row" onClick={() => setShowDeleted(true)}>
+          Deleted. Show its {file.deletions} line{file.deletions === 1 ? '' : 's'}
+        </button>
       ) : !near && !ctx.renderAll ? (
         <div style={{ height: `${hunks.reduce((s, h) => s + h.lines.length + 1, 0) * 20}px` }} />
       ) : rich ? (
@@ -571,7 +578,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         <DiffView {...body} />
       )}
           <Notes ctx={ctx} threads={[]} drafts={[]} form={t?.path === path && !!t.atEnd} />
-          <footer class="file-f">
+          {!hideDeleted && <footer class="file-f">
             <span class="file-f-name" title={path}>{path.split('/').pop()}</span>
             <button onClick={() => ctx.setTarget({ path, side: 'RIGHT', atEnd: true })}>Comment</button>
             <label class="viewed-box" title="Mark as viewed and go to the next file">
@@ -586,7 +593,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
               />{' '}
               Viewed
             </label>
-          </footer>
+          </footer>}
         </>
       )}
     </section>
