@@ -6,6 +6,7 @@ Fast, markdown-first GitHub PR review in your own browser, signed in with your G
 - Every changed file in one scrolling page with syntax highlighting, in reading order: markdown first, then each source file followed by its test; file bodies render as they near the viewport. "Show more lines" expands unchanged code between hunks.
 - Re-reviews open on only the changes since your last review (toggle back to the full diff), and stacked PRs get "‹ Layer 2/4 ›" navigation.
 - Changed lines highlight the exact words that changed. Code moved without changes (3+ unique lines, across files too) is dimmed with "Moved here from …". ␣ (or `w`) ignores whitespace-only changes.
+- In Kotlin/Java files, changed import blocks fold to one row (`⋯ 6 imports added · show`) that names packages the file didn't import before, so a new dependency or a layering slip still stands out.
 - Reopening a PR returns to where you were reading, and files changed since your last visit are marked.
 - The Jira ticket in the PR title (or branch) shows above the conversation: status, summary, description. Needs the Atlassian CLI (`acli jira auth login`).
 - Bot comments (CI summaries, AI reviewers) fold to one line; bot-only review threads start collapsed.

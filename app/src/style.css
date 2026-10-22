@@ -319,3 +319,7 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .diff tr.moved-h td { padding: 2px 8px; font: 11px var(--sans); color: var(--muted); background: var(--soft); }
 .new-b { padding: 0 6px; border-radius: 10px; font-size: 11px; color: var(--accent); border: 1px solid currentColor; white-space: nowrap; }
 .bar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.diff tr.import-fold td { padding: 2px 8px; font: 12px var(--sans); background: var(--soft); }
+.import-fold button { border: none; background: none; padding: 0; color: var(--muted); cursor: pointer; }
+.import-fold button:hover { color: var(--accent); }
+.new-pkgs { margin-left: 10px; font-family: var(--mono); color: light-dark(#9a6700, #cc7832); }

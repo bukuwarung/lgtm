@@ -1,6 +1,6 @@
 import { render, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, movedLines, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, isJvm, movedLines, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
@@ -745,6 +745,17 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const table = useRef<HTMLTableElement>(null);
   useWordHighlights(table, hunks);
   const mv = ctx.moved.get(path);
+  // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
+  const folds = useMemo(() => (isJvm(path) ? importFolds(hunks) : []), [hunks]);
+  const [openFolds, setOpenFolds] = useState<Set<string>>(new Set());
+  const noted = (side: Side, n: number) =>
+    threads.some((x) => x.diffSide === side && x.line === n) || drafts.some((x) => x.side === side && x.line === n) || (t?.side === side && t.line === n);
+  const foldAt = (hi: number, li: number) =>
+    folds.find(
+      (f) =>
+        f.hunk === hi && li >= f.start && li <= f.end && !openFolds.has(`${hi}-${f.start}`) &&
+        !hunks[hi].lines.slice(f.start, f.end + 1).some((l) => (l.old && noted('LEFT', l.old)) || (l.new && noted('RIGHT', l.new))),
+    );
 
   return (
     <table class="diff" ref={table}>
@@ -756,6 +767,22 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
               <td colSpan={3}>{h.header}</td>
             </tr>
             {h.lines.map((l, li) => {
+              const fold = foldAt(hi, li);
+              if (fold)
+                return li !== fold.start ? null : (
+                  <tr class="import-fold">
+                    <td colSpan={3}>
+                      <button onClick={() => setOpenFolds((s) => new Set(s).add(`${hi}-${fold.start}`))}>
+                        ⋯ {[fold.added && `${fold.added} import${fold.added > 1 ? 's' : ''} added`, fold.removed && `${fold.removed} removed`].filter(Boolean).join(', ')} · show
+                      </button>
+                      {fold.newPackages.length > 0 && (
+                        <span class="new-pkgs" title="Packages this file didn't import before">
+                          + {fold.newPackages.slice(0, 5).join(', ')}{fold.newPackages.length > 5 ? ` and ${fold.newPackages.length - 5} more` : ''}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
               const side: Side = l.kind === '-' ? 'LEFT' : 'RIGHT';
               const num = side === 'LEFT' ? l.old! : l.new!;
               const move = l.kind === '-' ? mv?.old.get(l.old!) : l.kind === '+' ? mv?.new.get(l.new!) : undefined;

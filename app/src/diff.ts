@@ -208,3 +208,45 @@ export function movedLines(files: { filename: string; hunks: Hunk[] }[]): Map<st
   }
   return out;
 }
+
+// Import blocks in Kotlin/Java diffs fold to one row: mostly fallout of the code changes (lint catches unused ones),
+// but a new package can be a new dependency or a layering slip, so the row names the packages this file didn't
+// import before. A fold covers a run of import/blank lines with at least one changed import; `end` is inclusive.
+// ponytail: "didn't import before" only sees imports inside the hunks; an old import outside them can look new.
+export type ImportFold = { hunk: number; start: number; end: number; added: number; removed: number; newPackages: string[] };
+const IMPORT = /^\s*import\s+(?:static\s+)?([\w.]+)(\.\*)?/;
+export const isJvm = (path: string) => /\.(kt|kts|java)$/.test(path);
+const packageOf = (text: string) => {
+  const m = text.match(IMPORT);
+  if (!m) return null;
+  const segs = m[1].split('.');
+  if (m[2]) return segs.join('.'); // import a.b.* → a.b
+  const cls = segs.findIndex((s) => /^[A-Z]/.test(s));
+  return segs.slice(0, cls < 0 ? -1 : cls).join('.'); // a.b.Foo → a.b; a.b.someFunction → a.b
+};
+
+export function importFolds(hunks: Hunk[]): ImportFold[] {
+  const known = new Set(hunks.flatMap((h) => h.lines.filter((l) => l.kind !== '+').map((l) => packageOf(l.text)).filter((p) => p != null)));
+  const out: ImportFold[] = [];
+  hunks.forEach((h, hi) => {
+    let start = -1;
+    const close = (end: number) => {
+      while (end >= start && !IMPORT.test(h.lines[end].text)) end--; // no trailing blanks
+      const run = h.lines.slice(start, end + 1);
+      const changed = run.filter((l) => l.kind !== ' ' && IMPORT.test(l.text));
+      if (changed.length) {
+        const added = changed.filter((l) => l.kind === '+');
+        const fresh = [...new Set(added.map((l) => packageOf(l.text)!).filter((p) => p && !known.has(p)))];
+        out.push({ hunk: hi, start, end, added: added.length, removed: changed.length - added.length, newPackages: fresh });
+      }
+      start = -1;
+    };
+    h.lines.forEach((l, i) => {
+      const fits = IMPORT.test(l.text) || (start >= 0 && !l.text.trim());
+      if (fits && start < 0) start = i;
+      else if (!fits && start >= 0) close(i - 1);
+    });
+    if (start >= 0) close(h.lines.length - 1);
+  });
+  return out;
+}

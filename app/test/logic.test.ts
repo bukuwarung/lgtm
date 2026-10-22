@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, movedLines, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { reviewOrder } from '../src/files.ts';
@@ -204,4 +204,13 @@ test('jira keys from the title, ADF to markdown', () => {
 test('reviewOrder: markdown first, then each source file followed by its test', () => {
   const order = reviewOrder(['app/src/test/java/a/FooTest.kt', 'app/src/main/java/a/Zed.kt', 'README.md', 'app/src/main/java/a/Foo.kt', 'app/src/androidTest/java/a/ZedTest.kt']);
   assert.deepEqual(order, ['README.md', 'app/src/main/java/a/Foo.kt', 'app/src/test/java/a/FooTest.kt', 'app/src/main/java/a/Zed.kt', 'app/src/androidTest/java/a/ZedTest.kt']);
+});
+
+test('importFolds folds a changed import block and names packages new to the file', () => {
+  const h = parsePatch([
+    '@@ -1,6 +1,7 @@', ' package a', ' ', ' import dagger.Module', '-import old.thing.Gone', '+import retrofit2.Retrofit', '+import dagger.Provides',
+    '+import kotlinx.coroutines.flow.map', ' ', ' class A',
+  ].join('\n'));
+  assert.deepEqual(importFolds(h), [{ hunk: 0, start: 2, end: 6, added: 3, removed: 1, newPackages: ['retrofit2', 'kotlinx.coroutines.flow'] }]);
+  assert.deepEqual(importFolds(parsePatch('@@ -1,2 +1,2 @@\n import a.B\n-val x = 1\n+val x = 2')), []);
 });

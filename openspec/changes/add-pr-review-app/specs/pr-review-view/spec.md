@@ -231,7 +231,11 @@ The PR list SHALL show each PR's size and flag what needs the user or blocks the
 - **THEN** the PR shows "💬 1 awaiting your reply" in the list, and the thread is outlined with "awaiting your reply" in the PR
 
 ### Requirement: Less to read in the diff
-The diff SHALL highlight the changed span inside modified lines, dim code moved without changes (runs of 3+ lines unique on both sides of the PR) with a link to where it moved from or to, and offer a remembered toggle (`w`) that shows whitespace-only changes as unchanged lines. Files SHALL be ordered markdown first, then each source file followed by its tests.
+The diff SHALL highlight the changed span inside modified lines, dim code moved without changes (runs of 3+ lines unique on both sides of the PR) with a link to where it moved from or to, fold changed Kotlin/Java import blocks to one row naming packages the file didn't import before, and offer a remembered toggle (`w`) that shows whitespace-only changes as unchanged lines. Files SHALL be ordered markdown first, then each source file followed by its tests.
+
+#### Scenario: Import block
+- **WHEN** a Kotlin file's diff adds imports from `dagger`, `retrofit2` and a package it already imported
+- **THEN** the import lines fold to "⋯ 3 imports added · show" with "+ retrofit2" (dagger was already imported), and a comment on one of those lines keeps the block open
 
 #### Scenario: Moved block
 - **WHEN** a PR moves a 10-line function from A.kt to B.kt unchanged

@@ -102,6 +102,7 @@
 - [x] 12.23 Word-level highlights (CSS Custom Highlight API), moved-code dimming, ignore-whitespace toggle (w)
 - [x] 12.24 Reading order (tests after their source), resume position, changed-since-last-visit badges
 - [x] 12.25 Bot comments folded; Jira ticket box via `acli` (`/jira`)
+- [x] 12.26 Kotlin/Java import blocks fold to one row naming packages new to the file
 
 ## 13. Verify
 
