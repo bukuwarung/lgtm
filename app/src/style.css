@@ -332,3 +332,4 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .hljs-kt-const { color: var(--hl-prop); font-style: italic; }
 .hljs-kt-arg { color: var(--hl-arg); }
 .hljs-kt-it { color: var(--hl-it); font-weight: 600; }
+.pill.p-strong { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }

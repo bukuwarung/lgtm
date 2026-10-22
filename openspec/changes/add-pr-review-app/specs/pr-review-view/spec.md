@@ -228,7 +228,7 @@ The PR list SHALL show each PR's size and flag what needs the user or blocks the
 
 #### Scenario: All my comments resolved
 - **WHEN** I requested changes on a PR and the author resolves every review thread I'm in
-- **THEN** the PR moves to "Needs your review" with a "your comments resolved" pill, counts in the tab title, and (if enabled) raises a "Your comments were resolved" notification; a PR I approved stays under "You approved"
+- **THEN** the PR moves to "Needs your review" with a prominent "↻ re-review" pill (the same one a re-request shows; the PR-wide verdict pill is hidden), counts in the tab title, and (if enabled) raises a "Your comments were resolved" notification; a PR I approved stays under "You approved"
 
 #### Scenario: Author answered my comment
 - **WHEN** the author replies to a current, unresolved thread I commented in

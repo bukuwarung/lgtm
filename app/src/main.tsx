@@ -97,6 +97,9 @@ const GROUPS: [Group, string][] = [
 ];
 // A PR I commented on or requested changes on comes back to "Needs your review" once every thread I'm in is resolved.
 const backToMe = (i: QueueItem) => !i.requested && !!i.myState && i.myState !== 'APPROVED' && !!i.thread?.allMineResolved;
+// Back on my plate after I reviewed it: re-requested, or my threads all resolved. Shown as one pill, and the PR-wide
+// verdict is hidden then, since it's usually my own earlier one.
+const reReview = (i: QueueItem) => (i.requested && (!!i.myState || i.reviewedBefore)) || backToMe(i);
 const groupOf = (i: QueueItem): Group =>
   i.requested || backToMe(i) ? 'needs'
   : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
@@ -204,14 +207,15 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
       <span class="pills">
         {unsent(i) > 0 && <span class="pill p-warn">{unsent(i)} unsent comment{unsent(i) > 1 ? 's' : ''}</span>}
         {(i.thread?.awaiting ?? 0) > 0 && <span class="pill p-reply">💬 {i.thread!.awaiting} awaiting your reply</span>}
-        {kind === REVIEWING && backToMe(i) && <span class="pill p-ok">your comments resolved</span>}
+        {kind === REVIEWING && reReview(i) && (
+          <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}>↻ re-review</span>
+        )}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad">CI failing</span>}
         {kind === REVIEWING && i.mergeState === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
         {i.isDraft && kind === REVIEWING && <span class="pill">draft</span>}
         {i.assigned && !i.authored && <span class="pill">assigned to you</span>}
-        {i.requested && (i.myState || i.reviewedBefore) && <span class="pill">re-requested</span>}
-        {kind === REVIEWING && i.reviewDecision === 'APPROVED' && <span class="pill p-ok">PR approved</span>}
-        {kind === REVIEWING && i.reviewDecision === 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
+        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok">PR approved</span>}
+        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}>{MERGE_PILL[i.mergeState]![0]}</span>}
         {kind === MINE && i.autoMerge && <span class="pill">auto-merge on</span>}
         <span class="pill p-size" title={`${i.files} changed files`}>
