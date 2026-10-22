@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getReviewQueue, loadToken, type QueueItem } from './github.ts';
+import { getAwaiting, getReviewQueue, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { useStoredFlag } from './platform.ts';
@@ -118,7 +118,7 @@ const MINE: Kind = {
 const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string]>> = {
   CLEAN: ['ready to merge', 'p-ok'],
   HAS_HOOKS: ['ready to merge', 'p-ok'],
-  UNSTABLE: ['mergeable, checks failing', 'p-ok'],
+  UNSTABLE: ['mergeable', 'p-ok'], // with the "CI failing" pill beside it
   BEHIND: ['behind base', ''],
   DIRTY: ['conflicts', 'p-bad'],
 };
@@ -137,9 +137,27 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   const [url, setUrl] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
   const [mineTab, toggleTab] = useStoredFlag('mineTab', false); // which tab: Reviewing or Your PRs
+  const [awaiting, setAwaiting] = useState<Map<string, number>>(new Map());
   const load = () => {
     setErr('');
-    getReviewQueue().then(setItems, (e) => setErr(e.message));
+    getReviewQueue().then((items) => {
+      setItems(items);
+      getAwaiting(items).then(setAwaiting, () => {}); // secondary: the list works without it
+    }, (e) => setErr(e.message));
+  };
+  // Unsent comments live in localStorage; re-read them whenever a review page saves drafts.
+  const [, setStorageTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setStorageTick((t) => t + 1);
+    addEventListener('lgtm:storage', bump);
+    return () => removeEventListener('lgtm:storage', bump);
+  }, []);
+  const unsent = (i: QueueItem) => {
+    try {
+      return JSON.parse(localStorage.getItem(`drafts:${i.repo}#${i.number}`) ?? 'null')?.drafts.length ?? 0;
+    } catch {
+      return 0;
+    }
   };
   useEffect(load, [version]);
   useEffect(() => {
@@ -176,6 +194,10 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         {i.repo}#{i.number} · {i.author} · {ago(i.updatedAt)}
       </span>
       <span class="pills">
+        {unsent(i) > 0 && <span class="pill p-warn">{unsent(i)} unsent comment{unsent(i) > 1 ? 's' : ''}</span>}
+        {(awaiting.get(i.id) ?? 0) > 0 && <span class="pill p-reply">💬 {awaiting.get(i.id)} awaiting your reply</span>}
+        {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad">CI failing</span>}
+        {kind === REVIEWING && i.mergeState === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
         {i.isDraft && kind === REVIEWING && <span class="pill">draft</span>}
         {i.assigned && !i.authored && <span class="pill">assigned to you</span>}
         {i.requested && i.myState && <span class="pill">re-requested</span>}
@@ -183,6 +205,9 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
         {kind === REVIEWING && i.reviewDecision === 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}>{MERGE_PILL[i.mergeState]![0]}</span>}
         {kind === MINE && i.autoMerge && <span class="pill">auto-merge on</span>}
+        <span class="pill p-size" title={`${i.files} changed files`}>
+          <b class="a">+{i.additions}</b> <b class="d">−{i.deletions}</b> · {i.files} file{i.files === 1 ? '' : 's'}
+        </span>
       </span>
     </a>
   );

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'preact/hooks';
 import { fetchJobLog } from './platform.ts';
 import type { ComponentChildren } from 'preact';
-import type { Check, ConversationItem, Draft, PR, PRFile, Thread } from './github.ts';
+import { awaitsMe, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, so there's nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean };
@@ -104,10 +104,11 @@ type IndexProps = {
   files: File[];
   viewed: Set<string>;
   counts: Counts;
+  me: string;
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me }: IndexProps) {
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
@@ -119,7 +120,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
       <Section title="Conversation" count={conversation.length + 1}>
         <Entry label="Description" meta={pr.user.login} onClick={() => jumpTo('pr-description')} />
         {conversation.map((c, i) => (
-          <Entry key={c.id} label={c.author} meta={c.state ? VERDICT[c.state] : 'commented'} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+          <Entry key={c.id} label={c.author} meta={c.state ? VERDICT[c.state] : 'commented'} sub={excerpts[i]} dim={c.bot} onClick={() => jumpTo('cv-' + c.id)} />
         ))}
       </Section>
 
@@ -177,13 +178,14 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         ))}
         {sortedThreads.map((t) => {
           const first = t.comments.nodes[0];
+          const waiting = !!me && awaitsMe(t, me, pr.user.login === me);
           return (
             <Entry
               key={t.id}
-              label={`${base(t.path)}${t.line ? ':' + t.line : ''}`}
-              meta={[first?.author?.login, t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
+              label={`${waiting ? '💬 ' : ''}${base(t.path)}${t.line ? ':' + t.line : ''}`}
+              meta={[first?.author?.login, waiting && 'awaiting your reply', t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
               sub={oneLine(first?.bodyText ?? '')}
-              dim={t.isResolved || t.isOutdated}
+              dim={t.isResolved || t.isOutdated || t.comments.nodes.every((c) => c.author?.__typename === 'Bot')}
               onClick={() => jumpTo('t-' + t.id, 'f-' + t.path)}
             />
           );

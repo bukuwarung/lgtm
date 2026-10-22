@@ -6,8 +6,14 @@ export const storage = {
     const v = localStorage.getItem(key);
     return v == null ? undefined : JSON.parse(v);
   },
-  set: async (key: string, value: unknown) => localStorage.setItem(key, JSON.stringify(value)),
-  remove: async (key: string) => localStorage.removeItem(key),
+  set: async (key: string, value: unknown) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    dispatchEvent(new Event('lgtm:storage')); // the PR list shows unsent comments
+  },
+  remove: async (key: string) => {
+    localStorage.removeItem(key);
+    dispatchEvent(new Event('lgtm:storage'));
+  },
 };
 
 // The local server answers with `gh auth token`.
@@ -57,4 +63,13 @@ export async function fetchJobLog(repo: string, job: number): Promise<string> {
   const text = await res.text();
   if (!res.ok) throw new Error(text || 'Could not load the log');
   return text;
+}
+
+export type JiraIssue = { key: string; url: string; summary: string; status?: string; statusCategory?: string; type?: string; description: any };
+// A Jira ticket through the local server's acli.
+export async function fetchJira(key: string): Promise<JiraIssue> {
+  const res = await fetch(`/jira?key=${encodeURIComponent(key)}`);
+  const body = await res.json().catch(() => ({ error: res.statusText }));
+  if (!res.ok) throw new Error(body.error || 'Could not load the ticket');
+  return body;
 }

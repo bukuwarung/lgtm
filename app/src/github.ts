@@ -16,6 +16,7 @@ export type PR = {
 };
 export type PRFile = {
   filename: string;
+  sha: string; // blob at the PR head: changes when the file does
   previous_filename?: string;
   status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
   additions: number;
@@ -24,7 +25,7 @@ export type PRFile = {
   blob_url: string;
 };
 // bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
-export type Comment = { databaseId: number; url: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string } | null };
+export type Comment = { databaseId: number; url: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string } | null };
 export type Thread = {
   id: string;
   path: string;
@@ -53,6 +54,10 @@ export type QueueItem = {
   author: string;
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   mergeState: MergeState['mergeStateStatus'];
+  ci: 'SUCCESS' | 'FAILURE' | 'ERROR' | 'PENDING' | 'EXPECTED' | null; // all checks on the head commit, rolled up
+  additions: number;
+  deletions: number;
+  files: number;
   autoMerge: boolean;
   requested: boolean; // my review is currently requested (including re-requests)
   myState: ReviewState | null; // my latest submitted review
@@ -61,7 +66,7 @@ export type QueueItem = {
   assigned: boolean; // assigned to me
   authored: boolean; // I opened it
 };
-export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState };
+export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean };
 
 // --- auth ---
 
@@ -120,7 +125,8 @@ const QUEUE = `query{viewer{login}
   reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}}
-fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{login} repository{nameWithOwner}
+fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{login}
+  additions deletions changedFiles commits(last:1){nodes{commit{statusCheckRollup{state}}}} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner}
   latestReviews(first:100){nodes{state author{login}}}}`;
 
@@ -144,6 +150,10 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       author: p.author?.login ?? 'ghost',
       reviewDecision: p.reviewDecision,
       mergeState: p.mergeStateStatus,
+      ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+      additions: p.additions,
+      deletions: p.deletions,
+      files: p.changedFiles,
       autoMerge: !!p.autoMergeRequest,
       requested: requested.has(p.id),
       myState: p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ?? null,
@@ -163,10 +173,10 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
     paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`, FULL),
   ]);
   return [
-    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', html: c.body_html ?? '', at: c.created_at, url: c.html_url })),
+    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' })),
     ...reviews
       .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
-      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state })),
+      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot' })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 }
 
@@ -198,7 +208,7 @@ export async function getRaw(repo: string, path: string, ref: string): Promise<s
 
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
-    nodes{id path line diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve comments(first:100){nodes{databaseId url bodyHTML bodyText createdAt author{login}}}}}}}}`;
+    nodes{id path line diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve comments(first:100){nodes{databaseId url bodyHTML bodyText createdAt author{__typename login}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');
@@ -431,3 +441,26 @@ export const updateBranch = (s: MergeState) =>
   graphql(`mutation($id:ID!,$oid:GitObjectID){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}`, { id: s.id, oid: s.headRefOid });
 export const markReady = (id: string) =>
   graphql(`mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}`, { id });
+
+// Does this review thread wait on me? Open and current, last word from a person other than me, and it's my PR or I'm
+// in the thread. Outdated threads don't count: the code moved on, and a reply there is nearly always "done".
+export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { comments: { nodes: Pick<Comment, 'author'>[] } }, me: string, myPR: boolean) {
+  const last = t.comments.nodes.at(-1)?.author;
+  if (t.isResolved || t.isOutdated || !last || last.login === me || last.__typename === 'Bot') return false;
+  return myPR || t.comments.nodes.some((c) => c.author?.login === me);
+}
+
+// Per PR in the list, how many review threads wait on my reply (see awaitsMe). One query for all of them.
+export async function getAwaiting(items: QueueItem[]): Promise<Map<string, number>> {
+  const me = await getViewer();
+  const ask = items.filter((i) => i.mine || i.myState);
+  if (!ask.length) return new Map();
+  const vars = Object.fromEntries(ask.map((i, k) => [`i${k}`, i.id]));
+  const d = await graphql(
+    `query(${ask.map((_, k) => `$i${k}:ID!`).join(',')}){${ask
+      .map((_, k) => `p${k}:node(id:$i${k}){...on PullRequest{reviewThreads(last:100){nodes{isResolved isOutdated comments(last:20){nodes{author{__typename login}}}}}}}`)
+      .join(' ')}}`,
+    vars,
+  );
+  return new Map(ask.map((i, k) => [i.id, d[`p${k}`].reviewThreads.nodes.filter((t: any) => awaitsMe(t, me, i.authored)).length]));
+}

@@ -79,3 +79,132 @@ export function gaps(hunks: Hunk[]): Gap[] {
   out.push({ before: hunks.length, from: next, to: null, offset });
   return out;
 }
+
+const squash = (s: string) => s.replace(/\s+/g, '');
+
+// "Ignore whitespace": inside each run of removed+added lines, lines equal but for whitespace become one unchanged
+// line (an LCS over the whitespace-free text, so a re-indented block inside a new `if` still lines up). Line numbers
+// are kept, so comments still anchor.
+export function ignoreWhitespace(hunks: Hunk[]): Hunk[] {
+  return hunks.map((h) => {
+    const out: Line[] = [];
+    let dels: Line[] = [], adds: Line[] = [];
+    const flush = () => {
+      const a = dels.map((l) => squash(l.text)), b = adds.map((l) => squash(l.text));
+      // ponytail: O(n·m) table per change block; fine for diffs, swap in Myers if huge blocks show up.
+      const L = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+      for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+      let i = 0, j = 0;
+      const pendD: Line[] = [], pendA: Line[] = [];
+      const emit = () => out.push(...pendD.splice(0), ...pendA.splice(0));
+      while (i < a.length || j < b.length) {
+        if (i < a.length && j < b.length && a[i] === b[j]) {
+          emit();
+          out.push({ kind: ' ', text: adds[j].text, old: dels[i].old, new: adds[j].new });
+          i++, j++;
+        } else if (j >= b.length || (i < a.length && L[i + 1][j] >= L[i][j + 1])) pendD.push(dels[i++]);
+        else pendA.push(adds[j++]);
+      }
+      emit();
+      dels = [];
+      adds = [];
+    };
+    for (const l of h.lines) {
+      if (l.kind === '-') {
+        if (adds.length) flush();
+        dels.push(l);
+      } else if (l.kind === '+') adds.push(l);
+      else {
+        flush();
+        out.push(l);
+      }
+    }
+    flush();
+    return { ...h, lines: out };
+  });
+}
+
+// Word-level change inside a modified line: the removed line's [start, end) and the added line's, after the common
+// prefix and suffix. Null when the lines share too little for a highlight to help.
+// ponytail: one changed span per line (prefix/suffix), not a token LCS; two edits far apart highlight everything between.
+export function wordChange(a: string, b: string): { del: [number, number]; add: [number, number] } | null {
+  let p = 0;
+  while (p < a.length && p < b.length && a[p] === b[p]) p++;
+  let s = 0;
+  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  if ((p + s) / Math.max(a.length, b.length) < 0.3 || (p + s === a.length && p + s === b.length)) return null;
+  return { del: [p, a.length - s], add: [p, b.length - s] };
+}
+
+// Removed lines paired with the added lines that replace them (i-th with i-th in each change run), as indexes into
+// hunk.lines.
+export function changePairs(h: Hunk): [number, number][] {
+  const out: [number, number][] = [];
+  let dels: number[] = [], adds: number[] = [];
+  const flush = () => {
+    for (let k = 0; k < Math.min(dels.length, adds.length); k++) out.push([dels[k], adds[k]]);
+    dels = [];
+    adds = [];
+  };
+  h.lines.forEach((l, i) => {
+    if (l.kind === '-') {
+      if (adds.length) flush();
+      dels.push(i);
+    } else if (l.kind === '+') adds.push(i);
+    else flush();
+  });
+  flush();
+  return out;
+}
+
+// Code moved without changes: runs of 3+ removed lines whose text (whitespace aside) is added elsewhere in the PR, and
+// those added runs. Only lines unique on both sides count (patience-diff style), so boilerplate repeated across files
+// (`plugins {`, `dependencies {`) doesn't pass for a move; such lines, and short ones (braces, blanks), ride along
+// inside a run without counting. For each file: line number → where the first line of its run went (or came from),
+// set on the run's first line only; '' for the rest.
+export type Moved = { old: Map<number, string>; new: Map<number, string> };
+export function movedLines(files: { filename: string; hunks: Hunk[] }[]): Map<string, Moved> {
+  const key = (t: string) => t.trim().replace(/\s+/g, ' ');
+  const where = { '-': new Map<string, string>(), '+': new Map<string, string>() };
+  const count = { '-': new Map<string, number>(), '+': new Map<string, number>() };
+  for (const f of files)
+    for (const h of f.hunks)
+      for (const l of h.lines) {
+        if (l.kind === ' ' || key(l.text).length < 6) continue;
+        const k = key(l.text);
+        count[l.kind].set(k, (count[l.kind].get(k) ?? 0) + 1);
+        if (!where[l.kind].has(k)) where[l.kind].set(k, `${f.filename}:${l.kind === '-' ? l.old : l.new}`);
+      }
+  const unique = (k: string) => count['-'].get(k) === 1 && count['+'].get(k) === 1;
+  const out = new Map<string, Moved>();
+  for (const f of files) {
+    const m: Moved = { old: new Map(), new: new Map() };
+    for (const h of f.hunks) {
+      for (const kind of ['-', '+'] as const) {
+        const other = where[kind === '-' ? '+' : '-'];
+        let run: Line[] = [];
+        const end = () => {
+          while (run.length && !unique(key(run.at(-1)!.text))) run.pop();
+          if (run.filter((l) => unique(key(l.text))).length >= 3) {
+            const side = kind === '-' ? m.old : m.new;
+            run.forEach((l, i) => side.set(kind === '-' ? l.old! : l.new!, i ? '' : other.get(key(l.text))!));
+          }
+          run = [];
+        };
+        for (const l of h.lines) {
+          if (l.kind !== kind) {
+            if (l.kind === ' ') end();
+            continue; // the other side's lines interleave; they don't break this side's run
+          }
+          const k = key(l.text);
+          if (unique(k)) run.push(l);
+          else if (k.length < 6 || other.has(k)) run.length && run.push(l); // rides along
+          else end();
+        }
+        end();
+      }
+    }
+    if (m.old.size || m.new.size) out.set(f.filename, m);
+  }
+  return out;
+}

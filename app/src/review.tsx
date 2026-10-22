@@ -1,10 +1,10 @@
 import { render, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, gaps, parsePatch, removedRuns, type Gap, type Hunk, type Removed } from './diff.ts';
+import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, movedLines, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
-  reply, resolveThread, setViewed, submitReview,
+  awaitsMe, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightCode, highlightHunks, languageFor, splitLines } from './highlight.ts';
@@ -12,7 +12,9 @@ import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
-import { notifySlack, slackConfigured, storage, useStoredFlag } from './platform.ts';
+import { reviewOrder } from './files.ts';
+import { fetchJira, notifySlack, slackConfigured, storage, useStoredFlag, type JiraIssue } from './platform.ts';
+import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
@@ -35,8 +37,13 @@ type Ctx = {
   mentions: string[]; // people on this PR, for @-completion
   suggestion: (t: Target) => string | null; // the target's lines, for a ```suggestion block
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
+  me: string; // my login ('' until known)
+  ignoreWs: boolean; // hide whitespace-only changes
+  moved: Map<string, Moved>; // code moved without changes, per file
 };
 type Saved = { sha: string; drafts: Draft[] };
+// My last visit to a PR: each file's blob then, and where I was reading (file + how far into it).
+type Visit = { files: Record<string, string>; at: { path: string; y: number } | null };
 
 const slackEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -48,16 +55,18 @@ function slackText(pr: PR, ref: string, event: ReviewEvent, body: string, commen
   return `${verb} <${pr.html_url}|${slackEscape(`${ref} ${pr.title}`)}>${extra}${quote}`;
 }
 
-// Mark generated and content-free files, and put markdown first (stable sort keeps GitHub's order within each group).
+// Mark generated and content-free files, and put them in reading order (markdown first, tests after their source).
 // Binary and too-large files also come without a patch but did change, so only renames/copies/mode changes count.
-const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>): File[] =>
-  files
+const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>): File[] => {
+  const order = new Map(reviewOrder(files.map((f) => f.filename)).map((p, i) => [p, i]));
+  return files
     .map((f) => ({
       ...f,
       generated: isGenerated(rules, f.filename),
       noDiff: ['renamed', 'copied', 'changed'].includes(f.status) && !f.additions && !f.deletions,
     }))
-    .sort((a, b) => +isMarkdown(b.filename) - +isMarkdown(a.filename));
+    .sort((a, b) => order.get(a.filename)! - order.get(b.filename)!);
+};
 
 const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
@@ -84,7 +93,12 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
   const [renderAll, setRenderAll] = useState(false);
   const [help, setHelp] = useState(false);
+  const [ignoreWs, toggleWs] = useStoredFlag('ignoreWs', false);
+  const [changedSinceVisit, setChangedSinceVisit] = useState<Set<string>>(new Set());
+  const resumeAt = useRef<Visit['at']>(null);
+  const visitKey = `visit:${repo}#${n}`;
   const [mine, setMine] = useState(false); // I opened it or it's assigned to me: show the merge box
+  const [me, setMe] = useState('');
   const threadCursor = useRef(-1);
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   const key = `drafts:${repo}#${n}`;
@@ -109,18 +123,26 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     (async () => {
       const pr = await getPR(repo, n);
       const headRepo = pr.head.repo?.full_name ?? repo;
-      const [files, threads, conversation, attrs, stored] = await Promise.all([
+      const [files, threads, conversation, attrs, stored, visit] = await Promise.all([
         getFiles(repo, n),
         getThreads(repo, n),
         getConversation(repo, n),
         getRaw(headRepo, '.gitattributes', pr.head.sha),
         storage.get<Saved>(key),
+        storage.get<Visit>(visitKey).catch(() => undefined),
       ]);
+      if (visit) {
+        setChangedSinceVisit(new Set(files.filter((f) => visit.files[f.filename] !== f.sha).map((f) => f.filename)));
+        resumeAt.current = visit.at;
+      }
       Promise.all([slackConfigured(), getViewer()]).then(([ready, me]) => {
         const people = [pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login);
         setSlackTo(ready ? [...new Set(people)] : null);
       }, () => setSlackTo(null));
-      getViewer().then((me) => setMine([pr.user, ...pr.assignees].some((u) => u.login === me)), () => {});
+      getViewer().then((me) => {
+        setMe(me);
+        setMine([pr.user, ...pr.assignees].some((u) => u.login === me));
+      }, () => {});
       const rules = parseGeneratedRules(attrs ?? '');
       getStack(repo, pr).then(setStack, () => {});
       getMyLastReviewCommit(repo, n).then((sha) => {
@@ -150,6 +172,42 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
       },
     );
   }, [since, lastReviewed, data]);
+
+  // Remember this visit when leaving the PR (or the page): file versions seen, and the reading position.
+  useEffect(() => {
+    if (!data) return;
+    const where = (): Visit['at'] => {
+      const top = 44 + 4;
+      const cur = [...document.querySelectorAll<HTMLElement>('main > .file')].findLast((s) => s.getBoundingClientRect().top <= top);
+      return cur ? { path: cur.id.slice(2), y: top - cur.getBoundingClientRect().top } : null;
+    };
+    let at = where();
+    const onScroll = () => (at = where());
+    const save = () => void storage.set(visitKey, { files: Object.fromEntries(data.files.map((f) => [f.filename, f.sha])), at } satisfies Visit);
+    addEventListener('scroll', onScroll, { passive: true });
+    addEventListener('pagehide', save);
+    // Pick up where I left off. Files above render lazily and shift things, so settle once more.
+    const resume = resumeAt.current && document.getElementById('f-' + resumeAt.current.path);
+    if (resume) {
+      const go = () => {
+        resume.scrollIntoView();
+        scrollBy(0, resumeAt.current!.y);
+      };
+      go();
+      setTimeout(go, 400);
+    }
+    return () => {
+      removeEventListener('scroll', onScroll);
+      removeEventListener('pagehide', save);
+      save();
+    };
+  }, [data]);
+
+  // Moved code is matched across the whole PR (generated files aside, or their copies would count as moves).
+  const moved = useMemo(() => {
+    const fs = since && sinceData ? sinceData.files : (data?.files ?? []);
+    return movedLines(fs.filter((f) => !f.generated).map((f) => ({ filename: f.filename, hunks: parsePatch(f.patch ?? '') })));
+  }, [data, sinceData, since]);
 
   // In "since" mode old-side line numbers refer to my last reviewed commit, so old-side threads would sit on the wrong lines.
   const shownThreads = since && sinceData ? threads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : threads;
@@ -220,6 +278,9 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     },
     renderAll,
     since: since && !!sinceData,
+    me,
+    ignoreWs,
+    moved,
     repo,
     mentions: [
       ...new Set(
@@ -267,6 +328,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
       drafts={drafts.filter((d) => d.path === f.filename)}
       viewed={viewed.has(f.filename)}
       collapsed={viewed.has(f.filename) && !expanded.has(f.filename)}
+      changed={changedSinceVisit.has(f.filename)}
       onToggleViewed={() => toggleViewed(f.filename)}
       onExpand={() => setExpanded((s) => new Set(s).add(f.filename))}
     />
@@ -312,6 +374,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
       c: () => path && ctx.setTarget({ path, side: 'RIGHT' }),
       ' ': () => commentAtCurrentLine() || scrollBy({ top: innerHeight * 0.85 }), // nothing to comment on: Space scrolls as usual
       i: toggleIndex,
+      w: toggleWs,
       '[': () => stackAt(-1) && (location.hash = `/${repo}/pull/${stackAt(-1)!.number}`),
       ']': () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
       '?': () => setHelp(!help),
@@ -343,6 +406,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
               onRefreshChecks={loadChecks}
               files={shown}
               viewed={viewed}
+              me={me}
               counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length}
             />
           </div>
@@ -364,6 +428,9 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
               {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
             </span>
           )}
+          <button class={ignoreWs ? 'on' : ''} aria-pressed={ignoreWs} title={ignoreWs ? 'Whitespace-only changes hidden (w to show)' : 'Hide whitespace-only changes (w)'} onClick={toggleWs}>
+            ␣
+          </button>
           <button title="Keyboard shortcuts (?)" onClick={() => setHelp(!help)}>⌨</button>
           <SubmitPanel count={drafts.length} slackTo={slackTo} onSubmit={submit} repo={repo} mentions={ctx.mentions} />
         </div>
@@ -389,6 +456,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
+          {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} />)}
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
           <Conversation pr={pr} items={conversation} />
           {visible.map(section)}
@@ -517,16 +585,17 @@ type SectionProps = {
   collapsed: boolean;
   onToggleViewed: () => void;
   onExpand: () => void;
+  changed: boolean; // changed since my last visit
 };
 
-function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand }: SectionProps) {
+function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand, changed }: SectionProps) {
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
   const [rich, setRich] = useState(canRich);
   // A deleted file's old contents are mostly noise: one row until asked for, unless a line comment is already on it.
   const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
   const hideDeleted = file.status === 'removed' && !showDeleted;
   const [ref, near] = useNear<HTMLElement>();
-  const hunks = useMemo(() => parsePatch(file.patch ?? ''), [file.patch]);
+  const hunks = useMemo(() => (ctx.ignoreWs ? ignoreWhitespace : (h: Hunk[]) => h)(parsePatch(file.patch ?? '')), [file.patch, ctx.ignoreWs]);
   const path = file.filename;
   const t = ctx.target;
   const body: BodyProps = { file, hunks, ctx, threads: threads.filter((x) => !isFileLevel(x)), drafts: drafts.filter((d) => d.line) };
@@ -543,6 +612,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
         </span>
         {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
+        {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
         <label class="viewed-box" title="Mark as viewed on GitHub (v)">
@@ -672,8 +742,12 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     );
   };
 
+  const table = useRef<HTMLTableElement>(null);
+  useWordHighlights(table, hunks);
+  const mv = ctx.moved.get(path);
+
   return (
-    <table class="diff">
+    <table class="diff" ref={table}>
       <tbody>
         {hunks.map((h, hi) => (
           <>
@@ -684,9 +758,19 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
             {h.lines.map((l, li) => {
               const side: Side = l.kind === '-' ? 'LEFT' : 'RIGHT';
               const num = side === 'LEFT' ? l.old! : l.new!;
+              const move = l.kind === '-' ? mv?.old.get(l.old!) : l.kind === '+' ? mv?.new.get(l.new!) : undefined;
               return (
                 <>
-                  <tr class={l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln'}>
+                  {move && (
+                    <tr class="moved-h">
+                      <td colSpan={3}>
+                        {l.kind === '-' ? '↳ Moved to ' : '↰ Moved here from '}
+                        <a href={'#f-' + move.split(':')[0]} onClick={(e) => { e.preventDefault(); jumpTo('f-' + move.split(':')[0]); }}>{move}</a>
+                        {' '}without changes
+                      </td>
+                    </tr>
+                  )}
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`}>
                     <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.new ?? ''}</td>
                     {hl ? <td class="code" dangerouslySetInnerHTML={{ __html: hl[hi][li] }} /> : <td class="code">{l.text}</td>}
@@ -702,6 +786,51 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
       </tbody>
     </table>
   );
+}
+
+// Word-level highlights inside changed lines, drawn with the CSS Custom Highlight API so the syntax-highlighted HTML
+// stays untouched. Each diff adds its ranges to two shared highlights and takes them back out on re-render.
+const WORD = typeof CSS !== 'undefined' && 'highlights' in CSS ? { del: new Highlight(), add: new Highlight() } : null;
+if (WORD) {
+  CSS.highlights.set('lgtm-word-del', WORD.del);
+  CSS.highlights.set('lgtm-word-add', WORD.add);
+}
+function rangeIn(el: Element | null, start: number, end: number) {
+  if (!el) return null;
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const r = document.createRange();
+  let pos = 0, started = false;
+  for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
+    const len = n.data.length;
+    if (!started && start <= pos + len) {
+      r.setStart(n, start - pos);
+      started = true;
+    }
+    if (started && end <= pos + len) {
+      r.setEnd(n, end - pos);
+      return r;
+    }
+    pos += len;
+  }
+  return null;
+}
+function useWordHighlights(table: { current: HTMLTableElement | null }, hunks: Hunk[]) {
+  useLayoutEffect(() => {
+    if (!WORD || !table.current) return;
+    const mine: [Highlight, Range][] = [];
+    hunks.forEach((h, hi) =>
+      changePairs(h).forEach(([d, a]) => {
+        const w = wordChange(h.lines[d].text, h.lines[a].text);
+        if (!w) return;
+        const cell = (li: number) => table.current!.querySelector(`tr[data-k="${hi}-${li}"] td.code`);
+        const rd = rangeIn(cell(d), ...w.del), ra = rangeIn(cell(a), ...w.add);
+        if (rd) mine.push([WORD.del, rd]);
+        if (ra) mine.push([WORD.add, ra]);
+      }),
+    );
+    for (const [hl, r] of mine) hl.add(r);
+    return () => mine.forEach(([hl, r]) => hl.delete(r));
+  });
 }
 
 function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
@@ -923,6 +1052,9 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const first = t.comments.nodes[0];
+  const waiting = !!ctx.me && awaitsMe(t, ctx.me, ctx.pr.user.login === ctx.me);
+  // Bot-only threads (AI reviewers, linters) start collapsed to their one-line preview.
+  const bot = t.comments.nodes.every((c) => c.author?.__typename === 'Bot');
 
   async function act(f: () => Promise<void>) {
     setBusy(true);
@@ -940,8 +1072,9 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   });
 
   return (
-    <details class="thread" id={'t-' + t.id} open={!t.isResolved && !t.isOutdated}>
+    <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot}>
       <summary>
+        {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}
         <span class="t-preview"><b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
         {t.isResolved && <span class="badge"> · resolved</span>}
@@ -1006,6 +1139,26 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
   );
 }
 
+// The Jira ticket the PR names, so the review can be held against its intent without leaving the page.
+function Ticket({ id }: { id: string }) {
+  const [issue, setIssue] = useState<JiraIssue | null>(null);
+  const [err, setErr] = useState('');
+  const [open, toggle] = useStoredFlag('ticketOpen', true);
+  useEffect(() => void fetchJira(id).then(setIssue, (e) => setErr(e.message)), [id]);
+  if (err) return <p class="note ticket-err">Jira {id}: {err}</p>;
+  if (!issue) return null;
+  const html = md.render(adfToMarkdown(issue.description));
+  return (
+    <details class="ticket" open={open} onToggle={(e) => e.currentTarget.open !== open && toggle()}>
+      <summary>
+        <a href={issue.url} target="_blank" rel="noopener">{issue.key}</a> <span class={'jira-st js-' + issue.statusCategory}>{issue.status}</span>{' '}
+        <span class="badge">{issue.type}</span> <b>{issue.summary}</b>
+      </summary>
+      {html ? <div class="md" dangerouslySetInnerHTML={{ __html: html }} /> : <p class="note">No description.</p>}
+    </details>
+  );
+}
+
 // Copies a comment's github.com link (the timestamp next to it opens it).
 function CopyLink({ url }: { url: string }) {
   const [done, setDone] = useState('');
@@ -1026,6 +1179,8 @@ function CopyLink({ url }: { url: string }) {
 
 const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', COMMENTED: 'reviewed', DISMISSED: 'review dismissed' };
 
+const botExcerpt = (html: string) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
+
 function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
   return (
     <details class="conversation" id="conversation" open>
@@ -1036,13 +1191,27 @@ function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
         <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
         {pr.body_html ? <div class="md" dangerouslySetInnerHTML={{ __html: pr.body_html }} /> : <p class="note">No description.</p>}
       </div>
-      {items.map((c) => (
-        <div class="comment" key={c.id} id={'cv-' + c.id}>
-          <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}>{STATE_LABEL[c.state] ?? c.state}</span>}{' '}
-          <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
-          {c.html && <div class="md" dangerouslySetInnerHTML={{ __html: c.html }} />}
-        </div>
-      ))}
+      {items.map((c) => {
+        const head = (
+          <>
+            <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}>{STATE_LABEL[c.state] ?? c.state}</span>}{' '}
+            <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
+          </>
+        );
+        const body = c.html && <div class="md" dangerouslySetInnerHTML={{ __html: c.html }} />;
+        // Bot reports (CI summaries, AI reviewers, coverage) fold to one line; click to read.
+        return c.bot ? (
+          <details class="comment bot" key={c.id} id={'cv-' + c.id}>
+            <summary>{head} <span class="bot-excerpt">{botExcerpt(c.html)}</span></summary>
+            {body}
+          </details>
+        ) : (
+          <div class="comment" key={c.id} id={'cv-' + c.id}>
+            {head}
+            {body}
+          </div>
+        );
+      })}
     </details>
   );
 }
@@ -1051,6 +1220,7 @@ const SHORTCUTS: [string, string][] = [
   ['j / k', 'Next / previous file'],
   ['n / p', 'Next / previous review thread'],
   ['v', 'Mark the current file viewed'],
+  ['w', 'Ignore whitespace on/off'],
   ['Space', 'Comment on the line under the mouse (or at the top of the view)'],
   ['c', 'Comment on the current file'],
   ['[ / ]', 'Previous / next PR in the stack'],

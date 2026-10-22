@@ -144,6 +144,24 @@ function jobLog(repo, job) {
     });
 }
 
+// A Jira ticket, via the Atlassian CLI (`acli jira auth login`), which owns the sign-in like gh and slackcli do.
+const acli = (args) =>
+  new Promise((resolve, reject) =>
+    execFile('acli', args, { maxBuffer: 1 << 24, timeout: 30000 }, (err, stdout, stderr) => {
+      if (err?.code === 'ENOENT') return reject(new Error('acli is not installed (brew install atlassian/homebrew-acli/acli)'));
+      if (err) return reject(new Error((stderr || stdout).trim().split('\n').pop()?.replace(/^✗ Error: /, '') || err.message));
+      resolve(stdout);
+    }),
+  );
+let jiraSite; // https://<site>.atlassian.net, for browse links: the issue's own `self` is an internal API host
+async function jiraIssue(key) {
+  if (!/^[A-Z][A-Z0-9]+-\d+$/.test(key)) throw new Error('Bad issue key');
+  jiraSite ??= acli(['jira', 'auth', 'status']).then((out) => 'https://' + (out.match(/Site:\s*(\S+)/)?.[1] ?? ''));
+  const [site, out] = await Promise.all([jiraSite, acli(['jira', 'workitem', 'view', key, '--json', '--fields', 'summary,status,issuetype,description'])]);
+  const f = JSON.parse(out).fields;
+  return { key, url: `${site}/browse/${key}`, summary: f.summary, status: f.status?.name, statusCategory: f.status?.statusCategory?.key, type: f.issuetype?.name, description: f.description ?? null };
+}
+
 const json = (res, status, value) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(value));
 
 function open(url) {
@@ -167,14 +185,20 @@ const server = createServer(async (req, res) => {
   const path = new URL(req.url ?? '/', ORIGIN).pathname;
 
   if (path === '/lgtm') return res.end('lgtm');
-  // /token, /slack and /job-log act with your credentials: only our own page may call them
+  // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/job-log') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams;
     return jobLog(q.get('repo') ?? '', q.get('job') ?? '').then(
       (text) => res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }).end(text),
       (e) => res.writeHead(500, { 'Content-Type': 'text/plain' }).end(e.message),
+    );
+  }
+  if (path === '/jira') {
+    return jiraIssue(new URL(req.url ?? '/', ORIGIN).searchParams.get('key') ?? '').then(
+      (issue) => json(res, 200, issue),
+      (e) => json(res, 500, { error: e.message }),
     );
   }
   if (path === '/slack') {

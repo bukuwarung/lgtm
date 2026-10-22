@@ -222,3 +222,24 @@ The system SHALL link each comment (PR description, conversation comments and re
 #### Scenario: Copy a review comment's link
 - **WHEN** the user clicks 🔗 on a review-thread comment
 - **THEN** its `…/pull/N#discussion_r…` URL is on the clipboard and the button briefly reads "Copied"
+
+### Requirement: Reviewer attention cues
+The PR list SHALL show each PR's size and flag what needs the user or blocks the PR: failing CI, merge conflicts, unsent draft comments, and review threads awaiting the user's reply (open, not outdated, last comment by a person other than the user, on the user's PR or in a thread they joined; bots never count).
+
+#### Scenario: Author answered my comment
+- **WHEN** the author replies to a current, unresolved thread I commented in
+- **THEN** the PR shows "💬 1 awaiting your reply" in the list, and the thread is outlined with "awaiting your reply" in the PR
+
+### Requirement: Less to read in the diff
+The diff SHALL highlight the changed span inside modified lines, dim code moved without changes (runs of 3+ lines unique on both sides of the PR) with a link to where it moved from or to, and offer a remembered toggle (`w`) that shows whitespace-only changes as unchanged lines. Files SHALL be ordered markdown first, then each source file followed by its tests.
+
+#### Scenario: Moved block
+- **WHEN** a PR moves a 10-line function from A.kt to B.kt unchanged
+- **THEN** both runs are dimmed, B.kt's reads "Moved here from A.kt:n without changes", and boilerplate repeated across files is never reported as moved
+
+### Requirement: Context without leaving the page
+The system SHALL show the Jira ticket named in the PR title or branch (status, type, summary, description) via the Atlassian CLI, fold bot comments in the conversation to one line, return to the reading position when a PR is reopened, and mark files changed since the user's last visit.
+
+#### Scenario: Resume
+- **WHEN** the user leaves a PR mid-way and opens it again after a new push
+- **THEN** the page scrolls back to where they were, and files whose content changed carry "new since your last visit"

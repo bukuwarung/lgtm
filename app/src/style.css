@@ -293,3 +293,29 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .copy-link:hover { opacity: 1; }
 .ix-ckgroup > summary { padding: 3px 8px 3px 14px; font-size: 12px; color: var(--muted); cursor: pointer; }
 .ix-ckgroup > summary:hover { background: var(--soft); }
+.ticket { margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.ticket > summary { cursor: pointer; }
+.ticket > .md { max-height: 320px; overflow: auto; margin-top: 8px; }
+.jira-st { padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; background: var(--soft); }
+.jira-st.js-indeterminate { color: light-dark(#0055cc, #6897bb); }
+.jira-st.js-done { color: var(--addfg); }
+.ticket-err { margin: 0 0 8px; font-size: 12px; }
+.pill.p-warn { color: light-dark(#9a6700, #cc7832); border-color: currentColor; }
+.pill.p-reply { color: var(--accent); border-color: currentColor; }
+.pill.p-size { border-color: transparent; padding: 0 2px; }
+.pill.p-size .a { color: var(--addfg); font-weight: 400; } .pill.p-size .d { color: var(--delfg); font-weight: 400; }
+.thread.awaiting { border-color: var(--accent); }
+.awaiting-b { color: var(--accent); font-weight: 600; }
+.thread.bot:not([open]) { opacity: .75; }
+details.comment.bot > summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .75; }
+details.comment.bot[open] > summary { opacity: 1; }
+details.comment.bot[open] .bot-excerpt { display: none; }
+.bot-excerpt { color: var(--muted); font-size: 12px; }
+/* Word-level changes inside modified lines (CSS Custom Highlight API) */
+::highlight(lgtm-word-del) { background-color: light-dark(#ffb8b0, #7a3b3b); }
+::highlight(lgtm-word-add) { background-color: light-dark(#a6f0b5, #3a6b45); }
+/* Code moved without changes: dimmed, with a note where it went / came from */
+.diff tr.moved { background: color-mix(in srgb, var(--soft) 70%, transparent); opacity: .6; }
+.diff tr.moved-h td { padding: 2px 8px; font: 11px var(--sans); color: var(--muted); background: var(--soft); }
+.new-b { padding: 0 6px; border-radius: 10px; font-size: 11px; color: var(--accent); border: 1px solid currentColor; white-space: nowrap; }
+.bar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }

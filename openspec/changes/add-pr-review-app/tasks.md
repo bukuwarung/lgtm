@@ -98,6 +98,10 @@
 - [x] 12.19 Every comment (description, conversation, review threads) links to github.com and has a copy-link button
 - [x] 12.20 Open review threads drop the header row; "Reviewing" and "Your PRs" are tabs (choice remembered)
 - [x] 12.21 Checks: one entry per check (latest run wins); failing/running listed, passed and skipped folded into groups
+- [x] 12.22 Queue: CI failing / conflicts / size / unsent comments / awaiting-your-reply pills
+- [x] 12.23 Word-level highlights (CSS Custom Highlight API), moved-code dimming, ignore-whitespace toggle (w)
+- [x] 12.24 Reading order (tests after their source), resume position, changed-since-last-visit badges
+- [x] 12.25 Bot comments folded; Jira ticket box via `acli` (`/jira`)
 
 ## 13. Verify
 

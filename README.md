@@ -2,9 +2,13 @@
 
 Fast, markdown-first GitHub PR review in your own browser, signed in with your GitHub CLI login.
 
-- Sidebar of every open PR you're asked to review or have reviewed, grouped: needs your review, you requested changes, you commented, you approved. A second tab, "Your PRs", lists the PRs you opened or are assigned to: changes requested, approved, waiting for review, draft. Other people's draft PRs are hidden until you ask for them; yours always show. It refreshes every 3 minutes, shows the waiting count in the tab title, and can send a desktop notification for new review requests (🔔).
-- Every changed file in one scrolling page with syntax highlighting; file bodies render as they near the viewport. "Show more lines" expands unchanged code between hunks.
+- Sidebar of every open PR you're asked to review or have reviewed, grouped: needs your review, you requested changes, you commented, you approved. A second tab, "Your PRs", lists the PRs you opened or are assigned to: changes requested, approved, waiting for review, draft. Other people's draft PRs are hidden until you ask for them; yours always show. Each PR shows its size (+/− lines, files) and what needs you or blocks it: `CI failing`, `conflicts`, `N unsent comments` (drafts you never submitted), `💬 N awaiting your reply` (open, current threads where someone answered you, or anyone commented on your PR). It refreshes every 3 minutes, shows the waiting count in the tab title, and can send a desktop notification for new review requests (🔔).
+- Every changed file in one scrolling page with syntax highlighting, in reading order: markdown first, then each source file followed by its test; file bodies render as they near the viewport. "Show more lines" expands unchanged code between hunks.
 - Re-reviews open on only the changes since your last review (toggle back to the full diff), and stacked PRs get "‹ Layer 2/4 ›" navigation.
+- Changed lines highlight the exact words that changed. Code moved without changes (3+ unique lines, across files too) is dimmed with "Moved here from …". ␣ (or `w`) ignores whitespace-only changes.
+- Reopening a PR returns to where you were reading, and files changed since your last visit are marked.
+- The Jira ticket in the PR title (or branch) shows above the conversation: status, summary, description. Needs the Atlassian CLI (`acli jira auth login`).
+- Bot comments (CI summaries, AI reviewers) fold to one line; bot-only review threads start collapsed.
 - Mark files Viewed (synced with GitHub), resolve conversations, and edit pending comments.
 - Comment editor with Write/Preview (rendered by GitHub), `:emoji:` and `@mention` completion, a formatting toolbar (⌘B/⌘I/⌘E/⌘K), and "± Suggest" for a GitHub suggested change.
 - A PR Shortcut Index beside the diff: jump to the description, any comment or review, CI checks (failing and running listed, passed and skipped folded; one entry per check even when a workflow ran several times; each links to its run; failed GitHub Actions jobs show the end of their log), review threads, or a file in a GitHub-style tree.

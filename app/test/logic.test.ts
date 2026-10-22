@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, anchor, gaps, parsePatch, removedRuns } from '../src/diff.ts';
+import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, movedLines, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { awaitsMe } from '../src/github.ts';
+import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
+import { reviewOrder } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightHunks, languageFor, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -152,4 +155,53 @@ test('emoji shortcodes render as GitHub emoji images, not inside code', () => {
   const html = md.render('Nice :tada: and :+1: but :nope: and `:tada:`');
   assert.match(html, /Nice <img class="emoji" alt=":tada:" title=":tada:" src="https:\/\/e\/tada.png"> and <img class="emoji" alt=":\+1:"/);
   assert.match(html, /but :nope: and <code>:tada:<\/code>/);
+});
+
+test('ignoreWhitespace turns re-indented lines into context, keeps real changes', () => {
+  const h = parsePatch(['@@ -1,3 +1,4 @@', '-a()', '-b()', '+if (x) {', '+  a()', '+  b2()', '+}', ' tail'].join('\n'));
+  const lines = ignoreWhitespace(h)[0].lines.map((l) => l.kind + l.text + (l.old ?? '') + '/' + (l.new ?? ''));
+  assert.deepEqual(lines, ['+if (x) {/1', '   a()1/2', '-b()2/', '+  b2()/3', '+}/4', ' tail3/5']);
+});
+
+test('wordChange finds the edited span, or nothing when lines differ wholesale', () => {
+  assert.deepEqual(wordChange('foo(a, b)', 'foo(xy, b)'), { del: [4, 5], add: [4, 6] });
+  assert.equal(wordChange('completely', 'different!'), null);
+  assert.deepEqual(changePairs(parsePatch('@@ -1,2 +1,2 @@\n-a\n-b\n+c\n ctx')[0]), [[0, 2]]);
+});
+
+test('movedLines marks a 3-line block moved between files, not a lone line', () => {
+  const block = ['val first = compute()', '', 'val second = other()', 'return first + second'];
+  const files = [
+    { filename: 'A.kt', hunks: parsePatch(['@@ -1,5 +1,1 @@', ...block.map((l) => '-' + l), '-lonelyLineHere', ' x'].join('\n')) },
+    { filename: 'B.kt', hunks: parsePatch(['@@ -1,1 +1,5 @@', ' y', ...block.map((l) => '+    ' + l)].join('\n')) },
+  ];
+  const m = movedLines(files);
+  assert.deepEqual([...m.get('A.kt')!.old], [[1, 'B.kt:2'], [2, ''], [3, ''], [4, '']]);
+  assert.deepEqual([...m.get('B.kt')!.new].map(([n, s]) => [n, s]), [[2, 'A.kt:1'], [3, ''], [4, ''], [5, '']]);
+});
+
+test('awaitsMe: open thread where someone else spoke last, on my PR or with me in it; bots never', () => {
+  const t = (resolved: boolean, ...who: [string, string?][]) => ({ isResolved: resolved, isOutdated: false, comments: { nodes: who.map(([login, __typename]) => ({ author: { login, __typename } })) } });
+  assert.equal(awaitsMe(t(false, ['me'], ['bob']), 'me', false), true);
+  assert.equal(awaitsMe(t(false, ['bob'], ['me']), 'me', true), false);
+  assert.equal(awaitsMe(t(false, ['bob']), 'me', false), false);
+  assert.equal(awaitsMe(t(false, ['bob']), 'me', true), true);
+  assert.equal(awaitsMe(t(false, ['cubic', 'Bot']), 'me', true), false);
+  assert.equal(awaitsMe(t(true, ['me'], ['bob']), 'me', false), false);
+  assert.equal(awaitsMe({ ...t(false, ['me'], ['bob']), isOutdated: true }, 'me', false), false);
+});
+
+test('jira keys from the title, ADF to markdown', () => {
+  assert.deepEqual(jiraKeys('feat(BUKU-1, BUKU-22): x', 'BUKU-9'), ['BUKU-1', 'BUKU-22']);
+  assert.deepEqual(jiraKeys('no key', 'feature/ABC-7-thing'), ['ABC-7']);
+  const doc = { type: 'doc', content: [
+    { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Goal' }] },
+    { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'code', marks: [{ type: 'code' }] }] }] }] },
+  ] };
+  assert.equal(adfToMarkdown(doc), '## Goal\n\n- `code`');
+});
+
+test('reviewOrder: markdown first, then each source file followed by its test', () => {
+  const order = reviewOrder(['app/src/test/java/a/FooTest.kt', 'app/src/main/java/a/Zed.kt', 'README.md', 'app/src/main/java/a/Foo.kt', 'app/src/androidTest/java/a/ZedTest.kt']);
+  assert.deepEqual(order, ['README.md', 'app/src/main/java/a/Foo.kt', 'app/src/test/java/a/FooTest.kt', 'app/src/main/java/a/Zed.kt', 'app/src/androidTest/java/a/ZedTest.kt']);
 });
