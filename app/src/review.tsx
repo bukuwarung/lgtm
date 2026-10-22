@@ -942,7 +942,8 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   return (
     <details class="thread" id={'t-' + t.id} open={!t.isResolved && !t.isOutdated}>
       <summary>
-        <b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}
+        {/* The preview is for a collapsed thread; once open, the comments below say it. */}
+        <span class="t-preview"><b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
         {t.isResolved && <span class="badge"> · resolved</span>}
         {t.isOutdated && <span class="badge"> · outdated</span>}
       </summary>

@@ -234,6 +234,11 @@ main { padding: 16px; }
 .draft { border-style: dashed; }
 .draft > button { justify-self: start; }
 .thread summary { cursor: pointer; }
+/* Open thread: no header row; the summary shrinks to a collapse toggle in the corner. */
+.thread { position: relative; }
+.thread[open] > summary { position: absolute; top: 8px; right: 12px; color: var(--muted); font-size: 12px; }
+.thread[open] > summary .t-preview { display: none; }
+.thread[open] > summary + .comment { padding-top: 0; border-top: none; }
 .comment { padding-top: 6px; border-top: 1px solid var(--border); }
 .comment .md > :last-child { margin-bottom: 0; }
 time { color: var(--muted); font-size: 12px; }
