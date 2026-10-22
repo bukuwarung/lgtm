@@ -217,7 +217,7 @@ export type Check = { name: string; state: 'failure' | 'pending' | 'success' | '
 
 const CHECKS = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
   commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename
-    ... on CheckRun{databaseId name status conclusion detailsUrl title checkSuite{app{slug} workflowRun{workflow{name}}}}
+    ... on CheckRun{databaseId name status conclusion startedAt detailsUrl title checkSuite{app{slug} workflowRun{workflow{name}}}}
     ... on StatusContext{context state targetUrl description}}}}}}}}}}`;
 
 const RUN_STATE: Record<string, Check['state']> = {
@@ -232,6 +232,9 @@ export async function getChecks(repo: string, n: number): Promise<Check[]> {
   const [owner, name] = repo.split('/');
   const d: any = await graphql(CHECKS, { owner, name, n });
   const nodes = d.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? [];
+  // A workflow can run several times on one commit (each PR edit or label change re-triggers it): latest run first, so
+  // each check keeps only its newest result below.
+  nodes.sort((a: any, b: any) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
   const checks: Check[] = nodes.map((c: any): Check =>
       c.__typename === 'CheckRun'
         ? {
@@ -243,10 +246,10 @@ export async function getChecks(repo: string, n: number): Promise<Check[]> {
           }
         : { name: c.context, state: STATUS_STATE[c.state] ?? 'neutral', url: c.targetUrl, summary: c.description ?? '' },
   );
-  // Re-runs leave a cancelled/skipped copy next to the real result; hide the copy.
-  const decided = new Set(checks.filter((c) => c.state !== 'neutral').map((c) => c.name));
-  return checks
-    .filter((c) => c.state !== 'neutral' || !decided.has(c.name))
+  // One entry per check: its latest real result, since re-runs also leave cancelled/skipped copies behind.
+  const latest = new Map<string, Check>();
+  for (const c of checks) if (!latest.has(c.name) || (latest.get(c.name)!.state === 'neutral' && c.state !== 'neutral')) latest.set(c.name, c);
+  return [...latest.values()]
     .sort((a: Check, b: Check) => CHECK_ORDER.indexOf(a.state) - CHECK_ORDER.indexOf(b.state) || a.name.localeCompare(b.name));
 }
 

@@ -97,6 +97,7 @@
 - [x] 12.18 Deleted files collapse to one row until shown (expanded if they carry line comments)
 - [x] 12.19 Every comment (description, conversation, review threads) links to github.com and has a copy-link button
 - [x] 12.20 Open review threads drop the header row; "Reviewing" and "Your PRs" are tabs (choice remembered)
+- [x] 12.21 Checks: one entry per check (latest run wins); failing/running listed, passed and skipped folded into groups
 
 ## 13. Verify
 

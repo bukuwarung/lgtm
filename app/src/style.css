@@ -291,3 +291,5 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .merge .error { margin: 0; }
 .copy-link { padding: 0 4px; font-size: 11px; border: none; background: none; color: var(--muted); cursor: pointer; opacity: 0.6; }
 .copy-link:hover { opacity: 1; }
+.ix-ckgroup > summary { padding: 3px 8px 3px 14px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.ix-ckgroup > summary:hover { background: var(--soft); }

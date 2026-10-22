@@ -7,7 +7,7 @@ Fast, markdown-first GitHub PR review in your own browser, signed in with your G
 - Re-reviews open on only the changes since your last review (toggle back to the full diff), and stacked PRs get "‹ Layer 2/4 ›" navigation.
 - Mark files Viewed (synced with GitHub), resolve conversations, and edit pending comments.
 - Comment editor with Write/Preview (rendered by GitHub), `:emoji:` and `@mention` completion, a formatting toolbar (⌘B/⌘I/⌘E/⌘K), and "± Suggest" for a GitHub suggested change.
-- A PR Shortcut Index beside the diff: jump to the description, any comment or review, CI checks (failures first, linking to their runs; failed GitHub Actions jobs show the end of their log), review threads, or a file in a GitHub-style tree.
+- A PR Shortcut Index beside the diff: jump to the description, any comment or review, CI checks (failing and running listed, passed and skipped folded; one entry per check even when a workflow ran several times; each links to its run; failed GitHub Actions jobs show the end of their log), review threads, or a file in a GitHub-style tree.
 - Drag the sidebars' edges to resize them (double-click to reset).
 - The PR conversation (description, comments, review verdicts) above the files; review threads inline. Each comment's timestamp links to it on github.com, and 🔗 copies that link.
 - Markdown files first, rendered as rich diff by default. Hover a block and click the `+` gutter to comment on its source lines. Mermaid diagrams are drawn, in files and in comments.

@@ -150,7 +150,18 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         ) : !checks.length ? (
           <p class="note ix-pad">No checks.</p>
         ) : (
-          checks.map((c) => <CheckEntry key={c.name + c.url} c={c} repo={repo} />)
+          <>
+            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} />)}
+            {([['success', 'passed'], ['neutral', 'skipped or cancelled']] as const).map(([state, label]) => {
+              const group = checks.filter((c) => c.state === state);
+              return group.length > 0 && (
+                <details class="ix-ckgroup">
+                  <summary><span class={'ck ck-' + state}>{CHECK_ICON[state]}</span> {group.length} {label}</summary>
+                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} />)}
+                </details>
+              );
+            })}
+          </>
         )}
       </Section>
 
