@@ -18,7 +18,7 @@ Fast, markdown-first GitHub PR review in your own browser, signed in with your G
 - Markdown files first, rendered as rich diff by default. Hover a block and click the `+` gutter to comment on its source lines. Mermaid diagrams are drawn, in files and in comments.
 - Files marked `linguist-generated` in the root `.gitattributes`, and files only renamed or moved without changes, are hidden behind "N … hidden · Show" rows.
 - Deleted files stay in place but collapse to one row; "Show its N lines" opens the old contents.
-- Stacked PRs (one's base branch is another's head) are grouped in the sidebar, bottom layer first.
+- Stacked PRs (one's base branch is another's head) show their layer (`2/4`). Each layer sits in its own status group; neighbouring layers in the same group stay together, bottom first.
 - On your own PRs, a merge box shows whether it can merge and why not (draft, review required, failing checks, behind, conflicts), with Ready for review, Update branch, merge (commit message editable before confirming), auto-merge, and the admin bypass. "Your PRs" in the sidebar shows ready to merge / behind base / conflicts.
 - Draft comments survive reloads and are submitted as one review (Comment / Approve / Request changes), optionally with a Slack DM to the author and assignees. The PR page links to the Slack thread with each person you've messaged about it.
 

@@ -225,30 +225,29 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
     </a>
   );
 
-  // One section: PRs grouped by status. A stack sits in the group of its most urgent layer; each layer keeps its own color.
+  // One section: PRs grouped by status. Each layer of a stack sits in its own group; layers that share a group stay
+  // together as a (partial) stack box, and every layer keeps its position in the whole stack ("2/4").
   const section = (kind: Kind, list: QueueItem[]) => {
-    const stackOf = new Map(findStacks(list).flatMap((st) => st.map((i) => [i.id, st] as const)));
-    const rank = (i: QueueItem) => kind.groups.findIndex(([g]) => g === kind.groupOf(i));
-    const entries = list.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
-    const groups = Map.groupBy(entries, (e) => (Array.isArray(e) ? kind.groups[Math.min(...e.map(rank))][0] : kind.groupOf(e)));
+    const layerOf = new Map(findStacks(list).flatMap((st) => st.map((i, k) => [i.id, `${k + 1}/${st.length}`] as const)));
     return (
       <>
         {kind.groups.map(([g, label]) => {
-          const inGroup = groups.get(g) ?? [];
-          const count = inGroup.reduce((n, e) => n + (Array.isArray(e) ? e.length : 1), 0);
+          const inGroup = list.filter((i) => kind.groupOf(i) === g);
+          const stackOf = new Map(findStacks(inGroup).flatMap((st) => st.map((i) => [i.id, st] as const)));
+          const entries = inGroup.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
           return (
-            <details key={g} open={!g.endsWith('approved') || count < 10} class={'pr-group g-' + g}>
+            <details key={g} open={!g.endsWith('approved') || inGroup.length < 10} class={'pr-group g-' + g}>
               <summary>
-                <span class="gdot" /> {label} <span class="count">{count}</span>
+                <span class="gdot" /> {label} <span class="count">{inGroup.length}</span>
               </summary>
-              {inGroup.map((e) =>
+              {entries.map((e) =>
                 Array.isArray(e) ? (
                   <div class="stack" key={e[0].id}>
-                    <div class="stack-h">⧉ Stack of {e.length} · bottom first</div>
-                    {e.map((i, k) => item(kind, i, `${k + 1}/${e.length}`))}
+                    <div class="stack-h">⧉ Stack · bottom first</div>
+                    {e.map((i) => item(kind, i, layerOf.get(i.id)))}
                   </div>
                 ) : (
-                  item(kind, e)
+                  item(kind, e, layerOf.get(e.id))
                 ),
               )}
             </details>

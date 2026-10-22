@@ -32,7 +32,7 @@ The system SHALL show, in a collapsible sidebar, every open PR where the signed-
 
 #### Scenario: Stacked PRs
 - **WHEN** PR #2's base branch is PR #1's head branch and both are in the list
-- **THEN** they appear together as one stack, #1 then #2, in the group of the more urgent one, each with its own status
+- **THEN** each sits in its own status group labelled with its layer ("1/2", "2/2"); when both share a group they appear together as one stack box, #1 then #2
 
 #### Scenario: Live queue
 - **WHEN** a new review request arrives while the page is open
