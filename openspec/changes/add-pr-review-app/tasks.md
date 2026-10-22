@@ -107,6 +107,7 @@
 - [x] 12.28 PRs whose threads I'm in are all resolved move back to "Needs your review"
 - [x] 12.29 Kotlin highlighting closer to IntelliJ (properties, named args, `it`, constants; plain types, yellow annotations)
 - [x] 12.30 Index: bot conversation posts folded; review threads tiered (mine, people, bots, resolved-without-me folded)
+- [x] 12.31 "Since my last review" falls back to the full diff when GitHub's comparison is truncated (300 files) by a big rebase
 
 ## 13. Verify
 

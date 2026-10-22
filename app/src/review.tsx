@@ -171,6 +171,14 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     getCompare(repo, lastReviewed, data.pr.head.sha).then(
       // After a rebase the comparison also carries the base branch's changes; keep only files this PR touches.
       (d) => {
+        // GitHub lists at most 300 files per comparison. After a rebase onto lots of base-branch work those can all be
+        // base-branch files, and the PR's own changes are cut off: fall back to the full diff rather than show nothing.
+        if (d.files.length >= 300) {
+          setSince(false);
+          setLastReviewed(null); // no "since" toggle either: it would hit the same limit
+          setNotice({ ok: false, text: 'Showing the full diff: the branch was rebased onto so much new base-branch work since your last review that GitHub can\'t list just what changed in this PR.' });
+          return;
+        }
         const inPR = new Set(data.files.map((f) => f.filename));
         setSinceData({ status: d.status, files: prepare(d.files.filter((f) => inPR.has(f.filename)), data.rules) });
       },
@@ -452,7 +460,8 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
                 <>
                   Showing changes since your last review (<code>{lastReviewed.slice(0, 7)}</code> → <code>{pr.head.sha.slice(0, 7)}</code>)
                   {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
-                  {sinceData?.status === 'diverged' && <b> · rebased since then, so these files may also show changes from the base branch</b>}
+                  {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
+                  {sinceData && !sinceData.files.length && <b> · none of this PR's files changed (only a rebase)</b>}
                   <button onClick={() => setSince(false)}>Show all changes</button>
                 </>
               ) : (
