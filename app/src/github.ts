@@ -65,6 +65,7 @@ export type QueueItem = {
   mine: boolean; // I opened it, or it's assigned to me and not in my review queue
   assigned: boolean; // assigned to me
   authored: boolean; // I opened it
+  thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
 };
 export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean };
 
@@ -450,17 +451,25 @@ export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { commen
   return myPR || t.comments.nodes.some((c) => c.author?.login === me);
 }
 
-// Per PR in the list, how many review threads wait on my reply (see awaitsMe). One query for all of them.
-export async function getAwaiting(items: QueueItem[]): Promise<Map<string, number>> {
+// Per PR in the list: how many review threads wait on my reply (see awaitsMe), and whether every thread I'm in is
+// resolved (then a PR I reviewed is ready for another look). One query for all of them.
+export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
+export async function getThreadStatus(items: QueueItem[]): Promise<Map<string, ThreadStatus>> {
   const me = await getViewer();
   const ask = items.filter((i) => i.mine || i.myState);
   if (!ask.length) return new Map();
   const vars = Object.fromEntries(ask.map((i, k) => [`i${k}`, i.id]));
   const d = await graphql(
     `query(${ask.map((_, k) => `$i${k}:ID!`).join(',')}){${ask
-      .map((_, k) => `p${k}:node(id:$i${k}){...on PullRequest{reviewThreads(last:100){nodes{isResolved isOutdated comments(last:20){nodes{author{__typename login}}}}}}}`)
+      .map((_, k) => `p${k}:node(id:$i${k}){...on PullRequest{reviewThreads(last:100){nodes{isResolved isOutdated starter:comments(first:1){nodes{author{login}}} comments(last:20){nodes{author{__typename login}}}}}}}`)
       .join(' ')}}`,
     vars,
   );
-  return new Map(ask.map((i, k) => [i.id, d[`p${k}`].reviewThreads.nodes.filter((t: any) => awaitsMe(t, me, i.authored)).length]));
+  return new Map(
+    ask.map((i, k) => {
+      const threads = d[`p${k}`].reviewThreads.nodes;
+      const mine = threads.filter((t: any) => [...t.starter.nodes, ...t.comments.nodes].some((c: any) => c.author?.login === me));
+      return [i.id, { awaiting: threads.filter((t: any) => awaitsMe(t, me, i.authored)).length, allMineResolved: mine.length > 0 && mine.every((t: any) => t.isResolved) }];
+    }),
+  );
 }

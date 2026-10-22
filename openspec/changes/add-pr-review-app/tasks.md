@@ -104,6 +104,7 @@
 - [x] 12.25 Bot comments folded; Jira ticket box via `acli` (`/jira`)
 - [x] 12.26 Kotlin/Java import blocks fold to one row naming packages new to the file
 - [x] 12.27 Submit panel says why there's no Slack option; PR page links to its Slack threads (permalinks via `slackcli team info`)
+- [x] 12.28 PRs whose threads I'm in are all resolved move back to "Needs your review"
 
 ## 13. Verify
 

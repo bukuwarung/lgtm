@@ -226,6 +226,10 @@ The system SHALL link each comment (PR description, conversation comments and re
 ### Requirement: Reviewer attention cues
 The PR list SHALL show each PR's size and flag what needs the user or blocks the PR: failing CI, merge conflicts, unsent draft comments, and review threads awaiting the user's reply (open, not outdated, last comment by a person other than the user, on the user's PR or in a thread they joined; bots never count).
 
+#### Scenario: All my comments resolved
+- **WHEN** I requested changes on a PR and the author resolves every review thread I'm in
+- **THEN** the PR moves to "Needs your review" with a "your comments resolved" pill, counts in the tab title, and (if enabled) raises a "Your comments were resolved" notification; a PR I approved stays under "You approved"
+
 #### Scenario: Author answered my comment
 - **WHEN** the author replies to a current, unresolved thread I commented in
 - **THEN** the PR shows "💬 1 awaiting your reply" in the list, and the thread is outlined with "awaiting your reply" in the PR

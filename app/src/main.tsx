@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getAwaiting, getReviewQueue, loadToken, type QueueItem } from './github.ts';
+import { getReviewQueue, getThreadStatus, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { useStoredFlag } from './platform.ts';
@@ -95,8 +95,11 @@ const GROUPS: [Group, string][] = [
   ['commented', 'You commented'],
   ['approved', 'You approved'],
 ];
+// A PR I commented on or requested changes on comes back to "Needs your review" once every thread I'm in is resolved.
+const backToMe = (i: QueueItem) => !i.requested && !!i.myState && i.myState !== 'APPROVED' && !!i.thread?.allMineResolved;
 const groupOf = (i: QueueItem): Group =>
-  i.requested ? 'needs' : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
+  i.requested || backToMe(i) ? 'needs'
+  : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
 
 // A sidebar section: its groups in priority order, and which group a PR falls in.
 type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string };
@@ -137,12 +140,17 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   const [url, setUrl] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
   const [mineTab, toggleTab] = useStoredFlag('mineTab', false); // which tab: Reviewing or Your PRs
-  const [awaiting, setAwaiting] = useState<Map<string, number>>(new Map());
+  // The list shows as soon as it loads; thread status (replies awaiting me, my comments resolved) follows. `settled`
+  // marks the second step done, so notifications compare complete lists.
+  const [settled, setSettled] = useState(false);
   const load = () => {
     setErr('');
-    getReviewQueue().then((items) => {
+    getReviewQueue().then(async (items) => {
+      setSettled(false);
       setItems(items);
-      getAwaiting(items).then(setAwaiting, () => {}); // secondary: the list works without it
+      const st = await getThreadStatus(items).catch(() => null); // secondary: the list works without it
+      if (st) setItems(items.map((i) => ({ ...i, thread: st.get(i.id) })));
+      setSettled(true);
     }, (e) => setErr(e.message));
   };
   // Unsent comments live in localStorage; re-read them whenever a review page saves drafts.
@@ -167,20 +175,20 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
   const seen = useRef<Set<string> | null>(null);
   useEffect(() => {
-    if (!items) return;
+    if (!items || !settled) return;
     const waiting = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);
     document.title = waiting.length ? `(${waiting.length}) lgtm` : 'lgtm';
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     if (seen.current && notify && Notification.permission === 'granted')
       for (const i of waiting.filter((i) => !seen.current!.has(i.id))) {
-        const note = new Notification(`Review requested: ${i.title}`, { body: `${i.repo}#${i.number} by ${i.author}`, tag: i.id });
+        const note = new Notification(`${i.requested ? 'Review requested' : 'Your comments were resolved'}: ${i.title}`, { body: `${i.repo}#${i.number} by ${i.author}`, tag: i.id });
         note.onclick = () => {
           focus();
           location.hash = `/${i.repo}/pull/${i.number}`;
         };
       }
     seen.current = new Set(waiting.map((i) => i.id));
-  }, [items]);
+  }, [items, settled]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
@@ -195,7 +203,8 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
       </span>
       <span class="pills">
         {unsent(i) > 0 && <span class="pill p-warn">{unsent(i)} unsent comment{unsent(i) > 1 ? 's' : ''}</span>}
-        {(awaiting.get(i.id) ?? 0) > 0 && <span class="pill p-reply">💬 {awaiting.get(i.id)} awaiting your reply</span>}
+        {(i.thread?.awaiting ?? 0) > 0 && <span class="pill p-reply">💬 {i.thread!.awaiting} awaiting your reply</span>}
+        {kind === REVIEWING && backToMe(i) && <span class="pill p-ok">your comments resolved</span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad">CI failing</span>}
         {kind === REVIEWING && i.mergeState === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
         {i.isDraft && kind === REVIEWING && <span class="pill">draft</span>}
