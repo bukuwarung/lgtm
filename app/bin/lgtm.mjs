@@ -203,7 +203,10 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/slack') {
     try {
-      if (req.method === 'GET') return json(res, 200, { configured: (await slackcli(['auth', 'whoami'])).ok });
+      if (req.method === 'GET') {
+        const r = await slackcli(['auth', 'whoami']);
+        return json(res, 200, { configured: r.ok, error: r.error });
+      }
       if (req.method === 'POST') return json(res, 200, await notify(await readJson(req)));
       return res.writeHead(405).end();
     } catch (e) {

@@ -13,7 +13,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { reviewOrder } from './files.ts';
-import { fetchJira, notifySlack, slackConfigured, storage, useStoredFlag, type JiraIssue } from './platform.ts';
+import { fetchJira, notifySlack, slackStatus, storage, useStoredFlag, type JiraIssue } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -88,6 +88,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const [error, setError] = useState('');
   // Who gets a Slack DM after submitting (author + assignees, minus me and bots); null = Slack not set up.
   const [slackTo, setSlackTo] = useState<string[] | null>(null);
+  const [slackNote, setSlackNote] = useState('Checking Slack…'); // why there's no Slack option, if there isn't
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const [viewed, setViewedPaths] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
@@ -135,10 +136,15 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
         setChangedSinceVisit(new Set(files.filter((f) => visit.files[f.filename] !== f.sha).map((f) => f.filename)));
         resumeAt.current = visit.at;
       }
-      Promise.all([slackConfigured(), getViewer()]).then(([ready, me]) => {
-        const people = [pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login);
-        setSlackTo(ready ? [...new Set(people)] : null);
-      }, () => setSlackTo(null));
+      Promise.all([slackStatus(), getViewer()]).then(([slack, me]) => {
+        const people = [...new Set([pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login))];
+        setSlackTo(slack.configured ? people : null);
+        setSlackNote(
+          !slack.configured ? `Slack unavailable: ${slack.error ?? 'slackcli is not signed in'}`
+          : !people.length ? 'No Slack message: nobody besides you is the author or an assignee'
+          : '',
+        );
+      }, (e) => setSlackNote(`Slack unavailable: ${e.message}`));
       getViewer().then((me) => {
         setMe(me);
         setMine([pr.user, ...pr.assignees].some((u) => u.login === me));
@@ -432,7 +438,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
             ␣
           </button>
           <button title="Keyboard shortcuts (?)" onClick={() => setHelp(!help)}>⌨</button>
-          <SubmitPanel count={drafts.length} slackTo={slackTo} onSubmit={submit} repo={repo} mentions={ctx.mentions} />
+          <SubmitPanel count={drafts.length} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} />
         </div>
         {help && <Help onClose={() => setHelp(false)} />}
         <main>
@@ -481,12 +487,13 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
 type SubmitProps = {
   count: number;
   slackTo: string[] | null;
+  slackNote: string;
   onSubmit: (e: ReviewEvent, body: string, notify: boolean) => Promise<boolean>;
   repo: string;
   mentions: string[];
 };
 
-function SubmitPanel({ count, slackTo, onSubmit, repo, mentions }: SubmitProps) {
+function SubmitPanel({ count, slackTo, slackNote, onSubmit, repo, mentions }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [body, setBody] = useState('');
@@ -544,6 +551,7 @@ function SubmitPanel({ count, slackTo, onSubmit, repo, mentions }: SubmitProps) 
               <input type="checkbox" checked={notify} onChange={toggleNotify} /> Message {slackTo.map((l) => '@' + l).join(', ')} on Slack
             </label>
           )}
+          {slackNote && <p class="note">{slackNote}</p>}
           <button class="primary" disabled={busy} onClick={go}>
             {busy ? 'Submitting…' : 'Submit review'}
           </button>
