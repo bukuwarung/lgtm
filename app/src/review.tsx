@@ -13,7 +13,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { reviewOrder } from './files.ts';
-import { fetchJira, notifySlack, slackStatus, storage, useStoredFlag, type JiraIssue } from './platform.ts';
+import { fetchJira, notifySlack, slackStatus, storage, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -89,6 +89,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   // Who gets a Slack DM after submitting (author + assignees, minus me and bots); null = Slack not set up.
   const [slackTo, setSlackTo] = useState<string[] | null>(null);
   const [slackNote, setSlackNote] = useState('Checking Slack…'); // why there's no Slack option, if there isn't
+  const [slackThreads, setSlackThreads] = useState<SlackThread[]>([]);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const [viewed, setViewedPaths] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
@@ -136,7 +137,8 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
         setChangedSinceVisit(new Set(files.filter((f) => visit.files[f.filename] !== f.sha).map((f) => f.filename)));
         resumeAt.current = visit.at;
       }
-      Promise.all([slackStatus(), getViewer()]).then(([slack, me]) => {
+      Promise.all([slackStatus(`${repo}#${n}`), getViewer()]).then(([slack, me]) => {
+        setSlackThreads(slack.threads);
         const people = [...new Set([pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login))];
         setSlackTo(slack.configured ? people : null);
         setSlackNote(
@@ -250,6 +252,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
           slackText(pr, `${repo}#${n}`, event, body, drafts.length),
           `${repo}#${n}`,
         );
+        slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads)); // a first message starts a thread
         const failed = results.filter((r) => !r.ok);
         const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : ''));
         setNotice({
@@ -463,6 +466,17 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} />)}
+          {slackThreads.length > 0 && (
+            <p class="slack-links">
+              Slack:{' '}
+              {slackThreads.map((t, i) => (
+                <>
+                  {i > 0 && ', '}
+                  <a href={t.url} target="_blank" rel="noopener">thread with @{t.login}</a>
+                </>
+              ))}
+            </p>
+          )}
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
           <Conversation pr={pr} items={conversation} />
           {visible.map(section)}

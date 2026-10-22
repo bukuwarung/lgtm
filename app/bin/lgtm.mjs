@@ -76,6 +76,18 @@ async function saveThreads(threads) {
 
 // DM each recipient: the team/personal mapping first, then their GitHub emails. Each PR gets one thread per person;
 // later reviews reply in it (a fresh DM starts a new thread if the old one is gone).
+// Links to this PR's Slack threads (one per person messaged), as message permalinks on the workspace's own URL.
+let slackUrl; // https://<workspace>.slack.com/
+async function prThreads(pr) {
+  if (!/^[\w.-]+\/[\w.-]+#\d+$/.test(pr)) return [];
+  const mine = Object.entries(await readThreads()).filter(([k]) => k.startsWith(pr + ':'));
+  if (!mine.length) return [];
+  slackUrl ??= slackcli(['team', 'info', '--json']).then((r) => (r.ok ? JSON.parse(r.stdout).url : null));
+  const base = await slackUrl;
+  if (!base) return [];
+  return mine.map(([k, t]) => ({ login: k.slice(pr.length + 1), url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}` }));
+}
+
 async function notify({ recipients, text, thread }) {
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
     typeof thread === 'string' && /^[\w.-]+\/[\w.-]+#\d+$/.test(thread) &&
@@ -204,8 +216,9 @@ const server = createServer(async (req, res) => {
   if (path === '/slack') {
     try {
       if (req.method === 'GET') {
-        const r = await slackcli(['auth', 'whoami']);
-        return json(res, 200, { configured: r.ok, error: r.error });
+        const pr = new URL(req.url ?? '/', ORIGIN).searchParams.get('pr');
+        const [r, threads] = await Promise.all([slackcli(['auth', 'whoami']), pr ? prThreads(pr).catch(() => []) : []]);
+        return json(res, 200, { configured: r.ok, error: r.error, threads });
       }
       if (req.method === 'POST') return json(res, 200, await notify(await readJson(req)));
       return res.writeHead(405).end();

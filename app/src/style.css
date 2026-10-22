@@ -323,3 +323,4 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .import-fold button { border: none; background: none; padding: 0; color: var(--muted); cursor: pointer; }
 .import-fold button:hover { color: var(--accent); }
 .new-pkgs { margin-left: 10px; font-family: var(--mono); color: light-dark(#9a6700, #cc7832); }
+.slack-links { margin: 0 0 12px; font-size: 13px; color: var(--muted); }

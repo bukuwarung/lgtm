@@ -46,8 +46,12 @@ export function useStoredFlag(key: string, initial: boolean) {
 
 // Slack DMs go through the local server, which runs slackcli (it holds the Slack sign-in).
 // Whether slackcli is signed in, and if not, why (shown in the submit panel instead of the Slack option).
-export const slackStatus = (): Promise<{ configured: boolean; error?: string }> =>
-  fetch('/slack').then((r) => r.json()).then((d) => ({ configured: !!d.configured, error: d.error }), (e) => ({ configured: false, error: e.message }));
+// `pr` ("owner/repo#12") also returns links to that PR's Slack threads.
+export type SlackThread = { login: string; url: string };
+export const slackStatus = (pr: string): Promise<{ configured: boolean; error?: string; threads: SlackThread[] }> =>
+  fetch(`/slack?pr=${encodeURIComponent(pr)}`)
+    .then((r) => r.json())
+    .then((d) => ({ configured: !!d.configured, error: d.error, threads: d.threads ?? [] }), (e) => ({ configured: false, error: e.message, threads: [] }));
 
 export type SlackResult = { login: string; ok: boolean; threaded?: boolean; error?: string };
 // `thread` ("owner/repo#12") keeps one Slack thread per PR and person; later reviews reply in it.

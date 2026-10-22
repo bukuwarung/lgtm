@@ -29,3 +29,14 @@ The system SHALL send Slack messages through slackcli, which holds the Slack sig
 #### Scenario: Request from another site
 - **WHEN** another origin posts to `/slack`
 - **THEN** the server answers `403`
+
+### Requirement: Slack status and thread links on the PR page
+The submit panel SHALL say why it offers no Slack message (slackcli not signed in, with its error, or nobody besides the user to message) instead of hiding the option silently. The PR page SHALL link to each stored Slack thread for that PR, as a message permalink on the workspace URL.
+
+#### Scenario: Thread exists
+- **WHEN** the user opens a PR they already messaged @isfa-buku about
+- **THEN** the page shows "Slack: thread with @isfa-buku" linking to `https://<workspace>.slack.com/archives/<channel>/p<ts>`
+
+#### Scenario: Own PR
+- **WHEN** the user finishes a review on their own PR with no other assignees
+- **THEN** the panel reads "No Slack message: nobody besides you is the author or an assignee"
