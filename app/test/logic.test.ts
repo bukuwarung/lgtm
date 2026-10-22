@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
-import { awaitsMe } from '../src/github.ts';
+import { awaitsMe, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { reviewOrder } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -224,4 +224,10 @@ test('Kotlin highlighting marks properties, named args, it, constants; types and
   const html = highlightHunks(parsePatch('@@ -0,0 +1,2 @@\n+@Inject val n: Int = repo.items.size + MAX_SIZE\n+f(id = 1).let { it }'), 'A.kt')![0].join('\n');
   assert.match(highlightCode('fun run(block: suspend () -> Unit) {}', 'kotlin'), /hljs-keyword">suspend</);
   for (const cls of ['kt-ann', 'kt-type', 'kt-prop', 'kt-const', 'kt-arg', 'kt-it']) assert.match(html, new RegExp(`hljs-${cls}`), cls);
+});
+
+test('threadTiers: mine first, then people, then bots; resolved without me set aside', () => {
+  const t = (id: string, resolved: boolean, ...who: [string, string?][]) => ({ id, isResolved: resolved, comments: { nodes: who.map(([login, __typename]) => ({ author: { login, __typename } })) } });
+  const tiers = threadTiers([t('bot', false, ['cubic', 'Bot']), t('done', true, ['bob']), t('bob', false, ['bob']), t('me', true, ['bob'], ['me']), t('me2', false, ['me'])], 'me');
+  assert.deepEqual(Object.fromEntries(Object.entries(tiers).map(([k, v]) => [k, v.map((x) => x.id)])), { mine: ['me2', 'me'], human: ['bob'], bot: ['bot'], resolved: ['done'] });
 });

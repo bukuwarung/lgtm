@@ -251,3 +251,10 @@ The system SHALL show the Jira ticket named in the PR title or branch (status, t
 #### Scenario: Resume
 - **WHEN** the user leaves a PR mid-way and opens it again after a new push
 - **THEN** the page scrolls back to where they were, and files whose content changed carry "new since your last visit"
+
+### Requirement: Index puts my threads first
+The PR Shortcut Index SHALL fold the conversation's bot posts into one collapsed group, and list review threads in tiers: threads the user commented in (open first), then open threads from people, then open bot-only threads; resolved threads the user isn't in SHALL sit in a collapsed "resolved" group.
+
+#### Scenario: Busy PR
+- **WHEN** a PR has 5 threads the user is in, 1 open cubic thread, 7 resolved cubic threads, and 3 bot conversation posts
+- **THEN** the index lists the user's 5 threads (open ones first), then "🤖 1 from bots", then a collapsed "✓ 7 resolved", and the conversation shows a collapsed "🤖 3 from bots"

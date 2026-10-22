@@ -475,3 +475,16 @@ export async function getThreadStatus(items: QueueItem[]): Promise<Map<string, T
     }),
   );
 }
+
+// Review threads by how much they concern me, each tier keeping the given order: threads I'm in (open, then resolved),
+// then open threads from people, then open bot-only threads; resolved threads I'm not in go last, out of the way.
+export function threadTiers<T extends Pick<Thread, 'isResolved'> & { comments: { nodes: Pick<Comment, 'author'>[] } }>(threads: T[], me: string) {
+  const mine = (t: T) => t.comments.nodes.some((c) => c.author?.login === me);
+  const bot = (t: T) => t.comments.nodes.every((c) => c.author?.__typename === 'Bot');
+  return {
+    mine: threads.filter(mine).sort((a, b) => +a.isResolved - +b.isResolved), // my open ones first
+    human: threads.filter((t) => !mine(t) && !t.isResolved && !bot(t)),
+    bot: threads.filter((t) => !mine(t) && !t.isResolved && bot(t)),
+    resolved: threads.filter((t) => !mine(t) && t.isResolved),
+  };
+}

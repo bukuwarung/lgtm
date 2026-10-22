@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'preact/hooks';
 import { fetchJobLog } from './platform.ts';
 import type { ComponentChildren } from 'preact';
-import { awaitsMe, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { awaitsMe, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, so there's nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean };
@@ -113,15 +113,38 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
   const failing = checks?.filter((c) => c.state === 'failure').length ?? 0;
+  const bots = conversation.filter((c) => c.bot);
+  const convEntry = (c: ConversationItem, i: number) => (
+    <Entry key={c.id} label={c.author} meta={c.state ? VERDICT[c.state] : 'commented'} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+  );
+  const tiers = threadTiers(sortedThreads, me);
+  const threadEntry = (t: Thread) => {
+    const first = t.comments.nodes[0];
+    const waiting = !!me && awaitsMe(t, me, pr.user.login === me);
+    return (
+      <Entry
+        key={t.id}
+        label={`${waiting ? '💬 ' : ''}${base(t.path)}${t.line ? ':' + t.line : ''}`}
+        meta={[first?.author?.login, waiting && 'awaiting your reply', t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
+        sub={oneLine(first?.bodyText ?? '')}
+        dim={t.isResolved || t.isOutdated}
+        onClick={() => jumpTo('t-' + t.id, 'f-' + t.path)}
+      />
+    );
+  };
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
 
   return (
     <div class="index">
       <Section title="Conversation" count={conversation.length + 1}>
         <Entry label="Description" meta={pr.user.login} onClick={() => jumpTo('pr-description')} />
-        {conversation.map((c, i) => (
-          <Entry key={c.id} label={c.author} meta={c.state ? VERDICT[c.state] : 'commented'} sub={excerpts[i]} dim={c.bot} onClick={() => jumpTo('cv-' + c.id)} />
-        ))}
+        {conversation.map((c, i) => !c.bot && convEntry(c, i))}
+        {bots.length > 0 && (
+          <details class="ix-ckgroup">
+            <summary>🤖 {bots.length} from bots</summary>
+            {conversation.map((c, i) => c.bot && convEntry(c, i))}
+          </details>
+        )}
       </Section>
 
       <Section
@@ -176,20 +199,19 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
           />
         ))}
-        {sortedThreads.map((t) => {
-          const first = t.comments.nodes[0];
-          const waiting = !!me && awaitsMe(t, me, pr.user.login === me);
-          return (
-            <Entry
-              key={t.id}
-              label={`${waiting ? '💬 ' : ''}${base(t.path)}${t.line ? ':' + t.line : ''}`}
-              meta={[first?.author?.login, waiting && 'awaiting your reply', t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
-              sub={oneLine(first?.bodyText ?? '')}
-              dim={t.isResolved || t.isOutdated || t.comments.nodes.every((c) => c.author?.__typename === 'Bot')}
-              onClick={() => jumpTo('t-' + t.id, 'f-' + t.path)}
-            />
-          );
-        })}
+        {[...tiers.mine, ...tiers.human].map(threadEntry)}
+        {tiers.bot.length > 0 && (
+          <details class="ix-ckgroup" open>
+            <summary>🤖 {tiers.bot.length} from bots</summary>
+            {tiers.bot.map(threadEntry)}
+          </details>
+        )}
+        {tiers.resolved.length > 0 && (
+          <details class="ix-ckgroup">
+            <summary>✓ {tiers.resolved.length} resolved</summary>
+            {tiers.resolved.map(threadEntry)}
+          </details>
+        )}
         {!threads.length && !drafts.length && <p class="note ix-pad">No review threads.</p>}
       </Section>
 

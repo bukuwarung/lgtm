@@ -106,6 +106,7 @@
 - [x] 12.27 Submit panel says why there's no Slack option; PR page links to its Slack threads (permalinks via `slackcli team info`)
 - [x] 12.28 PRs whose threads I'm in are all resolved move back to "Needs your review"
 - [x] 12.29 Kotlin highlighting closer to IntelliJ (properties, named args, `it`, constants; plain types, yellow annotations)
+- [x] 12.30 Index: bot conversation posts folded; review threads tiered (mine, people, bots, resolved-without-me folded)
 
 ## 13. Verify
 
