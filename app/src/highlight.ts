@@ -15,6 +15,22 @@ hljs.registerLanguage('kotlin', (h) => {
     { scope: 'kt-const', match: /\b[A-Z][A-Z0-9]*_[A-Z0-9_]*\b|\b[A-Z]{2,}[0-9]*\b(?![a-z])/ }, // MAX_SIZE, TAG
     { scope: 'kt-it', match: /\bit\b/ },
   ];
+  // A parameter's type starts at the first word after `:`, so `block: suspend () -> Unit` would swallow `suspend`
+  // into the (plain) type; keep modifier keywords out of it so they stay keywords.
+  const MODIFIER = /\b(?:suspend|crossinline|noinline|vararg)\b/;
+  const seen = new Set<object>();
+  const walk = (m: any) => {
+    if (!m || typeof m !== 'object' || seen.has(m)) return;
+    seen.add(m);
+    // The type is a variant of a mode in m.contains (KOTLIN_PAREN_TYPE in the grammar).
+    const holder = m.contains?.find((c: any) => c?.variants?.some((v: any) => v.className === 'type' && v.begin === h.UNDERSCORE_IDENT_RE));
+    if (holder) {
+      holder.variants.find((v: any) => v.className === 'type').begin = new RegExp(`\\b(?!${MODIFIER.source.slice(2)})[a-zA-Z_]\\w*`);
+      m.contains.unshift({ scope: 'keyword', match: MODIFIER });
+    }
+    for (const c of [...(m.contains ?? []), ...(m.variants ?? [])]) walk(c);
+  };
+  walk(k);
   // Kotlin-only colours for these (IntelliJ: types plain, annotations yellow), leaving other languages alone.
   k.classNameAliases = { ...k.classNameAliases, type: 'kt-type', built_in: 'kt-type', meta: 'kt-ann' };
   return k;

@@ -5,7 +5,7 @@ import { awaitsMe } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { reviewOrder } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
-import { highlightHunks, languageFor, splitLines } from '../src/highlight.ts';
+import { highlightCode, highlightHunks, languageFor, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
 import { isMarkdown, md, renderChunks } from '../src/markdown.ts';
 import { findStacks } from '../src/stacks.ts';
@@ -222,5 +222,6 @@ test('ownRoot reads the project package from a source path', () => {
 
 test('Kotlin highlighting marks properties, named args, it, constants; types and annotations get Kotlin-only classes', () => {
   const html = highlightHunks(parsePatch('@@ -0,0 +1,2 @@\n+@Inject val n: Int = repo.items.size + MAX_SIZE\n+f(id = 1).let { it }'), 'A.kt')![0].join('\n');
+  assert.match(highlightCode('fun run(block: suspend () -> Unit) {}', 'kotlin'), /hljs-keyword">suspend</);
   for (const cls of ['kt-ann', 'kt-type', 'kt-prop', 'kt-const', 'kt-arg', 'kt-it']) assert.match(html, new RegExp(`hljs-${cls}`), cls);
 });
