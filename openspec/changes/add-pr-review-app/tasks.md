@@ -94,6 +94,8 @@
 - [x] 12.15 Rich diff shows only sections in the diff; others fold, read-only; quote fallback removed; unmarked fences = Kotlin
 - [x] 12.16 Comment editor: GitHub preview, :emoji:/@mention completion, toolbar + shortcuts, Suggest
 - [x] 12.17 Merge box on my PRs (status + reasons, ready for review, update branch, merge/auto-merge, admin bypass) and merge pills in "Your PRs"
+- [x] 12.18 Deleted files collapse to one row until shown (expanded if they carry line comments)
+- [x] 12.19 Every comment (description, conversation, review threads) links to github.com and has a copy-link button
 
 ## 13. Verify
 

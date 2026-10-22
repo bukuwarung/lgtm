@@ -9,9 +9,10 @@ Fast, markdown-first GitHub PR review in your own browser, signed in with your G
 - Comment editor with Write/Preview (rendered by GitHub), `:emoji:` and `@mention` completion, a formatting toolbar (⌘B/⌘I/⌘E/⌘K), and "± Suggest" for a GitHub suggested change.
 - A PR Shortcut Index beside the diff: jump to the description, any comment or review, CI checks (failures first, linking to their runs; failed GitHub Actions jobs show the end of their log), review threads, or a file in a GitHub-style tree.
 - Drag the sidebars' edges to resize them (double-click to reset).
-- The PR conversation (description, comments, review verdicts) above the files; review threads inline.
+- The PR conversation (description, comments, review verdicts) above the files; review threads inline. Each comment's timestamp links to it on github.com, and 🔗 copies that link.
 - Markdown files first, rendered as rich diff by default. Hover a block and click the `+` gutter to comment on its source lines. Mermaid diagrams are drawn, in files and in comments.
 - Files marked `linguist-generated` in the root `.gitattributes`, and files only renamed or moved without changes, are hidden behind "N … hidden · Show" rows.
+- Deleted files stay in place but collapse to one row; "Show its N lines" opens the old contents.
 - Stacked PRs (one's base branch is another's head) are grouped in the sidebar, bottom layer first.
 - On your own PRs, a merge box shows whether it can merge and why not (draft, review required, failing checks, behind, conflicts), with Ready for review, Update branch, merge (commit message editable before confirming), auto-merge, and the admin bypass. "Your PRs" in the sidebar shows ready to merge / behind base / conflicts.
 - Draft comments survive reloads and are submitted as one review (Comment / Approve / Request changes), optionally with a Slack DM to the author and assignees.

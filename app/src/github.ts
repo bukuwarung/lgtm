@@ -24,7 +24,7 @@ export type PRFile = {
   blob_url: string;
 };
 // bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
-export type Comment = { databaseId: number; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string } | null };
+export type Comment = { databaseId: number; url: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string } | null };
 export type Thread = {
   id: string;
   path: string;
@@ -198,7 +198,7 @@ export async function getRaw(repo: string, path: string, ref: string): Promise<s
 
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
-    nodes{id path line diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve comments(first:100){nodes{databaseId bodyHTML bodyText createdAt author{login}}}}}}}}`;
+    nodes{id path line diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve comments(first:100){nodes{databaseId url bodyHTML bodyText createdAt author{login}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');

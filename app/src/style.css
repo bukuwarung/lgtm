@@ -283,3 +283,5 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .merge-confirm { display: grid; gap: 6px; }
 .merge-confirm input, .merge-confirm textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .merge .error { margin: 0; }
+.copy-link { padding: 0 4px; font-size: 11px; border: none; background: none; color: var(--muted); cursor: pointer; opacity: 0.6; }
+.copy-link:hover { opacity: 1; }

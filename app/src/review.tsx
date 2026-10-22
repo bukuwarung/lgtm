@@ -948,7 +948,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       </summary>
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
-          <b>{c.author?.login ?? 'ghost'}</b> <time>{new Date(c.createdAt).toLocaleString()}</time>
+          <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
           <div class="md" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
         </div>
       ))}
@@ -1005,6 +1005,24 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
   );
 }
 
+// Copies a comment's github.com link (the timestamp next to it opens it).
+function CopyLink({ url }: { url: string }) {
+  const [done, setDone] = useState('');
+  const show = (text: string) => {
+    setDone(text);
+    setTimeout(() => setDone(''), 1500);
+  };
+  return (
+    <button
+      class="copy-link"
+      title="Copy link to this comment"
+      onClick={() => navigator.clipboard.writeText(url).then(() => show('Copied'), () => show("Couldn't copy"))}
+    >
+      {done || '🔗'}
+    </button>
+  );
+}
+
 const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', COMMENTED: 'reviewed', DISMISSED: 'review dismissed' };
 
 function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
@@ -1014,13 +1032,13 @@ function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="comment" id="pr-description">
-        <b>{pr.user.login}</b> <span class="badge">opened this pull request</span>
+        <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
         {pr.body_html ? <div class="md" dangerouslySetInnerHTML={{ __html: pr.body_html }} /> : <p class="note">No description.</p>}
       </div>
       {items.map((c) => (
         <div class="comment" key={c.id} id={'cv-' + c.id}>
           <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}>{STATE_LABEL[c.state] ?? c.state}</span>}{' '}
-          <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a>
+          <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
           {c.html && <div class="md" dangerouslySetInnerHTML={{ __html: c.html }} />}
         </div>
       ))}

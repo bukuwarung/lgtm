@@ -208,3 +208,17 @@ On a PR the user opened or is assigned to, the system SHALL show GitHub's merge 
 #### Scenario: Someone else's PR
 - **WHEN** the user reviews a PR they didn't open and aren't assigned to
 - **THEN** no merge box is shown
+
+### Requirement: Deleted files collapsed
+The system SHALL show a deleted file in its place in the page and index, collapsed to a single row with its header (file-level Comment and Viewed still available), and show its removed lines only when asked. A deleted file that already has line comments SHALL open expanded.
+
+#### Scenario: Deletion-heavy PR
+- **WHEN** a PR deletes 25 files
+- **THEN** each shows as one "Deleted. Show its N lines" row, and clicking one renders that file's removed lines
+
+### Requirement: Comment links
+The system SHALL link each comment (PR description, conversation comments and reviews, review-thread comments) to its github.com URL and offer a button that copies that URL.
+
+#### Scenario: Copy a review comment's link
+- **WHEN** the user clicks 🔗 on a review-thread comment
+- **THEN** its `…/pull/N#discussion_r…` URL is on the clipboard and the button briefly reads "Copied"
