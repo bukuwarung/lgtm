@@ -1,8 +1,24 @@
 import hljs from 'highlight.js/lib/common';
 import dockerfile from 'highlight.js/lib/languages/dockerfile';
+import kotlin from 'highlight.js/lib/languages/kotlin';
 import type { Hunk } from './diff.ts';
 
 hljs.registerLanguage('dockerfile', dockerfile);
+// Kotlin closer to IntelliJ: the stock grammar leaves property access, named arguments, `it` and constants plain.
+// These modes come after the stock ones, so keywords, strings and comments still win where they overlap.
+hljs.registerLanguage('kotlin', (h) => {
+  const k = kotlin(h);
+  k.contains = [
+    ...k.contains,
+    { scope: 'kt-arg', match: /(?<=[(,]\s*)[a-z_]\w*(?=\s*=(?!=))/ }, // fetch(id = 1)
+    { scope: 'kt-prop', match: /(?<=\??\.)[a-z_]\w*\b(?!\s*[({<])/ }, // repo.items, a?.size
+    { scope: 'kt-const', match: /\b[A-Z][A-Z0-9]*_[A-Z0-9_]*\b|\b[A-Z]{2,}[0-9]*\b(?![a-z])/ }, // MAX_SIZE, TAG
+    { scope: 'kt-it', match: /\bit\b/ },
+  ];
+  // Kotlin-only colours for these (IntelliJ: types plain, annotations yellow), leaving other languages alone.
+  k.classNameAliases = { ...k.classNameAliases, type: 'kt-type', meta: 'kt-ann' };
+  return k;
+});
 
 // By extension ("a.ts"), then by whole basename ("Dockerfile", "Makefile").
 export function languageFor(path: string): string | undefined {

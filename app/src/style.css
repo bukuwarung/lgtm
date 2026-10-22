@@ -11,6 +11,8 @@
   --hl-kw: light-dark(#cf222e, #cc7832); --hl-fn: light-dark(#8250df, #ffc66d); --hl-const: light-dark(#0550ae, #6897bb);
   --hl-str: light-dark(#0a3069, #6a8759); --hl-builtin: light-dark(#953800, #9876aa); --hl-com: light-dark(#59636e, #808080);
   --hl-tag: light-dark(#116329, #e8bf6a);
+  /* IntelliJ (Light / Darcula) colours for the Kotlin extras */
+  --hl-ann: light-dark(#9e880d, #bbb529); --hl-prop: light-dark(#871094, #9876aa); --hl-arg: light-dark(#4a86e8, #467cda); --hl-it: light-dark(#0033b3, #507874);
   --g-needs: var(--accent); --g-changes: var(--delfg); --g-commented: light-dark(#8c959f, #808080); --g-approved: var(--addfg);
   --bar: 44px;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
@@ -324,3 +326,9 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .import-fold button:hover { color: var(--accent); opacity: 1; }
 .new-pkgs { font-family: var(--mono); }
 .slack-links { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+/* Kotlin, IntelliJ-style: types plain, annotations yellow, properties/constants purple, named args blue */
+.hljs-kt-ann { color: var(--hl-ann); }
+.hljs-kt-prop { color: var(--hl-prop); }
+.hljs-kt-const { color: var(--hl-prop); font-style: italic; }
+.hljs-kt-arg { color: var(--hl-arg); }
+.hljs-kt-it { color: var(--hl-it); font-weight: 600; }

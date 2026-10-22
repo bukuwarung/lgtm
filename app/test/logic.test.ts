@@ -219,3 +219,8 @@ test('ownRoot reads the project package from a source path', () => {
   assert.equal(ownRoot('app/src/main/java/com/bukuwarung/edc/Foo.kt'), 'com.bukuwarung');
   assert.equal(ownRoot('build.gradle.kts'), null);
 });
+
+test('Kotlin highlighting marks properties, named args, it, constants; types and annotations get Kotlin-only classes', () => {
+  const html = highlightHunks(parsePatch('@@ -0,0 +1,2 @@\n+@Inject val n: Int = repo.items.size + MAX_SIZE\n+f(id = 1).let { it }'), 'A.kt')![0].join('\n');
+  for (const cls of ['kt-ann', 'kt-type', 'kt-prop', 'kt-const', 'kt-arg', 'kt-it']) assert.match(html, new RegExp(`hljs-${cls}`), cls);
+});
