@@ -113,6 +113,7 @@
 - [x] 12.34 After submitting, open the next PR that needs review (default on), else an "All caught up!" page
 - [x] 12.35 Android vector drawables preview as before/after images (VectorDrawable → SVG)
 - [x] 12.36 Bitmap image previews (incl. Git LFS via signed download links); default review verdict from pending/open comments
+- [x] 12.37 Import folding for TypeScript/JavaScript (multi-line imports, external packages named)
 
 ## 13. Verify
 

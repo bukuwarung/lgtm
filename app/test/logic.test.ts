@@ -248,3 +248,13 @@ test('vectorToSvg converts an Android vector: viewBox, colours, clip-path order,
   assert.match(out.svg, /<linearGradient id="g\d"[^>]*><stop offset="0" stop-color="#000000"\/>/);
   assert.equal(vectorToSvg('<selector><item/></selector>'), null);
 });
+
+test('importFolds for TypeScript: multi-line imports, one count per statement, only outside packages named', () => {
+  const h = parsePatch([
+    '@@ -1,4 +1,9 @@', ' import { a } from "./a";', '+import type { B } from "@scope/lib/sub";', '+import {', '+  c,', '+  d,', "+} from 'react';",
+    "-import x from 'node:fs';", '+import "./side-effect.css";', ' ', ' export const y = 1;',
+  ].join('\n'));
+  assert.deepEqual(importFolds(h, 'ts'), [{ hunk: 0, start: 0, end: 8, added: 3, removed: 1, newPackages: ['@scope/lib', 'react'], packageMoved: false }]);
+  // `import x = require(...)` must not swallow the rest of the file
+  assert.equal(importFolds(parsePatch("@@ -0,0 +1,3 @@\n+import x = require('y');\n+const z = 1;\n+z;"), 'ts')[0]?.end ?? -1, -1);
+});

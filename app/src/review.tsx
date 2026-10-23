@@ -1,6 +1,6 @@
 import { render, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, isJvm, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -885,7 +885,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   useWordHighlights(table, hunks);
   const mv = ctx.moved.get(path);
   // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
-  const folds = useMemo(() => (isJvm(path) ? importFolds(hunks) : []), [hunks]);
+  const folds = useMemo(() => (importSyntax(path) ? importFolds(hunks, importSyntax(path)!) : []), [hunks]);
   const root = ownRoot(path);
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set());
   const noted = (side: Side, n: number) =>

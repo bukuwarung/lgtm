@@ -209,46 +209,80 @@ export function movedLines(files: { filename: string; hunks: Hunk[] }[]): Map<st
   return out;
 }
 
-// Import blocks in Kotlin/Java diffs fold to one row: mostly fallout of the code changes (lint catches unused ones),
-// but a new package can be a new dependency or a layering slip, so the row names the packages this file didn't
-// import before. A fold covers a run of import/blank lines with at least one changed import; `end` is inclusive.
+// Import blocks fold to one row (Kotlin/Java, TypeScript/JavaScript): mostly fallout of the code changes (lint
+// catches unused ones), but a new package can be a new dependency or a layering slip, so the row names the packages
+// this file didn't import before. A fold covers a run of package/import/blank lines with at least one changed import
+// (or package line); `end` is inclusive.
 // ponytail: "didn't import before" only sees imports inside the hunks; an old import outside them can look new.
 export type ImportFold = { hunk: number; start: number; end: number; added: number; removed: number; newPackages: string[]; packageMoved: boolean };
-const PACKAGE = /^\s*package\s+[\w.]+/;
-const IMPORT = /^\s*import\s+(?:static\s+)?([\w.]+)(\.\*)?/;
-export const isJvm = (path: string) => /\.(kt|kts|java)$/.test(path);
+type Syntax = {
+  starts: RegExp; // a line that begins an import
+  ends: RegExp; // the line that names the module (counted as one import)
+  pkg: RegExp | null; // a package declaration that folds along
+  packageOf: (text: string) => string | null; // what the import brings in, for "new: …" (null: the project's own)
+};
+const JVM_IMPORT = /^\s*import\s+(?:static\s+)?([\w.]+)(\.\*)?/;
+const TS_SPEC = /(?:\bfrom\s+|^\s*import\s+)['"]([^'"]+)['"]/;
+const SYNTAX: Record<'jvm' | 'ts', Syntax> = {
+  jvm: {
+    starts: JVM_IMPORT,
+    ends: JVM_IMPORT,
+    pkg: /^\s*package\s+[\w.]+/,
+    packageOf: (text) => {
+      const m = text.match(JVM_IMPORT);
+      if (!m) return null;
+      const segs = m[1].split('.');
+      if (m[2]) return segs.join('.'); // import a.b.* → a.b
+      const cls = segs.findIndex((s) => /^[A-Z]/.test(s));
+      return segs.slice(0, cls < 0 ? -1 : cls).join('.'); // a.b.Foo → a.b; a.b.someFunction → a.b
+    },
+  },
+  ts: {
+    starts: /^\s*import\b/,
+    ends: TS_SPEC,
+    pkg: null,
+    packageOf: (text) => {
+      const spec = text.match(TS_SPEC)?.[1];
+      // Relative paths, path aliases (@/…, ~/…) and Node built-ins are the project or the platform, not dependencies.
+      if (!spec || /^(\.|\/|@\/|~|node:)/.test(spec)) return null;
+      return spec.split('/').slice(0, spec.startsWith('@') ? 2 : 1).join('/'); // @scope/pkg/sub → @scope/pkg
+    },
+  },
+};
+export const importSyntax = (path: string) => (/\.(kt|kts|java)$/.test(path) ? 'jvm' : /\.[cm]?[jt]sx?$/.test(path) ? 'ts' : null);
 // The project's own package root from a source path (…/java/com/acme/… → com.acme): new imports from inside it are
 // everyday wiring, so only packages outside it are called out as new.
 export const ownRoot = (path: string) => path.match(/\/(?:java|kotlin)\/(\w+)\/(\w+)\//)?.slice(1).join('.') ?? null;
-const packageOf = (text: string) => {
-  const m = text.match(IMPORT);
-  if (!m) return null;
-  const segs = m[1].split('.');
-  if (m[2]) return segs.join('.'); // import a.b.* → a.b
-  const cls = segs.findIndex((s) => /^[A-Z]/.test(s));
-  return segs.slice(0, cls < 0 ? -1 : cls).join('.'); // a.b.Foo → a.b; a.b.someFunction → a.b
-};
 
-export function importFolds(hunks: Hunk[]): ImportFold[] {
+export function importFolds(hunks: Hunk[], lang: 'jvm' | 'ts' = 'jvm'): ImportFold[] {
+  const { starts, ends, pkg, packageOf } = SYNTAX[lang];
   const known = new Set(hunks.flatMap((h) => h.lines.filter((l) => l.kind !== '+').map((l) => packageOf(l.text)).filter((p) => p != null)));
   const out: ImportFold[] = [];
   hunks.forEach((h, hi) => {
     let start = -1;
+    let open = false; // inside a multi-line `import {` … `} from '…'`
     // The fold also takes the package line and the blank lines around the imports, so the file starts at its code.
     const close = (end: number) => {
       const run = h.lines.slice(start, end + 1);
-      const changed = run.filter((l) => l.kind !== ' ' && IMPORT.test(l.text));
-      const packageChanged = run.some((l) => l.kind !== ' ' && PACKAGE.test(l.text));
+      const changed = run.filter((l) => l.kind !== ' ' && ends.test(l.text));
+      const packageChanged = !!pkg && run.some((l) => l.kind !== ' ' && pkg.test(l.text));
       if (changed.length || packageChanged) {
         const added = changed.filter((l) => l.kind === '+');
-        const fresh = [...new Set(added.map((l) => packageOf(l.text)!).filter((p) => p && !known.has(p)))];
-        const packageMoved = run.some((l) => l.kind === '-' && PACKAGE.test(l.text)); // not just a new file's package
+        const fresh = [...new Set(added.map((l) => packageOf(l.text)).filter((p): p is string => !!p && !known.has(p)))];
+        const packageMoved = !!pkg && run.some((l) => l.kind === '-' && pkg.test(l.text)); // not just a new file's package
         out.push({ hunk: hi, start, end, added: added.length, removed: changed.length - added.length, newPackages: fresh, packageMoved });
       }
       start = -1;
     };
     h.lines.forEach((l, i) => {
-      const fits = IMPORT.test(l.text) || PACKAGE.test(l.text) || (start >= 0 && !l.text.trim());
+      let fits: boolean;
+      if (open) {
+        fits = true;
+        if (ends.test(l.text) || l.text.includes('}')) open = false;
+      } else if (starts.test(l.text)) {
+        fits = true;
+        open = !ends.test(l.text) && /\{[^}]*$/.test(l.text);
+      } else fits = !!pkg?.test(l.text) || (start >= 0 && !l.text.trim());
       if (fits && start < 0) start = i;
       else if (!fits && start >= 0) close(i - 1);
     });
