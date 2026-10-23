@@ -436,7 +436,9 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
             {showIndex ? '⇤' : '⇥'} Index
           </button>
           <h1>
-            {pr.title} <a href={pr.html_url} target="_blank" rel="noopener">{repo}#{n}</a>
+            <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on GitHub`}>
+              <span class="pr-num">#{n}</span> {pr.title}
+            </a>
           </h1>
           {layer >= 0 && (
             <span class="stack-nav" title="This PR's stack ([ and ] to move)">

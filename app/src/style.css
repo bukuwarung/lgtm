@@ -334,3 +334,6 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .hljs-kt-it { color: var(--hl-it); font-weight: 600; }
 .pill.p-strong { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
 .team-pick { width: 100%; margin-bottom: 8px; }
+.bar h1 a { color: inherit; }
+.bar h1 a:hover { color: var(--accent); }
+.bar h1 .pr-num { color: var(--muted); font-weight: 400; }
