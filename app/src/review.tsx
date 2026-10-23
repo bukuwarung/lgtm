@@ -903,9 +903,11 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         {hunks.map((h, hi) => (
           <>
             {gapBefore(hi) && gapRows(gapBefore(hi)!)}
-            <tr class="hunk">
-              <td colSpan={3}>{h.header}</td>
-            </tr>
+            {file.status !== 'added' && ( // a new file's one hunk header (@@ -0,0 +1,n @@) says nothing
+              <tr class="hunk">
+                <td colSpan={3}>{h.header}</td>
+              </tr>
+            )}
             {h.lines.map((l, li) => {
               const fold = foldAt(hi, li);
               // Outside the project and the standard library, one name per library (dagger.hilt rides with dagger).
@@ -916,10 +918,10 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                   <tr class="import-fold">
                     <td colSpan={3}>
                       <button
-                        title={`Show the imports${fold.newPackages.length ? `\nNew to this file: ${fold.newPackages.join(', ')}` : ''}`}
+                        title={`Show the package and imports${fold.newPackages.length ? `\nNew to this file: ${fold.newPackages.join(', ')}` : ''}`}
                         onClick={() => setOpenFolds((s) => new Set(s).add(`${hi}-${fold.start}`))}
                       >
-                        ⋯ {[fold.added && `+${fold.added}`, fold.removed && `−${fold.removed}`].filter(Boolean).join(' ')} imports
+                        ⋯ {[fold.packageMoved && 'package moved', (fold.added || fold.removed) && [fold.added && `+${fold.added}`, fold.removed && `−${fold.removed}`].filter(Boolean).join(' ') + ' imports'].filter(Boolean).join(', ') || 'package'}
                         {external.length > 0 && <span class="new-pkgs"> · new: {external.slice(0, 3).join(', ')}{external.length > 3 ? ` +${external.length - 3}` : ''}</span>}
                       </button>
                     </td>

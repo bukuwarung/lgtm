@@ -211,7 +211,8 @@ test('importFolds folds a changed import block and names packages new to the fil
     '@@ -1,6 +1,7 @@', ' package a', ' ', ' import dagger.Module', '-import old.thing.Gone', '+import retrofit2.Retrofit', '+import dagger.Provides',
     '+import kotlinx.coroutines.flow.map', ' ', ' class A',
   ].join('\n'));
-  assert.deepEqual(importFolds(h), [{ hunk: 0, start: 2, end: 6, added: 3, removed: 1, newPackages: ['retrofit2', 'kotlinx.coroutines.flow'] }]);
+  assert.deepEqual(importFolds(h), [{ hunk: 0, start: 0, end: 7, added: 3, removed: 1, newPackages: ['retrofit2', 'kotlinx.coroutines.flow'], packageMoved: false }]);
+  assert.equal(importFolds(parsePatch('@@ -1,2 +1,2 @@\n-package a.b\n+package a.c\n class X'))[0].packageMoved, true);
   assert.deepEqual(importFolds(parsePatch('@@ -1,2 +1,2 @@\n import a.B\n-val x = 1\n+val x = 2')), []);
 });
 
