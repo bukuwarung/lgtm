@@ -134,7 +134,7 @@ const QUEUE = `query{viewer{login}
 fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{login}
   additions deletions changedFiles commits(last:1){nodes{commit{statusCheckRollup{state}}}} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner}
-  latestReviews(first:100){nodes{state author{login}}}}`;
+  latestReviews(first:100){nodes{state author{login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
   const d = await graphql(QUEUE, {});
@@ -146,7 +146,12 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
     .map((p) => ({
       ...toItem(p),
       requested: requested.has(p.id),
-      myState: p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ?? null,
+      // A comment-only review (a reply, say) after an approval doesn't undo it on GitHub, so my approval or change
+      // request wins over a later plain comment.
+      myState:
+        p.latestOpinionatedReviews.nodes.find((r: any) => r.author?.login === me)?.state ??
+        p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ??
+        null,
       // An assigned PR that's waiting on my review belongs in the review queue, not twice.
       reviewedBefore: reviewed.has(p.id),
       reviewing: !authored.has(p.id) && (requested.has(p.id) || reviewed.has(p.id)),
