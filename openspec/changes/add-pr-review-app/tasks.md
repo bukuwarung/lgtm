@@ -109,6 +109,7 @@
 - [x] 12.30 Index: bot conversation posts folded; review threads tiered (mine, people, bots, resolved-without-me folded)
 - [x] 12.31 "Since my last review" falls back to the full diff when GitHub's comparison is truncated (300 files) by a big rebase
 - [x] 12.32 Team tab: pick a GitHub team, see each member's open PRs and their status
+- [x] 12.33 Stack layer picker; status pills on the PR page; whitespace toggle and shortcuts moved from the bar to the index footer
 
 ## 13. Verify
 

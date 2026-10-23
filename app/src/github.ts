@@ -13,6 +13,10 @@ export type PR = {
   requested_reviewers?: { login: string }[];
   head: { sha: string; ref: string; repo: { full_name: string; owner: { login: string } } | null };
   base: { ref: string };
+  draft?: boolean;
+  additions?: number;
+  deletions?: number;
+  changed_files?: number;
 };
 export type PRFile = {
   filename: string;
@@ -235,6 +239,13 @@ export async function getEmails(org: string, logins: string[]): Promise<Record<s
   return Object.fromEntries(
     logins.map((l, i) => [l, [...(d[`u${i}`]?.organizationVerifiedDomainEmails ?? []), d[`u${i}`]?.email].filter(Boolean)]),
   );
+}
+
+// The PR-wide review verdict and merge state, which only GraphQL has.
+export async function getStatus(repo: string, n: number): Promise<{ reviewDecision: QueueItem['reviewDecision']; mergeStateStatus: QueueItem['mergeState'] }> {
+  const [owner, name] = repo.split('/');
+  return (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviewDecision mergeStateStatus}}}`, { owner, name, n }))
+    .repository.pullRequest;
 }
 
 export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`, undefined, FULL);

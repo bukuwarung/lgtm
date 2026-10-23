@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, isJvm, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
   awaitsMe, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -95,6 +95,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
   const [renderAll, setRenderAll] = useState(false);
   const [help, setHelp] = useState(false);
+  const [status, setStatus] = useState<Awaited<ReturnType<typeof getStatus>> | null>(null);
   const [ignoreWs, toggleWs] = useStoredFlag('ignoreWs', false);
   const [changedSinceVisit, setChangedSinceVisit] = useState<Set<string>>(new Set());
   const resumeAt = useRef<Visit['at']>(null);
@@ -121,6 +122,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   useEffect(() => {
     getEmojis().then(() => setEmojiReady(true), () => {});
     loadChecks();
+    getStatus(repo, n).then(setStatus, () => {});
     getViewed(repo, n).then(setViewedPaths, () => {});
     (async () => {
       const pr = await getPR(repo, n);
@@ -352,6 +354,8 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   );
 
   const layer = stack.findIndex((l) => l.number === n);
+  const failingChecks = checks?.filter((c) => c.state === 'failure').length ?? 0;
+  const waitingOnMe = me ? threads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
   const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
 
   // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.
@@ -426,6 +430,12 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
               me={me}
               counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length}
             />
+            <div class="ix-foot">
+              <label title="Hide whitespace-only changes (w)">
+                <input type="checkbox" checked={ignoreWs} onChange={toggleWs} /> Ignore whitespace
+              </label>
+              <button onClick={() => setHelp(!help)} title="Keyboard shortcuts (?)">Shortcuts</button>
+            </div>
           </div>
           <Resizer name="index" label="PR index" />
         </aside>
@@ -448,18 +458,34 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
           {layer >= 0 && (
             <span class="stack-nav" title="This PR's stack ([ and ] to move)">
               {stackAt(-1) ? <a href={`#/${repo}/pull/${stackAt(-1)!.number}`} title={`#${stackAt(-1)!.number} ${stackAt(-1)!.title}`}>‹</a> : <span class="off">‹</span>}
-              <span>Layer {layer + 1}/{stack.length}</span>
+              <select value={n} onChange={(e) => (location.hash = `/${repo}/pull/${e.currentTarget.value}`)} aria-label="Jump to a stack layer">
+                {stack.map((l, k) => (
+                  <option value={l.number}>{k + 1}/{stack.length} · #{l.number} {l.title}</option>
+                ))}
+              </select>
               {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
             </span>
           )}
-          <button class={ignoreWs ? 'on' : ''} aria-pressed={ignoreWs} title={ignoreWs ? 'Whitespace-only changes hidden (w to show)' : 'Hide whitespace-only changes (w)'} onClick={toggleWs}>
-            ␣
-          </button>
-          <button title="Keyboard shortcuts (?)" onClick={() => setHelp(!help)}>⌨</button>
           <SubmitPanel count={drafts.length} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} />
         </div>
-        {help && <Help onClose={() => setHelp(false)} />}
+        {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
         <main>
+          <div class="pills pr-status">
+            {pr.draft && <span class="pill">draft</span>}
+            {status && !pr.draft && (
+              <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] }>
+                {{ APPROVED: 'approved', CHANGES_REQUESTED: 'changes requested', REVIEW_REQUIRED: 'awaiting review' }[status.reviewDecision ?? 'REVIEW_REQUIRED']}
+              </span>
+            )}
+            {failingChecks > 0 && <span class="pill p-bad">{failingChecks} check{failingChecks > 1 ? 's' : ''} failing</span>}
+            {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
+            {waitingOnMe > 0 && <span class="pill p-reply">💬 {waitingOnMe} awaiting your reply</span>}
+            {pr.additions != null && (
+              <span class="pill p-size">
+                <b class="a">+{pr.additions}</b> <b class="d">−{pr.deletions}</b> · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
           {notice && <p class={notice.ok ? 'notice' : 'warn'}>{notice.text}</p>}
           {lastReviewed && (
             <div class={since ? 'since on' : 'since'}>
@@ -1287,12 +1313,15 @@ const SHORTCUTS: [string, string][] = [
   ['?', 'This help'],
 ];
 
-function Help({ onClose }: { onClose: () => void }) {
+function Help({ onClose, ignoreWs, toggleWs }: { onClose: () => void; ignoreWs: boolean; toggleWs: () => void }) {
   return (
     <div class="help" role="dialog" aria-label="Keyboard shortcuts">
       <div class="row">
         <b>Keyboard shortcuts</b>
         <span class="spacer" />
+        <label>
+          <input type="checkbox" checked={ignoreWs} onChange={toggleWs} /> Ignore whitespace
+        </label>
         <button onClick={onClose}>Close</button>
       </div>
       <table>
