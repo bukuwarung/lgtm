@@ -440,6 +440,11 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
               <span class="pr-num">#{n}</span> {pr.title}
             </a>
           </h1>
+          {slackThreads.map((t) => (
+            <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with @${t.login} about this PR`}>
+              💬 @{t.login}
+            </a>
+          ))}
           {layer >= 0 && (
             <span class="stack-nav" title="This PR's stack ([ and ] to move)">
               {stackAt(-1) ? <a href={`#/${repo}/pull/${stackAt(-1)!.number}`} title={`#${stackAt(-1)!.number} ${stackAt(-1)!.title}`}>‹</a> : <span class="off">‹</span>}
@@ -477,17 +482,6 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} />)}
-          {slackThreads.length > 0 && (
-            <p class="slack-links">
-              Slack:{' '}
-              {slackThreads.map((t, i) => (
-                <>
-                  {i > 0 && ', '}
-                  <a href={t.url} target="_blank" rel="noopener">thread with @{t.login}</a>
-                </>
-              ))}
-            </p>
-          )}
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
           <Conversation pr={pr} items={conversation} />
           {visible.map(section)}
