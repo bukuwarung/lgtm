@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, isJvm, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -12,7 +12,7 @@ import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
-import { vectorToSvg, type VectorSvg } from './vector.ts';
+import { vectorToSvg } from './vector.ts';
 import { reviewOrder } from './files.ts';
 import { fetchJira, notifySlack, slackStatus, storage, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
@@ -364,6 +364,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const layer = stack.findIndex((l) => l.number === n);
   const failingChecks = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const waitingOnMe = me ? threads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
+  const myOpenThreads = me ? threads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).length : 0;
   const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
 
   // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.
@@ -474,7 +475,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
             </span>
           )}
-          <SubmitPanel count={drafts.length} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} />
+          <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} />
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
         <main>
@@ -539,6 +540,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
 
 type SubmitProps = {
   count: number;
+  myOpenThreads: number; // unresolved review threads I'm in
   slackTo: string[] | null;
   slackNote: string;
   onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean) => Promise<boolean>;
@@ -546,7 +548,12 @@ type SubmitProps = {
   mentions: string[];
 };
 
-function SubmitPanel({ count, slackTo, slackNote, onSubmit, repo, mentions }: SubmitProps) {
+const APPROVE_NOTE = 'Approved, but please address the comments';
+
+// The verdict to start from: pending comments → request changes; my earlier threads still open → comment; else approve.
+export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEvent => (pending ? 'REQUEST_CHANGES' : myOpenThreads ? 'COMMENT' : 'APPROVE');
+
+function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo, mentions }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
@@ -563,6 +570,14 @@ function SubmitPanel({ count, slackTo, slackNote, onSubmit, repo, mentions }: Su
     addEventListener('lgtm:finish', show);
     return () => removeEventListener('lgtm:finish', show);
   }, []);
+  // Each time the panel opens, start from the verdict that fits the comments as they are now.
+  useEffect(() => void (open && setEvent(defaultEvent(count, myOpenThreads))), [open]);
+  // Approving with pending comments: say so, unless I've written my own summary.
+  const pick = (v: ReviewEvent) => {
+    setEvent(v);
+    if (v === 'APPROVE' && count && !body.trim()) setBody(APPROVE_NOTE);
+    else if (v !== 'APPROVE' && body === APPROVE_NOTE) setBody('');
+  };
 
   async function go() {
     setBusy(true);
@@ -597,7 +612,7 @@ function SubmitPanel({ count, slackTo, slackNote, onSubmit, repo, mentions }: Su
           />
           {(Object.keys(labels) as ReviewEvent[]).map((v) => (
             <label>
-              <input type="radio" name="event" checked={event === v} onChange={() => setEvent(v)} /> {labels[v]}
+              <input type="radio" name="event" checked={event === v} onChange={() => pick(v)} /> {labels[v]}
             </label>
           ))}
           {slackTo && slackTo.length > 0 && (
@@ -657,7 +672,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
   const [rich, setRich] = useState(canRich);
   // Android drawables preview as images by default; one that isn't a <vector> (a selector, a shape) falls back to source.
-  const [canPreview, setCanPreview] = useState(/\/res\/drawable[^/]*\/[^/]+\.xml$/.test(file.filename));
+  const [canPreview, setCanPreview] = useState(DRAWABLE.test(file.filename) || BITMAP.test(file.filename));
   const [preview, setPreview] = useState(canPreview);
   // A deleted file's old contents are mostly noise: one row until asked for, unless a line comment is already on it.
   const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
@@ -682,7 +697,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
-        {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
+        {canPreview && !BITMAP.test(file.filename) && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
         <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
         <label class="viewed-box" title="Mark as viewed on GitHub (v)">
           <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
@@ -701,7 +716,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         form={t?.path === path && t.line == null && !t.atEnd}
       />
       {canPreview && preview && (near || ctx.renderAll) ? (
-        <VectorPreview file={file} ctx={ctx} onFail={() => (setCanPreview(false), setPreview(false))} />
+        <ImagePreview file={file} ctx={ctx} onFail={() => (setCanPreview(false), setPreview(false))} />
       ) : !file.patch ? (
         <p class="note pad">
           No diff to show (binary, too large, or renamed without changes).{' '}
@@ -741,32 +756,55 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   );
 }
 
-// Before / after images of an Android vector drawable (base branch vs PR head).
-function VectorPreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () => void }) {
-  const [imgs, setImgs] = useState<{ before: VectorSvg | null; after: VectorSvg | null } | null>(null);
+// Before / after images (base branch vs PR head): bitmaps as they are, Android vector drawables converted to SVG.
+const BITMAP = /\.(png|webp|jpe?g|gif)$/i;
+const DRAWABLE = /\/res\/drawable[^/]*\/[^/]+\.xml$/;
+type Shot = { src: string; size?: string; note?: string };
+function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () => void }) {
+  const [shots, setShots] = useState<{ before: Shot | null; after: Shot | null } | null>(null);
+  const [dims, setDims] = useState<Record<string, string>>({});
   useEffect(() => {
-    const head = file.status === 'removed' ? null : getRaw(ctx.headRepo, file.filename, ctx.pr.head.sha);
-    const base = file.status === 'added' ? null : getRaw(ctx.repo, file.previous_filename ?? file.filename, ctx.pr.base.sha);
-    Promise.all([base, head]).then(([b, h]) => {
-      const before = b ? vectorToSvg(b) : null, after = h ? vectorToSvg(h) : null;
-      if (!before && !after) return onFail();
-      setImgs({ before, after });
-    }, onFail);
+    const load = async (repo: string, path: string, ref: string): Promise<Shot | null> => {
+      if (BITMAP.test(file.filename)) {
+        const src = await getDownloadUrl(repo, path, ref);
+        return src ? { src } : null;
+      }
+      const text = await getRaw(repo, path, ref);
+      const v = text ? vectorToSvg(text) : null;
+      return v && { src: 'data:image/svg+xml,' + encodeURIComponent(v.svg), size: `${v.width}×${v.height}dp`, note: v.approx ? 'Colours from resources (@color/…, ?attr/…) are drawn grey.' : undefined };
+    };
+    Promise.all([
+      file.status === 'added' ? null : load(ctx.repo, file.previous_filename ?? file.filename, ctx.pr.base.sha),
+      file.status === 'removed' ? null : load(ctx.headRepo, file.filename, ctx.pr.head.sha),
+    ]).then(([before, after]) => (before || after ? setShots({ before, after }) : onFail()), onFail);
   }, []);
-  if (!imgs) return <p class="note pad">Loading preview…</p>;
-  const fig = (label: string, v: VectorSvg | null) =>
-    v && (
+  if (!shots) return <p class="note pad">Loading preview…</p>;
+  const fig = (label: string, s: Shot | null) =>
+    s && (
       <figure>
-        <img src={'data:image/svg+xml,' + encodeURIComponent(v.svg)} alt={`${label}: ${file.filename}`} style={{ height: `${Math.min(200, Math.max(96, v.height))}px` }} />
-        <figcaption>{label} · {v.width}×{v.height}dp</figcaption>
+        <a href={s.src} target="_blank" rel="noopener" title="Open full size">
+        <img
+          src={s.src}
+          alt={`${label}: ${file.filename}`}
+          // Small icons scale up to be seen; big images scale down.
+          style={{ height: '96px' }}
+          onLoad={(e) => {
+            const el = e.currentTarget;
+            el.style.height = `${Math.min(320, Math.max(96, el.naturalHeight))}px`;
+            if (BITMAP.test(file.filename)) setDims((d) => ({ ...d, [label]: `${el.naturalWidth}×${el.naturalHeight}px` }));
+          }}
+        />
+        </a>
+        <figcaption>{[label, dims[label], s.size].filter(Boolean).join(' · ')}</figcaption>
       </figure>
     );
+  const note = shots.before?.note ?? shots.after?.note;
   return (
     <div class="vector-preview">
-      {fig('Before', imgs.before)}
-      {imgs.before && imgs.after && <span class="vp-arrow">→</span>}
-      {fig(imgs.before ? 'After' : 'New', imgs.after)}
-      {(imgs.before?.approx || imgs.after?.approx) && <p class="note">Colours from resources (@color/…, ?attr/…) are drawn grey.</p>}
+      {fig('Before', shots.before)}
+      {shots.before && shots.after && <span class="vp-arrow">→</span>}
+      {fig(shots.before ? 'After' : file.status === 'removed' ? 'Deleted' : 'New', shots.after)}
+      {note && <p class="note">{note}</p>}
     </div>
   );
 }

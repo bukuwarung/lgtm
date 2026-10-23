@@ -112,6 +112,7 @@
 - [x] 12.33 Stack layer picker; status pills on the PR page; whitespace toggle and shortcuts moved from the bar to the index footer
 - [x] 12.34 After submitting, open the next PR that needs review (default on), else an "All caught up!" page
 - [x] 12.35 Android vector drawables preview as before/after images (VectorDrawable → SVG)
+- [x] 12.36 Bitmap image previews (incl. Git LFS via signed download links); default review verdict from pending/open comments
 
 ## 13. Verify
 

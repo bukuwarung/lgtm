@@ -186,6 +186,10 @@ The system SHALL let the user draft line, multi-line, and file-level comments, k
 - **WHEN** the user submits with event "Approve" and two drafts
 - **THEN** one review containing both comments is created on GitHub and the local drafts are cleared
 
+#### Scenario: Default verdict
+- **WHEN** the user opens Finish review
+- **THEN** the verdict starts as Request changes if they have pending comments (choosing Approve then fills an empty summary with "Approved, but please address the comments"), as Comment if threads they're in are still unresolved, and as Approve otherwise
+
 #### Scenario: Move on to the next PR
 - **WHEN** the user submits a review with "Then open the next PR that needs my review" checked (the default)
 - **THEN** the next non-draft PR in "Needs your review" opens with the Slack result shown at its top, or, if none is left, an "All caught up!" page with the lgtm icon
@@ -271,6 +275,7 @@ The PR list SHALL offer a "Team" tab where the user picks a GitHub team (from th
 - **THEN** the tab lists its six members with their open PRs (stacks kept together, layers labelled), and the tab shows the total count
 
 ### Requirement: Android vector drawable preview
+PNG, WebP, JPEG and GIF files (Git LFS ones included, through GitHub's signed download links) SHALL also show as before → after images, opening full size on click.
 Files under `res/drawable*/` whose XML root is `<vector>` SHALL show as images by default (base → head for changed files, the new image for added ones), converted from VectorDrawable to SVG (paths, groups and their transforms, clip-paths, fill/stroke attributes, inline gradients) and drawn in an `<img>`. A "Source" toggle SHALL switch to the diff. A drawable that isn't a vector SHALL show its diff as usual.
 
 #### Scenario: New illustration

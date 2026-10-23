@@ -263,6 +263,16 @@ export async function getRaw(repo: string, path: string, ref: string): Promise<s
   return (await ok(res)).text();
 }
 
+// A short-lived, signed link to a file at a commit, for <img>: unlike the raw bytes it resolves Git LFS files to the
+// stored image rather than the LFS pointer. Null if the file isn't there.
+export async function getDownloadUrl(repo: string, path: string, ref: string): Promise<string | null> {
+  // no-store: the same URL fetched raw (getRaw) may sit in the browser cache, and that cached body isn't JSON.
+  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, { cache: 'no-store' });
+  if (res.status === 404) return null;
+  return (await (await ok(res)).json()).download_url ?? null;
+}
+
+
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
     nodes{id path line diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve comments(first:100){nodes{databaseId url bodyHTML bodyText createdAt author{__typename login}}}}}}}}`;
