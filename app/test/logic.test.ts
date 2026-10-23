@@ -231,3 +231,19 @@ test('threadTiers: mine first, then people, then bots; resolved without me set a
   const tiers = threadTiers([t('bot', false, ['cubic', 'Bot']), t('done', true, ['bob']), t('bob', false, ['bob']), t('me', true, ['bob'], ['me']), t('me2', false, ['me'])], 'me');
   assert.deepEqual(Object.fromEntries(Object.entries(tiers).map(([k, v]) => [k, v.map((x) => x.id)])), { mine: ['me2', 'me'], human: ['bob'], bot: ['bot'], resolved: ['done'] });
 });
+
+test('vectorToSvg converts an Android vector: viewBox, colours, clip-path order, gradients', async () => {
+  const { vectorToSvg } = await import('../src/vector.ts');
+  const out = vectorToSvg(`<?xml version="1.0"?><vector xmlns:android="x" xmlns:aapt="y" android:width="24dp" android:height="12dp" android:viewportWidth="48" android:viewportHeight="24">
+    <path android:pathData="M0,0h1" android:fillColor="#80FF0000"/>
+    <group android:translateX="2"><clip-path android:pathData="M0,0h10v10z"/><path android:pathData="M1,1h2" android:strokeColor="@color/brand" android:strokeWidth="2"/></group>
+    <path android:pathData="M5,5h1"><aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="0" android:startY="0" android:endX="1" android:endY="0" android:startColor="#000" android:endColor="#fff"/></aapt:attr></path>
+  </vector>`)!;
+  assert.equal(out.width, 24);
+  assert.equal(out.approx, true); // @color/brand
+  assert.match(out.svg, /viewBox="0 0 48 24"/);
+  assert.match(out.svg, /fill="rgba\(255,0,0,0.502\)"/);
+  assert.match(out.svg, /<g transform="translate\(2 0\)[^"]*"><g clip-path="url\(#c\d\)"><path d="M1,1h2" fill="none" stroke="#9e9e9e"/);
+  assert.match(out.svg, /<linearGradient id="g\d"[^>]*><stop offset="0" stop-color="#000000"\/>/);
+  assert.equal(vectorToSvg('<selector><item/></selector>'), null);
+});

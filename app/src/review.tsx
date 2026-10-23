@@ -12,6 +12,7 @@ import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
+import { vectorToSvg, type VectorSvg } from './vector.ts';
 import { reviewOrder } from './files.ts';
 import { fetchJira, notifySlack, slackStatus, storage, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
@@ -655,6 +656,9 @@ type SectionProps = {
 function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand, changed }: SectionProps) {
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
   const [rich, setRich] = useState(canRich);
+  // Android drawables preview as images by default; one that isn't a <vector> (a selector, a shape) falls back to source.
+  const [canPreview, setCanPreview] = useState(/\/res\/drawable[^/]*\/[^/]+\.xml$/.test(file.filename));
+  const [preview, setPreview] = useState(canPreview);
   // A deleted file's old contents are mostly noise: one row until asked for, unless a line comment is already on it.
   const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
   const hideDeleted = file.status === 'removed' && !showDeleted;
@@ -678,6 +682,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
+        {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
         <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
         <label class="viewed-box" title="Mark as viewed on GitHub (v)">
           <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
@@ -695,7 +700,9 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         drafts={drafts.filter((d) => !d.line)}
         form={t?.path === path && t.line == null && !t.atEnd}
       />
-      {!file.patch ? (
+      {canPreview && preview && (near || ctx.renderAll) ? (
+        <VectorPreview file={file} ctx={ctx} onFail={() => (setCanPreview(false), setPreview(false))} />
+      ) : !file.patch ? (
         <p class="note pad">
           No diff to show (binary, too large, or renamed without changes).{' '}
           <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a>
@@ -731,6 +738,36 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         </>
       )}
     </section>
+  );
+}
+
+// Before / after images of an Android vector drawable (base branch vs PR head).
+function VectorPreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () => void }) {
+  const [imgs, setImgs] = useState<{ before: VectorSvg | null; after: VectorSvg | null } | null>(null);
+  useEffect(() => {
+    const head = file.status === 'removed' ? null : getRaw(ctx.headRepo, file.filename, ctx.pr.head.sha);
+    const base = file.status === 'added' ? null : getRaw(ctx.repo, file.previous_filename ?? file.filename, ctx.pr.base.sha);
+    Promise.all([base, head]).then(([b, h]) => {
+      const before = b ? vectorToSvg(b) : null, after = h ? vectorToSvg(h) : null;
+      if (!before && !after) return onFail();
+      setImgs({ before, after });
+    }, onFail);
+  }, []);
+  if (!imgs) return <p class="note pad">Loading preview…</p>;
+  const fig = (label: string, v: VectorSvg | null) =>
+    v && (
+      <figure>
+        <img src={'data:image/svg+xml,' + encodeURIComponent(v.svg)} alt={`${label}: ${file.filename}`} style={{ height: `${Math.min(200, Math.max(96, v.height))}px` }} />
+        <figcaption>{label} · {v.width}×{v.height}dp</figcaption>
+      </figure>
+    );
+  return (
+    <div class="vector-preview">
+      {fig('Before', imgs.before)}
+      {imgs.before && imgs.after && <span class="vp-arrow">→</span>}
+      {fig(imgs.before ? 'After' : 'New', imgs.after)}
+      {(imgs.before?.approx || imgs.after?.approx) && <p class="note">Colours from resources (@color/…, ?attr/…) are drawn grey.</p>}
+    </div>
   );
 }
 

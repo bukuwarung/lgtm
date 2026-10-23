@@ -348,3 +348,11 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .done { display: grid; justify-items: center; align-content: start; gap: 4px; padding-top: 15vh; text-align: center; }
 .done h2 { margin: 12px 0 0; }
 .done p { color: var(--muted); }
+/* Android vector drawable preview: on a checkerboard so transparency shows */
+.vector-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px; }
+.vector-preview figure { margin: 0; display: grid; gap: 4px; justify-items: center; }
+.vector-preview img { max-width: 100%; border: 1px solid var(--border); border-radius: 4px;
+  background: repeating-conic-gradient(light-dark(#e6e6e6, #3a3a3a) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.vector-preview figcaption { font-size: 11px; color: var(--muted); }
+.vector-preview .vp-arrow { color: var(--muted); font-size: 20px; }
+.vector-preview .note { flex-basis: 100%; margin: 0; }

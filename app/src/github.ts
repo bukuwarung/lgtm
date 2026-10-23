@@ -12,7 +12,7 @@ export type PR = {
   assignees: { login: string; type: string }[];
   requested_reviewers?: { login: string }[];
   head: { sha: string; ref: string; repo: { full_name: string; owner: { login: string } } | null };
-  base: { ref: string };
+  base: { ref: string; sha: string };
   draft?: boolean;
   additions?: number;
   deletions?: number;

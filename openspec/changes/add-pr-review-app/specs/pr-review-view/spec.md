@@ -269,3 +269,10 @@ The PR list SHALL offer a "Team" tab where the user picks a GitHub team (from th
 #### Scenario: Watch the Android team
 - **WHEN** the user picks `bukuwarung/android-team`
 - **THEN** the tab lists its six members with their open PRs (stacks kept together, layers labelled), and the tab shows the total count
+
+### Requirement: Android vector drawable preview
+Files under `res/drawable*/` whose XML root is `<vector>` SHALL show as images by default (base → head for changed files, the new image for added ones), converted from VectorDrawable to SVG (paths, groups and their transforms, clip-paths, fill/stroke attributes, inline gradients) and drawn in an `<img>`. A "Source" toggle SHALL switch to the diff. A drawable that isn't a vector SHALL show its diff as usual.
+
+#### Scenario: New illustration
+- **WHEN** a PR adds `res/drawable/img_bukusimpan_device_used.xml`
+- **THEN** the file shows the illustration on a checkerboard with "New · 192×144dp", and colours referencing resources are drawn grey with a note
