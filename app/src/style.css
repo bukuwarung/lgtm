@@ -238,9 +238,13 @@ main { padding: 16px; }
 .draft > button { justify-self: start; }
 .thread summary { cursor: pointer; }
 /* Open thread: no header row; the summary shrinks to a collapse toggle in the corner. */
-.thread { position: relative; }
-.thread[open] > summary { position: absolute; top: 8px; right: 12px; color: var(--muted); font-size: 12px; }
-.thread[open] > summary .t-preview { display: none; }
+/* The ▸/▾ toggle sits in a fixed left gutter, open or not: the click target never moves. */
+.thread { position: relative; padding-left: 28px; }
+.thread > summary { list-style: none; }
+.thread > summary::-webkit-details-marker { display: none; }
+.thread > summary::before { content: "▸"; position: absolute; left: 10px; top: 8px; color: var(--muted); }
+.thread[open] > summary::before { content: "▾"; }
+.thread[open] > summary { position: absolute; left: 0; top: 0; width: 28px; height: 28px; font-size: 0; } /* just the toggle */
 .thread[open] > summary + .comment { padding-top: 0; border-top: none; }
 .comment { padding-top: 6px; border-top: 1px solid var(--border); }
 .comment .md > :last-child { margin-bottom: 0; }
