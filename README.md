@@ -20,7 +20,7 @@ Fast, markdown-first GitHub PR review in your own browser, signed in with your G
 - Deleted files stay in place but collapse to one row; "Show its N lines" opens the old contents.
 - Stacked PRs (one's base branch is another's head) show their layer (`2/4`). Each layer sits in its own status group; neighbouring layers in the same group stay together, bottom first.
 - On your own PRs, a merge box shows whether it can merge and why not (draft, review required, failing checks, behind, conflicts), with Ready for review, Update branch, merge (commit message editable before confirming), auto-merge, and the admin bypass. "Your PRs" in the sidebar shows ready to merge / behind base / conflicts.
-- Draft comments survive reloads and are submitted as one review (Comment / Approve / Request changes), optionally with a Slack DM to the author and assignees. The PR page's top bar links to the Slack thread with each person you've messaged about it (💬 @login).
+- Draft comments survive reloads and are submitted as one review (Comment / Approve / Request changes), optionally with a Slack DM to the author and assignees. After submitting, lgtm opens the next PR that needs your review (uncheck "Then open the next PR" to stay), or an "All caught up!" page when none is left. The PR page's top bar links to the Slack thread with each person you've messaged about it (💬 @login).
 
 lgtm signs in through the GitHub CLI and slackcli; see [Setup](#setup).
 

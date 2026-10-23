@@ -18,6 +18,18 @@ function App() {
   const [route, setRoute] = useState(location.hash);
   const [queueVersion, setQueueVersion] = useState(0);
   const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
+  // The PR list's latest items (to pick the next PR to review), and a message to show on the page we move to.
+  const queue = useRef<QueueItem[]>([]);
+  const [flash, setFlash] = useState<{ route: string; text: string; ok: boolean } | null>(null);
+  const goNext = async (from: { repo: string; n: number }, notice: { text: string; ok: boolean } | null) => {
+    // With the PR list hidden nothing has loaded it; fetch it now (without thread status, so no "comments resolved").
+    const items = queue.current.length ? queue.current : await getReviewQueue().catch(() => []);
+    const next = items.find((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft && !(i.repo === from.repo && i.number === from.n));
+    const to = next ? `#/${next.repo}/pull/${next.number}` : '#/done';
+    setFlash(notice && { route: to, ...notice });
+    setQueueVersion((v) => v + 1);
+    location.hash = to.slice(1);
+  };
 
   useEffect(() => {
     const onHash = () => setRoute(location.hash);
@@ -50,9 +62,23 @@ function App() {
         <ThemeToggle />
       </nav>
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
-        {showPRs && <PRList current={r} version={queueVersion} />}
+        {showPRs && <PRList current={r} version={queueVersion} onItems={(items) => (queue.current = items)} />}
         {r ? (
-          <Review key={route} repo={r.repo} n={r.n} onSubmitted={() => setQueueVersion((v) => v + 1)} />
+          <Review
+            key={route}
+            repo={r.repo}
+            n={r.n}
+            onSubmitted={() => setQueueVersion((v) => v + 1)}
+            onReviewed={(notice) => goNext(r, notice)}
+            flash={flash?.route === route ? flash : null}
+          />
+        ) : route === '#/done' ? (
+          <div class="page done">
+            <img src="/favicon.png" alt="" width="96" height="96" />
+            <h2>All caught up!</h2>
+            <p>No pull requests need your review right now.</p>
+            {flash?.route === route && <p class={flash.ok ? 'notice' : 'warn'}>{flash.text}</p>}
+          </div>
         ) : (
           <p class="note page empty">Pick a pull request from the list, or paste a PR URL above it.</p>
         )}
@@ -140,7 +166,7 @@ function ago(iso: string) {
   return u ? rtf.format(Math.round(s / u[1]), u[0]) : 'just now';
 }
 
-function PRList({ current, version }: { current: { repo: string; n: number } | null; version: number }) {
+function PRList({ current, version, onItems }: { current: { repo: string; n: number } | null; version: number; onItems: (items: QueueItem[]) => void }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [err, setErr] = useState('');
   const [url, setUrl] = useState('');
@@ -223,6 +249,7 @@ function PRList({ current, version }: { current: { repo: string; n: number } | n
   }, []);
   const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
   const seen = useRef<Set<string> | null>(null);
+  useEffect(() => void (items && onItems(items)), [items]);
   useEffect(() => {
     if (!items || !settled) return;
     const waiting = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);

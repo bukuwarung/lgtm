@@ -186,6 +186,10 @@ The system SHALL let the user draft line, multi-line, and file-level comments, k
 - **WHEN** the user submits with event "Approve" and two drafts
 - **THEN** one review containing both comments is created on GitHub and the local drafts are cleared
 
+#### Scenario: Move on to the next PR
+- **WHEN** the user submits a review with "Then open the next PR that needs my review" checked (the default)
+- **THEN** the next non-draft PR in "Needs your review" opens with the Slack result shown at its top, or, if none is left, an "All caught up!" page with the lgtm icon
+
 #### Scenario: Submit fails
 - **WHEN** the submit request fails
 - **THEN** the drafts are kept and the error message from GitHub is shown

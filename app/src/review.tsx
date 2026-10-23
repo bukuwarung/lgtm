@@ -70,7 +70,9 @@ const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>)
 
 const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
-export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSubmitted: () => void }) {
+type Notice = { text: string; ok: boolean };
+// onReviewed: the review is in and the user chose to move on (with the Slack result, if any, to show next).
+export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: string; n: number; onSubmitted: () => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
@@ -90,7 +92,7 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
   const [slackTo, setSlackTo] = useState<string[] | null>(null);
   const [slackNote, setSlackNote] = useState('Checking Slack…'); // why there's no Slack option, if there isn't
   const [slackThreads, setSlackThreads] = useState<SlackThread[]>([]);
-  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(flash ?? null);
   const [viewed, setViewedPaths] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
   const [renderAll, setRenderAll] = useState(false);
@@ -245,14 +247,14 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
     (next.length ? storage.set(key, s) : storage.remove(key)).catch((e) => setError(e.message));
   }
 
-  async function submit(event: ReviewEvent, body: string, notify: boolean) {
+  async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean) {
     const head = (await getPR(repo, n)).head.sha;
     const sha = drafts.length ? saved.sha : head;
     if (sha !== head && !confirm('New commits were pushed after you started this review. Submit your comments against the older commit?')) return false;
     await submitReview(pr.node_id, sha, event, body, drafts);
     saveDrafts([]);
     onSubmitted();
-    setNotice(null);
+    let result: Notice | null = null;
     if (notify && slackTo?.length) {
       // The review is in; a Slack failure is reported, not thrown.
       try {
@@ -265,14 +267,19 @@ export function Review({ repo, n, onSubmitted }: { repo: string; n: number; onSu
         slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads)); // a first message starts a thread
         const failed = results.filter((r) => !r.ok);
         const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : ''));
-        setNotice({
+        result = {
           ok: !failed.length,
           text: [sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${r.error}`)].filter(Boolean).join(' '),
-        });
+        };
       } catch (e: any) {
-        setNotice({ ok: false, text: `Review submitted, but Slack failed: ${e.message}` });
+        result = { ok: false, text: `Review submitted, but Slack failed: ${e.message}` };
       }
     }
+    if (next) {
+      onReviewed(result);
+      return true;
+    }
+    setNotice(result);
     const [t, c] = await Promise.all([getThreads(repo, n), getConversation(repo, n)]);
     setThreads(t);
     setConversation(c);
@@ -533,7 +540,7 @@ type SubmitProps = {
   count: number;
   slackTo: string[] | null;
   slackNote: string;
-  onSubmit: (e: ReviewEvent, body: string, notify: boolean) => Promise<boolean>;
+  onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean) => Promise<boolean>;
   repo: string;
   mentions: string[];
 };
@@ -541,6 +548,7 @@ type SubmitProps = {
 function SubmitPanel({ count, slackTo, slackNote, onSubmit, repo, mentions }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
+  const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
   const [body, setBody] = useState('');
   const [event, setEvent] = useState<ReviewEvent>('COMMENT');
   const [busy, setBusy] = useState(false);
@@ -559,7 +567,7 @@ function SubmitPanel({ count, slackTo, slackNote, onSubmit, repo, mentions }: Su
     setBusy(true);
     setErr('');
     try {
-      if (await onSubmit(event, body, notify)) {
+      if (await onSubmit(event, body, notify, next)) {
         setOpen(false);
         setBody('');
       }
@@ -596,6 +604,9 @@ function SubmitPanel({ count, slackTo, slackNote, onSubmit, repo, mentions }: Su
               <input type="checkbox" checked={notify} onChange={toggleNotify} /> Message {slackTo.map((l) => '@' + l).join(', ')} on Slack
             </label>
           )}
+          <label>
+            <input type="checkbox" checked={next} onChange={toggleNext} /> Then open the next PR that needs my review
+          </label>
           {slackNote && <p class="note">{slackNote}</p>}
           <button class="primary" disabled={busy} onClick={go}>
             {busy ? 'Submitting…' : 'Submit review'}
