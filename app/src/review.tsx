@@ -17,7 +17,7 @@ import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, commentPrompt, prPr
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
 import { reviewOrder } from './files.ts';
-import { ago, claudeFolder, fetchJira, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { ago, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -546,7 +546,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
-          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} />
+          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} />
           {visible.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
@@ -1335,7 +1335,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const first = t.comments.nodes[0];
   const waiting = !!ctx.me && awaitsMe(t, ctx.me, ctx.pr.user.login === ctx.me);
   // Bot-only threads (AI reviewers, linters) start collapsed to their one-line preview.
-  const [foldBots] = useStoredFlag('foldBots', true);
+  const foldBots = useFoldBots(!!ctx.me && ctx.pr.user.login === ctx.me);
   const bot = foldBots && t.comments.nodes.every((c) => c.author?.__typename === 'Bot');
 
   async function act(f: () => Promise<void>) {
@@ -1518,8 +1518,8 @@ const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQU
 
 const botExcerpt = (html: string, max = 100) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
-function Conversation({ pr, items, lang, repo }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string }) {
-  const [foldBots] = useStoredFlag('foldBots', true);
+function Conversation({ pr, items, lang, repo, me }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string }) {
+  const foldBots = useFoldBots(!!me && pr.user.login === me);
   return (
     <details class="conversation" id="conversation" open>
       <summary>

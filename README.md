@@ -159,7 +159,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 </picture>
 </details>
 
-<details open><summary><b>Fold bot comments</b>: CI and AI-reviewer comments fold to one line.</summary>
+<details open><summary><b>Fold bot comments</b>: CI and AI-reviewer comments fold to one line, except on your own PRs (a second switch).</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/foldBots-dark.png">

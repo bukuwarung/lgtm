@@ -149,6 +149,7 @@ export function Settings() {
         <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Source is a click away per file." demo />
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
         <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo />
+        <Flag k="unfoldBotsOnMine" initial={true} label="…but not on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
         <Flag k="resumePosition" initial={true} label="Reopen a PR where you left off" />
       </section>
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'preact/hooks';
-import { fetchJobLog } from './platform.ts';
+import { fetchJobLog, useFoldBots } from './platform.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -109,6 +109,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
 export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me }: IndexProps) {
+  const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
@@ -140,7 +141,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         <Entry label="Description" meta={pr.user.login} onClick={() => jumpTo('pr-description')} />
         {conversation.map((c, i) => !c.bot && convEntry(c, i))}
         {bots.length > 0 && (
-          <details class="ix-ckgroup">
+          <details class="ix-ckgroup" open={!foldBots}>
             <summary>🤖 {bots.length} from bots</summary>
             {conversation.map((c, i) => c.bot && convEntry(c, i))}
           </details>

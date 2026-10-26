@@ -84,6 +84,14 @@ export function useStoredFlag(key: string, initial: boolean) {
   return [v === '1', () => set(v === '1' ? '0' : '1')] as const;
 }
 
+// Whether bot comments and bot-only threads start folded (Settings): on your own PRs they stay open unless asked,
+// since there they're usually yours to act on (failed checks, AI review findings).
+export function useFoldBots(myPR: boolean) {
+  const [fold] = useStoredFlag('foldBots', true);
+  const [openOnMine] = useStoredFlag('unfoldBotsOnMine', true);
+  return fold && !(myPR && openOnMine);
+}
+
 // GitHub login → Slack user ID, kept in your lgtm config; finding goes through slackcli.
 export type SlackPeople = { mine: Record<string, string> };
 export type SlackMatch = { login: string; id?: string; label?: string; display?: string; via?: 'email' | 'name' | 'username' };
