@@ -290,3 +290,15 @@ test('docBlocks finds whole doc comments of one kind; parseDoc renders KDoc and 
   assert.equal(j.body, 'Returns the `Order` for **id**.');
   assert.deepEqual(j.tags, [['Throws', [['IllegalStateException', 'if missing']]]]);
 });
+
+test('claude links: a new session carries the prompt (capped) and the folder', async () => {
+  const { claudeNewLink, commentPrompt, prPrompt } = await import('../src/claude.ts');
+  const u = new URL(claudeNewLink('Fix this & that', '/Users/me/app'));
+  assert.equal(u.protocol + '//' + u.host + u.pathname, 'claude://code/new');
+  assert.equal(u.searchParams.get('q'), 'Fix this & that');
+  assert.equal(u.searchParams.get('folder'), '/Users/me/app');
+  assert.equal(new URL(claudeNewLink('x'.repeat(5000))).searchParams.get('q')!.length, 2592);
+  const pr = { html_url: 'https://github.com/o/r/pull/7', number: 7, title: 'Add X', base: { ref: 'main' }, head: { ref: 'feat' } };
+  assert.match(prPrompt(pr, 'o/r'), /gh pr diff 7 --repo o\/r/);
+  assert.match(commentPrompt({ author: 'bob', text: 'Use a fake\nhere', url: 'u' }, { repo: 'o/r', number: 7, prUrl: pr.html_url, path: 'A.kt', line: 3 }), /from @bob on `A.kt:3`[\s\S]*> Use a fake\n> here/);
+});

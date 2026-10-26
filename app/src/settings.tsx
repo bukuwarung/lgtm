@@ -184,6 +184,8 @@ export function Settings() {
         <pre class="code-sample" dangerouslySetInnerHTML={{ __html: highlightCode(SAMPLE, 'kotlin') }} />
       </section>
 
+      <ClaudeFolders />
+
       <BackupSection />
 
       <section>
@@ -379,6 +381,54 @@ function BackupSection() {
         />
       </div>
       {msg && <p class={msg.ok ? 'notice' : 'error'}>{msg.text}</p>}
+    </section>
+  );
+}
+
+// Claude Code: which local checkout a new session for each repo opens in (the ✳ Claude menu). Without one, Claude
+// asks for a folder itself.
+function ClaudeFolders() {
+  const [raw, setRaw] = useStoredValue('claudeFolders', '{}');
+  const folders: Record<string, string> = (() => {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  })();
+  const [repos, setRepos] = useState<string[] | null>(null);
+  useEffect(() => {
+    getReviewQueue().then((q) => setRepos([...new Set([...q.map((i) => i.repo), ...Object.keys(folders)])].sort()), () => setRepos(Object.keys(folders)));
+  }, []);
+  const set = (repo: string, path: string) => {
+    const next = { ...folders };
+    if (path.trim()) next[repo] = path.trim();
+    else delete next[repo];
+    setRaw(JSON.stringify(next));
+  };
+  return (
+    <section>
+      <h3>Claude Code</h3>
+      <p class="note">
+        ✳ Claude (on a PR or a comment) opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt. Set where each repo is checked
+        out so the session starts there.
+      </p>
+      {!repos ? (
+        <p class="note">Loading…</p>
+      ) : (
+        <table class="set-people">
+          <tbody>
+            {repos.map((r) => (
+              <tr key={r}>
+                <td>{r}</td>
+                <td>
+                  <input class="folder-input" placeholder="~/Developer/…" value={folders[r] ?? ''} onChange={(e) => set(r, e.currentTarget.value)} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </section>
   );
 }

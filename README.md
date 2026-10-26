@@ -41,6 +41,8 @@ To update: `git pull && npm run build` in `app/`, then `lgtm` (it replaces an ol
 
 **Commenting.** Line, range and file comments everywhere, rendered markdown included. An editor with preview, `:emoji:` and `@mention` completion, and suggested changes. Drafts survive reloads and go out as one review, with the verdict pre-picked from your comments; then lgtm opens the next PR that needs you. Optional Slack DM to the author, one thread per PR.
 
+**Claude Code.** ✳ Claude on the PR bar or on any comment opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt (in the repo's local folder, set in Settings), or copies the prompt and reopens your last session.
+
 **Your PRs.** A merge box with what's blocking and the controls: ready for review, update branch, merge, auto-merge.
 
 ## Less to read

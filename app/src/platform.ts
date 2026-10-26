@@ -246,3 +246,18 @@ export function restoreBackup(text: string): number {
   for (const [k, v] of entries) localStorage.setItem(k, v);
   return entries.length;
 }
+
+// Opens a claude:// link in the Claude desktop app (the app: through the opener plugin; the browser asks first).
+export async function openClaude(url: string) {
+  if (isDesktop) return (await import('@tauri-apps/plugin-opener')).openUrl(url);
+  location.href = url;
+}
+
+// Per repo, the local checkout Claude Code should work in (Settings → Claude Code): { "owner/repo": "/path" }.
+export function claudeFolder(repo: string): string | undefined {
+  try {
+    return JSON.parse(localStorage.getItem('claudeFolders') ?? '{}')[repo] || undefined;
+  } catch {
+    return undefined;
+  }
+}

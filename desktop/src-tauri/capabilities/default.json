@@ -19,6 +19,14 @@
     "allow-export-settings",
     "core:window:allow-set-badge-count",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "claude://*"
+        }
+      ]
+    },
     "notification:default",
     "deep-link:default",
     "autostart:default"

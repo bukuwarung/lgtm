@@ -430,3 +430,12 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 ::highlight(lgtm-find-current) { background-color: light-dark(#ffb84d, #b3741f); }
 .side[hidden] { display: none; }
 .set-version { margin-top: 8px; font-size: 12px; }
+/* "✳ Claude": send a PR or comment to Claude Code */
+.claude-menu { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.claude-btn { flex: none; white-space: nowrap; }
+.claude-pop { position: absolute; top: 100%; right: 0; z-index: 20; display: grid; min-width: 260px; margin-top: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
+.claude-pop button { border: none; background: none; text-align: left; padding: 6px 10px; border-radius: 4px; font-size: 13px; }
+.claude-pop button:hover { background: var(--soft); }
+.claude-note { position: absolute; top: 100%; right: 0; z-index: 20; margin-top: 4px; padding: 4px 8px; white-space: nowrap; font-size: 12px; background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; }
+.comment .claude-pop, .comment .claude-note { left: 0; right: auto; }
+.folder-input { width: 100%; box-sizing: border-box; font: 12px var(--mono); }
