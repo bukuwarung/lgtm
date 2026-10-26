@@ -95,7 +95,7 @@ lgtm needs to know each GitHub account's Slack user. Open ⚙ Settings → Slack
 { "slackUsers": { "github-login": "U012ABC" } }
 ```
 
-No match? Find the ID with `slackcli search people "their name"` and add it there by hand. Values can be a Slack user ID (preferred: survives handle renames), `@handle`, or email. Both are read on every send, so no restart is needed. Each PR gets one Slack thread per person: your first review of a PR starts a DM, later reviews of that PR reply in the same thread (remembered in `~/.config/lgtm/slack-threads.json`). `LGTM_SLACK_DRY_RUN=1 lgtm` checks recipients without sending.
+Automation accounts that GitHub sees as people (an AI reviewer, a release bot) can be marked as bots there ("bot?"): they're never messaged, and their comments fold and count like GitHub's own bots. No match? Find the ID with `slackcli search people "their name"` and add it there by hand. Values can be a Slack user ID (preferred: survives handle renames), `@handle`, or email. Both are read on every send, so no restart is needed. Each PR gets one Slack thread per person: your first review of a PR starts a DM, later reviews of that PR reply in the same thread (remembered in `~/.config/lgtm/slack-threads.json`). `LGTM_SLACK_DRY_RUN=1 lgtm` checks recipients without sending.
 
 ## Develop
 

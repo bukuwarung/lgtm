@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
-import { awaitsMe, threadTiers } from '../src/github.ts';
+import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { reviewOrder } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -265,4 +265,12 @@ test('majorityLanguage: the most common code language, markdown and plain text a
   assert.equal(majorityLanguage(['a/A.kt', 'a/B.kt', 'build.gradle.kts', 'x.yaml', 'README.md', 'docs/a.md', 'docs/b.md', 'n.txt']), 'kt');
   assert.equal(majorityLanguage(['a.ts', 'b.tsx', 'c.yaml']), 'ts');
   assert.equal(majorityLanguage(['README.md']), undefined);
+});
+
+test('markBots: comments by accounts marked as bots count as bot comments', () => {
+  const t = { isResolved: false, isOutdated: false, comments: { nodes: [{ author: { login: 'me' } }, { author: { login: 'vorflux', __typename: 'User' } }] } };
+  const [marked] = markBots([t], new Set(['vorflux']));
+  assert.equal(marked.comments.nodes[1].author!.__typename, 'Bot');
+  assert.equal(awaitsMe(t, 'me', false), true); // a person replied…
+  assert.equal(awaitsMe(marked, 'me', false), false); // …but it's a bot now
 });

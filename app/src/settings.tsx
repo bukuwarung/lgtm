@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { fetchIntegrations, findSlackPeople, getSlackPeople, saveSlackPeople, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { fetchIntegrations, findSlackPeople, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { SHORTCUTS } from './review.tsx';
 
 export const THEMES = [['', 'Auto', '◐'], ['light', 'Light', '☀'], ['dark', 'Dark', '☾']] as const;
@@ -171,7 +171,9 @@ const VIA: Record<string, string> = { email: 'same email', name: 'same name', us
 // Who lgtm messages on Slack for each GitHub login. People come from the watched team and your review queue; for the
 // unmapped ones, "Find" asks Slack (email first, then name) and each match waits for your OK before it's saved.
 function SlackPeopleSection({ team }: { team: string }) {
-  const [logins, setLogins] = useState<string[] | null>(null);
+  const [everyone, setLogins] = useState<string[] | null>(null);
+  const { bots, toggleBot } = useBots();
+  const logins = everyone && everyone.filter((l) => !bots.has(l));
   const [org, setOrg] = useState('');
   const [map, setMap] = useState<SlackPeople | null>(null);
   const [matches, setMatches] = useState<Record<string, SlackMatch>>({});
@@ -235,7 +237,12 @@ function SlackPeopleSection({ team }: { team: string }) {
               const m = matches[l];
               return (
                 <tr key={l}>
-                  <td>@{l}</td>
+                  <td>
+                    @{l}{' '}
+                    <button class="link" title="Treat as a bot: no Slack messages; comments fold like bots'" disabled={!!busy} onClick={() => toggleBot(l)}>
+                      bot?
+                    </button>
+                  </td>
                   <td>
                     {current(l) ? (
                       <>
@@ -259,6 +266,17 @@ function SlackPeopleSection({ team }: { team: string }) {
             })}
           </tbody>
         </table>
+      )}
+      {bots.size > 0 && (
+        <p class="note">
+          Marked as bots (never messaged; their comments fold like bots'):{' '}
+          {[...bots].map((b) => (
+            <span key={b} class="bot-chip">
+              @{b}
+              <button class="link" title="Not a bot" onClick={() => toggleBot(b)}>×</button>
+            </span>
+          ))}
+        </p>
       )}
     </section>
   );

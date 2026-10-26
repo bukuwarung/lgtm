@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
-import { useStoredFlag, useStoredValue } from './platform.ts';
+import { readBots, useStoredFlag, useStoredValue } from './platform.ts';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { Resizer } from './resizer.tsx';
 
@@ -188,7 +188,7 @@ function PRList({ current, version, onItems }: { current: { repo: string; n: num
     getReviewQueue().then(async (items) => {
       setSettled(false);
       setItems(items);
-      const st = await getThreadStatus(items).catch(() => null); // secondary: the list works without it
+      const st = await getThreadStatus(items, readBots()).catch(() => null); // secondary: the list works without it
       if (st) setItems(items.map((i) => ({ ...i, thread: st.get(i.id) })));
       setSettled(true);
     }, (e) => setErr(e.message));

@@ -47,3 +47,10 @@ Settings SHALL list the watched team's members and the people in the user's queu
 #### Scenario: New teammate
 - **WHEN** `@mandeep-buku` has no mapping and the user clicks "Find Slack accounts"
 - **THEN** the row shows "Mandeep Singh (Mandeep) by same name" with Save, and bots or apps with no single match say so
+
+### Requirement: Accounts marked as bots
+Settings SHALL let the user mark a GitHub account as a bot and undo it. A marked account SHALL never get a Slack message and SHALL drop out of the Slack people list, and its comments SHALL be treated as a bot's: folded in the conversation, bot-only threads collapsed and grouped with bots in the index, and never counted as awaiting the user's reply.
+
+#### Scenario: AI reviewer account
+- **WHEN** the user marks `@vorflux` as a bot
+- **THEN** it leaves the unmapped list, appears under "Marked as bots" with ×, and its review comments fold like other bots'

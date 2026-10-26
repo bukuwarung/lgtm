@@ -379,3 +379,4 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .set-people td:first-child { width: 40%; }
 .settings small.inline { display: inline; }
 button.link { border: none; background: none; padding: 0 4px; color: var(--accent); cursor: pointer; font-size: 12px; }
+.bot-chip { display: inline-block; margin: 0 6px 4px 0; padding: 0 2px 0 6px; border: 1px solid var(--border); border-radius: 10px; }

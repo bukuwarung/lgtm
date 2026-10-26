@@ -531,6 +531,15 @@ export const updateBranch = (s: MergeState) =>
 export const markReady = (id: string) =>
   graphql(`mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 
+// Comments by accounts marked as bots count as bot comments (folded, never awaiting a reply, bot threads).
+export function markBots<T extends { comments: { nodes: Pick<Comment, 'author'>[] } }>(threads: T[], bots: Set<string>): T[] {
+  if (!bots.size) return threads;
+  return threads.map((t) => ({
+    ...t,
+    comments: { ...t.comments, nodes: t.comments.nodes.map((c) => (c.author && bots.has(c.author.login) ? { ...c, author: { ...c.author, __typename: 'Bot' } } : c)) },
+  }));
+}
+
 // Does this review thread wait on me? Open and current, last word from a person other than me, and it's my PR or I'm
 // in the thread. Outdated threads don't count: the code moved on, and a reply there is nearly always "done".
 export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { comments: { nodes: Pick<Comment, 'author'>[] } }, me: string, myPR: boolean) {
@@ -542,7 +551,7 @@ export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { commen
 // Per PR in the list: how many review threads wait on my reply (see awaitsMe), and whether every thread I'm in is
 // resolved (then a PR I reviewed is ready for another look). One query for all of them.
 export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
-export async function getThreadStatus(items: QueueItem[]): Promise<Map<string, ThreadStatus>> {
+export async function getThreadStatus(items: QueueItem[], bots: Set<string> = new Set()): Promise<Map<string, ThreadStatus>> {
   const me = await getViewer();
   const ask = items.filter((i) => i.mine || i.myState);
   if (!ask.length) return new Map();
@@ -555,7 +564,7 @@ export async function getThreadStatus(items: QueueItem[]): Promise<Map<string, T
   );
   return new Map(
     ask.map((i, k) => {
-      const threads = d[`p${k}`].reviewThreads.nodes;
+      const threads = markBots(d[`p${k}`].reviewThreads.nodes as any[], bots);
       const mine = threads.filter((t: any) => [...t.starter.nodes, ...t.comments.nodes].some((c: any) => c.author?.login === me));
       return [i.id, { awaiting: threads.filter((t: any) => awaitsMe(t, me, i.authored)).length, allMineResolved: mine.length > 0 && mine.every((t: any) => t.isResolved) }];
     }),

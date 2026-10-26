@@ -51,6 +51,24 @@ export function useStoredValue(key: string, initial: string) {
   return [value, set] as const;
 }
 
+// GitHub accounts you've marked as bots (automation users GitHub sees as people): treated like GitHub's own bots.
+export const readBots = (): Set<string> => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('bots') ?? '[]'));
+  } catch {
+    return new Set();
+  }
+};
+export function useBots() {
+  const [raw, set] = useStoredValue('bots', '[]');
+  const bots = new Set<string>(JSON.parse(raw || '[]'));
+  const toggleBot = (login: string) => {
+    bots.has(login) ? bots.delete(login) : bots.add(login);
+    set(JSON.stringify([...bots].sort()));
+  };
+  return { bots, toggleBot };
+}
+
 export function useStoredFlag(key: string, initial: boolean) {
   const [v, set] = useStoredValue(key, initial ? '1' : '0');
   return [v === '1', () => set(v === '1' ? '0' : '1')] as const;

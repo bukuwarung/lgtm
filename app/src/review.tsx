@@ -4,7 +4,7 @@ import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, i
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, reply, resolveThread, setViewed, submitReview,
+  awaitsMe, markBots, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -14,7 +14,7 @@ import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { vectorToSvg } from './vector.ts';
 import { reviewOrder } from './files.ts';
-import { fetchJira, notifySlack, slackStatus, storage, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { fetchJira, notifySlack, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -89,6 +89,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [showGenerated, setShowGenerated] = useState(false);
   const [showNoDiff, setShowNoDiff] = useState(false);
   // Feature switches (Settings → Diff).
+  const { bots } = useBots();
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
   const [foldNoDiff] = useStoredFlag('hideNoDiff', true);
   const [startSince] = useStoredFlag('sinceFirst', true);
@@ -98,7 +99,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [checks, setChecks] = useState<Check[] | null>(null);
   const [error, setError] = useState('');
   // Who gets a Slack DM after submitting (author + assignees, minus me and bots); null = Slack not set up.
-  const [slackTo, setSlackTo] = useState<string[] | null>(null);
+  const [slackPeople, setSlackTo] = useState<string[] | null>(null);
+  const slackTo = slackPeople && slackPeople.filter((l) => !bots.has(l)); // never message an account marked as a bot
   const [slackNote, setSlackNote] = useState('Checking Slack…'); // why there's no Slack option, if there isn't
   const [slackThreads, setSlackThreads] = useState<SlackThread[]>([]);
   const [notice, setNotice] = useState<Notice | null>(flash ?? null);
@@ -240,7 +242,10 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   }, [data, sinceData, since, dimMoved]);
 
   // In "since" mode old-side line numbers refer to my last reviewed commit, so old-side threads would sit on the wrong lines.
-  const shownThreads = since && sinceData ? threads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : threads;
+  // Accounts marked as bots in Settings count as bots here, like GitHub's own.
+  const allThreads = useMemo(() => markBots(threads, bots), [threads, bots.size]);
+  const conv = useMemo(() => (bots.size ? conversation.map((c) => (bots.has(c.author) ? { ...c, bot: true } : c)) : conversation), [conversation, bots.size]);
+  const shownThreads = since && sinceData ? allThreads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : allThreads;
   const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
   useEffect(() => {
     const main = document.querySelector('main');
@@ -381,8 +386,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
 
   const layer = stack.findIndex((l) => l.number === n);
   const failingChecks = checks?.filter((c) => c.state === 'failure').length ?? 0;
-  const waitingOnMe = me ? threads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
-  const myOpenThreads = me ? threads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).length : 0;
+  const waitingOnMe = me ? allThreads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
+  const myOpenThreads = me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).length : 0;
   const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
 
   // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.
@@ -447,7 +452,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
             <ShortcutIndex
               repo={repo}
               pr={pr}
-              conversation={conversation}
+              conversation={conv}
               threads={shownThreads}
               drafts={drafts}
               checks={checks}
@@ -536,7 +541,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
-          <Conversation pr={pr} items={conversation} lang={mainLang} />
+          <Conversation pr={pr} items={conv} lang={mainLang} />
           {visible.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
