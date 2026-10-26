@@ -502,7 +502,7 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .since-sum { flex: 1 1 100%; }
 .since-sum .link, .since-sum button.link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
 .since-state { flex: 1; }
-.blame-pop { position: fixed; z-index: 60; max-width: 420px; padding: 6px 10px; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 20px var(--shadow); pointer-events: none; }
+.blame-pop { position: fixed; z-index: 60; transform: translateY(-100%); max-width: 420px; padding: 6px 10px; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 20px var(--shadow); pointer-events: none; }
 .blame-pop div { margin-top: 2px; }
 /* Ask Claude about a selection */
 .ask-btn { position: fixed; z-index: 55; padding: 2px 10px; font-size: 12px; box-shadow: 0 4px 12px var(--shadow); }

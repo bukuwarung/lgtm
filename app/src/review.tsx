@@ -1,4 +1,5 @@
 import { render, type VNode } from 'preact';
+import { createPortal } from 'preact/compat';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { addedLines, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
@@ -1041,7 +1042,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   return (
     <>
     {blame.pop}
-    <table class="diff" ref={table} onMouseOver={blame.over} onMouseLeave={blame.hide}>
+    <table class="diff" ref={table} onMouseEnter={blame.enter} onMouseOver={blame.over} onMouseLeave={blame.hide} onMouseDown={blame.hide}>
       <tbody>
         {hunks.map((h, hi) => (
           <>
@@ -1135,15 +1136,28 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   );
 }
 
-// Hovering a line number for a moment shows who last changed that line: the old number blames the base, the new
-// one the head (a line this PR added shows its own commit). One blame per file and side, kept for the session.
+// Hovering a line number for a moment shows who last changed that line, above it (clear of a comment box opening
+// below): the old number blames the base, the new one the head (a line this PR added shows its own commit). A file's
+// blame is fetched when the mouse enters its diff, and kept for the session.
 const blames = new Map<string, Promise<Map<number, BlameLine>>>();
 function useBlameHover(ctx: Ctx, file: File) {
   const [on] = useStoredFlag('blameHover', true);
   const [pop, setPop] = useState<{ x: number; y: number; b: BlameLine } | null>(null);
   const timer = useRef(0);
   const cell = useRef<Element | null>(null); // the number being hovered
+  const side = (old: boolean) => {
+    const sha = old ? ctx.pr.base.sha : ctx.pr.head.sha;
+    const path = old ? (file.previous_filename ?? file.filename) : file.filename;
+    const key = `${ctx.repo}@${sha}:${path}`;
+    if (!blames.has(key)) blames.set(key, getBlame(ctx.repo, sha, path).catch(() => new Map()));
+    return blames.get(key)!;
+  };
   const hide = () => (clearTimeout(timer.current), (cell.current = null), setPop(null));
+  const enter = () => {
+    if (!on) return;
+    if (file.status !== 'added') void side(true);
+    if (file.status !== 'removed') void side(false);
+  };
   const over = (e: MouseEvent) => {
     const td = (e.target as Element).closest('td.num') as HTMLTableCellElement | null;
     if (!on || !td || !td.textContent) return cell.current && hide();
@@ -1152,28 +1166,29 @@ function useBlameHover(ctx: Ctx, file: File) {
     clearTimeout(timer.current);
     setPop(null);
     const line = Number(td.textContent);
-    const old = td.cellIndex === 0;
-    const sha = old ? ctx.pr.base.sha : ctx.pr.head.sha;
-    const path = old ? (file.previous_filename ?? file.filename) : file.filename;
     timer.current = setTimeout(async () => {
-      const key = `${ctx.repo}@${sha}:${path}`;
-      if (!blames.has(key)) blames.set(key, getBlame(ctx.repo, sha, path).catch(() => new Map()));
-      const b = (await blames.get(key)!).get(line);
+      const b = (await side(td.cellIndex === 0)).get(line);
+      if (!b || cell.current !== td || document.activeElement?.closest('.editor')) return; // moved on, or typing
       const r = td.getBoundingClientRect();
-      if (b && td.isConnected) setPop({ x: r.right + 6, y: r.top, b });
-    }, 600) as unknown as number;
+      setPop({ x: r.left, y: r.top - 4, b });
+    }, 500) as unknown as number;
   };
   useEffect(() => () => clearTimeout(timer.current), []);
   return {
+    enter,
     over,
     hide,
-    pop: pop && (
-      <div class="blame-pop" style={{ left: pop.x, top: pop.y }}>
-        <b>{pop.b.who}</b> · {ago(pop.b.when)} · <code>{pop.b.sha}</code>
-        <div>{pop.b.message}</div>
-        {pop.b.pr && <div class="note">#{pop.b.pr.number} {pop.b.pr.title}</div>}
-      </div>
-    ),
+    // On <body>: inside a file, whose containment (content-visibility) would place and clip a fixed element itself.
+    pop:
+      pop &&
+      createPortal(
+        <div class="blame-pop" style={{ left: pop.x, top: pop.y }}>
+          <b>{pop.b.who}</b> · {ago(pop.b.when)} · <code>{pop.b.sha}</code>
+          <div>{pop.b.message}</div>
+          {pop.b.pr && <div class="note">#{pop.b.pr.number} {pop.b.pr.title}</div>}
+        </div>,
+        document.body,
+      ),
   };
 }
 
