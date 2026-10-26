@@ -23,6 +23,8 @@
     "allow-self-update",
     "allow-walkthrough",
     "core:window:allow-set-badge-count",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
     "opener:default",
     {
       "identifier": "opener:allow-open-url",

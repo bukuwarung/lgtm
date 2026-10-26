@@ -491,3 +491,5 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .walkthrough code.wt-file { cursor: pointer; color: var(--accent); }
 .walkthrough code.wt-file:hover { text-decoration: underline; }
 .g-note { margin-left: 6px; font-weight: 400; color: var(--muted); }
+/* The app: the top bar is the title bar, with room for the traffic lights on the left. */
+.desktop .top { padding-left: 84px; -webkit-user-select: none; user-select: none; }

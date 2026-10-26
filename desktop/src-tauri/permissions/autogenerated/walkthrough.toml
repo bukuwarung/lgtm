@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-walkthrough"
+description = "Enables the walkthrough command without any pre-configured scope."
+commands.allow = ["walkthrough"]
+
+[[permission]]
+identifier = "deny-walkthrough"
+description = "Denies the walkthrough command without any pre-configured scope."
+commands.deny = ["walkthrough"]

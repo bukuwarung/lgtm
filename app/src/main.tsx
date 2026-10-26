@@ -108,7 +108,8 @@ function App() {
   const r = parseRoute(route);
   return (
     <>
-      <nav class="top">
+      {/* In the app the window has no title bar: this bar holds the traffic lights (left) and drags the window. */}
+      <nav class="top" data-tauri-drag-region>
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
         <TopActions onRefresh={() => setQueueVersion((v) => v + 1)} />
         <span class="spacer" />
