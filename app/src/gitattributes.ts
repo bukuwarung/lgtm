@@ -1,4 +1,5 @@
-export type Rule = [RegExp, boolean];
+// A pattern, whether it sets or unsets the attribute, and which: linguist-generated or linguist-binary.
+export type Rule = [RegExp, boolean, 'generated' | 'binary'];
 
 // gitattributes glob → RegExp. No "/" matches the basename at any depth; with "/" it is anchored to the root.
 function globToRe(pattern: string): RegExp {
@@ -22,11 +23,11 @@ export function parseGeneratedRules(text: string): Rule[] {
     const [pattern, ...attrs] = line.trim().split(/\s+/);
     if (!pattern || pattern.startsWith('#')) continue;
     for (const a of attrs) {
-      const on = a === 'linguist-generated' || a === 'linguist-generated=true';
-      const off = a === '-linguist-generated' || a === '!linguist-generated' || a === 'linguist-generated=false';
-      if (!on && !off) continue;
+      const m = a.match(/^([-!]?)linguist-(generated|binary)(?:=(true|false))?$/);
+      if (!m) continue;
+      const on = !m[1] && m[3] !== 'false';
       try {
-        rules.push([globToRe(pattern), on]);
+        rules.push([globToRe(pattern), on, m[2] as 'generated' | 'binary']);
       } catch {
         // malformed pattern: git ignores it too
       }
@@ -35,6 +36,6 @@ export function parseGeneratedRules(text: string): Rule[] {
   return rules;
 }
 
-// Last matching rule wins, as in git.
-export const isGenerated = (rules: Rule[], path: string) =>
-  rules.reduce((acc, [re, on]) => (re.test(path) ? on : acc), false);
+// Marked generated or binary; per attribute, the last matching rule wins, as in git.
+const marked = (rules: Rule[], path: string, attr: Rule[2]) => rules.reduce((acc, [re, on, a]) => (a === attr && re.test(path) ? on : acc), false);
+export const isGenerated = (rules: Rule[], path: string) => marked(rules, path, 'generated') || marked(rules, path, 'binary');

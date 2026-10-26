@@ -64,6 +64,11 @@ test('gitattributes: spec scenarios', () => {
   assert.equal(isGenerated(parseGeneratedRules(''), 'x.pb.go'), false);
   assert.equal(isGenerated(parseGeneratedRules('**/vendor/** linguist-generated'), 'a/vendor/b.js'), true);
   assert.equal(isGenerated(parseGeneratedRules('**/vendor/** linguist-generated'), 'vendor/b.js'), true);
+  const both = parseGeneratedRules(['*.bin linguist-binary', 'keep.bin -linguist-binary', 'gen/* linguist-generated', 'gen/x.bin -linguist-binary'].join('\n'));
+  assert.equal(isGenerated(both, 'a/data.bin'), true);
+  assert.equal(isGenerated(both, 'keep.bin'), false);
+  assert.equal(isGenerated(both, 'gen/x.bin'), true); // unsetting binary leaves generated
+  assert.equal(isGenerated(parseGeneratedRules('*.bin linguist-binary=false'), 'a.bin'), false);
 });
 
 test('renderChunks maps blocks to lines, marks changes, escapes HTML', () => {

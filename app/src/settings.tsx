@@ -150,7 +150,7 @@ export function Settings() {
           <Flag k="sinceNotOnMine" initial={true} label="Except on your own PRs" hint="They open with every change; the bar above the files still switches to just the new commits." />
         </Flag>
         <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New outside packages are still named." demo />
-        <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated in .gitattributes." demo />
+        <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated or linguist-binary in .gitattributes." demo />
         <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />

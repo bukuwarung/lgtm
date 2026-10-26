@@ -87,7 +87,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 </picture>
 </details>
 
-<details open><summary><b>Hide generated files</b>: files marked <code>linguist-generated</code> wait behind one row.</summary>
+<details open><summary><b>Hide generated files</b>: files marked <code>linguist-generated</code> or <code>linguist-binary</code> wait behind one row.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/hideGenerated-dark.png">
