@@ -5,7 +5,7 @@ import { getEmails, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadT
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { ago, askNotifications, availableUpdate, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
-import { Palette } from './palette.tsx';
+import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { DemoPage } from './demos.tsx';
@@ -59,7 +59,7 @@ function App() {
   const onMenu = useRef((_: string) => {});
   onMenu.current = (id) => {
     if (id === 'settings') location.hash = '/settings';
-    else if (id === 'open-url') document.querySelector<HTMLInputElement>('.top-actions input')?.focus();
+    else if (id === 'open-url') dispatchEvent(new Event('lgtm:palette'));
     else if (id === 'palette') {
       // The menu takes ⌘K before the page sees it: in a comment box, hand it back (there it makes a link).
       const box = document.activeElement?.closest('.editor') && document.activeElement;
@@ -112,6 +112,7 @@ function App() {
       <nav class="top" data-tauri-drag-region>
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
         <TopActions onRefresh={() => setQueueVersion((v) => v + 1)} />
+        <CommandBar queue={() => queue.current} parse={parseRoute} />
         <span class="spacer" />
         {update && (
           <a href="#/settings" class="nav-btn nav-update" title={`lgtm ${update} is out: see Settings`}>
@@ -122,7 +123,6 @@ function App() {
         <ThemeToggle />
       </nav>
       {isDesktop && <FindBar />}
-      <Palette queue={() => queue.current} />
       {toast && (
         <div class="toast" role="status">
           {toast.text}
@@ -156,7 +156,7 @@ function App() {
             {flash?.route === route && <p class={flash.ok ? 'notice' : 'warn'}>{flash.text}</p>}
           </div>
         ) : (
-          <p class="note page empty">Pick a pull request from the list, or paste a PR URL above it.</p>
+          <p class="note page empty">Pick a pull request from the list, or paste a PR link in the box at the top (⌘K).</p>
         )}
       </div>
     </>
@@ -193,33 +193,12 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
   );
 }
 
-// The top bar's PR actions: open a PR by URL, refresh the list, desktop notifications on/off.
+// The top bar's PR list actions: refresh it, desktop notifications on/off.
 function TopActions({ onRefresh }: { onRefresh: () => void }) {
-  const [url, setUrl] = useState('');
   const [err, setErr] = useState('');
   const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
   return (
-    <form
-      class="top-actions"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const r = parseRoute(url);
-        if (r) {
-          location.hash = `/${r.repo}/pull/${r.n}`;
-          setUrl('');
-        } else setErr('Not a GitHub pull request URL');
-      }}
-    >
-      <input
-        placeholder="Open PR URL…"
-        value={url}
-        aria-invalid={!!err}
-        title={err || 'Paste a GitHub pull request URL and press Enter'}
-        onInput={(e) => {
-          setUrl(e.currentTarget.value);
-          setErr('');
-        }}
-      />
+    <div class="top-actions">
       <button type="button" title="Refresh the PR list (also every 3 minutes)" onClick={onRefresh}>↻</button>
       <button
         type="button"
@@ -234,7 +213,7 @@ function TopActions({ onRefresh }: { onRefresh: () => void }) {
         {notify ? '🔔' : '🔕'}
       </button>
       {err && <span class="top-err">{err}</span>}
-    </form>
+    </div>
   );
 }
 

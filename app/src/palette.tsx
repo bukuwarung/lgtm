@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { QueueItem } from './github.ts';
 
-// ⌘K: jump to a PR in your queue, or within the open PR to a file or anything in its index (comments, checks,
-// threads). Index entries are read from the page and clicked, so they jump exactly like the index does.
+// Go to: a PR in your queue, or within the open PR a file or anything in its index (comments, checks, threads).
+// Index entries are read from the page and clicked, so they jump exactly like the index does.
 type Entry = { kind: string; label: string; sub: string; run: () => void };
 
 function entries(queue: QueueItem[]): Entry[] {
@@ -29,61 +29,82 @@ function entries(queue: QueueItem[]): Entry[] {
 // Every word of the query, in any order, somewhere in the entry.
 export const matches = (q: string, text: string) => q.toLowerCase().split(/\s+/).every((w) => text.toLowerCase().includes(w));
 
-export function Palette({ queue }: { queue: () => QueueItem[] }) {
-  const [list, setList] = useState<Entry[] | null>(null);
+// The top bar's one box: type to go to a PR in your queue or within the open PR, or paste a PR link to open it.
+// ⌘K (and ⌘L in the app) puts the cursor in it.
+export function CommandBar({ queue, parse }: { queue: () => QueueItem[]; parse: (s: string) => { repo: string; n: number } | null }) {
+  const [list, setList] = useState<Entry[] | null>(null); // open while not null
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const open = () => {
+    setList(entries(queue()));
+    setSel(0);
+  };
+  const close = () => {
+    setList(null);
+    setQ('');
+    input.current?.blur();
+  };
   useEffect(() => {
-    const open = () => {
-      setList(entries(queue()));
-      setQ('');
-      setSel(0);
-      requestAnimationFrame(() => input.current?.focus());
-    };
+    const focus = () => (input.current?.focus(), input.current?.select());
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !e.defaultPrevented) { // a comment box's ⌘K is "link"
         e.preventDefault();
-        open();
+        focus();
       }
     };
     addEventListener('keydown', onKey);
-    addEventListener('lgtm:palette', open);
-    return () => (removeEventListener('keydown', onKey), removeEventListener('lgtm:palette', open));
+    addEventListener('lgtm:palette', focus);
+    return () => (removeEventListener('keydown', onKey), removeEventListener('lgtm:palette', focus));
   }, []);
-  if (!list) return null;
-  const shown = list.filter((e) => matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50);
+  const pr = parse(q);
+  const shown = !list
+    ? []
+    : [
+        ...(pr ? [{ kind: 'Open', label: `${pr.repo}#${pr.n}`, sub: 'Pull request from the link', run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
+        ...(pr ? [] : list.filter((e) => matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50)),
+      ];
   const go = (e?: Entry) => {
-    setList(null);
-    e?.run();
+    if (!e) return;
+    close();
+    e.run();
   };
   return (
-    <div class="palette-back" onMouseDown={(e) => e.target === e.currentTarget && setList(null)}>
-      <div class="palette" role="dialog" aria-label="Go to">
-        <input
-          ref={input}
-          value={q}
-          placeholder="Go to a PR, file, thread or check…"
-          onInput={(e) => (setQ(e.currentTarget.value), setSel(0))}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-              e.preventDefault();
-              setSel((s) => (s + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % Math.max(shown.length, 1));
-            } else if (e.key === 'Enter') go(shown[sel]);
-            else if (e.key === 'Escape') setList(null);
-          }}
-        />
-        <ul>
+    <div class="cmd">
+      <input
+        ref={input}
+        value={q}
+        placeholder="Go to a PR, file or thread, or paste a PR link  ⌘K"
+        aria-label="Go to, or open a PR link"
+        onFocus={open}
+        onBlur={() => setTimeout(() => setList(null), 150)}
+        onInput={(e) => (setQ(e.currentTarget.value), setSel(0), list || open())}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSel((s) => (s + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % Math.max(shown.length, 1));
+          } else if (e.key === 'Enter') go(shown[sel]);
+          else if (e.key === 'Escape') close();
+        }}
+      />
+      {list && (
+        <ul class="cmd-list" role="listbox">
           {shown.map((e, k) => (
-            <li key={k} class={k === sel ? 'on' : ''} onMouseEnter={() => setSel(k)} onClick={() => go(e)} ref={(el) => void (k === sel && el?.scrollIntoView({ block: 'nearest' }))}>
+            <li
+              key={k}
+              class={k === sel ? 'on' : ''}
+              onMouseEnter={() => setSel(k)}
+              onMouseDown={(ev) => (ev.preventDefault(), go(e))}
+              ref={(el) => void (k === sel && el?.scrollIntoView({ block: 'nearest' }))}
+            >
               <span class="pal-kind">{e.kind}</span>
               <span class="pal-label">{e.label}</span>
               {e.sub && <span class="pal-sub">{e.sub}</span>}
             </li>
           ))}
-          {!shown.length && <li class="pal-none">Nothing matches</li>}
+          {!shown.length && <li class="pal-none">{q ? 'Nothing matches' : 'Nothing to go to yet'}</li>}
         </ul>
-      </div>
+      )}
     </div>
   );
 }

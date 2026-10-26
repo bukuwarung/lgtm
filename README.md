@@ -182,7 +182,7 @@ The defaults; change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 | `[` / `]` | Previous / next PR in the stack |
 | `i` | Show / hide the index |
 | `⌘↵` | Finish review |
-| `⌘K` | Go to a PR, file, thread or check |
+| `⌘K` | Go to a PR, file, thread or check, or open a pasted PR link (the box at the top) |
 | `⌘F` | Find, in every file |
 | `?` | All shortcuts |
 

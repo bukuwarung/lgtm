@@ -68,7 +68,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 "File",
                 true,
                 &[
-                    &item("open-url", "Open PR URL…", Some("CmdOrCtrl+L"))?,
+                    &item("open-url", "Open PR Link…", Some("CmdOrCtrl+L"))?,
                     &item("palette", "Go to…", Some("CmdOrCtrl+K"))?,
                     &sep()?,
                     &item("reload", "Reload", Some("CmdOrCtrl+R"))?,
