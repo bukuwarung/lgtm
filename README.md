@@ -223,3 +223,7 @@ scripts/release.sh 0.2.0
 It sets the version everywhere (Settings shows it), runs the tests, builds a universal, ad-hoc-signed `lgtm.app` and the browser version's tarball, and points [`Casks/lgtm.rb`](Casks/lgtm.rb) and [`Formula/lgtm-cli.rb`](Formula/lgtm-cli.rb) at them (version, SHA-256). Then it prints the two publishing commands: push the commit, and `gh release create` with both files. This repo is its own Homebrew tap, so `brew upgrade` picks the release up once both are out.
 
 `LGTM_PORT` changes the port (drafts are stored per port), `LGTM_NO_OPEN=1` skips opening a browser tab. Design and specs: [`openspec/changes/add-pr-review-app`](openspec/changes/add-pr-review-app).
+
+## License
+
+[MIT](LICENSE)

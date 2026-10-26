@@ -4,6 +4,7 @@ class LgtmCli < Formula
   homepage "https://github.com/bukuwarung/lgtm"
   url "https://github.com/bukuwarung/lgtm/releases/download/v0.1.0/lgtm-cli-0.1.0.tar.gz"
   sha256 "adaa71e49002bf8159f9fbceddd922604e251dc3f1200a5998c6a9392af10249"
+  license "MIT"
 
   depends_on "gh"
   depends_on "node"
