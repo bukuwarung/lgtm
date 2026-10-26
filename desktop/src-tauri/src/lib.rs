@@ -143,6 +143,8 @@ pub fn run() {
             commands::claude_sessions,
             commands::clipboard_pr,
             commands::copy_text,
+            commands::self_update,
+            commands::walkthrough,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lgtm");

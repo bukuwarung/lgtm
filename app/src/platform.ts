@@ -16,6 +16,37 @@ export const storage = {
   },
 };
 
+// The last-loaded copy of recently opened PRs (IndexedDB: diffs can outgrow localStorage), so a PR shows at once
+// and refreshes behind. Keeps the 30 most recent; any failure just means no copy.
+const PR_CACHE_SIZE = 30;
+let cacheDb: Promise<IDBDatabase> | undefined;
+const openCache = () =>
+  (cacheDb ??= new Promise((ok, no) => {
+    const r = indexedDB.open('lgtm', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('prs');
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => no(r.error);
+  }));
+const done = <T>(r: IDBRequest<T>) => new Promise<T>((ok, no) => ((r.onsuccess = () => ok(r.result)), (r.onerror = () => no(r.error))));
+export const prCache = {
+  async get<T>(key: string): Promise<{ v: T; at: number } | undefined> {
+    try {
+      return await done((await openCache()).transaction('prs').objectStore('prs').get(key));
+    } catch {
+      return undefined;
+    }
+  },
+  async set(key: string, v: unknown) {
+    try {
+      const store = (await openCache()).transaction('prs', 'readwrite').objectStore('prs');
+      store.put({ v, at: Date.now() }, key);
+      const [keys, rows] = await Promise.all([done(store.getAllKeys()), done(store.getAll())]);
+      const old = keys.map((k, i) => [k, rows[i].at] as const).sort((a, b) => b[1] - a[1]).slice(PR_CACHE_SIZE);
+      for (const [k] of old) store.delete(k);
+    } catch {}
+  },
+};
+
 // Inside the macOS app (desktop/, Tauri) the page reaches the CLIs through app commands instead of the local server.
 export const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => (await import('@tauri-apps/api/core')).invoke<T>(cmd, args);
@@ -82,6 +113,23 @@ export function useBots() {
 export function useStoredFlag(key: string, initial: boolean) {
   const [v, set] = useStoredValue(key, initial ? '1' : '0');
   return [v === '1', () => set(v === '1' ? '0' : '1')] as const;
+}
+
+// Saved replies (Settings): offered in every comment box after "/" at the start of a line, or from its toolbar.
+export type SavedReply = { title: string; body: string };
+const REPLIES: SavedReply[] = [
+  { title: 'test', body: 'Could we add a test for this?' },
+  { title: 'why', body: "Could you add a comment on why this is needed? It isn't obvious from the code." },
+  { title: 'nit', body: 'nit: ' },
+  { title: 'lgtm', body: 'Looks good to me 👍' },
+];
+export function useSavedReplies() {
+  const [raw, setRaw] = useStoredValue('savedReplies', JSON.stringify(REPLIES));
+  let list: SavedReply[] = REPLIES;
+  try {
+    list = JSON.parse(raw);
+  } catch {}
+  return [list, (next: SavedReply[]) => setRaw(JSON.stringify(next))] as const;
 }
 
 // Whether bot comments and bot-only threads start folded (Settings): on your own PRs they stay open unless asked,
@@ -254,6 +302,17 @@ export async function availableUpdate(): Promise<string | null> {
   }
   return newer(saved.latest, __APP_VERSION__) ? saved.latest.replace(/^v/, '') : null;
 }
+// A PR walkthrough from Claude Code (the claude CLI) for a prompt the page builds (claude.ts).
+export async function claudeWalkthrough(input: string): Promise<string> {
+  if (isDesktop) return command<string>('walkthrough', { input });
+  const res = await fetch('/walkthrough', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }) });
+  const d = await res.json().catch(() => ({ error: res.statusText }));
+  if (!res.ok) throw new Error(d.error ?? 'Walkthrough failed');
+  return d.text;
+}
+
+// The app: upgrade through Homebrew and restart (resolves only on failure: success restarts the app).
+export const selfUpdate = () => command<void>('self_update');
 export const UPGRADE = isDesktop ? 'brew upgrade --cask lgtm' : 'brew upgrade lgtm-cli';
 
 // --- Diagnostics (Help → Copy Diagnostics, Settings): what a bug report needs, with no tokens or PR text ---

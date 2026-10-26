@@ -35,3 +35,33 @@ export function commentPrompt(
     `Help me address it.`,
   ].join('\n');
 }
+
+// The walkthrough (shown in lgtm, from the claude CLI): what the PR does, its changes grouped by intent, and where to
+// slow down. Generated files are left out; the diff is cut at MAX_DIFF characters.
+const MAX_DIFF = 400_000;
+export function walkthroughPrompt(
+  pr: { html_url: string; title: string; body: string | null },
+  files: { filename: string; status: string; patch?: string; generated?: boolean }[],
+): string {
+  let diff = '';
+  for (const f of files.filter((f) => !f.generated)) {
+    const part = `--- ${f.filename} (${f.status})\n${f.patch ?? '(no text diff: binary, renamed only, or too large)'}\n`;
+    if (diff.length + part.length > MAX_DIFF) {
+      diff += `\n(The diff continues; it was cut here for length.)\n`;
+      break;
+    }
+    diff += part;
+  }
+  return [
+    "You're helping someone review a GitHub pull request. Its title, description and diff are below. Write a short walkthrough in Markdown:",
+    '1. One or two sentences: what the PR does and why.',
+    '2. A "### Changes" section: the changes grouped by intent (not file by file), one bullet each, naming the files involved as full paths in backticks, exactly as in the diff.',
+    '3. A "### Worth a close look" section: up to five spots where a reviewer should slow down (risky logic, edge cases, behaviour changes, missing tests), each naming the file path in backticks and saying why.',
+    'Be concise and concrete. No praise, no preamble, no closing remarks.',
+    '',
+    `PR: ${pr.html_url}`,
+    `Title: ${pr.title}`,
+    `Description:\n${pr.body?.trim() || '(none)'}`,
+    `Diff:\n${diff}`,
+  ].join('\n');
+}

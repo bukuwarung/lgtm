@@ -4,7 +4,7 @@ import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, i
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, markBots, reply, resolveThread, setViewed, submitReview,
+  awaitsMe, markBots, renderGfm, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -13,11 +13,11 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, commentPrompt, prPrompt } from './claude.ts';
+import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, walkthroughPrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
-import { reviewOrder } from './files.ts';
-import { ago, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { reviewOrder, untested } from './files.ts';
+import { ago, claudeWalkthrough, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -46,6 +46,7 @@ type Ctx = {
   langFor: (path?: string) => string | undefined; // the language an unmarked code block in a comment on `path` is read as
   mainLang?: string; // the PR's main code language
   moved: Map<string, Moved>; // code moved without changes, per file
+  untested: Set<string>; // code files whose tests the PR doesn't touch (Settings switch)
 };
 type Saved = { sha: string; drafts: Draft[] };
 // My last visit to a PR: each file's blob then, and where I was reading (file + how far into it).
@@ -118,6 +119,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const visitKey = `visit:${repo}#${n}`;
   const [mine, setMine] = useState(false); // I opened it or it's assigned to me: show the merge box
   const [me, setMe] = useState('');
+  const [stale, setStale] = useState<number | null>(null); // showing the copy loaded at this time, while refreshing
   const threadCursor = useRef(-1);
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   const [bindings] = useBindings();
@@ -142,20 +144,48 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     getStatus(repo, n).then(setStatus, () => {});
     getViewed(repo, n).then(setViewedPaths, () => {});
     (async () => {
-      const pr = await getPR(repo, n);
-      const headRepo = pr.head.repo?.full_name ?? repo;
-      const [files, threads, conversation, attrs, stored, visit] = await Promise.all([
-        getFiles(repo, n),
-        getThreads(repo, n),
-        getConversation(repo, n),
-        getRaw(headRepo, '.gitattributes', pr.head.sha),
-        storage.get<Saved>(key),
-        storage.get<Visit>(visitKey).catch(() => undefined),
-      ]);
-      if (visit) {
-        setChangedSinceVisit(new Set(files.filter((f) => visit.files[f.filename] !== f.sha).map((f) => f.filename)));
-        resumeAt.current = visit.at;
+      const [stored, visit] = await Promise.all([storage.get<Saved>(key), storage.get<Visit>(visitKey).catch(() => undefined)]);
+      if (visit) resumeAt.current = visit.at;
+      // Show a PR's last-loaded copy at once (marked as updating), then the fresh one.
+      type Loaded = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null };
+      let fresh = false;
+      let shownHead = '';
+      const show = (d: Loaded) => {
+        const headRepo = d.pr.head.repo?.full_name ?? repo;
+        const rules = parseGeneratedRules(d.attrs ?? '');
+        if (visit) setChangedSinceVisit(new Set(d.files.filter((f) => visit.files[f.filename] !== f.sha).map((f) => f.filename)));
+        if (shownHead && shownHead !== d.pr.head.sha) setSinceData(null); // new commits: compare again
+        shownHead = d.pr.head.sha;
+        setThreads(d.threads);
+        setConversation(d.conversation);
+        setSaved(stored ?? { sha: d.pr.head.sha, drafts: [] });
+        setData({ pr: d.pr, headRepo, files: prepare(d.files, rules), rules });
+      };
+      prCache.get<Loaded>(`${repo}#${n}`).then((c) => {
+        if (!c || fresh) return;
+        setStale(c.at);
+        show(c.v);
+      });
+      let pr: PR;
+      let loaded: Loaded;
+      try {
+        pr = await getPR(repo, n);
+        const headRepo = pr.head.repo?.full_name ?? repo;
+        const [files, threads, conversation, attrs] = await Promise.all([
+          getFiles(repo, n),
+          getThreads(repo, n),
+          getConversation(repo, n),
+          getRaw(headRepo, '.gitattributes', pr.head.sha),
+        ]);
+        loaded = { pr, files, threads, conversation, attrs };
+      } catch (e: any) {
+        if (!shownHead) throw e;
+        return setNotice({ ok: false, text: `Couldn't refresh this PR (${e.message}); showing the copy loaded earlier.` });
       }
+      fresh = true;
+      setStale(null);
+      show(loaded);
+      void prCache.set(`${repo}#${n}`, loaded);
       Promise.all([slackStatus(`${repo}#${n}`), getViewer()]).then(([slack, me]) => {
         setSlackThreads(slack.threads);
         const people = [...new Set([pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login))];
@@ -170,7 +200,6 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         setMe(me);
         setMine([pr.user, ...pr.assignees].some((u) => u.login === me));
       }, () => {});
-      const rules = parseGeneratedRules(attrs ?? '');
       getStack(repo, pr).then(setStack, () => {});
       Promise.all([getMyLastReviewCommit(repo, n), getViewer().catch(() => '')]).then(([sha, me]) => {
         if (sha && sha !== pr.head.sha) {
@@ -178,10 +207,6 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           if (startSince && !(wholeOnMine && pr.user.login === me)) setSince(true); // re-review: start with just what changed
         }
       }, () => {});
-      setThreads(threads);
-      setConversation(conversation);
-      setSaved(stored ?? { sha: pr.head.sha, drafts: [] });
-      setData({ pr, headRepo, files: prepare(files, rules), rules });
     })().catch((e) => setError(e.message));
   }, []);
 
@@ -230,6 +255,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       };
       go();
       setTimeout(go, 400);
+      resumeAt.current = null; // once: the fresh copy replacing a cached one mustn't move you back
     }
     return () => {
       removeEventListener('scroll', onScroll);
@@ -311,7 +337,10 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   }
 
   const mainLang = majorityLanguage(data.files.filter((f) => !f.generated).map((f) => f.filename));
+  const [flagUntested] = useStoredFlag('flagUntested', true);
+  const noTests = useMemo(() => new Set(flagUntested ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested]);
   const ctx: Ctx = {
+    untested: noTests,
     pr,
     headRepo,
     target,
@@ -504,11 +533,12 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
             </span>
           )}
-          <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} />
+          <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
         <main>
           <div class="pills pr-status">
+            {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}>updating…</span>}
             {pr.draft && <span class="pill">draft</span>}
             {status && !pr.draft && (
               <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] }>
@@ -518,6 +548,11 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
             {failingChecks > 0 && <span class="pill p-bad">{failingChecks} check{failingChecks > 1 ? 's' : ''} failing</span>}
             {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
             {waitingOnMe > 0 && <span class="pill p-reply">💬 {waitingOnMe} awaiting your reply</span>}
+            {noTests.size > 0 && (
+              <span class="pill p-warn" title={`Changed without a matching test change:\n${[...noTests].join('\n')}`}>
+                {noTests.size} file{noTests.size > 1 ? 's' : ''} without test changes
+              </span>
+            )}
             {pr.additions != null && (
               <span class="pill p-size">
                 <b class="a">+{pr.additions}</b> <b class="d">−{pr.deletions}</b> · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
@@ -546,6 +581,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
+          <Walkthrough pr={pr} repo={repo} files={data.files} />
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} />
           {visible.map(section)}
@@ -575,6 +611,7 @@ type SubmitProps = {
   onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean) => Promise<boolean>;
   repo: string;
   mentions: string[];
+  authored: boolean; // my own PR: GitHub only takes comments there
 };
 
 const APPROVE_NOTE = 'Approved, but please address the comments';
@@ -582,7 +619,7 @@ const APPROVE_NOTE = 'Approved, but please address the comments';
 // The verdict to start from: pending comments → request changes; my earlier threads still open → comment; else approve.
 export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEvent => (pending ? 'REQUEST_CHANGES' : myOpenThreads ? 'COMMENT' : 'APPROVE');
 
-function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo, mentions }: SubmitProps) {
+function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo, mentions, authored }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
@@ -600,7 +637,7 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
     return () => removeEventListener('lgtm:finish', show);
   }, []);
   // Each time the panel opens, start from the verdict that fits the comments as they are now.
-  useEffect(() => void (open && setEvent(defaultEvent(count, myOpenThreads))), [open]);
+  useEffect(() => void (open && setEvent(authored ? 'COMMENT' : defaultEvent(count, myOpenThreads))), [open, authored]);
   // Approving with pending comments: say so, unless I've written my own summary.
   const pick = (v: ReviewEvent) => {
     setEvent(v);
@@ -639,7 +676,7 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
             autoFocus
             placeholder="Leave a review summary (optional) · ⌘↵ to submit"
           />
-          {(Object.keys(labels) as ReviewEvent[]).map((v) => (
+          {!authored && (Object.keys(labels) as ReviewEvent[]).map((v) => (
             <label>
               <input type="radio" name="event" checked={event === v} onChange={() => pick(v)} /> {labels[v]}
             </label>
@@ -727,6 +764,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
         </span>
         {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
+        {ctx.untested.has(file.filename) && <span class="badge no-test" title="The PR changes this code but no test with its name">no test change</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
@@ -1472,6 +1510,11 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
       </button>
       {open && (
         <span class="claude-pop" role="menu">
+          {label && (
+            <button role="menuitem" title="Claude reads the diff and summarizes it above the files" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:walkthrough')))}>
+              Walkthrough of this PR, here
+            </button>
+          )}
           <button role="menuitem" onClick={() => (setOpen(false), void openClaude(claudeNewLink(prompt, claudeFolder(repo))))}>
             New Claude Code session
           </button>
@@ -1494,6 +1537,81 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
       )}
       {note && <span class="claude-note">{note}</span>}
     </span>
+  );
+}
+
+// "✳ Claude → Walkthrough": Claude Code's summary of the PR, above the files. Kept per PR with the commit it read;
+// file paths in it jump to the file.
+type WalkthroughSaved = { sha: string; text: string; html: string };
+function Walkthrough({ pr, repo, files }: { pr: PR; repo: string; files: File[] }) {
+  const key = `walkthrough:${repo}#${pr.number}`;
+  const read = (): WalkthroughSaved | null => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+  const [saved, setSaved] = useState(read);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const run = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      const text = await claudeWalkthrough(walkthroughPrompt(pr, files));
+      const next = { sha: pr.head.sha, text, html: await renderGfm(text, repo) }; // GitHub sanitizes the HTML
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {}
+      setSaved(next);
+    } catch (e: any) {
+      setErr(e.message);
+    }
+    setBusy(false);
+  };
+  useEffect(() => {
+    const go = () => void run();
+    addEventListener('lgtm:walkthrough', go);
+    return () => removeEventListener('lgtm:walkthrough', go);
+  }, [pr.head.sha, files]);
+  // A path in backticks that names a file in this PR (in full, or by an unambiguous end) jumps to it.
+  const fileFor = (t: string) => {
+    const exact = files.find((f) => f.filename === t);
+    const ends = files.filter((f) => f.filename.endsWith('/' + t));
+    return exact ?? (ends.length === 1 ? ends[0] : undefined);
+  };
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    for (const c of body.current?.querySelectorAll('code') ?? []) if (fileFor(c.textContent ?? '')) c.classList.add('wt-file');
+  }, [saved, files]);
+  if (!saved && !busy && !err) return null;
+  return (
+    <details class="walkthrough" open>
+      <summary>
+        ✳ Walkthrough by Claude
+        {saved && saved.sha !== pr.head.sha && <span class="pill p-warn">written before the latest commits</span>}
+        <button disabled={busy} onClick={(e) => (e.preventDefault(), void run())}>{busy ? 'Claude is reading the diff…' : 'Write again'}</button>
+        <button title="Remove" onClick={(e) => (e.preventDefault(), localStorage.removeItem(key), setSaved(null), setErr(''))}>✕</button>
+      </summary>
+      {err && (
+        <p class="error">
+          Couldn't get a walkthrough: {err}
+          {/authenticat|oauth|log ?in/i.test(err) && <> Sign Claude Code in again: run <code>claude</code> in Terminal, then <code>/login</code>.</>}
+        </p>
+      )}
+      {saved && (
+        <div
+          ref={body}
+          class="md"
+          dangerouslySetInnerHTML={{ __html: saved.html }}
+          onClick={(e) => {
+            const f = (e.target as Element).closest('code.wt-file') && fileFor((e.target as Element).textContent ?? '');
+            if (f) document.getElementById('f-' + f.filename)?.scrollIntoView();
+          }}
+        />
+      )}
+    </details>
   );
 }
 

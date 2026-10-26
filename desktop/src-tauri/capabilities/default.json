@@ -20,6 +20,8 @@
     "allow-claude-sessions",
     "allow-clipboard-pr",
     "allow-copy-text",
+    "allow-self-update",
+    "allow-walkthrough",
     "core:window:allow-set-badge-count",
     "opener:default",
     {

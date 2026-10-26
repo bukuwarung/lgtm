@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getEmojis, renderGfm } from './github.ts';
 import { renderMermaid } from './mermaid.ts';
+import { useSavedReplies } from './platform.ts';
 
 type Props = {
   value: string;
@@ -15,7 +16,7 @@ type Props = {
   placeholder?: string;
 };
 
-type Completion = { kind: ':' | '@'; start: number; items: { name: string; img?: string }[]; i: number };
+type Completion = { kind: ':' | '@' | '/'; start: number; items: { name: string; img?: string; body?: string }[]; i: number };
 
 // Comment editor: Write/Preview (rendered by GitHub, so it's exactly what gets posted), :emoji: and @mention
 // completion, a formatting toolbar with the usual shortcuts, and "Suggest" for a GitHub suggested change.
@@ -26,6 +27,7 @@ export function Editor(p: Props) {
   const [preview, setPreview] = useState<{ html?: string; error?: string } | null>(null);
   const [emojis, setEmojis] = useState<Record<string, string>>({});
   const [ac, setAc] = useState<Completion | null>(null);
+  const [replies] = useSavedReplies();
 
   useEffect(() => {
     getEmojis().then(setEmojis, () => {});
@@ -65,7 +67,14 @@ export function Editor(p: Props) {
     set(v.slice(0, s) + ins + v.slice(e), s + ins.length);
   };
 
+  // Saved replies whose title matches `q`, as completions starting at `start` (the "/", or the caret from the toolbar).
+  const offerReplies = (q: string, start: number) => {
+    const items = replies.filter((r) => r.title.toLowerCase().includes(q.toLowerCase())).map((r) => ({ name: r.title, body: r.body }));
+    setAc(items.length ? { kind: '/', start, items, i: 0 } : null);
+  };
   const complete = (v: string, caret: number) => {
+    const r = v.slice(0, caret).match(/(?:^|\n)\/([\w-]*)$/);
+    if (r) return offerReplies(r[1], caret - r[1].length - 1);
     const m = v.slice(0, caret).match(/(?:^|[\s(])([:@])([\w+-]+)$/);
     if (!m) return setAc(null);
     const [, kind, q] = m as unknown as [string, ':' | '@', string];
@@ -81,7 +90,7 @@ export function Editor(p: Props) {
   };
   const pick = (name: string) => {
     const { v, s } = sel();
-    const ins = ac!.kind === ':' ? `:${name}: ` : `@${name} `;
+    const ins = ac!.kind === '/' ? ac!.items.find((it) => it.name === name)!.body! : ac!.kind === ':' ? `:${name}: ` : `@${name} `;
     set(v.slice(0, ac!.start) + ins + v.slice(s), ac!.start + ins.length);
     setAc(null);
   };
@@ -147,6 +156,7 @@ export function Editor(p: Props) {
             {tool('❝', 'Quote', () => prefix('> '))}
             {tool('•', 'List', () => prefix('- '))}
             {tool('☐', 'Task', () => prefix('- [ ] '))}
+            {replies.length > 0 && tool('↩︎ Replies', 'Saved replies (or type / at the start of a line)', () => offerReplies('', sel().s))}
             {p.suggestion != null && tool('± Suggest', 'Suggest a change to these lines', () => insertBlock('```suggestion\n' + p.suggestion + '\n```'))}
           </>
         )}
@@ -156,7 +166,7 @@ export function Editor(p: Props) {
           <textarea
             ref={area}
             rows={p.rows ?? 4}
-            placeholder={p.placeholder ?? 'Leave a comment · : for emoji, @ to mention · ⌘↵ to save'}
+            placeholder={p.placeholder ?? 'Leave a comment · : for emoji, @ to mention, / for saved replies · ⌘↵ to save'}
             value={p.value}
             onInput={(e) => {
               p.onInput(e.currentTarget.value);
@@ -178,8 +188,9 @@ export function Editor(p: Props) {
                     pick(it.name);
                   }}
                 >
-                  {it.img ? <img src={it.img} alt="" width={18} height={18} /> : <span class="ed-at">@</span>}
+                  {it.img ? <img src={it.img} alt="" width={18} height={18} /> : <span class="ed-at">{ac.kind === '/' ? '/' : '@'}</span>}
                   {ac.kind === ':' ? `:${it.name}:` : it.name}
+                  {it.body && <span class="ed-reply">{it.body}</span>}
                 </li>
               ))}
             </ul>

@@ -60,7 +60,12 @@ function App() {
   onMenu.current = (id) => {
     if (id === 'settings') location.hash = '/settings';
     else if (id === 'open-url') document.querySelector<HTMLInputElement>('.top-actions input')?.focus();
-    else if (id === 'palette') dispatchEvent(new Event('lgtm:palette'));
+    else if (id === 'palette') {
+      // The menu takes ⌘K before the page sees it: in a comment box, hand it back (there it makes a link).
+      const box = document.activeElement?.closest('.editor') && document.activeElement;
+      if (box) box.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }));
+      else dispatchEvent(new Event('lgtm:palette'));
+    }
     else if (id === 'find') dispatchEvent(new Event('lgtm:find'));
     else if (id === 'reload') location.reload();
     else if (id === 'back') history.back();
@@ -261,7 +266,7 @@ const groupOf = (i: QueueItem): Group =>
   : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
 
 // A sidebar section: its groups in priority order, which group a PR falls in, and (if not the group's) its colour.
-type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string };
+type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string; note?: (g: string) => string };
 const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 // My own PRs (and ones assigned to me), by where they stand.
 const MINE: Kind = {
@@ -276,7 +281,14 @@ const MINE: Kind = {
     i.isDraft ? 'm-draft' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'm-changes' : i.reviewDecision === 'APPROVED' ? 'm-approved' : 'm-waiting',
 };
 // A team's open PRs, one group per member, coloured by where each PR stands (as in "Your PRs").
-const teamKind = (members: string[]): Kind => ({ name: 'Team', groups: members.map((m) => [m, m]), groupOf: (i) => i.author, colorOf: MINE.groupOf });
+// Each member's label also says how many reviews they're asked for, to help pick a reviewer who isn't swamped.
+const teamKind = (members: string[], load: Record<string, number>): Kind => ({
+  name: 'Team',
+  groups: members.map((m) => [m, m]),
+  groupOf: (i) => i.author,
+  colorOf: MINE.groupOf,
+  note: (m) => (load[m] ? `${load[m]} review${load[m] > 1 ? 's' : ''} requested` : ''),
+});
 type Tab = 'reviewing' | 'mine' | 'team';
 
 // On my PRs: where merging stands (BLOCKED is already told by the group: waiting for review / changes requested).
@@ -337,7 +349,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
   // Team tab: a GitHub team ("org/slug") and its members' open PRs. Settings can change it too.
   const [team, setTeam] = useStoredValue('team', '');
   const [teams, setTeams] = useState<string[] | null>(null);
-  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[] } | null>(null);
+  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
   const [teamErr, setTeamErr] = useState('');
   const teamRef = useRef(team); // the 3-minute refresh closes over the first render; read the current team here
   teamRef.current = team;
@@ -456,6 +468,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
             <details key={g} open={!g.endsWith('approved') || inGroup.length < 10} class={'pr-group g-' + g}>
               <summary>
                 <span class="gdot" /> {label} <span class="count">{inGroup.length}</span>
+                {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review">{kind.note(g)}</span>}
               </summary>
               {entries.map((e) =>
                 Array.isArray(e) ? (
@@ -506,7 +519,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
               </select>
               {teamErr && <p class="error">{teamErr}</p>}
               {team && !teamData && !teamErr && <p class="note">Loading…</p>}
-              {teamData?.team === team && section(teamKind(teamData.members), teamData.items)}
+              {teamData?.team === team && section(teamKind(teamData.members, teamData.load), teamData.items)}
             </>
           )}
         </>

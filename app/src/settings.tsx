@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { askNotifications, availableUpdate, copyDiagnostics, diagnostics, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { askNotifications, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
@@ -162,6 +162,7 @@ export function Settings() {
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
         </Flag>
         <Flag k="resumePosition" initial={true} label="Reopen a PR where you left off" />
+        <Flag k="flagUntested" initial={true} label="Point out code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)." />
       </section>
 
       {isDesktop && <LaunchAtLogin />}
@@ -201,6 +202,8 @@ export function Settings() {
       <BackupSection />
 
       <Shortcuts />
+
+      <SavedReplies />
       <About />
     </div>
   );
@@ -209,6 +212,7 @@ export function Settings() {
 // The version, a newer one if there is, and diagnostics for bug reports.
 function About() {
   const [update, setUpdate] = useState<string | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
   const [copied, setCopied] = useState('');
   const [text, setText] = useState('');
   useEffect(() => void availableUpdate().then(setUpdate), []);
@@ -218,7 +222,18 @@ function About() {
       {update && (
         <p class="notice">
           lgtm {update} is out. Update with <code>{UPGRADE}</code>{!isDesktop && <> (or <code>git pull</code> and <code>npm run build</code> from source)</>}.
+          {isDesktop && (
+            <>
+              {' '}
+              <button class="primary" disabled={updating === ''} onClick={() => (setUpdating(''), selfUpdate().catch((e) => setUpdating(e.message)))}>
+                {updating === '' ? 'Updating… lgtm restarts when it’s done' : 'Update now'}
+              </button>
+            </>
+          )}
         </p>
+      )}
+      {updating && (
+        <p class="error">{updating}</p>
       )}
       <p>
         <button
@@ -235,6 +250,36 @@ function About() {
       </p>
       {text && <textarea class="diag" readOnly rows={8} value={text} onFocus={(e) => e.currentTarget.select()} />}
     </div>
+  );
+}
+
+// Saved replies: a short name (typed after "/" in a comment box) and the text it puts in.
+function SavedReplies() {
+  const [list, save] = useSavedReplies();
+  const change = (i: number, r: Partial<SavedReply>) => save(list.map((x, k) => (k === i ? { ...x, ...r } : x)));
+  return (
+    <section>
+      <h3>Saved replies</h3>
+      <p class="note">In a comment box, type / and the name at the start of a line (or use ↩︎ Replies), then Enter.</p>
+      <table class="set-replies">
+        <tbody>
+          {list.map((r, i) => (
+            <tr key={i}>
+              <td>
+                <input value={r.title} aria-label="Name" placeholder="name" onChange={(e) => change(i, { title: e.currentTarget.value.replace(/\s+/g, '-') })} />
+              </td>
+              <td>
+                <textarea rows={2} value={r.body} aria-label="Reply" onChange={(e) => change(i, { body: e.currentTarget.value })} />
+              </td>
+              <td>
+                <button title="Remove" onClick={() => save(list.filter((_, k) => k !== i))}>✕</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button onClick={() => save([...list, { title: 'new', body: '' }])}>Add a reply</button>
+    </section>
   );
 }
 

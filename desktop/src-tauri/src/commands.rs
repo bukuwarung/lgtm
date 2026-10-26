@@ -431,6 +431,46 @@ pub async fn clipboard_pr() -> Option<String> {
     pr_link(&String::from_utf8_lossy(&out.stdout[..out.stdout.len().min(1 << 16)]))
 }
 
+/// The PR walkthrough: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
+/// claudeText()).
+#[tauri::command]
+pub async fn walkthrough(input: String) -> Result<String, String> {
+    if input.is_empty() || input.len() > 800_000 {
+        return Err("Bad walkthrough request".into());
+    }
+    let args = ["-p", "--tools", "", "--no-session-persistence", "--output-format", "text"];
+    let out = run("claude", &args, Some(&input), std::time::Duration::from_secs(300));
+    if out.missing {
+        return Err("Claude Code isn't installed (see claude.com/code), or not on the PATH".into());
+    }
+    if !out.ok {
+        return Err(last_line(&plain(if out.stderr.trim().is_empty() { &out.stdout } else { &out.stderr })));
+    }
+    Ok(out.stdout.trim().to_string())
+}
+
+/// Settings → "Update now": Homebrew refreshes its taps and upgrades the cask, then lgtm restarts as the new version.
+#[tauri::command]
+pub async fn self_update(app: tauri::AppHandle) -> Result<(), String> {
+    let installed = run("brew", &["list", "--cask", "lgtm"], None, SECONDS_30);
+    if installed.missing {
+        return Err("Homebrew isn't installed.".into());
+    }
+    if !installed.ok {
+        return Err("This copy of lgtm wasn't installed with Homebrew: update it the way you installed it.".into());
+    }
+    let minutes = |m: u64| std::time::Duration::from_secs(60 * m);
+    let update = run("brew", &["update", "--quiet"], None, minutes(5));
+    if !update.ok {
+        return Err(format!("brew update failed: {}", last_line(&plain(&update.stderr))));
+    }
+    let upgrade = run("brew", &["upgrade", "--cask", "lgtm"], None, minutes(10));
+    if !upgrade.ok {
+        return Err(format!("brew upgrade failed: {}", last_line(&plain(&upgrade.stderr))));
+    }
+    app.restart()
+}
+
 /// Text onto the clipboard (Help → Copy Diagnostics comes from the menu, without the click a web page needs).
 #[tauri::command]
 pub async fn copy_text(text: String) -> Result<(), String> {

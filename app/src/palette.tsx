@@ -42,7 +42,7 @@ export function Palette({ queue }: { queue: () => QueueItem[] }) {
       requestAnimationFrame(() => input.current?.focus());
     };
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !e.defaultPrevented) { // a comment box's ⌘K is "link"
         e.preventDefault();
         open();
       }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { reviewOrder } from '../src/files.ts';
+import { reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -322,4 +322,18 @@ test('rebinding a key moves it off the action that had it', async () => {
   assert.deepEqual(bind(b, 'nextFile', 'n'), { nextFile: 'n', nextThread: '' });
   assert.deepEqual(bind(b, 'nextFile', 'j'), {});
   assert.equal(readBindings('{"help":"h"}').help, 'h');
+});
+
+test('untested: code changed without a matching test change', () => {
+  const f = (filename: string, status = 'modified', additions = 3) => ({ filename, status, additions });
+  assert.deepEqual(
+    untested([
+      f('app/src/main/java/a/Foo.kt'), f('app/src/test/java/a/FooTest.kt'), // tested
+      f('app/src/main/java/a/Bar.kt'), // not
+      f('src/cart.ts'), f('src/__tests__/cart.test.ts'), // tested
+      f('lib/pay.py'), f('tests/test_pay.py'), // tested
+      f('src/gone.ts', 'removed', 0), f('app/src/debug/java/a/DevTool.kt'), f('README.md'), f('build.gradle.kts'), f('src/only-deletions.ts', 'modified', 0),
+    ]),
+    ['app/src/main/java/a/Bar.kt'],
+  );
 });

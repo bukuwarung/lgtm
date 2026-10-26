@@ -30,28 +30,28 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Set
 
 ## What it does
 
-**Your queue.** Tabs for PRs to review, your own PRs, and a GitHub team you watch, grouped by where they stand. Each PR shows its size and what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, and `↻ re-review` when it's back on your plate. Refreshes every 3 minutes, with optional desktop notifications.
+**Your queue.** Tabs for PRs to review, your own PRs, and a GitHub team you watch, grouped by where they stand. Each PR shows its size and what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, and `↻ re-review` when it's back on your plate. Refreshes every 3 minutes, with optional desktop notifications. On the Team tab, each member shows how many reviews they're asked for, to help pick a reviewer who isn't swamped.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-queue-dark.png">
   <img alt="The PR list: Reviewing, Your PRs and Team tabs, PRs grouped by where they stand, with pills for what needs you" src="docs/features/scene-queue-light.png" width="380">
 </picture>
 
-**Reading.** Every changed file on one page, markdown first and tests right after their source. The Jira ticket and PR status on top, a jump index of comments, checks (with failed-job logs), threads and files, and navigation for stacked PRs. It reopens where you left off and marks files changed since your last visit. Syntax highlighting in your pick of code themes (IntelliJ, GitHub, VS Code, One, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night, Nord) and free fonts (JetBrains Mono, Fira Code, Cascadia Code, Geist Mono, Iosevka and more), with code ligatures (`->` as →, `>=` as ≥) in the fonts that have them.
+**Reading.** Every changed file on one page, markdown first and tests right after their source. The Jira ticket and PR status on top, a jump index of comments, checks (with failed-job logs), threads and files, and navigation for stacked PRs. A PR you've opened before shows at once from its last copy while it refreshes. It reopens where you left off, marks files changed since your last visit, and points out code changed without a matching test change. Syntax highlighting in your pick of code themes (IntelliJ, GitHub, VS Code, One, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night, Nord) and free fonts (JetBrains Mono, Fira Code, Cascadia Code, Geist Mono, Iosevka and more), with code ligatures (`->` as →, `>=` as ≥) in the fonts that have them.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-review-dark.png">
   <img alt="A PR: the bar with ✳ Claude and Finish review, the Jira ticket, status pills, changes since your last review, and a diff" src="docs/features/scene-review-light.png" width="760">
 </picture>
 
-**Commenting.** Line, range and file comments everywhere, rendered markdown included. An editor with preview, `:emoji:` and `@mention` completion, and suggested changes. Drafts survive reloads and go out as one review, with the verdict pre-picked from your comments; then lgtm opens the next PR that needs you. Optional Slack DM to the author, one thread per PR.
+**Commenting.** Line, range and file comments everywhere, rendered markdown included. An editor with preview, `:emoji:` and `@mention` completion, saved replies (`/` at the start of a line), and suggested changes. Drafts survive reloads and go out as one review, with the verdict pre-picked from your comments; then lgtm opens the next PR that needs you. Optional Slack DM to the author, one thread per PR.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-comment-dark.png">
   <img alt="A review thread under a diff line, with a suggested change and a reply being written" src="docs/features/scene-comment-light.png" width="760">
 </picture>
 
-**Claude Code.** ✳ Claude on the PR bar or on any comment opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt (in the repo's local folder, set in Settings). Or it copies the prompt and reopens a session you already have: your last one, or one started on that PR (lgtm finds those in the Claude app's local session records; switch it off in Settings).
+**Claude Code.** ✳ Claude on the PR bar or on any comment opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt (in the repo's local folder, set in Settings), or writes a walkthrough of the PR right above its files: what it does, the changes grouped by intent, and where to look closely. That one runs the `claude` CLI on the diff, with your Claude login. Or it copies the prompt and reopens a session you already have: your last one, or one started on that PR (lgtm finds those in the Claude app's local session records; switch it off in Settings).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-claude-dark.png">
@@ -65,7 +65,7 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Set
   <img alt="The merge box: what is blocking, update branch, merge method, merge and auto-merge" src="docs/features/scene-merge-light.png" width="760">
 </picture>
 
-**On your Mac.** A Dock badge with the "needs your review" count, notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, ⌘F across every file, Back and Forward (⌘[ ⌘]), a remembered window, and "Launch at login" in Settings. Copy a PR link anywhere (Slack, say) and switch to lgtm: it offers to open it. When a new version is out, the top bar says so. Help → Copy Diagnostics puts what a bug report needs on the clipboard (no tokens or PR text).
+**On your Mac.** A Dock badge with the "needs your review" count, notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, ⌘F across every file, Back and Forward (⌘[ ⌘]), a remembered window, and "Launch at login" in Settings. Copy a PR link anywhere (Slack, say) and switch to lgtm: it offers to open it. When a new version is out, the top bar says so, and Settings → Update now upgrades through Homebrew and restarts. Help → Copy Diagnostics puts what a bug report needs on the clipboard (no tokens or PR text).
 
 ## Less to read
 

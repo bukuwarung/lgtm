@@ -219,6 +219,25 @@ function jobLog(repo, job) {
     });
 }
 
+// The PR walkthrough: the page's prompt (instructions and the diff) through Claude Code's CLI, signed in like the
+// others. No tools and no saved session: Claude only reads what it's given and writes text back.
+function claudeText(input) {
+  if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad walkthrough request'));
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      'claude',
+      ['-p', '--tools', '', '--no-session-persistence', '--output-format', 'text'],
+      { cwd: homedir(), maxBuffer: 1 << 24, timeout: 300000 },
+      (err, stdout, stderr) => {
+        if (err?.code === 'ENOENT') return reject(new Error('Claude Code isn\'t installed (see claude.com/code), or not on the PATH'));
+        if (err) return reject(new Error((stderr || stdout).trim().split('\n').pop() || err.message));
+        resolve(stdout.trim());
+      },
+    );
+    child.stdin.end(input);
+  });
+}
+
 // A Jira ticket, via the Atlassian CLI (`acli jira auth login`), which owns the sign-in like gh and slackcli do.
 const acli = (args) =>
   new Promise((resolve, reject) =>
@@ -330,7 +349,12 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/walkthrough'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (path === '/walkthrough' && req.method === 'POST') {
+    return readJson(req)
+      .then((b) => claudeText(b?.input))
+      .then((text) => json(res, 200, { text }), (e) => json(res, 500, { error: e.message }));
+  }
   if (path === '/job-log') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams;
     return jobLog(q.get('repo') ?? '', q.get('job') ?? '').then(

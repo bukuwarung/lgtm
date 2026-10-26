@@ -215,19 +215,25 @@ export async function getTeamMembers(team: string): Promise<string[]> {
   return t.members.nodes.map((m: any) => m.login).sort((a: string, b: string) => a.localeCompare(b));
 }
 
-export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[] }> {
+// Plus each member's review load: open PRs that ask them, by name, for a review.
+export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
   const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
-  if (!chunks.length) return { members, items: [] };
-  const vars = Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`]));
+  if (!chunks.length) return { members, items: [], load: {} };
+  const vars = {
+    ...Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`])),
+    ...Object.fromEntries(members.map((m, k) => [`r${k}`, `is:open is:pr archived:false org:${org} user-review-requested:${m}`])),
+  };
   const d = await graphql(
-    `query(${chunks.map((_, k) => `$q${k}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){nodes{...F}}`).join(' ')}}
+    `query(${Object.keys(vars).map((v) => `$${v}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){nodes{...F}}`).join(' ')}
+    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}
     ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
     vars,
   );
   const items = chunks.flatMap((_, k) => d[`s${k}`].nodes.map(toItem)) as QueueItem[];
-  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
+  const load = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].issueCount as number]));
+  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load };
 }
 
 // Top-level PR comments plus submitted reviews that carry a verdict or a summary.
