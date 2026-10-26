@@ -26,8 +26,9 @@ export function useTheme() {
   return [theme, setTheme] as const;
 }
 
-// A switch; with an example (demos.tsx) it also shows what it does, the side you have now outlined.
-function Flag({ k, initial, label, hint, demo }: { k: string; initial: boolean; label: string; hint?: string; demo?: boolean }) {
+// A switch; with an example (demos.tsx) it also shows what it does, the side you have now outlined. Children are
+// sub-switches: indented under it, and greyed out while it's off.
+function Flag({ k, initial, label, hint, demo, children }: { k: string; initial: boolean; label: string; hint?: string; demo?: boolean; children?: preact.ComponentChildren }) {
   const [on, toggle] = useStoredFlag(k, initial);
   return (
     <div class={demo ? 'set-flag with-demo' : 'set-flag'}>
@@ -38,6 +39,11 @@ function Flag({ k, initial, label, hint, demo }: { k: string; initial: boolean; 
           {hint && <small>{hint}</small>}
         </span>
       </label>
+      {children && (
+        <fieldset class="set-sub" disabled={!on}>
+          {children}
+        </fieldset>
+      )}
       {demo && <DemoPair k={k} active={on} />}
     </div>
   );
@@ -57,6 +63,8 @@ function Status({ ok, children }: { ok: boolean | null; children: preact.Compone
 export function Settings() {
   const [theme, setTheme] = useTheme();
   const look = useCodeLook();
+  const [keys] = useBindings();
+  const also = (k: string) => (k ? `Also ${keyLabel(k)} on a PR.` : undefined);
   const [team, setTeam] = useStoredValue('team', '');
   const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
   const [teams, setTeams] = useState<string[] | null>(null);
@@ -129,8 +137,8 @@ export function Settings() {
 
       <section>
         <h3>Reviewing</h3>
-        <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint="Also i." />
-        <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint="Also w." demo />
+        <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)} />
+        <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation" />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review." />
         <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
@@ -138,8 +146,9 @@ export function Settings() {
 
       <section>
         <h3>Diff</h3>
-        <Flag k="sinceFirst" initial={true} label="On a re-review, show only what changed since your last review" demo />
-        <Flag k="sinceNotOnMine" initial={true} label="…but not on your own PRs" hint="They open with every change; the bar above the files still switches to just the new commits." />
+        <Flag k="sinceFirst" initial={true} label="On a re-review, show only what changed since your last review" demo>
+          <Flag k="sinceNotOnMine" initial={true} label="Except on your own PRs" hint="They open with every change; the bar above the files still switches to just the new commits." />
+        </Flag>
         <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New outside packages are still named." demo />
         <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated in .gitattributes." demo />
         <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
@@ -149,8 +158,9 @@ export function Settings() {
         <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode; edited ones stay source." demo />
         <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Source is a click away per file." demo />
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
-        <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo />
-        <Flag k="unfoldBotsOnMine" initial={true} label="…but not on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
+        <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo>
+          <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
+        </Flag>
         <Flag k="resumePosition" initial={true} label="Reopen a PR where you left off" />
       </section>
 

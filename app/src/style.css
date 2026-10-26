@@ -467,3 +467,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .signin pre { padding: 8px 12px; background: var(--soft); border-radius: 6px; }
 .diag { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; font: 12px/1.4 var(--mono); }
 .key-btn { min-width: 64px; padding: 2px 6px; background: none; } .key-btn.on { border-color: var(--accent); color: var(--accent); }
+.set-sub { margin: 2px 0 4px 26px; padding: 0 0 0 10px; border: 0; border-left: 2px solid var(--border); min-width: 0; }
+.set-sub:disabled { opacity: .5; }
+.set-sub .set-flag { margin: 0; }
