@@ -514,3 +514,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .set-sources { margin: 0 0 8px; padding-left: 18px; max-width: 720px; }
 .set-sources li { margin: 2px 0; }
 .set-pace input[type=range] { width: 220px; }
+.idle.old { color: light-dark(#9a6700, #cc7832); }
+.idle-pick { width: 100%; margin-bottom: 8px; font-size: 12px; }
+.idle-pick.on { border-color: var(--accent); color: var(--accent); }
