@@ -410,10 +410,6 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
   const shown = items?.filter((i) => i.mine || showDrafts || !i.isDraft || isCurrent(i));
-  // The aging filter: only PRs without activity for at least that many days (0 = all), on every tab.
-  const [idleRaw, setIdle] = useStoredValue('idleFilter', '0');
-  const idleMin = Number(idleRaw) || 0;
-  const aged = (list: QueueItem[]) => (idleMin ? list.filter((i) => idleDays(i) >= idleMin) : list);
 
   const item = (kind: Kind, i: QueueItem, layer?: string) => (
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
@@ -497,20 +493,12 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
       {err && <p class="error">{err}</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', aged(shown.filter((i) => i.reviewing)).length], ['mine', 'Your PRs', aged(shown.filter((i) => i.mine)).length], ['team', 'Team', teamData && aged(teamData.items).length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', shown.filter((i) => i.reviewing).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData?.items.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
               {name} {n != null && <span class="count">{n}</span>}
             </button>
           ))}
         </div>
-      )}
-      {shown && (
-        <select class={idleMin ? 'idle-pick on' : 'idle-pick'} value={String(idleMin)} onChange={(e) => setIdle(e.currentTarget.value)} aria-label="Filter by last activity">
-          <option value="0">All PRs</option>
-          {[3, 7, 14, 30].map((d) => (
-            <option value={String(d)}>No activity for {d}+ days</option>
-          ))}
-        </select>
       )}
       {tab === 'reviewing' && draftCount > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
@@ -521,8 +509,8 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
         !err && <p class="note">Loading…</p>
       ) : (
         <>
-          {tab === 'mine' && section(MINE, aged(shown.filter((i) => i.mine)))}
-          {tab === 'reviewing' && section(REVIEWING, aged(shown.filter((i) => i.reviewing)))}
+          {tab === 'mine' && section(MINE, shown.filter((i) => i.mine))}
+          {tab === 'reviewing' && section(REVIEWING, shown.filter((i) => i.reviewing))}
           {tab === 'team' && (
             <>
               <select class="team-pick" value={team} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="GitHub team">
@@ -531,7 +519,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
               </select>
               {teamErr && <p class="error">{teamErr}</p>}
               {team && !teamData && !teamErr && <p class="note">Loading…</p>}
-              {teamData?.team === team && section(teamKind(teamData.members, teamData.load), aged(teamData.items))}
+              {teamData?.team === team && section(teamKind(teamData.members, teamData.load), teamData.items)}
             </>
           )}
         </>
