@@ -35,5 +35,5 @@
 - [x] 5.2 `scripts/release.sh X.Y.Z` (version, tests, universal ad-hoc-signed build, zip, `lgtm-cli` tarball, cask + formula version and SHA-256) and the README's Releasing section
 - [x] 5.3 `Casks/lgtm.rb`: depends on `gh`, macOS ≥ Ventura, quarantine step, zap, caveats for slackcli/acli (passes `brew style` and `brew audit --strict`; installed and launched from a local tap)
 - [x] 5.4 `Formula/lgtm-cli.rb`: terminal version, depends on `node` and `gh` (installed and served from a local tap)
-- [ ] 5.5 First release; install on a clean account with `brew install --cask bukuwarung/lgtm/lgtm` and with `lgtm-cli`; `brew upgrade` to a second release
+- [x] 5.5 First release (v0.1.0, then v0.2.0 through `brew upgrade`); install on a clean account with `brew install --cask bukuwarung/lgtm/lgtm` and with `lgtm-cli`; `brew upgrade` to a second release
 - [x] 5.6 README: install via Homebrew first, building from source second
