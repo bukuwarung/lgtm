@@ -236,7 +236,8 @@ export const DEMOS: Record<string, Demo> = {
         <Rows rows={MD_SRC.split('\n').map((l, i) => ['+', '', i + 1, md.utils.escapeHtml(l) || ' '] as Row).map((r) => [r[0], r[1], r[2], `<span>${r[3]}</span>`] as Row)} />
       </File>
     ),
-    // Rendered, and still commented line by line: a block's "+" (shown on hover) and a thread under its line.
+    // Rendered, and still commented line by line: a thread under its line, and a block's "+" (shown on hover)
+    // opening the comment box.
     on: (
       <File path="docs/rollout.md" add={4} del={0}>
         <div class="md demo-md chunk demo-chunk">
@@ -259,6 +260,24 @@ export const DEMOS: Record<string, Demo> = {
             </li>
             <li data-src="4-4" data-chg="" class="demo-plus">
               <strong>Remove</strong> the old screen next sprint
+              <div class="note-host">
+                <div class="draft-form">
+                  <div class="badge">Line 4</div>
+                  <div class="editor">
+                    <div class="ed-bar">
+                      <button type="button" class="ed-tab on">Write</button>
+                      <button type="button" class="ed-tab">Preview</button>
+                    </div>
+                    <div class="ed-write">
+                      <textarea rows={2} value="Can we link the ticket for the removal?" />
+                    </div>
+                  </div>
+                  <div class="row">
+                    <button class="primary">Add to review</button>
+                    <button>Cancel</button>
+                  </div>
+                </div>
+              </div>
             </li>
           </ul>
         </div>
