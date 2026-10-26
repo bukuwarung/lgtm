@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
 import { fetchIntegrations, findSlackPeople, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { SHORTCUTS } from './review.tsx';
+import { DemoPair } from './demos.tsx';
 
 export const THEMES = [['', 'Auto', '◐'], ['light', 'Light', '☀'], ['dark', 'Dark', '☾']] as const;
 
@@ -15,16 +16,20 @@ export function useTheme() {
   return [theme, setTheme] as const;
 }
 
-function Flag({ k, initial, label, hint }: { k: string; initial: boolean; label: string; hint?: string }) {
+// A switch; with an example (demos.tsx) it also shows what it does, the side you have now outlined.
+function Flag({ k, initial, label, hint, demo }: { k: string; initial: boolean; label: string; hint?: string; demo?: boolean }) {
   const [on, toggle] = useStoredFlag(k, initial);
   return (
-    <label class="set-row">
-      <input type="checkbox" checked={on} onChange={toggle} />
-      <span>
-        {label}
-        {hint && <small>{hint}</small>}
-      </span>
-    </label>
+    <div class={demo ? 'set-flag with-demo' : 'set-flag'}>
+      <label class="set-row">
+        <input type="checkbox" checked={on} onChange={toggle} />
+        <span>
+          {label}
+          {hint && <small>{hint}</small>}
+        </span>
+      </label>
+      {demo && <DemoPair k={k} active={on} />}
+    </div>
   );
 }
 
@@ -114,7 +119,7 @@ export function Settings() {
       <section>
         <h3>Reviewing</h3>
         <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint="Also i." />
-        <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint="Also w." />
+        <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint="Also w." demo />
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation" />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review." />
         <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
@@ -122,16 +127,16 @@ export function Settings() {
 
       <section>
         <h3>Diff</h3>
-        <Flag k="sinceFirst" initial={true} label="On a re-review, show only what changed since your last review" />
-        <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New outside packages are still named." />
-        <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated in .gitattributes." />
-        <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" />
-        <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" />
-        <Flag k="dimMoved" initial={true} label="Dim code moved without changes" />
-        <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" />
-        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Source is a click away per file." />
-        <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" />
-        <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" />
+        <Flag k="sinceFirst" initial={true} label="On a re-review, show only what changed since your last review" demo />
+        <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New outside packages are still named." demo />
+        <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated in .gitattributes." demo />
+        <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
+        <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
+        <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
+        <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo />
+        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Source is a click away per file." demo />
+        <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
+        <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo />
         <Flag k="resumePosition" initial={true} label="Reopen a PR where you left off" />
       </section>
 

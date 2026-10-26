@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc && vite build",
     "test": "node --test test/*.test.ts",
-    "start": "vite build && node bin/lgtm.mjs"
+    "start": "vite build && node bin/lgtm.mjs",
+    "demos": "node scripts/demos.mjs"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

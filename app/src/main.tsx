@@ -6,6 +6,7 @@ import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { readBots, useStoredFlag, useStoredValue } from './platform.ts';
 import { Settings, THEMES, useTheme } from './settings.tsx';
+import { DemoPage } from './demos.tsx';
 import { Resizer } from './resizer.tsx';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
@@ -39,6 +40,7 @@ function App() {
     return () => removeEventListener('hashchange', onHash);
   }, []);
 
+  if (route.startsWith('#/demo/')) return <DemoPage k={route.slice(7)} />; // README pictures; no sign-in needed
   if (state === 'loading') return null;
   if (typeof state === 'object')
     return (

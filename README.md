@@ -27,6 +27,87 @@ lgtm signs in through the GitHub CLI and slackcli; see [Setup](#setup).
 
 Design and specs: [`openspec/changes/add-pr-review-app`](openspec/changes/add-pr-review-app).
 
+## Less to read
+
+Each of these is on by default and has a switch in ⚙ Settings, which shows the same examples.
+
+**Changes since your last review.** Re-reviews start with only what changed since your last review.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/sinceFirst-dark.png">
+  <img alt="Changes since your last review: off and on" src="docs/features/sinceFirst-light.png" width="760">
+</picture>
+
+**Fold package and import blocks.** Package and import blocks fold to one line, naming only new outside libraries.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/foldImports-dark.png">
+  <img alt="Fold package and import blocks: off and on" src="docs/features/foldImports-light.png" width="760">
+</picture>
+
+**Hide generated files.** Files marked `linguist-generated` stay out of the way.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/hideGenerated-dark.png">
+  <img alt="Hide generated files: off and on" src="docs/features/hideGenerated-light.png" width="760">
+</picture>
+
+**Hide files moved without changes.** Files renamed or moved without changes are hidden.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/hideNoDiff-dark.png">
+  <img alt="Hide files moved without changes: off and on" src="docs/features/hideNoDiff-light.png" width="760">
+</picture>
+
+**Collapse deleted files.** Deleted files collapse to one row.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/collapseDeleted-dark.png">
+  <img alt="Collapse deleted files: off and on" src="docs/features/collapseDeleted-light.png" width="760">
+</picture>
+
+**Dim code moved without changes.** Code moved without changes is dimmed, with where it came from.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/dimMoved-dark.png">
+  <img alt="Dim code moved without changes: off and on" src="docs/features/dimMoved-light.png" width="760">
+</picture>
+
+**Highlight the changed words.** The changed words inside a line are highlighted.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/wordDiff-dark.png">
+  <img alt="Highlight the changed words: off and on" src="docs/features/wordDiff-light.png" width="760">
+</picture>
+
+**Ignore whitespace-only changes.** Whitespace-only changes can be ignored (`w`).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/ignoreWs-dark.png">
+  <img alt="Ignore whitespace-only changes: off and on" src="docs/features/ignoreWs-light.png" width="760">
+</picture>
+
+**Markdown rendered.** Markdown files show rendered, still commentable line by line.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/richMarkdown-dark.png">
+  <img alt="Markdown rendered: off and on" src="docs/features/richMarkdown-light.png" width="760">
+</picture>
+
+**Images as pictures.** Images and Android vector drawables show as pictures.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/previewImages-dark.png">
+  <img alt="Images as pictures: off and on" src="docs/features/previewImages-light.png" width="760">
+</picture>
+
+**Fold bot comments.** Bot comments fold to one line.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/foldBots-dark.png">
+  <img alt="Fold bot comments: off and on" src="docs/features/foldBots-light.png" width="760">
+</picture>
+
 ## Setup
 
 You need Node 22+, plus two CLIs that lgtm signs in through. It never asks for a password or token itself.
@@ -99,7 +180,7 @@ Automation accounts that GitHub sees as people (an AI reviewer, a release bot) c
 
 ## Develop
 
-Running `lgtm` again while one is already running reuses it when it's the same version, and replaces it when it's an older (or newer) one, so after `git pull` and a rebuild, just run `lgtm`. `LGTM_NO_OPEN=1` starts it without opening a browser tab.
+Running `lgtm` again while one is already running reuses it when it's the same version, and replaces it when it's an older (or newer) one, so after `git pull` and a rebuild, just run `lgtm`. `LGTM_NO_OPEN=1` starts it without opening a browser tab. The feature pictures come from `src/demos.tsx`: with lgtm running, `npm run demos` (in `app/`) recaptures them into `docs/features/` with headless Chrome.
 
 ```bash
 cd app
