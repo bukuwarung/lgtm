@@ -2,12 +2,16 @@
 // lgtm: serve the review UI on 127.0.0.1 and hand it the GitHub CLI's token.
 // Usage: lgtm [https://github.com/owner/repo/pull/123]
 import { execFile, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// This server's version (a hash of its own code): a newer `lgtm` replaces an older one still running.
+const VERSION = createHash('sha1').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex').slice(0, 12);
 // Fixed port: drafts live in localStorage, which is per origin.
 const PORT = Number(process.env.LGTM_PORT ?? 4517);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -236,7 +240,9 @@ async function jiraIssue(key) {
 
 const json = (res, status, value) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(value));
 
+// LGTM_NO_OPEN=1: don't open a browser tab (tests, or running lgtm as a background service).
 function open(url) {
+  if (process.env.LGTM_NO_OPEN === '1') return;
   const [cmd, args] = process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
   execFile(cmd, args, () => {});
 }
@@ -256,7 +262,7 @@ const server = createServer(async (req, res) => {
   if (!HOSTS.has(req.headers.host ?? '')) return res.writeHead(403).end();
   const path = new URL(req.url ?? '/', ORIGIN).pathname;
 
-  if (path === '/lgtm') return res.end('lgtm');
+  if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
   if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
@@ -325,13 +331,39 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// The lgtm process listening on our port, if it is one (macOS/Linux: lsof).
+function runningLgtm() {
+  try {
+    const pid = Number(execFileSync('lsof', ['-ti', `tcp:${PORT}`, '-sTCP:LISTEN'], { encoding: 'utf8' }).trim().split('\n')[0]);
+    const cmd = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
+    return /lgtm/.test(cmd) ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+let replacing = false;
 server.on('error', async (e) => {
-  // Already running? Reuse it.
-  if (e.code === 'EADDRINUSE' && (await fetch(ORIGIN + '/lgtm').then((r) => r.text()).catch(() => '')) === 'lgtm') {
+  const running = e.code === 'EADDRINUSE' ? await fetch(ORIGIN + '/lgtm').then((r) => r.text()).catch(() => '') : '';
+  // The same version already running: use it.
+  if (running === `lgtm ${VERSION}`) {
     open(url);
     process.exit(0);
   }
-  console.error(e.code === 'EADDRINUSE' ? `Port ${PORT} is taken by another program. Set LGTM_PORT to use a different one.` : e);
+  // An older (or newer) lgtm: stop it and take over, so the page always talks to the code it was built with.
+  const pid = running.startsWith('lgtm') && !replacing && runningLgtm();
+  if (pid) {
+    replacing = true;
+    console.log(`Replacing the lgtm already running (pid ${pid}) with this version.`);
+    process.kill(pid);
+    for (let i = 0; i < 20 && runningLgtm(); i++) await new Promise((r) => setTimeout(r, 150));
+    return server.listen(PORT, '127.0.0.1');
+  }
+  console.error(
+    running.startsWith('lgtm') ? `Another lgtm is running on port ${PORT}. Stop it (Ctrl-C in its terminal) and run lgtm again.`
+    : e.code === 'EADDRINUSE' ? `Port ${PORT} is taken by another program. Set LGTM_PORT to use a different one.`
+    : e,
+  );
   process.exit(1);
 });
 

@@ -107,6 +107,8 @@ Both are read on every send, so no restart is needed. Each PR gets one Slack thr
 
 ## Develop
 
+Running `lgtm` again while one is already running reuses it when it's the same version, and replaces it when it's an older (or newer) one, so after `git pull` and a rebuild, just run `lgtm`. `LGTM_NO_OPEN=1` starts it without opening a browser tab.
+
 ```bash
 cd app
 npm test       # logic checks (patch parsing, anchors, .gitattributes, markdown mapping, highlighting)

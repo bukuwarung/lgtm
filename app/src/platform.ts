@@ -72,7 +72,9 @@ export const saveSlackPeople = (map: Record<string, string>) => call<SlackPeople
 // GitHub is the gh login (in the page); this asks the server about the CLIs it drives: slackcli and acli.
 export type Integrations = { slack: { ok: boolean; error?: string; who?: string }; jira: { ok: boolean; error?: string; site?: string } };
 export async function fetchIntegrations(): Promise<Integrations> {
-  const res = await fetch('/integrations');
+  const res = await fetch('/integrations').catch(() => {
+    throw new Error("lgtm isn't running. Start it with the lgtm command, then reload.");
+  });
   // An lgtm started before this page existed doesn't know the route: the page is newer than the running server.
   if (!res.ok) throw new Error('the running lgtm is older than this page. Restart it (Ctrl-C, then lgtm) and reload.');
   return res.json();
