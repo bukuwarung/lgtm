@@ -428,3 +428,4 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .find-count { min-width: 64px; font-size: 12px; color: var(--muted); text-align: center; }
 ::highlight(lgtm-find) { background-color: light-dark(#fff3a3, #6b5f1f); }
 ::highlight(lgtm-find-current) { background-color: light-dark(#ffb84d, #b3741f); }
+.side[hidden] { display: none; }

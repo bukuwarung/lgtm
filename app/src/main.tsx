@@ -72,7 +72,8 @@ function App() {
       </nav>
       {isDesktop && <FindBar />}
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
-        {showPRs && <PRList current={r} version={queueVersion} onItems={(items) => (queue.current = items)} />}
+        {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
+        <PRList hidden={!showPRs} current={r} version={queueVersion} onItems={(items) => (queue.current = items)} />
         {r ? (
           <Review
             key={route}
@@ -208,7 +209,7 @@ function ago(iso: string) {
   return u ? rtf.format(Math.round(s / u[1]), u[0]) : 'just now';
 }
 
-function PRList({ current, version, onItems }: { current: { repo: string; n: number } | null; version: number; onItems: (items: QueueItem[]) => void }) {
+function PRList({ hidden, current, version, onItems }: { hidden: boolean; current: { repo: string; n: number } | null; version: number; onItems: (items: QueueItem[]) => void }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [err, setErr] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
@@ -354,7 +355,7 @@ function PRList({ current, version, onItems }: { current: { repo: string; n: num
   };
 
   return (
-    <aside class="side prs">
+    <aside class="side prs" hidden={hidden}>
       <div class="side-scroll">
       {err && <p class="error">{err}</p>}
       {shown && (
