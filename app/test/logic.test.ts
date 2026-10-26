@@ -378,3 +378,9 @@ test('editedDocBlocks: an edited doc comment, from its new version, with the cha
   assert.deepEqual(d.paras, [{ md: 'Sums the prices, in cents.', changed: true }]);
   assert.deepEqual(d.tags, [['Params', [['items', 'the cart', false]]], ['Returns', [['', 'the total', true]]]]);
 });
+
+test('docParts: paragraphs at blank lines and at sentence ends', async () => {
+  const { docParts } = await import('../src/docs.ts');
+  const lines = ['/**', ' * Transparent host for the gate.', ' * Launched over the homepage. Reuses the', ' * login gate, e.g. the', ' * prompt.', ' *', ' * The window is translucent.', ' */'].map((text) => ({ text, changed: false }));
+  assert.deepEqual(docParts(lines, 'kdoc').paras.map((p) => p.md), ['Transparent host for the gate.', 'Launched over the homepage. Reuses the\nlogin gate, e.g. the\nprompt.', 'The window is translucent.']);
+});

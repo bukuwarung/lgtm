@@ -94,17 +94,24 @@ export function docParts(lines: DocLine[], syntax: 'kdoc' | 'java' | 'jsdoc'): D
     return s.replace(/\{@link\s+([^}\s|]+)[^}]*\}/g, '`$1`').replace(/(?<![\]`])\[([\w.#]+)\](?![(\[:])/g, '`$1`');
   };
   const text = lines.map((l, i) => ({ text: stripLine(l.text, i, lines.length), changed: l.changed }));
-  // Segments: body paragraphs (split at blank lines), then one per @tag (running to the next).
+  // Segments: body paragraphs, then one per @tag (running to the next). A paragraph ends at a blank line, or at a line
+  // ending a sentence when the next starts one (not lowercase: "e.g." doesn't split); lists and code blocks stay whole.
   const segs: { tag: boolean; lines: DocLine[] }[] = [];
-  for (const l of text) {
-    const isTag = /^@\w+/.test(l.text.trim());
+  let fence = false;
+  text.forEach((l, i) => {
+    const t = l.text.trim();
+    if (t.startsWith('```')) fence = !fence;
+    const isTag = !fence && /^@\w+/.test(t);
     const cur = segs.at(-1);
     if (isTag) segs.push({ tag: true, lines: [l] });
     else if (cur?.tag) cur.lines.push(l);
-    else if (!l.text.trim()) (cur?.lines.length ? segs.push({ tag: false, lines: [] }) : null);
+    else if (!t && !fence) (cur?.lines.length ? segs.push({ tag: false, lines: [] }) : null);
     else if (cur) cur.lines.push(l);
     else segs.push({ tag: false, lines: [l] });
-  }
+    const next = text[i + 1]?.text.trim() ?? '';
+    const sentenceEnd = /[.!?]$/.test(t) && !/^[-*+]\s|^\d+\.\s/.test(t) && next && !/^[a-z(]/.test(next) && !/^([-*+]|\d+\.)\s|^@|^```/.test(next);
+    if (!fence && sentenceEnd && segs.at(-1)?.tag === false && segs.at(-1)!.lines.length) segs.push({ tag: false, lines: [] });
+  });
   const paras: DocParts['paras'] = [];
   const tags = new Map<string, [string, string, boolean][]>();
   for (const seg of segs.filter((g) => g.lines.length)) {
