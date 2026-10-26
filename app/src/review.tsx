@@ -931,6 +931,8 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const docs = useMemo(() => (renderDocs && docSyntax(path) ? docBlocks(hunks) : []), [hunks, renderDocs]);
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
+  // A doc comment switched to its source: a header row above its first line switches it back.
+  const docOpenedAt = (hi: number, li: number) => docs.find((d) => d.hunk === hi && d.start === li && openDocs.has(`${hi}-${li}`));
 
   return (
     <table class="diff" ref={table}>
@@ -983,8 +985,22 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
               const side: Side = l.kind === '-' ? 'LEFT' : 'RIGHT';
               const num = side === 'LEFT' ? l.old! : l.new!;
               const move = l.kind === '-' ? mv?.old.get(l.old!) : l.kind === '+' ? mv?.new.get(l.new!) : undefined;
+              const opened = docOpenedAt(hi, li);
               return (
                 <>
+                  {opened && (
+                    <tr class="doc-h">
+                      <td colSpan={3}>
+                        <button
+                          class="link"
+                          title="Show this doc comment rendered"
+                          onClick={() => setOpenDocs((s) => { const x = new Set(s); x.delete(`${hi}-${li}`); return x; })}
+                        >
+                          ⤒ Render doc comment
+                        </button>
+                      </td>
+                    </tr>
+                  )}
                   {move && (
                     <tr class="moved-h">
                       <td colSpan={3}>
@@ -1063,7 +1079,7 @@ function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'j
   const { body, tags } = useMemo(() => parseDoc(doc.text, syntax), [doc.text]);
   return (
     <div class="doc-render" style={{ marginLeft: `${doc.indent}ch`, width: `calc(100% - ${doc.indent + 3}ch)` }}>
-      <button class="link doc-source" title="Show the comment's source lines" onClick={onSource}>source</button>
+      <button class="link doc-source" title="Show the comment's source lines" onClick={onSource}>&lt;/&gt; source</button>
       {body && <div class="md" dangerouslySetInnerHTML={{ __html: md.render(body) }} />}
       {tags.length > 0 && (
         <dl class="doc-tags">
