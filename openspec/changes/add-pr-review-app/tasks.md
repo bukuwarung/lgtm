@@ -118,6 +118,7 @@
 - [x] 12.39 Unmarked code blocks take the commented file's language, else the PR's main language; GitHub's named blocks recoloured
 - [x] 12.40 Settings → Slack people: current GitHub→Slack mapping, find matches (email, then name), save to the personal config
 - [x] 12.41 A newer lgtm replaces an outdated running one (version = hash of the server code); LGTM_NO_OPEN
+- [x] 12.42 Drop the committed team Slack mapping; the mapping lives only in each user's config, built in Settings
 
 ## 13. Verify
 

@@ -56,8 +56,8 @@ export function useStoredFlag(key: string, initial: boolean) {
   return [v === '1', () => set(v === '1' ? '0' : '1')] as const;
 }
 
-// GitHub login → Slack user ID: the shared team file and your own overrides; finding and saving go through slackcli.
-export type SlackPeople = { team: Record<string, string>; mine: Record<string, string> };
+// GitHub login → Slack user ID, kept in your lgtm config; finding goes through slackcli.
+export type SlackPeople = { mine: Record<string, string> };
 export type SlackMatch = { login: string; id?: string; label?: string; display?: string; via?: 'email' | 'name' | 'username' };
 async function call<T>(method: string, body?: unknown): Promise<T> {
   const res = await fetch('/slack-people', { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });

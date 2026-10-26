@@ -89,21 +89,13 @@ To update: `git pull && npm run build` in `app/` (restart `lgtm` only if `app/bi
 
 ## Slack: who is who
 
-GitHub doesn't expose our emails, so [`app/slack-users.json`](app/slack-users.json) maps GitHub logins to Slack user IDs for the team. New teammate? Add them there and open a PR:
-
-```bash
-slackcli search people "their name"   # shows their Slack user ID (U…)
-```
-
-Values can be a Slack user ID (preferred: survives handle renames), `@handle`, or email. For a personal addition or override without committing, use `~/.config/lgtm/config.json`:
+lgtm needs to know each GitHub account's Slack user. Open ⚙ Settings → Slack people: it lists your team and the people in your queue, and "Find Slack accounts" looks the unmapped ones up in Slack (their verified company email on GitHub first, then their GitHub name, then their login's first word, each only when Slack finds exactly one person). You confirm each match before it's saved to `~/.config/lgtm/config.json`:
 
 ```json
 { "slackUsers": { "github-login": "U012ABC" } }
 ```
 
-Or let lgtm find them: Settings → Slack people lists your team and the people in your queue with their mapping, and "Find Slack accounts" looks the unmapped ones up in Slack (their verified company email on GitHub first, then their GitHub name, each only when Slack finds exactly one person). You confirm each match before it's saved to your `config.json`.
-
-Both are read on every send, so no restart is needed. Each PR gets one Slack thread per person: your first review of a PR starts a DM, later reviews of that PR reply in the same thread (remembered in `~/.config/lgtm/slack-threads.json`). `LGTM_SLACK_DRY_RUN=1 lgtm` checks recipients without sending.
+No match? Find the ID with `slackcli search people "their name"` and add it there by hand. Values can be a Slack user ID (preferred: survives handle renames), `@handle`, or email. Both are read on every send, so no restart is needed. Each PR gets one Slack thread per person: your first review of a PR starts a DM, later reviews of that PR reply in the same thread (remembered in `~/.config/lgtm/slack-threads.json`). `LGTM_SLACK_DRY_RUN=1 lgtm` checks recipients without sending.
 
 ## Develop
 

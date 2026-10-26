@@ -69,8 +69,7 @@ export function Settings() {
           {!ints ? 'checking…' : ints.slack.ok ? <>signed in{ints.slack.who && <> as <code>{ints.slack.who}</code></>} through slackcli</> : <>not available: {ints.slack.error}</>}
           {ints && !ints.slack.ok && <pre>brew install shaharia-lab/tap/slackcli{'\n'}slackcli auth login-auto</pre>}
           <small>
-            GitHub logins map to Slack users through <code>app/slack-users.json</code> (shared) and <code>slackUsers</code> in{' '}
-            <code>~/.config/lgtm/config.json</code> (yours). People without an entry are found by their email.
+            Who's who on Slack is set under Slack people below (saved in <code>~/.config/lgtm/config.json</code>).
           </small>
         </Status>
         <Status ok={ints ? ints.jira.ok : null}>
@@ -188,7 +187,7 @@ function SlackPeopleSection({ team }: { team: string }) {
     });
   }, [team]);
 
-  const current = (l: string) => map?.mine[l] ?? map?.team[l];
+  const current = (l: string) => map?.mine[l];
   const unmapped = (logins ?? []).filter((l) => !current(l));
   const run = async (label: string, f: () => Promise<void>) => {
     setBusy(label);
@@ -213,8 +212,8 @@ function SlackPeopleSection({ team }: { team: string }) {
     <section>
       <h3>Slack people</h3>
       <p class="note">
-        Who gets the Slack message for each GitHub account. Shared entries live in <code>app/slack-users.json</code>; what you save here goes to
-        your own <code>~/.config/lgtm/config.json</code>. Unmapped people are still tried by their GitHub email when you send.
+        Who gets the Slack message for each GitHub account, saved in your <code>~/.config/lgtm/config.json</code>. Unmapped people are
+        still tried by their GitHub email when you send.
       </p>
       <div class="row">
         <button disabled={!!busy || !unmapped.length || !org} onClick={find}>
@@ -240,8 +239,8 @@ function SlackPeopleSection({ team }: { team: string }) {
                   <td>
                     {current(l) ? (
                       <>
-                        <code>{current(l)}</code> <small class="inline">{map.mine[l] ? 'yours' : 'shared'}</small>
-                        {map.mine[l] && <button class="link" disabled={!!busy} onClick={() => save({ [l]: '' })}>remove</button>}
+                        <code>{current(l)}</code>
+                        <button class="link" disabled={!!busy} onClick={() => save({ [l]: '' })}>remove</button>
                       </>
                     ) : m?.id ? (
                       <>

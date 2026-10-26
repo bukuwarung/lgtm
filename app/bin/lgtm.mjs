@@ -17,9 +17,8 @@ const PORT = Number(process.env.LGTM_PORT ?? 4517);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
-// Team GitHub login → Slack user (ID, @handle or email), committed so everyone shares it.
-const TEAM = fileURLToPath(new URL('../slack-users.json', import.meta.url));
-// Optional personal additions/overrides: { "slackUsers": { "github-login": "U…" } }
+// Your settings, including GitHub login → Slack user (ID, @handle or email): { "slackUsers": { "github-login": "U…" } }.
+// Settings → Slack people fills it in.
 const CONFIG = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'config.json');
 // Slack DM thread per PR and person, so later reviews of a PR reply in the same thread: { "o/r#12:login": { channel, ts } }
 const THREADS = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'slack-threads.json');
@@ -105,9 +104,9 @@ const parseJson = (out = '') => {
   }
 };
 
-// The current mapping: the shared team file and your own overrides.
+// The current GitHub → Slack mapping (yours, in the config).
 async function slackPeople() {
-  return { team: JSON.parse(await readFile(TEAM, 'utf8')), mine: (await readConfig()).slackUsers ?? {} };
+  return { mine: (await readConfig()).slackUsers ?? {} };
 }
 
 // Best guesses for people without a mapping: an exact email match first (their verified company email on GitHub),
@@ -139,7 +138,7 @@ async function findSlack(people) {
   return out;
 }
 
-// Saves to your own config (~/.config/lgtm/config.json), not the shared team file; an empty id removes the entry.
+// Saves to your config (~/.config/lgtm/config.json); an empty id removes the entry.
 async function saveSlackPeople(map) {
   const entries = Object.entries(map ?? {});
   if (!entries.length || entries.length > 100 || entries.some(([l, id]) => !LOGIN.test(l) || (id !== '' && !SLACK_ID.test(id)))) throw new Error('Bad request');
@@ -157,7 +156,7 @@ async function notify({ recipients, text, thread }) {
     typeof thread === 'string' && /^[\w.-]+\/[\w.-]+#\d+$/.test(thread) &&
     recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string'));
   if (!valid) throw new Error('Bad Slack request');
-  const users = { ...JSON.parse(await readFile(TEAM, 'utf8')), ...(await readConfig()).slackUsers };
+  const users = (await readConfig()).slackUsers ?? {};
   const threads = await readThreads();
   const send = (args) => slackcli(['messages', 'send', ...args, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
   const results = await Promise.all(
@@ -169,7 +168,7 @@ async function notify({ recipients, text, thread }) {
         if (r.ok) return { login, ok: true, threaded: true, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
       }
       const targets = [users[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
-      if (!targets.length) return { login, ok: false, error: `no Slack user known: add "${login}": "U…" to app/slack-users.json (or slackUsers in ${CONFIG})` };
+      if (!targets.length) return { login, ok: false, error: `no Slack user known: map @${login} in Settings → Slack people` };
       let error = '';
       for (const target of targets) {
         const r = await send([`--recipient-id=${target}`]);
