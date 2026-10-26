@@ -18,7 +18,7 @@ The window loads the bundled UI from Tauri's asset protocol; the server routes b
 *Alternatives:* **Tauri + Node sidecar** reuses `lgtm.mjs` nearly as is but ships a Node runtime and keeps the port. **Electron** reuses the most code but is the heaviest and keeps a Chromium per app.
 
 ### 2. One UI, two platforms
-`app/src/platform.ts` keeps its exports (`fetchToken`, `slackStatus`, `notifySlack`, `getSlackPeople`/`findSlackPeople`/`saveSlackPeople`, `fetchJira`, `fetchJobLog`, `fetchIntegrations`, `storage`, …). It splits into `platform.web.ts` (today's `fetch` calls) and `platform.desktop.ts` (`invoke` of the matching commands); Vite aliases one in by mode (`vite build --mode desktop`). Nothing else imports Tauri. Desktop-only features (Dock badge, notifications, launch at login) are optional exports that are no-ops on the web.
+`app/src/platform.ts` keeps its exports (`fetchToken`, `slackStatus`, `notifySlack`, `getSlackPeople`/`findSlackPeople`/`saveSlackPeople`, `fetchJira`, `fetchJobLog`, `fetchIntegrations`, `storage`, …). Each export checks `isDesktop` (Tauri's injected `__TAURI_INTERNALS__`) and either calls the local server (`fetch`) or the matching command (`invoke`, from `@tauri-apps/api`, loaded only in the app). One UI build (`app/dist`) serves both, so there's no separate build mode. Nothing else imports Tauri. Desktop-only features (Dock badge, notifications, launch at login) are optional exports that are no-ops on the web.
 
 ### 3. Commands mirror the server routes
 | Server route | Command | Notes |

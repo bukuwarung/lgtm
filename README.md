@@ -172,4 +172,14 @@ npm start       # build, then run the server
 npm run demos   # recapture docs/features/*.png from src/demos.tsx (lgtm must be running)
 ```
 
+**Desktop app (in progress).** `desktop/` wraps the same UI in a macOS app with [Tauri](https://tauri.app) (plan: [`openspec/changes/add-desktop-app`](openspec/changes/add-desktop-app)). To build it you need Rust:
+
+```bash
+brew install rustup && rustup default stable
+export PATH="/opt/homebrew/opt/rustup/bin:$PATH"   # rustup is keg-only
+cd desktop && npm install && npm run build         # → src-tauri/target/release/bundle/macos/lgtm.app
+```
+
+So far the app signs in with gh and does everything GitHub-side; Slack, Jira and CI job logs still need the browser version.
+
 `LGTM_PORT` changes the port (drafts are stored per port), `LGTM_NO_OPEN=1` skips opening a browser tab. Design and specs: [`openspec/changes/add-pr-review-app`](openspec/changes/add-pr-review-app).

@@ -30,7 +30,7 @@ None. `github-auth`, `slack-notify` and the rest keep their behaviour; only wher
 ## Impact
 
 - New `desktop/` (Tauri 2 project: Rust crate, `tauri.conf.json`, capabilities, icons) building `app/`'s UI.
-- `app/src/platform.ts` split into a web and a desktop implementation behind the same exports; `vite build --mode desktop` selects it.
+- `app/src/platform.ts` calls the local server or, inside the app, the matching command (decided at runtime; one UI build serves both).
 - New public repo `bukuwarung/homebrew-tap` (cask, formula, release assets), maintained by hand with the release checklist.
 - Build machines need Rust (`rustup`) and Xcode command-line tools; users need neither.
 - Pending draft comments live in the browser's storage and don't move to the app by themselves (design, decision 7).

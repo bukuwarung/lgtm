@@ -1,9 +1,9 @@
 ## 1. Skeleton
 
-- [ ] 1.1 Install the toolchain on the build machine (`rustup`, Tauri CLI); document it in the README's Develop section
-- [ ] 1.2 `desktop/`: Tauri 2 project (`tauri.conf.json`, Rust crate, app icon from the `:mantap:` favicon, min macOS 13) that bundles `app/`'s built UI
-- [ ] 1.3 Split `app/src/platform.ts` into `platform.web.ts` / `platform.desktop.ts` behind the same exports; Vite alias by mode (`--mode desktop`)
-- [ ] 1.4 `gh_token` command + login-shell `PATH` lookup; the app opens signed in and lists PRs
+- [x] 1.1 Install the toolchain on the build machine (`rustup`, Tauri CLI); document it in the README's Develop section
+- [x] 1.2 `desktop/`: Tauri 2 project (`tauri.conf.json`, Rust crate, app icon from the `:mantap:` favicon, min macOS 13) that bundles `app/`'s built UI
+- [x] 1.3 `app/src/platform.ts`: server calls or app commands, by runtime check (`isDesktop`); one UI build for both
+- [x] 1.4 `gh_token` command + login-shell `PATH` lookup; the app opens signed in and lists PRs
 
 ## 2. Port the server routes
 
