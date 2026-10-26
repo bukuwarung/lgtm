@@ -413,7 +413,7 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .doc-tags dt { color: var(--muted); }
 .doc-render code { padding: .05em .3em; background: var(--soft); border-radius: 4px; font-size: 85%; }
 .doc-tags dd { margin: 0; }
-.doc-source { position: absolute; top: 4px; right: 6px; font-size: 11px; opacity: .55; }
+.doc-source { float: right; margin: 0 0 4px 12px; font-size: 11px; opacity: .55; } /* the text wraps around it */
 .doc-render:hover .doc-source { opacity: 1; }
 .diff tr.doc-h td { padding: 1px 8px; font: 11px var(--sans); background: var(--soft); }
 /* Doc tags (@param, @return…) inside a comment: the comment's colour, slightly bolder, like IntelliJ, not keyword-coloured */
