@@ -9,21 +9,18 @@ if (HL) {
   CSS.highlights.set('lgtm-find-current', HL.cur);
 }
 
-function search(q: string): Range[] {
+function search(q: string): StaticRange[] {
   const root = document.querySelector('.shell');
   if (!root || !q) return [];
   const needle = q.toLowerCase();
-  const out: Range[] = [];
+  const out: StaticRange[] = [];
   const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => (n.parentElement?.closest('input, textarea, script, style, .find-bar') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
   });
   for (let n = walk.nextNode() as Text | null; n && out.length < 2000; n = walk.nextNode() as Text | null) {
     const text = n.data.toLowerCase();
     for (let i = text.indexOf(needle); i >= 0; i = text.indexOf(needle, i + needle.length)) {
-      const r = document.createRange();
-      r.setStart(n, i);
-      r.setEnd(n, i + needle.length);
-      out.push(r);
+      out.push(new StaticRange({ startContainer: n, startOffset: i, endContainer: n, endOffset: i + needle.length })); // fixed: can't stretch when the page changes
     }
   }
   return out;
@@ -32,7 +29,7 @@ function search(q: string): Range[] {
 export function FindBar() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [hits, setHits] = useState<Range[]>([]);
+  const [hits, setHits] = useState<StaticRange[]>([]);
   const [i, setI] = useState(0);
   const input = useRef<HTMLInputElement>(null);
 

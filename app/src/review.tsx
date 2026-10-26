@@ -1080,27 +1080,23 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
 }
 
 // Word-level highlights inside changed lines, drawn with the CSS Custom Highlight API so the syntax-highlighted HTML
-// stays untouched. Each diff adds its ranges to two shared highlights and takes them back out on re-render.
+// stays untouched. Each diff adds its ranges to two shared highlights and takes them back out on re-render. They're
+// StaticRanges: a live Range follows DOM changes, and rows replaced under it stretched it across whole stretches of
+// the diff, painting them green until the next re-render.
 const WORD = typeof CSS !== 'undefined' && 'highlights' in CSS ? { del: new Highlight(), add: new Highlight() } : null;
 if (WORD) {
   CSS.highlights.set('lgtm-word-del', WORD.del);
   CSS.highlights.set('lgtm-word-add', WORD.add);
 }
-function rangeIn(el: Element | null, start: number, end: number) {
+function rangeIn(el: Element | null, start: number, end: number): StaticRange | null {
   if (!el) return null;
   const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  const r = document.createRange();
-  let pos = 0, started = false;
+  let pos = 0;
+  let from: [Text, number] | null = null;
   for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
     const len = n.data.length;
-    if (!started && start <= pos + len) {
-      r.setStart(n, start - pos);
-      started = true;
-    }
-    if (started && end <= pos + len) {
-      r.setEnd(n, end - pos);
-      return r;
-    }
+    if (!from && start <= pos + len) from = [n, start - pos];
+    if (from && end <= pos + len) return new StaticRange({ startContainer: from[0], startOffset: from[1], endContainer: n, endOffset: end - pos });
     pos += len;
   }
   return null;
@@ -1109,7 +1105,7 @@ function useWordHighlights(table: { current: HTMLTableElement | null }, hunks: H
   const [on] = useStoredFlag('wordDiff', true);
   useLayoutEffect(() => {
     if (!on || !WORD || !table.current) return;
-    const mine: [Highlight, Range][] = [];
+    const mine: [Highlight, StaticRange][] = [];
     hunks.forEach((h, hi) =>
       changePairs(h).forEach(([d, a]) => {
         const w = wordChange(h.lines[d].text, h.lines[a].text);
