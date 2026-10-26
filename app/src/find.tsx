@@ -44,8 +44,10 @@ export function FindBar() {
         requestAnimationFrame(() => input.current?.select());
       }
     };
+    const show = () => (setOpen(true), requestAnimationFrame(() => input.current?.select()));
     addEventListener('keydown', onKey);
-    return () => removeEventListener('keydown', onKey);
+    addEventListener('lgtm:find', show); // Edit → Find… in the app's menu bar
+    return () => (removeEventListener('keydown', onKey), removeEventListener('lgtm:find', show));
   }, []);
 
   // Search after typing pauses (and after the page has rendered every file).

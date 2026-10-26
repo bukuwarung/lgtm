@@ -16,7 +16,7 @@ import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, commentPrompt, prPr
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
 import { reviewOrder } from './files.ts';
-import { ago, claudeFolder, fetchJira, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { ago, claudeFolder, fetchJira, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -50,7 +50,6 @@ type Saved = { sha: string; drafts: Draft[] };
 // My last visit to a PR: each file's blob then, and where I was reading (file + how far into it).
 type Visit = { files: Record<string, string>; at: { path: string; y: number } | null };
 
-const slackEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function slackText(pr: PR, ref: string, event: ReviewEvent, body: string, comments: number) {
   // :approved: and :request-changes: are the workspace's custom Slack emoji.
@@ -1563,6 +1562,7 @@ export const SHORTCUTS: [string, string][] = [
   ['[ / ]', 'Previous / next PR in the stack'],
   ['i', 'Show / hide the index'],
   ['⌘↵', 'Finish review (submit inside the panel)'],
+  ['⌘K', 'Go to a PR, file, thread or check'],
   ['⌘F', 'Find, in every file'],
   ['?', 'This help'],
 ];

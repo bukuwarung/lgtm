@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { askNotifications, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { askNotifications, availableUpdate, copyDiagnostics, diagnostics, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { SHORTCUTS } from './review.tsx';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
@@ -201,7 +201,39 @@ export function Settings() {
           </tbody>
         </table>
       </section>
-      <p class="note set-version">lgtm {__APP_VERSION__} · {isDesktop ? 'macOS app' : 'browser version'}</p>
+      <About />
+    </div>
+  );
+}
+
+// The version, a newer one if there is, and diagnostics for bug reports.
+function About() {
+  const [update, setUpdate] = useState<string | null>(null);
+  const [copied, setCopied] = useState('');
+  const [text, setText] = useState('');
+  useEffect(() => void availableUpdate().then(setUpdate), []);
+  return (
+    <div class="note set-version">
+      lgtm {__APP_VERSION__} · {isDesktop ? 'macOS app' : 'browser version'}
+      {update && (
+        <p class="notice">
+          lgtm {update} is out. Update with <code>{UPGRADE}</code>{!isDesktop && <> (or <code>git pull</code> and <code>npm run build</code> from source)</>}.
+        </p>
+      )}
+      <p>
+        <button
+          onClick={() =>
+            copyDiagnostics().then(
+              () => setCopied('Copied: paste it into your bug report.'),
+              async () => (setCopied("Couldn't copy here; select the text below."), setText(await diagnostics())),
+            )
+          }
+        >
+          Copy diagnostics
+        </button>{' '}
+        {copied || 'Version, macOS, which sign-ins work and recent errors, for a bug report. No tokens or PR text.'}
+      </p>
+      {text && <textarea class="diag" readOnly rows={8} value={text} onFocus={(e) => e.currentTarget.select()} />}
     </div>
   );
 }

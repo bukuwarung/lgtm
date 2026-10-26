@@ -58,14 +58,14 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Set
   <img alt="The ✳ Claude menu: a new session, a session started on this PR, or the last session" src="docs/features/scene-claude-light.png" width="760">
 </picture>
 
-**Your PRs.** A merge box with what's blocking and the controls: ready for review, update branch, merge, auto-merge.
+**Your PRs.** A merge box with what's blocking and the controls: ready for review, update branch, merge, auto-merge. A PR waiting for review shows for how long, and after a day `🔔 nudge` reminds the requested reviewers on Slack (it asks before sending).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-merge-dark.png">
   <img alt="The merge box: what is blocking, update branch, merge method, merge and auto-merge" src="docs/features/scene-merge-light.png" width="760">
 </picture>
 
-**On your Mac.** A Dock badge with the "needs your review" count, notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, ⌘F across every file, a remembered window, and "Launch at login" in Settings.
+**On your Mac.** A Dock badge with the "needs your review" count, notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, ⌘F across every file, Back and Forward (⌘[ ⌘]), a remembered window, and "Launch at login" in Settings. Copy a PR link anywhere (Slack, say) and switch to lgtm: it offers to open it. When a new version is out, the top bar says so. Help → Copy Diagnostics puts what a bug report needs on the clipboard (no tokens or PR text).
 
 ## Less to read
 
@@ -180,6 +180,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 | `[` / `]` | Previous / next PR in the stack |
 | `i` | Show / hide the index |
 | `⌘↵` | Finish review |
+| `⌘K` | Go to a PR, file, thread or check |
 | `⌘F` | Find, in every file |
 | `?` | All shortcuts |
 

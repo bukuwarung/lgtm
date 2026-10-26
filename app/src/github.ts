@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { fetchToken } from './platform.ts';
+import { fetchToken, recordError } from './platform.ts';
 
 export type PR = {
   number: number;
@@ -71,6 +71,8 @@ export type QueueItem = {
   assigned: boolean; // assigned to me
   authored: boolean; // I opened it
   thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
+  waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
+  pendingReviewers: string[]; // people (not teams) whose review is requested
 };
 export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean };
 
@@ -100,6 +102,7 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
 async function ok(res: Response) {
   if (res.ok) return res;
   const msg = (await res.json().catch(() => null))?.message;
+  recordError(`GitHub ${res.status} ${new URL(res.url).pathname}: ${msg ?? res.statusText}`);
   throw new Error(`GitHub ${res.status}: ${msg ?? res.statusText}`);
 }
 
@@ -121,6 +124,7 @@ async function paginate<T>(path: string, accept?: string): Promise<T[]> {
 // partial: return what resolved even if some fields errored (they come back null).
 async function graphql<T = any>(query: string, variables: Record<string, unknown>, partial = false): Promise<T> {
   const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query, variables }) });
+  if (r.errors?.length) recordError(`GitHub GraphQL: ${r.errors[0].message}`);
   if (r.errors?.length && !(partial && r.data)) throw new Error(r.errors[0].message);
   return r.data;
 }
@@ -134,7 +138,9 @@ const QUEUE = `query{viewer{login}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}}
 fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{login}
   additions deletions changedFiles commits(last:1){nodes{commit{statusCheckRollup{state}}}} repository{nameWithOwner}
-  headRefName baseRefName headRepository{nameWithOwner}
+  headRefName baseRefName headRepository{nameWithOwner} createdAt
+  reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
+  timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
   latestReviews(first:100){nodes{state author{login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
@@ -182,6 +188,8 @@ const toItem = (p: any): QueueItem => ({
       deletions: p.deletions,
       files: p.changedFiles,
       autoMerge: !!p.autoMergeRequest,
+      waitingSince: [p.createdAt, p.timelineItems?.nodes[0]?.createdAt].filter(Boolean).sort().at(-1),
+      pendingReviewers: (p.reviewRequests?.nodes ?? []).map((r: any) => r.requestedReviewer?.login).filter(Boolean),
       requested: false,
       myState: null,
       reviewedBefore: false,

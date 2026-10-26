@@ -29,13 +29,90 @@ fn adopt_login_path() {
 #[tauri::command]
 async fn gh_token() -> Result<String, String> {
     let out = Command::new("gh").args(["auth", "token"]).output().map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => "The GitHub CLI isn't installed. Run `brew install gh`, then `gh auth login`, and reopen lgtm.".to_string(),
+        std::io::ErrorKind::NotFound => "The GitHub CLI isn't installed.".to_string(),
         _ => e.to_string(),
     })?;
     if !out.status.success() {
-        return Err("The GitHub CLI isn't signed in. Run `gh auth login`, then reload (⌘R).".into());
+        return Err("The GitHub CLI isn't signed in.".into());
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// The menu bar. Custom items reach the UI as a "menu" event carrying the item's id (main.tsx handles them); the
+/// predefined ones (Edit, Window) are macOS's own.
+fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem as P, Submenu};
+    let item = |id: &str, text: &str, keys: Option<&str>| MenuItem::with_id(app, id, text, true, keys);
+    let sep = || P::separator(app);
+    Menu::with_items(
+        app,
+        &[
+            &Submenu::with_items(
+                app,
+                "lgtm",
+                true,
+                &[
+                    &P::about(app, None, Some(AboutMetadata { version: Some(app.package_info().version.to_string()), ..Default::default() }))?,
+                    &sep()?,
+                    &item("settings", "Settings…", Some("CmdOrCtrl+,"))?,
+                    &sep()?,
+                    &P::hide(app, None)?,
+                    &P::hide_others(app, None)?,
+                    &P::show_all(app, None)?,
+                    &sep()?,
+                    &P::quit(app, None)?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "File",
+                true,
+                &[
+                    &item("open-url", "Open PR URL…", Some("CmdOrCtrl+L"))?,
+                    &item("palette", "Go to…", Some("CmdOrCtrl+K"))?,
+                    &sep()?,
+                    &item("reload", "Reload", Some("CmdOrCtrl+R"))?,
+                    &P::close_window(app, None)?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "Edit",
+                true,
+                &[
+                    &P::undo(app, None)?,
+                    &P::redo(app, None)?,
+                    &sep()?,
+                    &P::cut(app, None)?,
+                    &P::copy(app, None)?,
+                    &P::paste(app, None)?,
+                    &P::select_all(app, None)?,
+                    &sep()?,
+                    &item("find", "Find…", Some("CmdOrCtrl+F"))?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "View",
+                true,
+                &[
+                    &item("back", "Back", Some("CmdOrCtrl+["))?,
+                    &item("forward", "Forward", Some("CmdOrCtrl+]"))?,
+                    &sep()?,
+                    &item("toggle-prs", "Show or Hide the PR List", Some("CmdOrCtrl+Shift+L"))?,
+                    &sep()?,
+                    &P::fullscreen(app, None)?,
+                ],
+            )?,
+            &Submenu::with_items(app, "Window", true, &[&P::minimize(app, None)?, &P::maximize(app, None)?])?,
+            &Submenu::with_items(
+                app,
+                "Help",
+                true,
+                &[&item("help", "lgtm on GitHub", None)?, &item("diagnostics", "Copy Diagnostics", None)?],
+            )?,
+        ],
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,6 +124,11 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init()) // lgtm://<owner>/<repo>/pull/<n>
         .plugin(tauri_plugin_window_state::Builder::default().build()) // window size and position, remembered
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .menu(menu)
+        .on_menu_event(|app, event| {
+            use tauri::Emitter;
+            let _ = app.emit("menu", event.id().as_ref());
+        })
         .invoke_handler(tauri::generate_handler![
             gh_token,
             commands::integrations,
@@ -59,6 +141,8 @@ pub fn run() {
             commands::slack_people_save,
             commands::export_settings,
             commands::claude_sessions,
+            commands::clipboard_pr,
+            commands::copy_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lgtm");

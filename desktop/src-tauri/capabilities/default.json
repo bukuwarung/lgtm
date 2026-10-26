@@ -18,6 +18,8 @@
     "allow-slack-people-save",
     "allow-export-settings",
     "allow-claude-sessions",
+    "allow-clipboard-pr",
+    "allow-copy-text",
     "core:window:allow-set-badge-count",
     "opener:default",
     {

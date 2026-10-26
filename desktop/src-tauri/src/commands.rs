@@ -418,6 +418,29 @@ pub async fn claude_sessions() -> Vec<Value> {
     out
 }
 
+// --- A PR link on the clipboard (offered when the app comes to the front) ---
+// Only the first GitHub PR link goes to the UI, never the rest of the clipboard.
+
+pub fn pr_link(text: &str) -> Option<String> {
+    re(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+").find(text).map(|m| m.as_str().to_string())
+}
+
+#[tauri::command]
+pub async fn clipboard_pr() -> Option<String> {
+    let out = std::process::Command::new("/usr/bin/pbpaste").output().ok()?;
+    pr_link(&String::from_utf8_lossy(&out.stdout[..out.stdout.len().min(1 << 16)]))
+}
+
+/// Text onto the clipboard (Help → Copy Diagnostics comes from the menu, without the click a web page needs).
+#[tauri::command]
+pub async fn copy_text(text: String) -> Result<(), String> {
+    use std::io::Write;
+    let mut child = std::process::Command::new("/usr/bin/pbcopy").stdin(std::process::Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    child.stdin.take().ok_or("no stdin")?.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+    child.wait().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // --- Settings export (Settings → Backup) ---
 
 /// Saves the page's settings file to ~/Downloads as lgtm-settings-<date>.json (-2, -3… if taken). The app picks the
@@ -472,6 +495,12 @@ mod tests {
         assert!(block_on(export_settings("{\"lgtm\":1}".into(), "today/evil".into())).is_err());
         assert!(block_on(export_settings("{\"other\":1}".into(), "2026-10-26".into())).is_err());
         assert!(block_on(export_settings("not json".into(), "2026-10-26".into())).is_err());
+    }
+
+    #[test]
+    fn pr_link_takes_only_the_link() {
+        assert_eq!(pr_link("see https://github.com/o/r/pull/12#discussion_r1 thanks").as_deref(), Some("https://github.com/o/r/pull/12"));
+        assert_eq!(pr_link("https://github.com/o/r/issues/12"), None);
     }
 
     #[test]

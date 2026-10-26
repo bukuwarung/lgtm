@@ -302,3 +302,11 @@ test('claude links: a new session carries the prompt (capped) and the folder', a
   assert.match(prPrompt(pr, 'o/r'), /gh pr diff 7 --repo o\/r/);
   assert.match(commentPrompt({ author: 'bob', text: 'Use a fake\nhere', url: 'u' }, { repo: 'o/r', number: 7, prUrl: pr.html_url, path: 'A.kt', line: 3 }), /from @bob on `A.kt:3`[\s\S]*> Use a fake\n> here/);
 });
+
+test('newer compares versions numerically', async () => {
+  const { newer } = await import('../src/platform.ts');
+  assert.ok(newer('v0.10.0', '0.9.1'));
+  assert.ok(newer('0.1.1', '0.1.0'));
+  assert.ok(!newer('v0.1.0', '0.1.0'));
+  assert.ok(!newer('0.1.0', '0.2.0'));
+});

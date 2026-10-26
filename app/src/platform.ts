@@ -210,6 +210,73 @@ export async function initDesktop(go: (route: string) => void) {
   };
   open(await getCurrent()); // the link that launched the app
   await onOpenUrl(open);
+  // The menu bar's own items (desktop/src-tauri/src/lib.rs), passed on as "lgtm:menu" with the item's id.
+  const { listen } = await import('@tauri-apps/api/event');
+  await listen<string>('menu', (e) => dispatchEvent(new CustomEvent('lgtm:menu', { detail: e.payload })));
+}
+
+// The app: the GitHub PR link on the clipboard, if there is one (only the link ever leaves the app's side).
+export async function clipboardPR(): Promise<string | null> {
+  return isDesktop ? command<string | null>('clipboard_pr').catch(() => null) : null;
+}
+
+// --- Updates: the newest release on GitHub, checked at most once a day ---
+const RELEASES = 'https://api.github.com/repos/bukuwarung/lgtm/releases/latest';
+// "0.10.0" > "0.9.1": compares numerically, part by part.
+export const newer = (a: string, b: string) => {
+  const [x, y] = [a, b].map((v) => v.replace(/^v/, '').split('.').map(Number));
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
+};
+// The newer version's number, or null when this one is the newest (or GitHub can't be reached).
+export async function availableUpdate(): Promise<string | null> {
+  let saved: { at: number; latest: string } | null = null;
+  try {
+    saved = JSON.parse(localStorage.getItem('updateCheck') ?? 'null');
+  } catch {}
+  if (!saved || Date.now() - saved.at > 24 * 3600 * 1000) {
+    const latest = await fetch(RELEASES, { headers: { Accept: 'application/vnd.github+json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => r?.tag_name as string | undefined, () => undefined);
+    if (!latest) return null;
+    saved = { at: Date.now(), latest };
+    try {
+      localStorage.setItem('updateCheck', JSON.stringify(saved));
+    } catch {}
+  }
+  return newer(saved.latest, __APP_VERSION__) ? saved.latest.replace(/^v/, '') : null;
+}
+export const UPGRADE = isDesktop ? 'brew upgrade --cask lgtm' : 'brew upgrade lgtm-cli';
+
+// --- Diagnostics (Help → Copy Diagnostics, Settings): what a bug report needs, with no tokens or PR text ---
+const errors: string[] = [];
+export function recordError(text: string) {
+  errors.push(`${new Date().toISOString().slice(0, 19)} ${text.slice(0, 300)}`);
+  if (errors.length > 20) errors.shift();
+}
+if (typeof window !== 'undefined') {
+  addEventListener('error', (e) => recordError(`error: ${e.message}`));
+  addEventListener('unhandledrejection', (e) => recordError(`unhandled: ${e.reason?.message ?? e.reason}`));
+}
+
+// Copies diagnostics. In a browser the clipboard write starts during the click and waits for the text (the sign-in
+// checks take a few seconds, longer than a click's permission lasts).
+export async function copyDiagnostics(): Promise<void> {
+  if (isDesktop) return command('copy_text', { text: await diagnostics() });
+  const blob = diagnostics().then((t) => new Blob([t], { type: 'text/plain' }));
+  await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+}
+
+export async function diagnostics(): Promise<string> {
+  const i = await fetchIntegrations().catch((e) => e.message as string);
+  const line = (name: string, s: { ok: boolean; error?: string }) => `${name}: ${s.ok ? 'ok' : `not working (${s.error ?? 'unknown'})`}`;
+  return [
+    `lgtm ${__APP_VERSION__} (${isDesktop ? 'macOS app' : 'browser version'})`,
+    navigator.userAgent,
+    ...(typeof i === 'string' ? [`Integrations: ${i}`] : [line('Slack', i.slack), line('Jira', i.jira)]),
+    `Recent errors:${errors.length ? '' : ' none'}`,
+    ...errors.map((e) => `  ${e}`),
+  ].join('\n');
 }
 
 // --- Export / import: everything lgtm keeps in this browser (or app) — preferences and pending drafts — as one
@@ -245,6 +312,14 @@ export function restoreBackup(text: string): number {
   const entries = Object.entries(b.storage).filter(([k, v]) => typeof k === 'string' && typeof v === 'string');
   for (const [k, v] of entries) localStorage.setItem(k, v);
   return entries.length;
+}
+
+export const slackEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// A web page in the default browser (the app) or a new tab.
+export async function openExternal(url: string) {
+  if (isDesktop) return (await import('@tauri-apps/plugin-opener')).openUrl(url);
+  open(url, '_blank', 'noopener');
 }
 
 // Opens a claude:// link in the Claude desktop app (the app: through the opener plugin; the browser asks first).
