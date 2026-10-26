@@ -362,7 +362,9 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 /* Settings page */
 .nav-btn { padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-size: 13px; }
 .nav-btn:hover, .nav-btn.on { border-color: var(--accent); text-decoration: none; }
-.settings { max-width: 720px; }
+/* The examples beside the switches get the width they need (code doesn't wrap); text stays at a readable 720px. */
+.settings { max-width: 960px; }
+.settings .set-row, .settings section > p, .settings .set-int, .settings .set-sub { max-width: 720px; }
 .settings h2 { margin: 0 0 16px; }
 .settings section { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .settings h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
@@ -473,3 +475,4 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .demo-chunk { padding-left: 44px; }
 .demo-chunk .thread { padding-left: 12px; }
 .demo-chunk .comment { border-top: 0; padding-top: 0; }
+.demo-side .diff .num { min-width: 28px; padding: 0 4px; }

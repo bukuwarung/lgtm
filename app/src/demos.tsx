@@ -59,7 +59,7 @@ const IMPORTS: Row[] = [
   ['+', '', 7, ''],
 ];
 const BODY: Row[] = [
-  ['+', '', 8, 'class OrderRepository @Inject constructor('],
+  ['+', '', 8, 'class OrderRepo @Inject constructor('],
   ['+', '', 9, '    private val api: OrderApi,'],
   ['+', '', 10, ') {'],
 ];
@@ -84,7 +84,7 @@ const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width=
 const BOT_TEXT = 'Coverage report: 82.4% of lines (+0.3%), 71.0% of branches. 14 files changed, 3 with lower coverage: OrderRepository.kt, CartViewModel.kt, PaymentSheet.kt. Details in the CI run.';
 
 const DOC = `/**
- * Sums the prices of the [Item]s in the cart.
+ * Sums the [Item] prices in the cart.
  *
  * @param items what's in the cart
  * @return the total, in cents
@@ -289,7 +289,7 @@ export const DEMOS: Record<string, Demo> = {
     off: (
       <File path="res/drawable/ic_orders.xml" st="added" add={9} del={0}>
         <Rows
-          rows={['<vector android:width="24dp" android:height="24dp"', '    android:viewportWidth="24" android:viewportHeight="24">', '  <path android:fillColor="#92BDFF"', '      android:pathData="M4,3h16a1,1 0,0 1,1 1v16…"/>']
+          rows={['<vector android:width="24dp"', '    android:height="24dp"', '    android:viewportWidth="24"', '    android:viewportHeight="24">', '  <path android:fillColor="#92BDFF"', '    android:pathData="M4,3h16…"/>']
             .map((l, i) => ['+', '', i + 1, `<span>${md.utils.escapeHtml(l)}</span>`] as Row)}
         />
       </File>
