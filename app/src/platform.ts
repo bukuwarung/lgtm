@@ -50,6 +50,17 @@ export const prCache = {
 // Inside the macOS app (desktop/, Tauri) the page reaches the CLIs through app commands instead of the local server.
 export const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 if (isDesktop) document.documentElement.classList.add('desktop'); // styles for the app's own window (top bar)
+
+// No autocorrect or auto-capitals in any text field (macOS rewrites code, logins and paths otherwise); one-line fields
+// skip spell-check too, comment boxes keep its underlines. Set on focus, so fields added later are covered.
+if (typeof window !== 'undefined')
+  addEventListener('focusin', (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('autocapitalize', 'off');
+    if (el instanceof HTMLInputElement) el.spellcheck = false;
+  });
 const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => (await import('@tauri-apps/api/core')).invoke<T>(cmd, args);
 // Tauri rejects with the command's error string; make it an Error like the web path's.
 const command = <T>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
