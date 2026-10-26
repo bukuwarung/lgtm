@@ -62,9 +62,10 @@ function App() {
     <>
       <nav class="top">
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
-        <a href="#" class="brand">
-          <img src="/favicon.png" alt="" width="22" height="22" /> lgtm
+        <a href="#" class="brand" title="lgtm home">
+          <img src="/favicon.png" alt="lgtm" width="22" height="22" />
         </a>
+        <TopActions onRefresh={() => setQueueVersion((v) => v + 1)} />
         <span class="spacer" />
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings">⚙ Settings</a>
         <ThemeToggle />
@@ -95,6 +96,51 @@ function App() {
         )}
       </div>
     </>
+  );
+}
+
+// The top bar's PR actions: open a PR by URL, refresh the list, desktop notifications on/off.
+function TopActions({ onRefresh }: { onRefresh: () => void }) {
+  const [url, setUrl] = useState('');
+  const [err, setErr] = useState('');
+  const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
+  return (
+    <form
+      class="top-actions"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const r = parseRoute(url);
+        if (r) {
+          location.hash = `/${r.repo}/pull/${r.n}`;
+          setUrl('');
+        } else setErr('Not a GitHub pull request URL');
+      }}
+    >
+      <input
+        placeholder="Open PR URL…"
+        value={url}
+        aria-invalid={!!err}
+        title={err || 'Paste a GitHub pull request URL and press Enter'}
+        onInput={(e) => {
+          setUrl(e.currentTarget.value);
+          setErr('');
+        }}
+      />
+      <button type="button" title="Refresh the PR list (also every 3 minutes)" onClick={onRefresh}>↻</button>
+      <button
+        type="button"
+        title={notify ? 'Desktop notifications for new review requests: on' : 'Notify me about new review requests'}
+        aria-pressed={notify}
+        class={notify ? 'on' : ''}
+        onClick={async () => {
+          if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
+          toggleNotify();
+        }}
+      >
+        {notify ? '🔔' : '🔕'}
+      </button>
+      {err && <span class="top-err">{err}</span>}
+    </form>
   );
 }
 
@@ -165,7 +211,6 @@ function ago(iso: string) {
 function PRList({ current, version, onItems }: { current: { repo: string; n: number } | null; version: number; onItems: (items: QueueItem[]) => void }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [err, setErr] = useState('');
-  const [url, setUrl] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
   const [tabValue, setTab] = useStoredValue('prTab', 'reviewing'); // which tab, remembered
   const tab = tabValue as Tab;
@@ -222,7 +267,7 @@ function PRList({ current, version, onItems }: { current: { repo: string; n: num
     const t = setInterval(load, 3 * 60 * 1000);
     return () => clearInterval(t);
   }, []);
-  const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
+  const [notify] = useStoredFlag('notifyRequests', false);
   const seen = useRef<Set<string> | null>(null);
   useEffect(() => void (items && onItems(items)), [items]);
   useEffect(() => {
@@ -311,32 +356,6 @@ function PRList({ current, version, onItems }: { current: { repo: string; n: num
   return (
     <aside class="side prs">
       <div class="side-scroll">
-      <form
-        class="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const r = parseRoute(url);
-          if (r) {
-            location.hash = `/${r.repo}/pull/${r.n}`;
-            setUrl('');
-          } else setErr('That is not a GitHub pull request URL.');
-        }}
-      >
-        <input placeholder="Open PR URL…" value={url} onInput={(e) => setUrl(e.currentTarget.value)} />
-        <button type="button" title="Refresh (also refreshes every 3 minutes)" onClick={load}>↻</button>
-        <button
-          type="button"
-          title={notify ? 'Desktop notifications for new review requests: on' : 'Notify me about new review requests'}
-          aria-pressed={notify}
-          class={notify ? 'on' : ''}
-          onClick={async () => {
-            if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications.' : 'Notifications are blocked for this page in your browser settings.');
-            toggleNotify();
-          }}
-        >
-          {notify ? '🔔' : '🔕'}
-        </button>
-      </form>
       {err && <p class="error">{err}</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">

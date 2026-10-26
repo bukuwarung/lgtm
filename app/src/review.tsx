@@ -209,7 +209,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   useEffect(() => {
     if (!data) return;
     const where = (): Visit['at'] => {
-      const top = 44 + 4;
+      const top = 46 + 44 + 4; // below the top bar (--nav) and the review bar (--bar)
       const cur = [...document.querySelectorAll<HTMLElement>('main > .file')].findLast((s) => s.getBoundingClientRect().top <= top);
       return cur ? { path: cur.id.slice(2), y: top - cur.getBoundingClientRect().top } : null;
     };
@@ -415,7 +415,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest('input, textarea, select, [contenteditable]')) return;
     if (e.key === ' ' && (e.target as Element).closest('button, a, summary, label')) return; // Space presses a focused control
     const sections = [...document.querySelectorAll<HTMLElement>('main > .file')];
-    const top = 44 + 60;
+    const top = 46 + 44 + 60;
     const cur = sections.reduce((c, s, i) => (s.getBoundingClientRect().top <= top ? i : c), -1);
     const path = sections[Math.max(cur, 0)]?.id.slice(2);
     const ordered = threadOrder(shownThreads, drafts, shown);
