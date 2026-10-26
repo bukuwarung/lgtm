@@ -29,11 +29,14 @@ export type PRFile = {
   blob_url: string;
 };
 // bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
-export type Comment = { databaseId: number; url: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string } | null };
+export type Comment = { databaseId: number; url: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string } | null; originalCommit?: { oid: string } | null };
 export type Thread = {
   id: string;
   path: string;
   line: number | null;
+  startLine?: number | null;
+  originalLine?: number | null; // where it was written: lines of the first comment's originalCommit
+  originalStartLine?: number | null;
   diffSide: 'LEFT' | 'RIGHT';
   subjectType: 'LINE' | 'FILE';
   isResolved: boolean;
@@ -311,7 +314,8 @@ export async function getDownloadUrl(repo: string, path: string, ref: string): P
 
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
-    nodes{id path line diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve comments(first:100){nodes{databaseId url bodyHTML bodyText createdAt author{__typename login}}}}}}}}`;
+    nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve
+      comments(first:100){nodes{databaseId url bodyHTML bodyText createdAt author{__typename login} originalCommit{oid}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');
@@ -425,15 +429,36 @@ export async function getStack(repo: string, pr: PR): Promise<StackLayer[]> {
 }
 
 // The commit my latest submitted review was on, if any.
-export async function getMyLastReviewCommit(repo: string, n: number): Promise<string | null> {
+// My latest submitted review: the commit it was on, and when.
+export async function getMyLastReview(repo: string, n: number): Promise<{ sha: string; at: string } | null> {
   const [me, reviews] = await Promise.all([getViewer(), paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`)]);
-  return reviews.filter((r) => r.user?.login === me && r.state !== 'PENDING').at(-1)?.commit_id ?? null;
+  const r = reviews.filter((r) => r.user?.login === me && r.state !== 'PENDING').at(-1);
+  return r ? { sha: r.commit_id, at: r.submitted_at } : null;
 }
 
 // Files changed between two commits. status 'diverged' means `base` isn't an ancestor (the PR was rebased).
-export async function getCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[] }> {
+// commits: how many head has that base doesn't.
+export async function getCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[]; commits: number }> {
   const d = await json(`/repos/${repo}/compare/${base}...${head}`);
-  return { status: d.status, files: d.files ?? [] };
+  return { status: d.status, files: d.files ?? [], commits: d.ahead_by ?? 0 };
+}
+
+// Who last changed each line of a file at a commit (git blame), with the PR that brought it in.
+export type BlameLine = { sha: string; message: string; when: string; who: string; pr?: { number: number; title: string } };
+const BLAME = `query($owner:String!,$name:String!,$oid:GitObjectID!,$path:String!){repository(owner:$owner,name:$name){object(oid:$oid){... on Commit{
+  blame(path:$path){ranges{startingLine endingLine commit{abbreviatedOid messageHeadline committedDate author{name user{login}}
+    associatedPullRequests(first:1){nodes{number title}}}}}}}}}`;
+export async function getBlame(repo: string, sha: string, path: string): Promise<Map<number, BlameLine>> {
+  const [owner, name] = repo.split('/');
+  const d = await graphql(BLAME, { owner, name, oid: sha, path });
+  const out = new Map<number, BlameLine>();
+  for (const r of d.repository.object?.blame?.ranges ?? []) {
+    const c = r.commit;
+    const pr = c.associatedPullRequests?.nodes?.[0];
+    const info: BlameLine = { sha: c.abbreviatedOid, message: c.messageHeadline, when: c.committedDate, who: c.author?.user?.login ?? c.author?.name ?? 'someone', pr };
+    for (let l = r.startingLine; l <= r.endingLine; l++) out.set(l, info);
+  }
+  return out;
 }
 
 // GitHub's emoji shortcodes (name → image URL), cached for the session.

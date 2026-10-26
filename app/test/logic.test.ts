@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, anchor, markText, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { reviewOrder, untested } from '../src/files.ts';
@@ -342,4 +342,12 @@ test('markText marks text only, closing around tags and counting entities as one
   assert.equal(markText('val fee', 4, 7, 'm'), 'val <mark class="m">fee</mark>');
   assert.equal(markText('<span class="k">val</span> a &amp; b', 2, 7, 'm'), '<span class="k">va<mark class="m">l</mark></span><mark class="m"> a &amp;</mark> b');
   assert.equal(markText('x', 1, 1, 'm'), 'x');
+});
+
+test('rangeChange: what became of commented lines', () => {
+  const patch = '@@ -1,5 +1,5 @@\n a\n b\n-c\n+C\n d\n e';
+  assert.equal(rangeChange(patch, 1, 2), null); // a, b untouched
+  assert.deepEqual(rangeChange(patch, 2, 4)!.map((l) => l.kind + l.text), ['-c', '+C']);
+  assert.equal(rangeChange('@@ -1,2 +1,3 @@\n a\n+x\n b', 2, 2), null); // inserted before the range
+  assert.deepEqual(rangeChange('@@ -1,3 +1,4 @@\n a\n b\n+x\n c', 2, 3)!.map((l) => l.kind + l.text), ['+x']); // inside it
 });

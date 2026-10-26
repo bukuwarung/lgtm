@@ -315,3 +315,19 @@ export function markText(html: string, start: number, end: number, cls: string):
   }
   return inMark ? out + '</mark>' : out;
 }
+
+// What became of lines [start, end] of a file, given the patch from that version to now: null when no line in the
+// range changed, else the patch lines touching it (removed, added, and kept ones between them).
+export function rangeChange(patch: string, start: number, end: number): Line[] | null {
+  for (const h of parsePatch(patch)) {
+    let lastOld = 0;
+    const touched: number[] = [];
+    h.lines.forEach((l, i) => {
+      if (l.old != null) lastOld = l.old;
+      const inside = l.kind === '-' ? l.old! >= start && l.old! <= end : l.kind === '+' ? lastOld >= start && lastOld < end : false;
+      if (inside) touched.push(i);
+    });
+    if (touched.length) return h.lines.slice(touched[0], touched.at(-1)! + 1);
+  }
+  return null;
+}

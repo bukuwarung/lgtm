@@ -494,3 +494,21 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .side.collapsed { visibility: hidden; border-right-color: transparent; transition: visibility 0s .22s, border-color 0s .22s; }
 .resizing .shell, .resizing .review { transition: none; }
 @media (prefers-reduced-motion: reduce) { .shell, .review, .side.collapsed { transition: none; } }
+/* On my open threads: whether the commented lines changed since */
+.then-now { margin: 0 0 6px; padding: 4px 8px; font-size: 12px; color: var(--muted); background: var(--soft); border-radius: 4px; }
+.then-now.changed { color: var(--fg); }
+.diff.mini { margin-top: 4px; font-size: 12px; }
+.diff.mini td.code { padding: 0 6px; }
+.since-sum { flex: 1 1 100%; }
+.since-sum .link, .since-sum button.link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.since-state { flex: 1; }
+.blame-pop { position: fixed; z-index: 60; max-width: 420px; padding: 6px 10px; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 20px var(--shadow); pointer-events: none; }
+.blame-pop div { margin-top: 2px; }
+/* Ask Claude about a selection */
+.ask-btn { position: fixed; z-index: 55; padding: 2px 10px; font-size: 12px; box-shadow: 0 4px 12px var(--shadow); }
+.ask-panel { position: fixed; right: 16px; bottom: 16px; z-index: 55; display: grid; gap: 8px; width: min(520px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; box-shadow: 0 16px 48px var(--shadow); }
+.ask-panel .row { display: flex; align-items: center; gap: 8px; }
+.ask-sel { margin: 0; max-height: 120px; overflow: auto; padding: 6px 8px; font: 12px/1.4 var(--mono); background: var(--soft); border-radius: 4px; white-space: pre-wrap; }
+.ask-panel textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.ask-answer { font-size: 14px; }
+.thread[open] > summary > * { display: none; } /* open, the summary is only the toggle */

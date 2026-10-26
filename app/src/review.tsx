@@ -1,11 +1,11 @@
 import { render, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, changePairs, gaps, markText, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getBlame, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, markBots, renderGfm, reply, resolveThread, setViewed, submitReview,
-  type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
+  type BlameLine, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
@@ -13,7 +13,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, walkthroughPrompt, commentPrompt, prPrompt } from './claude.ts';
+import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, walkthroughPrompt, askPrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
@@ -47,7 +47,9 @@ type Ctx = {
   mainLang?: string; // the PR's main code language
   moved: Map<string, Moved>; // code moved without changes, per file
   untested: Set<string>; // code files whose tests the PR doesn't touch (Settings switch)
+  sinceComment: Map<string, SinceComment>; // my open threads, against the code now
 };
+type SinceComment = { kind: 'same' | 'gone' | 'unknown' } | { kind: 'changed'; lines: Line[] };
 type Saved = { sha: string; drafts: Draft[] };
 // My last visit to a PR: each file's blob then, and where I was reading (file + how far into it).
 type Visit = { files: Record<string, string>; at: { path: string; y: number } | null };
@@ -83,6 +85,10 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
   const [lastReviewed, setLastReviewed] = useState<string | null>(null);
+  const [lastReviewAt, setLastReviewAt] = useState(''); // when I submitted it
+  const [newCommits, setNewCommits] = useState<number | null>(null); // since that review
+  // My open threads, against the code now: unchanged, changed (the lines as they are), or unknown (history rewritten).
+  const [sinceComment, setSinceComment] = useState<Map<string, SinceComment>>(new Map());
   const [since, setSince] = useState(false);
   const [sinceData, setSinceData] = useState<{ status: string; files: File[] } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -201,8 +207,11 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         setMine([pr.user, ...pr.assignees].some((u) => u.login === me));
       }, () => {});
       getStack(repo, pr).then(setStack, () => {});
-      Promise.all([getMyLastReviewCommit(repo, n), getViewer().catch(() => '')]).then(([sha, me]) => {
+      Promise.all([getMyLastReview(repo, n), getViewer().catch(() => '')]).then(([last, me]) => {
+        const sha = last?.sha;
+        if (last) setLastReviewAt(last.at);
         if (sha && sha !== pr.head.sha) {
+          getCompare(repo, sha, pr.head.sha).then((c) => setNewCommits(c.commits), () => {});
           setLastReviewed(sha);
           if (startSince && !(wholeOnMine && pr.user.login === me)) setSince(true); // re-review: start with just what changed
         }
@@ -232,6 +241,34 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       },
     );
   }, [since, lastReviewed, data]);
+
+  // My open threads against the code now: a compare from the commit each thread was written on to the head (one per
+  // commit, kept), then whether the commented lines changed. Rewritten history (force-push) can't be mapped.
+  const compares = useRef(new Map<string, Promise<Awaited<ReturnType<typeof getCompare>> | null>>());
+  useEffect(() => {
+    if (!data || !me) return;
+    const head = data.pr.head.sha;
+    const mine = threads.filter(
+      (t) => !t.isResolved && t.diffSide === 'RIGHT' && t.subjectType === 'LINE' && t.originalLine && t.comments.nodes.some((c) => c.author?.login === me),
+    );
+    let stop = false;
+    Promise.all(
+      mine.map(async (t): Promise<[string, SinceComment] | null> => {
+        const oid = t.comments.nodes[0]?.originalCommit?.oid;
+        if (!oid || oid === head) return null;
+        if (!compares.current.has(oid)) compares.current.set(oid, getCompare(repo, oid, head).catch(() => null));
+        const c = await compares.current.get(oid)!;
+        if (!c || c.status === 'diverged') return [t.id, { kind: 'unknown' }];
+        const f = c.files.find((f) => f.filename === t.path || f.previous_filename === t.path);
+        if (!f) return [t.id, { kind: 'same' }];
+        if (f.status === 'removed') return [t.id, { kind: 'gone' }];
+        if (!f.patch) return [t.id, { kind: 'unknown' }];
+        const lines = rangeChange(f.patch, t.originalStartLine ?? t.originalLine!, t.originalLine!);
+        return [t.id, lines ? { kind: 'changed', lines } : { kind: 'same' }];
+      }),
+    ).then((r) => !stop && setSinceComment(new Map(r.filter((x): x is [string, SinceComment] => !!x))));
+    return () => void (stop = true);
+  }, [data?.pr.head.sha, threads, me]);
 
   // Remember this visit when leaving the PR (or the page): file versions seen, and the reading position.
   useEffect(() => {
@@ -341,6 +378,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const noTests = useMemo(() => new Set(flagUntested ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested]);
   const ctx: Ctx = {
     untested: noTests,
+    sinceComment,
     pr,
     headRepo,
     target,
@@ -563,18 +601,26 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           {notice && <p class={notice.ok ? 'notice' : 'warn'}>{notice.text}</p>}
           {lastReviewed && (
             <div class={since ? 'since on' : 'since'}>
+              <SinceSummary
+                me={me}
+                threads={threads}
+                lastReviewAt={lastReviewAt}
+                newCommits={newCommits}
+                sinceComment={sinceComment}
+                onCommits={() => setSince(true)}
+              />
               {since ? (
                 <>
-                  Showing changes since your last review (<code>{lastReviewed.slice(0, 7)}</code> → <code>{pr.head.sha.slice(0, 7)}</code>)
-                  {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
-                  {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
-                  {sinceData && !sinceData.files.length && <b> · none of this PR's files changed (only a rebase)</b>}
+                  <span class="since-state">
+                    Showing only those changes (<code>{lastReviewed.slice(0, 7)}</code> → <code>{pr.head.sha.slice(0, 7)}</code>)
+                    {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
+                    {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
+                    {sinceData && !sinceData.files.length && <b> · none of this PR's files changed (only a rebase)</b>}
+                  </span>
                   <button onClick={() => setSince(false)}>Show all changes</button>
                 </>
               ) : (
-                <>
-                  New commits since your last review. <button onClick={() => setSince(true)}>Show only those changes</button>
-                </>
+                <button onClick={() => setSince(true)}>Show only those changes</button>
               )}
             </div>
           )}
@@ -583,6 +629,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <Walkthrough pr={pr} repo={repo} files={data.files} />
+          <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} />
           {visible.map(section)}
@@ -990,8 +1037,11 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   // A doc comment switched to its source: a header row above its first line switches it back.
   const docOpenedAt = (hi: number, li: number) => docs.find((d) => d.hunk === hi && d.start === li && openDocs.has(`${hi}-${li}`));
 
+  const blame = useBlameHover(ctx, file);
   return (
-    <table class="diff" ref={table}>
+    <>
+    {blame.pop}
+    <table class="diff" ref={table} onMouseOver={blame.over} onMouseLeave={blame.hide}>
       <tbody>
         {hunks.map((h, hi) => (
           <>
@@ -1081,7 +1131,50 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         {gapBefore(hunks.length) && gapRows(gapBefore(hunks.length)!)}
       </tbody>
     </table>
+    </>
   );
+}
+
+// Hovering a line number for a moment shows who last changed that line: the old number blames the base, the new
+// one the head (a line this PR added shows its own commit). One blame per file and side, kept for the session.
+const blames = new Map<string, Promise<Map<number, BlameLine>>>();
+function useBlameHover(ctx: Ctx, file: File) {
+  const [on] = useStoredFlag('blameHover', true);
+  const [pop, setPop] = useState<{ x: number; y: number; b: BlameLine } | null>(null);
+  const timer = useRef(0);
+  const cell = useRef<Element | null>(null); // the number being hovered
+  const hide = () => (clearTimeout(timer.current), (cell.current = null), setPop(null));
+  const over = (e: MouseEvent) => {
+    const td = (e.target as Element).closest('td.num') as HTMLTableCellElement | null;
+    if (!on || !td || !td.textContent) return cell.current && hide();
+    if (td === cell.current) return;
+    cell.current = td;
+    clearTimeout(timer.current);
+    setPop(null);
+    const line = Number(td.textContent);
+    const old = td.cellIndex === 0;
+    const sha = old ? ctx.pr.base.sha : ctx.pr.head.sha;
+    const path = old ? (file.previous_filename ?? file.filename) : file.filename;
+    timer.current = setTimeout(async () => {
+      const key = `${ctx.repo}@${sha}:${path}`;
+      if (!blames.has(key)) blames.set(key, getBlame(ctx.repo, sha, path).catch(() => new Map()));
+      const b = (await blames.get(key)!).get(line);
+      const r = td.getBoundingClientRect();
+      if (b && td.isConnected) setPop({ x: r.right + 6, y: r.top, b });
+    }, 600) as unknown as number;
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return {
+    over,
+    hide,
+    pop: pop && (
+      <div class="blame-pop" style={{ left: pop.x, top: pop.y }}>
+        <b>{pop.b.who}</b> · {ago(pop.b.when)} · <code>{pop.b.sha}</code>
+        <div>{pop.b.message}</div>
+        {pop.b.pr && <div class="note">#{pop.b.pr.number} {pop.b.pr.title}</div>}
+      </div>
+    ),
+  };
 }
 
 // The changed words inside a changed line, per row ("hunk-line"): marked in the row's own HTML (markText). The CSS
@@ -1380,7 +1473,10 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         <span class="t-preview"><b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
         {t.isResolved && <span class="badge"> · resolved</span>}
         {t.isOutdated && <span class="badge"> · outdated</span>}
+        {ctx.sinceComment.get(t.id)?.kind === 'changed' && <span class="badge"> · code changed since</span>}
+        {ctx.sinceComment.get(t.id)?.kind === 'same' && <span class="badge"> · code unchanged</span>}
       </summary>
+      <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
           <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
@@ -1403,6 +1499,56 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       </div>
       {err && <p class="error">{err}</p>}
     </details>
+  );
+}
+
+// On my open threads: did the commented lines change since the thread started? ("Did they fix it?")
+function ThenNow({ s }: { s?: SinceComment }) {
+  if (!s) return null;
+  if (s.kind !== 'changed')
+    return (
+      <p class="then-now">
+        {{ same: "✓ The commented lines haven't changed since.", gone: 'The file was removed since.', unknown: "The branch was rewritten since (force-push), so lgtm can't tell whether these lines changed." }[s.kind]}
+      </p>
+    );
+  const shown = s.lines.slice(0, 12);
+  return (
+    <div class="then-now changed">
+      ✎ Changed since this thread started:
+      <table class="diff mini">
+        <tbody>
+          {shown.map((l) => (
+            <tr class={l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln'}>
+              <td class="code">{l.text}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {s.lines.length > shown.length && <span class="note">…and {s.lines.length - shown.length} more lines</span>}
+    </div>
+  );
+}
+
+// "Since your last review": new commits, my threads with replies, code changed under my threads, my threads
+// resolved. Each count jumps to the first one (or shows just the new commits).
+function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; newCommits: number | null; sinceComment: Map<string, SinceComment>; onCommits: () => void }) {
+  const mine = p.me ? p.threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === p.me)) : [];
+  const replied = mine.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login !== p.me && c.createdAt > p.lastReviewAt));
+  const changed = mine.filter((t) => p.sinceComment.get(t.id)?.kind === 'changed');
+  const resolved = mine.filter((t) => t.isResolved);
+  const go = (t: Thread) => jumpTo('t-' + t.id, 'f-' + t.path);
+  const n = (k: number, one: string, many = one + 's') => `${k} ${k === 1 ? one : many}`;
+  const parts = [
+    p.newCommits ? <button class="link" onClick={p.onCommits}>{n(p.newCommits, 'new commit')}</button> : null,
+    replied.length ? <button class="link" onClick={() => go(replied[0])}>{n(replied.length, 'thread')} with new replies</button> : null,
+    changed.length ? <button class="link" onClick={() => go(changed[0])}>code changed under {n(changed.length, 'thread')} of yours</button> : null,
+    resolved.length ? <span>{resolved.length} of your {n(mine.length, 'thread')} resolved</span> : null,
+  ].filter(Boolean);
+  if (!parts.length) return <span class="since-sum">New commits since your last review.</span>;
+  return (
+    <span class="since-sum">
+      Since your last review: {parts.map((x, i) => (i ? [' · ', x] : x))}
+    </span>
   );
 }
 
@@ -1592,6 +1738,91 @@ function Walkthrough({ pr, repo, files }: { pr: PR; repo: string; files: File[] 
         />
       )}
     </details>
+  );
+}
+
+// Select code in a file, then "✳ Ask Claude": a question about it, answered by the claude CLI (as the walkthrough)
+// with the file, its diff in this PR and the selection.
+function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
+  const [sel, setSel] = useState<{ path: string; text: string; x: number; y: number } | null>(null);
+  const [panel, setPanel] = useState<{ path: string; text: string } | null>(null);
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState<{ html?: string; error?: string } | null>(null);
+  useEffect(() => {
+    const up = () =>
+      setTimeout(() => {
+        const s = getSelection();
+        // The selection's text keeps line breaks between rows; a range's raw text is the fallback where the page isn't laid out.
+        const text = (s?.toString() || (s?.rangeCount ? s.getRangeAt(0).toString() : '')).trim();
+        const n = s?.anchorNode;
+        const el = n && (n.nodeType === 1 ? (n as Element) : n.parentElement);
+        const file = el?.closest('main > .file');
+        if (!s || !text || !file || el!.closest('.editor, .notes, .note-host')) return setSel(null);
+        const r = s.getRangeAt(0).getBoundingClientRect();
+        setSel({ path: file.id.slice(2), text: text.slice(0, 4000), x: Math.min(r.right, innerWidth - 140), y: r.bottom + 4 });
+      });
+    const away = () => setSel(null);
+    addEventListener('mouseup', up);
+    addEventListener('scroll', away, { passive: true });
+    return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away));
+  }, []);
+  const ask = async () => {
+    if (!panel || !q.trim()) return;
+    setBusy(true);
+    setAnswer(null);
+    try {
+      const f = files.find((f) => f.filename === panel.path);
+      const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
+      const text = await claudeWalkthrough(askPrompt(pr, panel.path, f?.patch, source, panel.text, q.trim()));
+      setAnswer({ html: await renderGfm(text, repo) }); // GitHub sanitizes the HTML
+    } catch (e: any) {
+      setAnswer({ error: e.message });
+    }
+    setBusy(false);
+  };
+  return (
+    <>
+      {sel && !panel && (
+        <button
+          class="ask-btn primary"
+          style={{ left: sel.x, top: sel.y }}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => (setPanel({ path: sel.path, text: sel.text }), setSel(null), setQ(''), setAnswer(null))}
+        >
+          ✳ Ask Claude
+        </button>
+      )}
+      {panel && (
+        <div class="ask-panel" role="dialog" aria-label="Ask Claude">
+          <div class="row">
+            <b>Ask Claude about {panel.path.split('/').pop()}</b>
+            <span class="spacer" />
+            <button title="Close" onClick={() => setPanel(null)}>✕</button>
+          </div>
+          <pre class="ask-sel">{panel.text}</pre>
+          <textarea
+            rows={2}
+            autoFocus
+            placeholder="Your question · ↵ to ask"
+            value={q}
+            onInput={(e) => setQ(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) (e.preventDefault(), void ask());
+              else if (e.key === 'Escape') setPanel(null);
+            }}
+          />
+          <button class="primary" disabled={busy || !q.trim()} onClick={ask}>{busy ? 'Claude is reading…' : 'Ask'}</button>
+          {answer?.error && (
+            <p class="error">
+              {answer.error}
+              {/authenticat|oauth|log ?in/i.test(answer.error) && <> Sign Claude Code in again: run <code>claude</code> in Terminal, then <code>/login</code>.</>}
+            </p>
+          )}
+          {answer?.html && <div class="md ask-answer" dangerouslySetInnerHTML={{ __html: answer.html }} />}
+        </div>
+      )}
+    </>
   );
 }
 
