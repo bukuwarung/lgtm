@@ -247,7 +247,7 @@ The diff SHALL highlight the changed span inside modified lines, dim code moved 
 
 #### Scenario: Import block
 - **WHEN** a Kotlin file's diff adds imports from `dagger`, `retrofit2` and a package it already imported
-- **THEN** the import lines fold to "⋯ +3 imports · new: retrofit2" (dagger was already imported; the project's own packages, java/kotlin, and sub-packages of a listed library are left out), and a comment on one of those lines keeps the block open
+- **THEN** the import lines fold to "⋯ +3 imports · new: retrofit2" (dagger was already imported; the project's own packages, java/kotlin, and sub-packages of a listed library are left out), and a comment on one of those lines shows just that line (with its thread) while the rest stays folded
 
 #### Scenario: Moved block
 - **WHEN** a PR moves a 10-line function from A.kt to B.kt unchanged

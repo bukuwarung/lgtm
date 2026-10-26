@@ -1,6 +1,6 @@
 import { render, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -925,7 +925,14 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         b.hunk === hi && li >= b.start && li <= b.end && !open.has(`${hi}-${b.start}`) &&
         !hunks[hi].lines.slice(b.start, b.end + 1).some((l) => (l.old && noted('LEFT', l.old)) || (l.new && noted('RIGHT', l.new))),
     );
-  const foldAt = (hi: number, li: number) => covering(folds, openFolds, hi, li);
+  // An import fold steps aside only for the lines that carry a comment: they show (with the thread) and the rest of
+  // the block stays folded, one row per folded stretch.
+  const lineNoted = (l: Line) => (l.old != null && noted('LEFT', l.old)) || (l.new != null && noted('RIGHT', l.new));
+  const foldAt = (hi: number, li: number) => {
+    const f = folds.find((b) => b.hunk === hi && li >= b.start && li <= b.end && !openFolds.has(`${hi}-${b.start}`));
+    if (!f || lineNoted(hunks[hi].lines[li])) return undefined;
+    return { ...f, head: li === f.start || lineNoted(hunks[hi].lines[li - 1]) };
+  };
   // KDoc / Javadoc / JSDoc comments, rendered like IntelliJ's reader mode; "source" shows the lines again.
   const [renderDocs] = useStoredFlag('renderDocs', true);
   const docs = useMemo(() => (renderDocs && docSyntax(path) ? docBlocks(hunks) : []), [hunks, renderDocs]);
@@ -951,7 +958,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
               const outside = fold ? fold.newPackages.filter((p) => (!root || !p.startsWith(root)) && !/^(java|kotlin)(\.|$)/.test(p)) : [];
               const external = outside.filter((p) => !outside.some((q) => p.startsWith(q + '.')));
               if (fold)
-                return li !== fold.start ? null : (
+                return !fold.head ? null : (
                   <tr class="import-fold">
                     <td colSpan={3}>
                       <button
