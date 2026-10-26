@@ -48,7 +48,7 @@ code, pre { font-family: var(--mono); }
 .brand { display: inline-flex; align-items: center; gap: 6px; }
 .brand:hover { text-decoration: none; }
 .spacer { flex: 1; }
-.signin, .inbox { max-width: 720px; margin: 48px auto; padding: 0 16px; }
+.signin { max-width: 720px; margin: 48px auto; padding: 0 16px; }
 .repo { color: var(--muted); margin-right: 4px; }
 .meta { display: block; color: var(--muted); font-size: 12px; }
 
@@ -515,3 +515,11 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .set-sources li { margin: 2px 0; }
 .set-pace input[type=range] { width: 220px; }
 .idle.old { color: light-dark(#9a6700, #cc7832); }
+.set-head { display: flex; align-items: center; gap: 12px; max-width: 720px; margin-bottom: 16px; }
+.set-head h2 { margin: 0; flex: 1; }
+.set-search { width: 240px; padding: 4px 10px; }
+.settings [hidden] { display: none !important; }
+/* What's new, once after an update */
+.whats-new-back { position: fixed; inset: 0; z-index: 70; display: flex; justify-content: center; align-items: flex-start; padding-top: 10vh; background: rgb(0 0 0 / .3); }
+.whats-new { display: grid; gap: 10px; width: min(640px, calc(100vw - 32px)); max-height: 75vh; overflow: auto; padding: 16px 20px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
+.whats-new .row { display: flex; align-items: center; gap: 8px; font-size: 15px; }

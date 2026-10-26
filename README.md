@@ -65,7 +65,7 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Set
   <img alt="The merge box: what is blocking, update branch, merge method, merge and auto-merge" src="docs/features/scene-merge-light.png" width="760">
 </picture>
 
-**On your Mac.** A Dock badge with the "needs your review" count, notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, ⌘F across every file, Back and Forward (⌘[ ⌘]), a remembered window, and "Launch at login" in Settings. Copy a PR link anywhere (Slack, say) and switch to lgtm: it offers to open it. When a new version is out, the top bar says so, and Settings → Update now upgrades through Homebrew and restarts. Help → Copy Diagnostics puts what a bug report needs on the clipboard (no tokens or PR text).
+**On your Mac.** A Dock badge with the "needs your review" count, notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, ⌘F across every file, Back and Forward (⌘[ ⌘]), a remembered window, and "Launch at login" in Settings. Copy a PR link anywhere (Slack, say) and switch to lgtm: it offers to open it. When a new version is out, the top bar says so, and Settings → Update now upgrades through Homebrew and restarts. After an update, lgtm shows what's new once. Help → Copy Diagnostics puts what a bug report needs on the clipboard (no tokens or PR text).
 
 ## Less to read
 

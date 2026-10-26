@@ -116,9 +116,20 @@ const FULL = 'application/vnd.github.full+json';
 
 const json = async (path: string, init?: RequestInit, accept?: string) => (await ok(await gh(path, init, accept))).json();
 
+// Every page of a list. The first page's Link header names the last one, so the rest are fetched at once (a 1,400-file
+// PR is 15 pages); without it, page by page.
 async function paginate<T>(path: string, accept?: string): Promise<T[]> {
-  const out: T[] = [];
-  for (let url: string | undefined = path; url; ) {
+  const first = await ok(await gh(path, {}, accept));
+  const out: T[] = await first.json();
+  const link = first.headers.get('link') ?? '';
+  const next = link.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+  const last = Number(link.match(/<[^>]*[?&]page=(\d+)[^>]*>;\s*rel="last"/)?.[1]);
+  if (next && last && /[?&]page=\d+/.test(next)) {
+    const urls = Array.from({ length: last - 1 }, (_, k) => next.replace(/([?&]page=)\d+/, `$1${k + 2}`));
+    const pages = await Promise.all(urls.map(async (u) => (await ok(await gh(u, {}, accept))).json()));
+    return out.concat(...pages);
+  }
+  for (let url = next; url; ) {
     const res = await ok(await gh(url, {}, accept));
     out.push(...(await res.json()));
     url = res.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];

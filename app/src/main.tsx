@@ -1,11 +1,11 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getEmails, getEstimates, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
+import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, askNotifications, availableUpdate, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, askNotifications, availableUpdate, newer, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -124,6 +124,7 @@ function App() {
         <ThemeToggle />
       </nav>
       {isDesktop && <FindBar />}
+      <WhatsNew />
       {toast && (
         <div class="toast" role="status">
           {toast.text}
@@ -161,6 +162,43 @@ function App() {
         )}
       </div>
     </>
+  );
+}
+
+// After an update: this version's release notes, once. A first install just remembers the version.
+function WhatsNew() {
+  const [notes, setNotes] = useState<string | null>(null);
+  const seen = () => {
+    try {
+      localStorage.setItem('seenVersion', __APP_VERSION__);
+    } catch {}
+  };
+  useEffect(() => {
+    let last: string | null = null;
+    try {
+      last = localStorage.getItem('seenVersion');
+    } catch {}
+    if (!last) return seen();
+    if (!newer(__APP_VERSION__, last)) return;
+    fetch(`https://api.github.com/repos/bukuwarung/lgtm/releases/tags/v${__APP_VERSION__}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((r) => renderGfm(r.body ?? '', 'bukuwarung/lgtm')) // GitHub sanitizes the HTML
+      .then(setNotes, seen); // no notes to show: don't ask again
+  }, []);
+  if (!notes) return null;
+  const close = () => (seen(), setNotes(null));
+  return (
+    <div class="whats-new-back" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div class="whats-new" role="dialog" aria-label={`What's new in lgtm ${__APP_VERSION__}`}>
+        <div class="row">
+          <b>What's new in lgtm {__APP_VERSION__}</b>
+          <span class="spacer" />
+          <button class="primary" onClick={close}>Got it</button>
+        </div>
+        <div class="md" dangerouslySetInnerHTML={{ __html: notes }} />
+        <a href="https://github.com/bukuwarung/lgtm/releases" target="_blank" rel="noopener">All releases</a>
+      </div>
+    </div>
   );
 }
 

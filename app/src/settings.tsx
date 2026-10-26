@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
 import { askNotifications, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
@@ -64,6 +64,24 @@ function Status({ ok, children }: { ok: boolean | null; children: preact.Compone
 export function Settings() {
   const [theme, setTheme] = useTheme();
   const look = useCodeLook();
+  // Search: keeps the sections that mention every word, and within them only the matching switches (a section whose
+  // title matches stays whole).
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState(true);
+  const page = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const has = (el: Element) => words.every((w) => (el.textContent ?? '').toLowerCase().includes(w));
+    let any = false;
+    for (const sec of page.current?.querySelectorAll<HTMLElement>(':scope > section') ?? []) {
+      const whole = !words.length || has(sec.querySelector('h3') ?? sec);
+      const items = [...sec.querySelectorAll<HTMLElement>(':scope > .set-flag, :scope > .set-row')];
+      for (const it of items) it.hidden = !whole && !has(it);
+      sec.hidden = !whole && !has(sec);
+      any ||= !sec.hidden;
+    }
+    setFound(any);
+  });
   const [keys] = useBindings();
   const also = (k: string) => (k ? `Also ${keyLabel(k)} on a PR.` : undefined);
   const [team, setTeam] = useStoredValue('team', '');
@@ -79,8 +97,12 @@ export function Settings() {
   }, []);
 
   return (
-    <div class="page settings">
-      <h2>Settings</h2>
+    <div class="page settings" ref={page}>
+      <div class="set-head">
+        <h2>Settings</h2>
+        <input type="search" class="set-search" placeholder="Search settings" value={q} onInput={(e) => setQ(e.currentTarget.value)} aria-label="Search settings" />
+      </div>
+      {q && !found && <p class="note">No setting matches “{q}”.</p>}
 
       <section>
         <h3>Accounts</h3>
