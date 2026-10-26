@@ -68,6 +68,10 @@ It serves the UI on `http://127.0.0.1:4517` and opens it in your default browser
 
 To update: `git pull && npm run build` in `app/` (restart `lgtm` only if `app/bin/lgtm.mjs` changed).
 
+## Settings
+
+⚙ Settings (top right) shows whether lgtm can use your GitHub, Slack and Jira sign-ins, with the commands to fix any that can't, and holds every preference: which PRs the list shows, desktop notifications, the team to watch, review defaults (PR index, ignore whitespace, Jira ticket, Slack message, open the next PR) and the theme. Preferences are per browser.
+
 ## Keyboard shortcuts
 
 | Key | Action |

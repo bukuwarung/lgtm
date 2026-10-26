@@ -1387,7 +1387,7 @@ function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
   );
 }
 
-const SHORTCUTS: [string, string][] = [
+export const SHORTCUTS: [string, string][] = [
   ['j / k', 'Next / previous file'],
   ['n / p', 'Next / previous review thread'],
   ['v', 'Mark the current file viewed'],

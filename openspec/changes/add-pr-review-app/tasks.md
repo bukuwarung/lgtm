@@ -114,6 +114,7 @@
 - [x] 12.35 Android vector drawables preview as before/after images (VectorDrawable → SVG)
 - [x] 12.36 Bitmap image previews (incl. Git LFS via signed download links); default review verdict from pending/open comments
 - [x] 12.37 Import folding for TypeScript/JavaScript (multi-line imports, external packages named)
+- [x] 12.38 Settings page: integration status (gh, slackcli, acli) with setup commands, and every preference in one place, synced live
 
 ## 13. Verify
 

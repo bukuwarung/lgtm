@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 
 // The page is served by bin/lgtm.mjs on a fixed 127.0.0.1 port, so localStorage persists drafts across runs.
 export const storage = {
@@ -24,25 +24,41 @@ export async function fetchToken(): Promise<string> {
 }
 
 // A remembered on/off UI preference (sidebar visibility etc.). Storage failures just mean it isn't remembered.
-export function useStoredFlag(key: string, initial: boolean) {
-  const [on, setOn] = useState(() => {
+// Every user of a key sees a change at once (the settings page and the views it configures are on screen together).
+export function useStoredValue(key: string, initial: string) {
+  const read = () => {
     try {
-      const v = localStorage.getItem(key);
-      return v == null ? initial : v === '1';
+      return localStorage.getItem(key) ?? initial;
     } catch {
       return initial;
     }
-  });
-  const toggle = () => {
-    setOn(!on);
+  };
+  const [value, setValue] = useState(read);
+  useEffect(() => {
+    const sync = (e: Event) => (e as CustomEvent).detail === key && setValue(read());
+    addEventListener('lgtm:pref', sync);
+    return () => removeEventListener('lgtm:pref', sync);
+  }, [key]);
+  const set = (v: string) => {
+    setValue(v);
     try {
-      localStorage.setItem(key, on ? '0' : '1');
+      localStorage.setItem(key, v);
     } catch {
       // not remembered
     }
+    dispatchEvent(new CustomEvent('lgtm:pref', { detail: key }));
   };
-  return [on, toggle] as const;
+  return [value, set] as const;
 }
+
+export function useStoredFlag(key: string, initial: boolean) {
+  const [v, set] = useStoredValue(key, initial ? '1' : '0');
+  return [v === '1', () => set(v === '1' ? '0' : '1')] as const;
+}
+
+// GitHub is the gh login (in the page); this asks the server about the CLIs it drives: slackcli and acli.
+export type Integrations = { slack: { ok: boolean; error?: string; who?: string }; jira: { ok: boolean; error?: string; site?: string } };
+export const fetchIntegrations = (): Promise<Integrations> => fetch('/integrations').then((r) => r.json());
 
 // Slack DMs go through the local server, which runs slackcli (it holds the Slack sign-in).
 // Whether slackcli is signed in, and if not, why (shown in the submit panel instead of the Slack option).

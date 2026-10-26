@@ -199,13 +199,24 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end('lgtm');
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/job-log') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams;
     return jobLog(q.get('repo') ?? '', q.get('job') ?? '').then(
       (text) => res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }).end(text),
       (e) => res.writeHead(500, { 'Content-Type': 'text/plain' }).end(e.message),
     );
+  }
+  if (path === '/integrations') {
+    const plain = (s = '') => s.replace(/\x1b\[[0-9;]*m/g, ''); // the CLIs colour their output
+    const [slack, jira] = await Promise.all([
+      slackcli(['auth', 'whoami']).then((r) => ({ ok: r.ok, error: r.error, who: plain(r.stdout).match(/User:\s*(\S+)/)?.[1] })),
+      acli(['jira', 'auth', 'status']).then(
+        (out) => ({ ok: true, site: plain(out).match(/Site:\s*(\S+)/)?.[1] }),
+        (e) => ({ ok: false, error: e.message }),
+      ),
+    ]);
+    return json(res, 200, { slack, jira });
   }
   if (path === '/jira') {
     return jiraIssue(new URL(req.url ?? '/', ORIGIN).searchParams.get('key') ?? '').then(

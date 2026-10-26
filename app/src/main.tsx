@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
-import { useStoredFlag } from './platform.ts';
+import { useStoredFlag, useStoredValue } from './platform.ts';
+import { Settings, THEMES, useTheme } from './settings.tsx';
 import { Resizer } from './resizer.tsx';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
@@ -59,6 +60,7 @@ function App() {
           <img src="/favicon.png" alt="" width="22" height="22" /> lgtm
         </a>
         <span class="spacer" />
+        <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings">⚙ Settings</a>
         <ThemeToggle />
       </nav>
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
@@ -72,6 +74,8 @@ function App() {
             onReviewed={(notice) => goNext(r, notice)}
             flash={flash?.route === route ? flash : null}
           />
+        ) : route === '#/settings' ? (
+          <Settings />
         ) : route === '#/done' ? (
           <div class="page done">
             <img src="/favicon.png" alt="" width="96" height="96" />
@@ -87,29 +91,14 @@ function App() {
   );
 }
 
-const THEMES = [['', '◐ Auto'], ['light', '☀ Light'], ['dark', '☾ Dark']] as const;
-
 // Cycles auto → light → dark; index.html applies the saved choice before first paint.
 function ThemeToggle() {
-  const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? '');
+  const [theme, setTheme] = useTheme();
   const i = THEMES.findIndex(([t]) => t === theme);
-  const next = THEMES[(i + 1) % THEMES.length][0];
+  const next = THEMES[(i + 1) % THEMES.length];
   return (
-    <button
-      title={`Theme: ${THEMES[i][1].slice(2)} (click for ${THEMES[(i + 1) % THEMES.length][1].slice(2)})`}
-      onClick={() => {
-        if (next) document.documentElement.dataset.theme = next;
-        else delete document.documentElement.dataset.theme;
-        try {
-          if (next) localStorage.setItem('theme', next);
-          else localStorage.removeItem('theme');
-        } catch {
-          // per-viewer convenience only
-        }
-        setTheme(next);
-      }}
-    >
-      {THEMES[i][1]}
+    <button title={`Theme: ${THEMES[i][1]} (click for ${next[1]})`} onClick={() => setTheme(next[0])}>
+      {THEMES[i][2]} {THEMES[i][1]}
     </button>
   );
 }
@@ -171,45 +160,21 @@ function PRList({ current, version, onItems }: { current: { repo: string; n: num
   const [err, setErr] = useState('');
   const [url, setUrl] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
-  // Which tab, remembered (an older version stored only "Your PRs or not").
-  const [tab, setTabState] = useState<Tab>(() => {
-    try {
-      return (localStorage.getItem('prTab') as Tab | null) ?? (localStorage.getItem('mineTab') === '1' ? 'mine' : 'reviewing');
-    } catch {
-      return 'reviewing';
-    }
-  });
-  const setTab = (t: Tab) => {
-    setTabState(t);
-    try {
-      localStorage.setItem('prTab', t);
-    } catch {}
-  };
-  // Team tab: a GitHub team ("org/slug") and its members' open PRs.
-  const [team, setTeamState] = useState(() => {
-    try {
-      return localStorage.getItem('team') ?? '';
-    } catch {
-      return '';
-    }
-  });
+  const [tabValue, setTab] = useStoredValue('prTab', 'reviewing'); // which tab, remembered
+  const tab = tabValue as Tab;
+  // Team tab: a GitHub team ("org/slug") and its members' open PRs. Settings can change it too.
+  const [team, setTeam] = useStoredValue('team', '');
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[] } | null>(null);
   const [teamErr, setTeamErr] = useState('');
   const teamRef = useRef(team); // the 3-minute refresh closes over the first render; read the current team here
   teamRef.current = team;
+  const requested = useRef(''); // the team last fetched, so a team change (here or in Settings) fetches once
   const loadTeam = (t = teamRef.current) => {
+    requested.current = t;
     if (!t) return;
     setTeamErr('');
     getTeamPRs(t).then((d) => setTeamData({ team: t, ...d }), (e) => setTeamErr(e.message));
-  };
-  const setTeam = (t: string) => {
-    setTeamState(t);
-    setTeamData(null);
-    try {
-      localStorage.setItem('team', t);
-    } catch {}
-    loadTeam(t);
   };
   useEffect(() => {
     if (tab === 'team' && !teams) getTeams().then(setTeams, (e) => setTeamErr(e.message));
@@ -243,6 +208,9 @@ function PRList({ current, version, onItems }: { current: { repo: string; n: num
     }
   };
   useEffect(load, [version]);
+  useEffect(() => {
+    if (requested.current !== team) loadTeam(team);
+  }, [team]);
   useEffect(() => {
     const t = setInterval(load, 3 * 60 * 1000);
     return () => clearInterval(t);
