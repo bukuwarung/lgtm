@@ -443,24 +443,6 @@ export async function getCompare(repo: string, base: string, head: string): Prom
   return { status: d.status, files: d.files ?? [], commits: d.ahead_by ?? 0 };
 }
 
-// Who last changed each line of a file at a commit (git blame), with the PR that brought it in.
-export type BlameLine = { sha: string; message: string; when: string; who: string; pr?: { number: number; title: string } };
-const BLAME = `query($owner:String!,$name:String!,$oid:GitObjectID!,$path:String!){repository(owner:$owner,name:$name){object(oid:$oid){... on Commit{
-  blame(path:$path){ranges{startingLine endingLine commit{abbreviatedOid messageHeadline committedDate author{name user{login}}
-    associatedPullRequests(first:1){nodes{number title}}}}}}}}}`;
-export async function getBlame(repo: string, sha: string, path: string): Promise<Map<number, BlameLine>> {
-  const [owner, name] = repo.split('/');
-  const d = await graphql(BLAME, { owner, name, oid: sha, path });
-  const out = new Map<number, BlameLine>();
-  for (const r of d.repository.object?.blame?.ranges ?? []) {
-    const c = r.commit;
-    const pr = c.associatedPullRequests?.nodes?.[0];
-    const info: BlameLine = { sha: c.abbreviatedOid, message: c.messageHeadline, when: c.committedDate, who: c.author?.user?.login ?? c.author?.name ?? 'someone', pr };
-    for (let l = r.startingLine; l <= r.endingLine; l++) out.set(l, info);
-  }
-  return out;
-}
-
 // GitHub's emoji shortcodes (name → image URL), cached for the session.
 let emojis: Promise<Record<string, string>> | undefined;
 export const getEmojis = () =>

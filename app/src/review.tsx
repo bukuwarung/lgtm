@@ -1,12 +1,11 @@
 import { render, type VNode } from 'preact';
-import { createPortal } from 'preact/compat';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { addedLines, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getBlame, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, markBots, renderGfm, reply, resolveThread, setViewed, submitReview,
-  type BlameLine, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
+  type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
@@ -1038,11 +1037,8 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   // A doc comment switched to its source: a header row above its first line switches it back.
   const docOpenedAt = (hi: number, li: number) => docs.find((d) => d.hunk === hi && d.start === li && openDocs.has(`${hi}-${li}`));
 
-  const blame = useBlameHover(ctx, file);
   return (
-    <>
-    {blame.pop}
-    <table class="diff" ref={table} onMouseEnter={blame.enter} onMouseOver={blame.over} onMouseLeave={blame.hide} onMouseDown={blame.hide}>
+    <table class="diff" ref={table}>
       <tbody>
         {hunks.map((h, hi) => (
           <>
@@ -1132,64 +1128,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         {gapBefore(hunks.length) && gapRows(gapBefore(hunks.length)!)}
       </tbody>
     </table>
-    </>
   );
-}
-
-// Hovering a line number for a moment shows who last changed that line, above it (clear of a comment box opening
-// below): the old number blames the base, the new one the head (a line this PR added shows its own commit). A file's
-// blame is fetched when the mouse enters its diff, and kept for the session.
-const blames = new Map<string, Promise<Map<number, BlameLine>>>();
-function useBlameHover(ctx: Ctx, file: File) {
-  const [on] = useStoredFlag('blameHover', true);
-  const [pop, setPop] = useState<{ x: number; y: number; b: BlameLine } | null>(null);
-  const timer = useRef(0);
-  const cell = useRef<Element | null>(null); // the number being hovered
-  const side = (old: boolean) => {
-    const sha = old ? ctx.pr.base.sha : ctx.pr.head.sha;
-    const path = old ? (file.previous_filename ?? file.filename) : file.filename;
-    const key = `${ctx.repo}@${sha}:${path}`;
-    if (!blames.has(key)) blames.set(key, getBlame(ctx.repo, sha, path).catch(() => new Map()));
-    return blames.get(key)!;
-  };
-  const hide = () => (clearTimeout(timer.current), (cell.current = null), setPop(null));
-  const enter = () => {
-    if (!on) return;
-    if (file.status !== 'added') void side(true);
-    if (file.status !== 'removed') void side(false);
-  };
-  const over = (e: MouseEvent) => {
-    const td = (e.target as Element).closest('td.num') as HTMLTableCellElement | null;
-    if (!on || !td || !td.textContent) return cell.current && hide();
-    if (td === cell.current) return;
-    cell.current = td;
-    clearTimeout(timer.current);
-    setPop(null);
-    const line = Number(td.textContent);
-    timer.current = setTimeout(async () => {
-      const b = (await side(td.cellIndex === 0)).get(line);
-      if (!b || cell.current !== td || document.activeElement?.closest('.editor')) return; // moved on, or typing
-      const r = td.getBoundingClientRect();
-      setPop({ x: r.left, y: r.top - 4, b });
-    }, 500) as unknown as number;
-  };
-  useEffect(() => () => clearTimeout(timer.current), []);
-  return {
-    enter,
-    over,
-    hide,
-    // On <body>: inside a file, whose containment (content-visibility) would place and clip a fixed element itself.
-    pop:
-      pop &&
-      createPortal(
-        <div class="blame-pop" style={{ left: pop.x, top: pop.y }}>
-          <b>{pop.b.who}</b> · {ago(pop.b.when)} · <code>{pop.b.sha}</code>
-          <div>{pop.b.message}</div>
-          {pop.b.pr && <div class="note">#{pop.b.pr.number} {pop.b.pr.title}</div>}
-        </div>,
-        document.body,
-      ),
-  };
 }
 
 // The changed words inside a changed line, per row ("hunk-line"): marked in the row's own HTML (markText). The CSS

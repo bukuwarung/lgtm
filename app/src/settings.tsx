@@ -162,7 +162,6 @@ export function Settings() {
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
         </Flag>
         <Flag k="resumePosition" initial={true} label="Reopen a PR where you left off" />
-        <Flag k="blameHover" initial={true} label="Show who last changed a line" hint="Hover a line number for a moment: the commit, when, and its PR." />
         <Flag k="flagUntested" initial={true} label="Point out code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)." />
       </section>
 
