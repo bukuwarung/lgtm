@@ -56,6 +56,19 @@ export function useStoredFlag(key: string, initial: boolean) {
   return [v === '1', () => set(v === '1' ? '0' : '1')] as const;
 }
 
+// GitHub login → Slack user ID: the shared team file and your own overrides; finding and saving go through slackcli.
+export type SlackPeople = { team: Record<string, string>; mine: Record<string, string> };
+export type SlackMatch = { login: string; id?: string; label?: string; display?: string; via?: 'email' | 'name' | 'username' };
+async function call<T>(method: string, body?: unknown): Promise<T> {
+  const res = await fetch('/slack-people', { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+  const d = await res.json().catch(() => ({ error: 'the running lgtm is older than this page. Restart it (Ctrl-C, then lgtm) and reload.' }));
+  if (!res.ok) throw new Error(d.error);
+  return d;
+}
+export const getSlackPeople = () => call<SlackPeople>('GET');
+export const findSlackPeople = (people: { login: string; name: string | null; emails: string[] }[]) => call<SlackMatch[]>('POST', { people });
+export const saveSlackPeople = (map: Record<string, string>) => call<SlackPeople>('PUT', map);
+
 // GitHub is the gh login (in the page); this asks the server about the CLIs it drives: slackcli and acli.
 export type Integrations = { slack: { ok: boolean; error?: string; who?: string }; jira: { ok: boolean; error?: string; site?: string } };
 export async function fetchIntegrations(): Promise<Integrations> {

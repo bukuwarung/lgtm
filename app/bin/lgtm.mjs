@@ -88,6 +88,66 @@ async function prThreads(pr) {
   return mine.map(([k, t]) => ({ login: k.slice(pr.length + 1), url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}` }));
 }
 
+// --- GitHub ↔ Slack people (Settings) ---
+
+const LOGIN = /^[\w-]{1,39}$/;
+const SLACK_ID = /^U[A-Z0-9]{6,}$/;
+// slackcli may print a spinner line first, and prints nothing at all for an empty search.
+const parseJson = (out = '') => {
+  try {
+    return JSON.parse(out.slice(out.indexOf('{')));
+  } catch {
+    return null;
+  }
+};
+
+// The current mapping: the shared team file and your own overrides.
+async function slackPeople() {
+  return { team: JSON.parse(await readFile(TEAM, 'utf8')), mine: (await readConfig()).slackUsers ?? {} };
+}
+
+// Best guesses for people without a mapping: an exact email match first (their verified company email on GitHub),
+// then their GitHub name, then their login's first word, each only when Slack finds exactly one live person.
+async function findSlack(people) {
+  if (!Array.isArray(people) || people.length > 50) throw new Error('Bad request');
+  const one = (u, via) => ({ id: u.id, label: u.real_name || u.profile?.real_name || u.name, display: u.profile?.display_name || '', via });
+  const out = [];
+  for (const p of people) {
+    if (!LOGIN.test(p?.login ?? '')) continue;
+    let found = null;
+    for (const email of (Array.isArray(p.emails) ? p.emails : []).slice(0, 5)) {
+      if (typeof email !== 'string' || !/^[^\s@-][^\s@]*@[^\s@]+$/.test(email)) continue;
+      const r = await slackcli(['users', 'info', email, '--json']);
+      const u = r.ok && parseJson(r.stdout);
+      if (u?.id && !u.deleted) {
+        found = one(u, 'email');
+        break;
+      }
+    }
+    for (const [query, via] of [[p.name, 'name'], [p.login.split(/[-_]/)[0], 'username']]) {
+      if (found || typeof query !== 'string' || query.trim().length < 3 || query.startsWith('-')) continue;
+      const r = await slackcli(['search', 'people', query.slice(0, 100), '--json', '--limit', '5']);
+      const live = r.ok ? (parseJson(r.stdout)?.people ?? []).filter((u) => !u.deleted && !u.is_bot) : [];
+      if (live.length === 1) found = one(live[0], via);
+    }
+    out.push({ login: p.login, ...(found ?? {}) });
+  }
+  return out;
+}
+
+// Saves to your own config (~/.config/lgtm/config.json), not the shared team file; an empty id removes the entry.
+async function saveSlackPeople(map) {
+  const entries = Object.entries(map ?? {});
+  if (!entries.length || entries.length > 100 || entries.some(([l, id]) => !LOGIN.test(l) || (id !== '' && !SLACK_ID.test(id)))) throw new Error('Bad request');
+  const config = await readConfig();
+  const mine = { ...(config.slackUsers ?? {}) };
+  for (const [l, id] of entries) id ? (mine[l] = id) : delete mine[l];
+  await mkdir(dirname(CONFIG), { recursive: true });
+  await writeFile(CONFIG + '.tmp', JSON.stringify({ ...config, slackUsers: mine }, null, 2));
+  await rename(CONFIG + '.tmp', CONFIG);
+  return slackPeople();
+}
+
 async function notify({ recipients, text, thread }) {
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
     typeof thread === 'string' && /^[\w.-]+\/[\w.-]+#\d+$/.test(thread) &&
@@ -199,13 +259,23 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end('lgtm');
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/job-log') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams;
     return jobLog(q.get('repo') ?? '', q.get('job') ?? '').then(
       (text) => res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }).end(text),
       (e) => res.writeHead(500, { 'Content-Type': 'text/plain' }).end(e.message),
     );
+  }
+  if (path === '/slack-people') {
+    try {
+      if (req.method === 'GET') return json(res, 200, await slackPeople());
+      if (req.method === 'POST') return json(res, 200, await findSlack((await readJson(req)).people));
+      if (req.method === 'PUT') return json(res, 200, await saveSlackPeople(await readJson(req)));
+      return res.writeHead(405).end();
+    } catch (e) {
+      return json(res, 500, { error: e.message });
+    }
   }
   if (path === '/integrations') {
     const plain = (s = '') => s.replace(/\x1b\[[0-9;]*m/g, ''); // the CLIs colour their output

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
-import { getTeams, getViewer } from './github.ts';
-import { fetchIntegrations, useStoredFlag, useStoredValue, type Integrations } from './platform.ts';
+import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
+import { fetchIntegrations, findSlackPeople, getSlackPeople, saveSlackPeople, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { SHORTCUTS } from './review.tsx';
 
 export const THEMES = [['', 'Auto', '◐'], ['light', 'Light', '☀'], ['dark', 'Dark', '☾']] as const;
@@ -80,6 +80,8 @@ export function Settings() {
         </Status>
         {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
       </section>
+
+      {ints?.slack.ok && <SlackPeopleSection team={team} />}
 
       <section>
         <h3>Pull request list</h3>
@@ -162,5 +164,103 @@ export function Settings() {
         </table>
       </section>
     </div>
+  );
+}
+
+const VIA: Record<string, string> = { email: 'same email', name: 'same name', username: 'GitHub username' };
+
+// Who lgtm messages on Slack for each GitHub login. People come from the watched team and your review queue; for the
+// unmapped ones, "Find" asks Slack (email first, then name) and each match waits for your OK before it's saved.
+function SlackPeopleSection({ team }: { team: string }) {
+  const [logins, setLogins] = useState<string[] | null>(null);
+  const [org, setOrg] = useState('');
+  const [map, setMap] = useState<SlackPeople | null>(null);
+  const [matches, setMatches] = useState<Record<string, SlackMatch>>({});
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    getSlackPeople().then(setMap, (e) => setErr(e.message));
+    Promise.all([team ? getTeamMembers(team).catch(() => []) : [], getReviewQueue().catch(() => []), getViewer()]).then(([members, queue, me]) => {
+      setOrg(team.split('/')[0] || queue[0]?.repo.split('/')[0] || '');
+      const people = new Set([...members, ...queue.map((i) => i.author)]);
+      people.delete(me);
+      setLogins([...people].filter((l) => !l.endsWith('[bot]') && l !== 'ghost').sort((a, b) => a.localeCompare(b)));
+    });
+  }, [team]);
+
+  const current = (l: string) => map?.mine[l] ?? map?.team[l];
+  const unmapped = (logins ?? []).filter((l) => !current(l));
+  const run = async (label: string, f: () => Promise<void>) => {
+    setBusy(label);
+    setErr('');
+    try {
+      await f();
+    } catch (e: any) {
+      setErr(e.message);
+    }
+    setBusy('');
+  };
+  const find = () =>
+    run('find', async () => {
+      const people = await getPeople(org, unmapped);
+      const found = await findSlackPeople(unmapped.map((login) => ({ login, ...people[login] })));
+      setMatches(Object.fromEntries(found.map((m) => [m.login, m])));
+    });
+  const save = (entries: Record<string, string>) => run('save', async () => setMap(await saveSlackPeople(entries)));
+  const suggested = Object.values(matches).filter((m) => m.id && !current(m.login));
+
+  return (
+    <section>
+      <h3>Slack people</h3>
+      <p class="note">
+        Who gets the Slack message for each GitHub account. Shared entries live in <code>app/slack-users.json</code>; what you save here goes to
+        your own <code>~/.config/lgtm/config.json</code>. Unmapped people are still tried by their GitHub email when you send.
+      </p>
+      <div class="row">
+        <button disabled={!!busy || !unmapped.length || !org} onClick={find}>
+          {busy === 'find' ? 'Searching Slack…' : `Find Slack accounts for ${unmapped.length} unmapped`}
+        </button>
+        {suggested.length > 1 && (
+          <button disabled={!!busy} onClick={() => save(Object.fromEntries(suggested.map((m) => [m.login, m.id!])))}>
+            Save all {suggested.length} matches
+          </button>
+        )}
+      </div>
+      {err && <p class="error">{err}</p>}
+      {!logins || !map ? (
+        <p class="note">Loading…</p>
+      ) : (
+        <table class="set-people">
+          <tbody>
+            {logins.map((l) => {
+              const m = matches[l];
+              return (
+                <tr key={l}>
+                  <td>@{l}</td>
+                  <td>
+                    {current(l) ? (
+                      <>
+                        <code>{current(l)}</code> <small class="inline">{map.mine[l] ? 'yours' : 'shared'}</small>
+                        {map.mine[l] && <button class="link" disabled={!!busy} onClick={() => save({ [l]: '' })}>remove</button>}
+                      </>
+                    ) : m?.id ? (
+                      <>
+                        {m.label}
+                        {m.display && m.display !== m.label && <> ({m.display})</>} <small class="inline">by {VIA[m.via!]}</small>{' '}
+                        <button disabled={!!busy} onClick={() => save({ [l]: m.id! })}>Save</button>
+                      </>
+                    ) : m ? (
+                      <small class="inline">no single match; add it to the config by hand</small>
+                    ) : (
+                      <small class="inline">not mapped</small>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }

@@ -101,6 +101,8 @@ Values can be a Slack user ID (preferred: survives handle renames), `@handle`, o
 { "slackUsers": { "github-login": "U012ABC" } }
 ```
 
+Or let lgtm find them: Settings → Slack people lists your team and the people in your queue with their mapping, and "Find Slack accounts" looks the unmapped ones up in Slack (their verified company email on GitHub first, then their GitHub name, each only when Slack finds exactly one person). You confirm each match before it's saved to your `config.json`.
+
 Both are read on every send, so no restart is needed. Each PR gets one Slack thread per person: your first review of a PR starts a DM, later reviews of that PR reply in the same thread (remembered in `~/.config/lgtm/slack-threads.json`). `LGTM_SLACK_DRY_RUN=1 lgtm` checks recipients without sending.
 
 ## Develop

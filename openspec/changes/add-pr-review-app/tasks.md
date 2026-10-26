@@ -116,6 +116,7 @@
 - [x] 12.37 Import folding for TypeScript/JavaScript (multi-line imports, external packages named)
 - [x] 12.38 Settings page: integration status (gh, slackcli, acli) with setup commands, and every preference in one place, synced live
 - [x] 12.39 Unmarked code blocks take the commented file's language, else the PR's main language; GitHub's named blocks recoloured
+- [x] 12.40 Settings → Slack people: current GitHub→Slack mapping, find matches (email, then name), save to the personal config
 
 ## 13. Verify
 

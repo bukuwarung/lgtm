@@ -374,3 +374,8 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .set-seg button { border: none; border-radius: 0; background: none; }
 .set-seg button.on { background: var(--soft); color: var(--accent); }
 .set-keys td { padding: 2px 12px 2px 0; font-size: 13px; }
+.set-people { width: 100%; margin-top: 8px; font-size: 13px; border-collapse: collapse; }
+.set-people td { padding: 4px 8px 4px 0; border-top: 1px solid var(--border); vertical-align: middle; }
+.set-people td:first-child { width: 40%; }
+.settings small.inline { display: inline; }
+button.link { border: none; background: none; padding: 0 4px; color: var(--accent); cursor: pointer; font-size: 12px; }

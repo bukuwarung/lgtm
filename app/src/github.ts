@@ -118,9 +118,10 @@ async function paginate<T>(path: string, accept?: string): Promise<T[]> {
   return out;
 }
 
-async function graphql<T = any>(query: string, variables: Record<string, unknown>): Promise<T> {
+// partial: return what resolved even if some fields errored (they come back null).
+async function graphql<T = any>(query: string, variables: Record<string, unknown>, partial = false): Promise<T> {
   const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query, variables }) });
-  if (r.errors?.length) throw new Error(r.errors[0].message);
+  if (r.errors?.length && !(partial && r.data)) throw new Error(r.errors[0].message);
   return r.data;
 }
 
@@ -198,12 +199,17 @@ export async function getTeams(): Promise<string[]> {
 
 // A team's members and their open PRs in the team's organization. Search ORs repeated author: filters; members go
 // in chunks so each query stays under GitHub's search length limit.
-export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[] }> {
+export async function getTeamMembers(team: string): Promise<string[]> {
   const [org, slug] = team.split('/');
   const t = (await graphql(`query($org:String!,$slug:String!){organization(login:$org){team(slug:$slug){members(first:100){nodes{login}}}}}`, { org, slug }))
     .organization?.team;
   if (!t) throw new Error(`No team ${team}, or you can't see it.`);
-  const members: string[] = t.members.nodes.map((m: any) => m.login).sort((a: string, b: string) => a.localeCompare(b));
+  return t.members.nodes.map((m: any) => m.login).sort((a: string, b: string) => a.localeCompare(b));
+}
+
+export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[] }> {
+  const org = team.split('/')[0];
+  const members = await getTeamMembers(team);
   const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
   if (!chunks.length) return { members, items: [] };
   const vars = Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`]));
@@ -235,14 +241,30 @@ export const getViewer = () => (viewer ??= json('/user').then((u) => u.login as 
 
 // Emails to find someone on Slack: their verified company addresses for the org, then their public email.
 export async function getEmails(org: string, logins: string[]): Promise<Record<string, string[]>> {
-  const vars = Object.fromEntries(logins.map((l, i) => [`l${i}`, l]));
-  const fields = (withOrg: boolean) =>
-    logins.map((_, i) => `u${i}:user(login:$l${i}){email${withOrg ? ' organizationVerifiedDomainEmails(login:$org)' : ''}}`).join(' ');
-  const decl = (withOrg: boolean) => [...logins.map((_, i) => `$l${i}:String!`), ...(withOrg ? ['$org:String!'] : [])].join(',');
-  // The org field needs org membership; fall back to public emails only if it errors.
-  const d = await graphql(`query(${decl(true)}){${fields(true)}}`, { ...vars, org }).catch(() => graphql(`query(${decl(false)}){${fields(false)}}`, vars));
+  const people = await getPeople(org, logins);
+  return Object.fromEntries(logins.map((l) => [l, people[l].emails]));
+}
+
+// GitHub name and emails per login (verified company emails first), to find people on Slack.
+export async function getPeople(org: string, logins: string[]): Promise<Record<string, { name: string | null; emails: string[] }>> {
+  if (!logins.length) return {};
+  const query = (ls: string[], withOrg: boolean) => {
+    const vars = Object.fromEntries(ls.map((l, i) => [`l${i}`, l]));
+    const fields = ls.map((_, i) => `u${i}:user(login:$l${i}){name email${withOrg ? ' organizationVerifiedDomainEmails(login:$org)' : ''}}`).join(' ');
+    const decl = [...ls.map((_, i) => `$l${i}:String!`), ...(withOrg ? ['$org:String!'] : [])].join(',');
+    return graphql(`query(${decl}){${fields}}`, withOrg ? { ...vars, org } : vars, true).then((d) => ls.map((_, i) => d[`u${i}`] ?? null));
+  };
+  // Apps and bots aren't users (null). The org's verified emails need org membership: whoever came back empty is
+  // asked again for public details only.
+  const first = await query(logins, true);
+  const missing = logins.filter((_, i) => !first[i]);
+  const second = missing.length ? await query(missing, false) : [];
+  const user = (l: string, i: number) => first[i] ?? second[missing.indexOf(l)] ?? null;
   return Object.fromEntries(
-    logins.map((l, i) => [l, [...(d[`u${i}`]?.organizationVerifiedDomainEmails ?? []), d[`u${i}`]?.email].filter(Boolean)]),
+    logins.map((l, i) => {
+      const u = user(l, i);
+      return [l, { name: u?.name ?? null, emails: [...(u?.organizationVerifiedDomainEmails ?? []), u?.email].filter(Boolean) }];
+    }),
   );
 }
 

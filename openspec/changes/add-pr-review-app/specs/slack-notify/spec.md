@@ -40,3 +40,10 @@ The submit panel SHALL say why it offers no Slack message (slackcli not signed i
 #### Scenario: Own PR
 - **WHEN** the user finishes a review on their own PR with no other assignees
 - **THEN** the panel reads "No Slack message: nobody besides you is the author or an assignee"
+
+### Requirement: Find Slack accounts
+Settings SHALL list the watched team's members and the people in the user's queue with their current Slack mapping (shared or personal), and offer to look up the unmapped ones through slackcli: by their verified company email on GitHub, then by their GitHub name, then by their login's first word, accepting a match only when exactly one live Slack person is found. Each match SHALL be saved only when the user confirms it, to the personal config (`~/.config/lgtm/config.json`), never to the shared team file; a personal entry can be removed.
+
+#### Scenario: New teammate
+- **WHEN** `@mandeep-buku` has no mapping and the user clicks "Find Slack accounts"
+- **THEN** the row shows "Mandeep Singh (Mandeep) by same name" with Save, and bots or apps with no single match say so
