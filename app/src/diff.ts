@@ -290,3 +290,28 @@ export function importFolds(hunks: Hunk[], lang: 'jvm' | 'ts' = 'jvm'): ImportFo
   });
   return out;
 }
+
+// Wraps characters [start, end) of a line's HTML (syntax-highlighted, or escaped text) in <mark class=cls>, counting
+// text only (an entity is one character). The mark closes and reopens around tags, so the HTML stays well nested.
+export function markText(html: string, start: number, end: number, cls: string): string {
+  if (start >= end) return html;
+  const open = `<mark class="${cls}">`;
+  let out = '';
+  let pos = 0;
+  let inMark = false;
+  for (let i = 0; i < html.length; ) {
+    if (html[i] === '<') {
+      const j = html.indexOf('>', i) + 1 || html.length;
+      out += inMark ? `</mark>${html.slice(i, j)}${open}` : html.slice(i, j);
+      i = j;
+      continue;
+    }
+    if (pos === start) (out += open), (inMark = true);
+    if (pos === end && inMark) (out += '</mark>'), (inMark = false);
+    const ch = html[i] === '&' ? (html.slice(i).match(/^&(#\d+|#x[\da-f]+|\w+);/i)?.[0] ?? '&') : html[i];
+    out += ch;
+    i += ch.length;
+    pos++;
+  }
+  return inMark ? out + '</mark>' : out;
+}

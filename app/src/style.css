@@ -319,8 +319,6 @@ details.comment.bot[open] > summary { opacity: 1; }
 details.comment.bot[open] .bot-excerpt { display: none; }
 .bot-excerpt { color: var(--muted); font-size: 12px; }
 /* Word-level changes inside modified lines (CSS Custom Highlight API) */
-::highlight(lgtm-word-del) { background-color: light-dark(#ffb8b0, #7a3b3b); }
-::highlight(lgtm-word-add) { background-color: light-dark(#a6f0b5, #3a6b45); }
 /* Code moved without changes: dimmed, with a note where it went / came from */
 .diff tr.moved { background: color-mix(in srgb, var(--soft) 70%, transparent); opacity: .6; }
 .diff tr.moved-h td { padding: 2px 8px; font: 11px var(--sans); color: var(--muted); background: var(--soft); }
@@ -397,8 +395,8 @@ button.link { border: none; background: none; padding: 0 4px; color: var(--accen
 .demo-side .conversation { margin: 0; }
 .demo-side .vector-preview { padding: 8px; }
 .demo-md { padding: 4px 12px; }
-mark.wd-del { background: light-dark(#ffb8b0, #7a3b3b); color: inherit; }
-mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
+mark.wd-del { background: light-dark(#ffb8b0, #7a3b3b); color: inherit; padding: 0; }
+mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding: 0; }
 .demo-page { width: 980px; padding: 16px; }
 .demo-page h3 { margin: 0 0 10px; font-size: 15px; }
 .demo-page .demo-pair { margin: 0; font-size: 13px; }

@@ -1,6 +1,6 @@
 import { render, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, changePairs, gaps, markText, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReviewCommit, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -953,7 +953,12 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   };
 
   const table = useRef<HTMLTableElement>(null);
-  useWordHighlights(table, hunks);
+  const words = useWordMarks(hunks);
+  const codeHtml = (hi: number, li: number, text: string) => {
+    const html = hl ? hl[hi][li] : md.utils.escapeHtml(text);
+    const w = words.get(`${hi}-${li}`);
+    return w ? markText(html, w[1], w[2], w[0]) : html;
+  };
   const mv = ctx.moved.get(path);
   // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
   const [foldImports] = useStoredFlag('foldImports', true);
@@ -1064,7 +1069,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                   <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`}>
                     <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.new ?? ''}</td>
-                    {hl ? <td class="code" dangerouslySetInnerHTML={{ __html: hl[hi][li] }} /> : <td class="code">{l.text}</td>}
+                    <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />
                   </tr>
                   {notes(side, num)}
                   {l.kind === ' ' && notes('LEFT', l.old!)}
@@ -1079,46 +1084,24 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   );
 }
 
-// Word-level highlights inside changed lines, drawn with the CSS Custom Highlight API so the syntax-highlighted HTML
-// stays untouched. Each diff adds its ranges to two shared highlights and takes them back out on re-render. They're
-// StaticRanges: a live Range follows DOM changes, and rows replaced under it stretched it across whole stretches of
-// the diff, painting them green until the next re-render.
-const WORD = typeof CSS !== 'undefined' && 'highlights' in CSS ? { del: new Highlight(), add: new Highlight() } : null;
-if (WORD) {
-  CSS.highlights.set('lgtm-word-del', WORD.del);
-  CSS.highlights.set('lgtm-word-add', WORD.add);
-}
-function rangeIn(el: Element | null, start: number, end: number): StaticRange | null {
-  if (!el) return null;
-  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  let pos = 0;
-  let from: [Text, number] | null = null;
-  for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
-    const len = n.data.length;
-    if (!from && start <= pos + len) from = [n, start - pos];
-    if (from && end <= pos + len) return new StaticRange({ startContainer: from[0], startOffset: from[1], endContainer: n, endOffset: end - pos });
-    pos += len;
-  }
-  return null;
-}
-function useWordHighlights(table: { current: HTMLTableElement | null }, hunks: Hunk[]) {
+// The changed words inside a changed line, per row ("hunk-line"): marked in the row's own HTML (markText). The CSS
+// Custom Highlight API drew them before, but the browser sometimes painted those far past their words (whole files
+// green, header included) until the next re-render.
+function useWordMarks(hunks: Hunk[]) {
   const [on] = useStoredFlag('wordDiff', true);
-  useLayoutEffect(() => {
-    if (!on || !WORD || !table.current) return;
-    const mine: [Highlight, StaticRange][] = [];
-    hunks.forEach((h, hi) =>
-      changePairs(h).forEach(([d, a]) => {
-        const w = wordChange(h.lines[d].text, h.lines[a].text);
-        if (!w) return;
-        const cell = (li: number) => table.current!.querySelector(`tr[data-k="${hi}-${li}"] td.code`);
-        const rd = rangeIn(cell(d), ...w.del), ra = rangeIn(cell(a), ...w.add);
-        if (rd) mine.push([WORD.del, rd]);
-        if (ra) mine.push([WORD.add, ra]);
-      }),
-    );
-    for (const [hl, r] of mine) hl.add(r);
-    return () => mine.forEach(([hl, r]) => hl.delete(r));
-  });
+  return useMemo(() => {
+    const m = new Map<string, [cls: string, start: number, end: number]>();
+    if (on)
+      hunks.forEach((h, hi) =>
+        changePairs(h).forEach(([d, a]) => {
+          const w = wordChange(h.lines[d].text, h.lines[a].text);
+          if (!w) return;
+          m.set(`${hi}-${d}`, ['wd-del', ...w.del]);
+          m.set(`${hi}-${a}`, ['wd-add', ...w.add]);
+        }),
+      );
+    return m;
+  }, [hunks, on]);
 }
 
 // A documentation comment, rendered: the description as markdown, then the tags (Params, Returns, Throws…).

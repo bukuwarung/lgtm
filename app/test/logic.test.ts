@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, anchor, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { addedLines, anchor, markText, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { reviewOrder, untested } from '../src/files.ts';
@@ -336,4 +336,10 @@ test('untested: code changed without a matching test change', () => {
     ]),
     ['app/src/main/java/a/Bar.kt'],
   );
+});
+
+test('markText marks text only, closing around tags and counting entities as one', () => {
+  assert.equal(markText('val fee', 4, 7, 'm'), 'val <mark class="m">fee</mark>');
+  assert.equal(markText('<span class="k">val</span> a &amp; b', 2, 7, 'm'), '<span class="k">va<mark class="m">l</mark></span><mark class="m"> a &amp;</mark> b');
+  assert.equal(markText('x', 1, 1, 'm'), 'x');
 });
