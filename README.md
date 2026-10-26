@@ -30,7 +30,7 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Set
 
 ## What it does
 
-**Your queue.** Tabs for PRs to review, your own PRs, and a GitHub team you watch, grouped by where they stand. Each PR shows its size and what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, and `↻ re-review` when it's back on your plate. Each PR also gets a rough time to review (⏱), from its description and its changed lines (generated files and lockfiles left out). Refreshes every 3 minutes, with optional desktop notifications. On the Team tab, each member shows how many reviews they're asked for, to help pick a reviewer who isn't swamped.
+**Your queue.** Tabs for PRs to review, your own PRs, and a GitHub team you watch, grouped by where they stand. Each PR shows its size and what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, and `↻ re-review` when it's back on your plate. Each PR also gets a rough time to review (⏱), from its description and its changed lines (generated files and lockfiles left out); Settings → Time to review gives the sources and sets your own pace. Refreshes every 3 minutes, with optional desktop notifications. On the Team tab, each member shows how many reviews they're asked for, to help pick a reviewer who isn't swamped.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-queue-dark.png">

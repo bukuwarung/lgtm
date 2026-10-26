@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
 import { askNotifications, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
@@ -135,6 +136,8 @@ export function Settings() {
         </label>
       </section>
 
+      <TimeToReview />
+
       <section>
         <h3>Reviewing</h3>
         <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)} />
@@ -250,6 +253,37 @@ function About() {
       </p>
       {text && <textarea class="diag" readOnly rows={8} value={text} onFocus={(e) => e.currentTarget.select()} />}
     </div>
+  );
+}
+
+// The ⏱ estimate in the PR list: where its paces come from, and your own pace on top (50%–200%).
+function TimeToReview() {
+  const [raw, setPace] = useStoredValue('reviewPace', '100');
+  const pace = Number(raw) || 100;
+  const example = (minutes: number) => estimateLabel(minutes / (pace / 100));
+  return (
+    <section>
+      <h3>Time to review</h3>
+      <p class="note">
+        Each PR in the list gets a rough time to review (⏱): reading its description, then its changed lines. The paces:
+      </p>
+      <ul class="note set-sources">
+        <li>
+          Code: 5 changed lines a minute (300 an hour), the careful end of the SmartBear/Cisco code review study, which found reviewers catch the
+          most defects below 300–500 lines an hour (Jason Cohen, <i>Best Kept Secrets of Peer Code Review</i>, 2006).
+        </li>
+        <li>Description: 200 words a minute, a little under typical silent reading (about 240; Brysbaert, 2019), since PR descriptions are technical.</li>
+        <li>Tests at twice the code pace, docs at six times, deleted lines counted at a third, generated files and lockfiles skipped: lgtm's own guesses.</li>
+      </ul>
+      <label class="set-row set-pace">
+        <span>
+          Your pace: <b>{pace}%</b>
+          <small>{pace === 100 ? 'As above.' : pace < 100 ? 'Slower: estimates grow.' : 'Faster: estimates shrink.'} 300 lines of code would take {example(60)}.</small>
+        </span>
+        <input type="range" min={50} max={200} step={10} value={pace} onInput={(e) => setPace(e.currentTarget.value)} aria-label="Your review pace, percent" />
+      </label>
+      {pace !== 100 && <button onClick={() => setPace('100')}>Back to 100%</button>}
+    </section>
   );
 }
 

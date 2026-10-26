@@ -511,3 +511,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .ask-answer { font-size: 14px; }
 .thread[open] > summary > * { display: none; } /* open, the summary is only the toggle */
 .pill.p-time { font-variant-numeric: tabular-nums; }
+.set-sources { margin: 0 0 8px; padding-left: 18px; max-width: 720px; }
+.set-sources li { margin: 2px 0; }
+.set-pace input[type=range] { width: 220px; }

@@ -325,6 +325,8 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [err, setErr] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
+  const [paceRaw] = useStoredValue('reviewPace', '100'); // Settings → Time to review: estimates ÷ your pace
+  const pace = (Number(paceRaw) || 100) / 100;
   const [tabValue, setTab] = useStoredValue('prTab', 'reviewing'); // which tab, remembered
   const tab = tabValue as Tab;
   // Team tab: a GitHub team ("org/slug") and its members' open PRs. Settings can change it too.
@@ -437,9 +439,9 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
         {kind === MINE && MINE.groupOf(i) === 'm-waiting' && <Waiting i={i} />}
         {i.estimate && <span
           class="pill p-time"
-          title={`Rough time to review: the description (${i.estimate.words} words), then ${Math.round(i.estimate.code)} lines of code, ${Math.round(i.estimate.tests)} of tests and ${Math.round(i.estimate.docs)} of docs (deleted lines count a third; generated files and lockfiles are skipped)${i.files > 100 ? '. Only the first 100 files are counted' : ''}`}
+          title={`Rough time to review: the description (${i.estimate.words} words), then ${Math.round(i.estimate.code)} lines of code, ${Math.round(i.estimate.tests)} of tests and ${Math.round(i.estimate.docs)} of docs (deleted lines count a third; generated files and lockfiles are skipped)${pace !== 1 ? `, at your ${Math.round(pace * 100)}% pace` : ''}${i.files > 100 ? '. Only the first 100 files are counted' : ''}. See Settings → Time to review`}
         >
-          ⏱ {estimateLabel(i.estimate.minutes)}
+          ⏱ {estimateLabel(i.estimate.minutes / pace)}
         </span>}
         <span class="pill p-size" title={`${i.files} changed files`}>
           <b class="a">+{i.additions}</b> <b class="d">−{i.deletions}</b> · {i.files} file{i.files === 1 ? '' : 's'}
