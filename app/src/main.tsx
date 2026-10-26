@@ -468,7 +468,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
   };
 
   return (
-    <aside class="side prs" hidden={hidden}>
+    <aside class={hidden ? 'side prs collapsed' : 'side prs'} aria-hidden={hidden}>
       <div class="side-scroll">
       {err && <p class="error">{err}</p>}
       {shown && (

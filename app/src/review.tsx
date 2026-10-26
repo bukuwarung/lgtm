@@ -480,8 +480,9 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
 
   return (
     <div class={showIndex ? 'review' : 'review no-index'}>
-      {showIndex && (
-        <aside class="side tree">
+      {/* Always there, so showing and hiding can slide (style.css); hidden, it's out of reach of the keyboard. */}
+      {(
+        <aside class={showIndex ? 'side tree' : 'side tree collapsed'} aria-hidden={!showIndex}>
           <div class="side-scroll">
             <ShortcutIndex
               repo={repo}

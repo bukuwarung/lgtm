@@ -54,14 +54,14 @@ code, pre { font-family: var(--mono); }
 
 /* Layout: the document scrolls (IntersectionObserver relies on it); sidebars and bars are sticky. */
 .shell { display: grid; grid-template-columns: var(--prs-w, 300px) minmax(0, 1fr); }
-.shell.no-prs { grid-template-columns: minmax(0, 1fr); }
+.shell.no-prs { grid-template-columns: 0px minmax(0, 1fr); }
 .empty { margin-top: 48px; }
 /* Sidebars: sticky full-height columns; content scrolls inside, the resize handle stays on the edge. */
 .side { position: sticky; top: var(--nav); height: calc(100vh - var(--nav)); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
 .side-scroll { flex: 1; min-height: 0; overflow: auto; }
 .prs .side-scroll { padding: 8px; }
 .drafts-toggle { width: 100%; margin-bottom: 6px; padding: 2px 8px; border-style: dashed; font-size: 12px; color: var(--muted); }
-.resizer { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; z-index: 5; cursor: col-resize; }
+.resizer { position: absolute; top: 0; right: 0; width: 6px; height: 100%; z-index: 5; cursor: col-resize; }
 .resizer:hover, .resizer:focus-visible, body.resizing .resizer { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: none; }
 body.resizing { cursor: col-resize; user-select: none; }
 .prs input { padding: 3px 8px; }
@@ -89,7 +89,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .pill.p-bad { color: var(--delfg); border-color: currentColor; }
 
 .review { display: grid; grid-template-columns: var(--index-w, 280px) minmax(0, 1fr); }
-.review.no-index { grid-template-columns: minmax(0, 1fr); }
+.review.no-index { grid-template-columns: 0px minmax(0, 1fr); }
 .tree { font-size: 13px; }
 
 /* PR Shortcut Index */
@@ -428,7 +428,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .find-count { min-width: 64px; font-size: 12px; color: var(--muted); text-align: center; }
 ::highlight(lgtm-find) { background-color: light-dark(#fff3a3, #6b5f1f); }
 ::highlight(lgtm-find-current) { background-color: light-dark(#ffb84d, #b3741f); }
-.side[hidden] { display: none; }
 .set-version { margin-top: 8px; font-size: 12px; }
 /* "✳ Claude": send a PR or comment to Claude Code */
 .claude-menu { position: relative; display: inline-flex; align-items: center; gap: 6px; }
@@ -489,3 +488,11 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .g-note { margin-left: 6px; font-weight: 400; color: var(--muted); }
 /* The app: the top bar is the title bar, with room for the traffic lights on the left. */
 .desktop .top { padding-left: 84px; -webkit-user-select: none; user-select: none; }
+/* Showing and hiding the PR list and the PR index slides their column; the panel keeps its width inside, clipped,
+   so its content doesn't reflow on the way. Instant while resizing, and for reduced motion. */
+.shell, .review { transition: grid-template-columns .22s cubic-bezier(.2, .8, .2, 1); }
+.side { overflow: hidden; min-width: 0; transition: visibility 0s; }
+.side > .side-scroll { min-width: 200px; }
+.side.collapsed { visibility: hidden; border-right-color: transparent; transition: visibility 0s .22s, border-color 0s .22s; }
+.resizing .shell, .resizing .review { transition: none; }
+@media (prefers-reduced-motion: reduce) { .shell, .review, .side.collapsed { transition: none; } }
