@@ -32,7 +32,7 @@
 ## 5. Release and Homebrew
 
 - [ ] 5.1 Create the public repo `bukuwarung/homebrew-tap` (README with install line and the quarantine note)
-- [ ] 5.2 Release workflow in `bukuwarung/lgtm` on `v*` tags: build UI, universal Tauri build, zip the app, package `lgtm-cli`, publish a release in the tap repo, update cask + formula (version, SHA-256)
+- [ ] 5.2 Release checklist in the README's Develop section: bump version, build UI, universal Tauri build, zip the app, package `lgtm-cli`, `gh release create` in the tap repo, update cask + formula (version, SHA-256)
 - [ ] 5.3 `Casks/lgtm.rb`: depends on `gh`, macOS ≥ Ventura, quarantine postflight, caveats for slackcli/acli
 - [ ] 5.4 `Formula/lgtm-cli.rb`: terminal version, depends on `node` and `gh`
 - [ ] 5.5 First release; install on a clean account with `brew install --cask bukuwarung/tap/lgtm` and with `lgtm-cli`; `brew upgrade` to a second release

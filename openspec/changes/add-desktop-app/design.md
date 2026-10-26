@@ -42,14 +42,21 @@ postflight do
   system_command "xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/lgtm.app"]
 end
 ```
-*Trade-off:* installing skips Gatekeeper for lgtm, so trust rests on the tap and its release workflow (only the private repo's workflow can publish). The README says so, and documents the manual "Open Anyway" path for a download by hand.
+*Trade-off:* installing skips Gatekeeper for lgtm, so trust rests on the tap and on who can publish to it (its maintainers). The README says so, and documents the manual "Open Anyway" path for a download by hand.
 
 ### 6. Releases and tap in one public repo: `bukuwarung/homebrew-tap`
 A tap must be a repo named `homebrew-*`, and Homebrew can only download from public URLs. One public repo holds both: `Casks/lgtm.rb`, `Formula/lgtm-cli.rb`, and GitHub Releases with the assets. The source stays private in `bukuwarung/lgtm`.
-- **Release workflow** (in `bukuwarung/lgtm`, on a `v*` tag, `macos-14` runner): build the UI, `tauri build --target universal-apple-darwin`, zip `lgtm.app`, package the terminal version (`app/dist` + `app/bin` + `package.json`) as `lgtm-cli-<v>.tar.gz`, create a release in the tap repo, then rewrite the cask and formula with the new version and SHA-256 and push. Publishing uses a fine-grained token limited to the tap repo (contents: write), stored as a secret.
+- **Releasing, by hand** (a checklist in the README's Develop section, run on a maintainer's Mac):
+  1. Bump the version in `app/package.json` and `desktop/tauri.conf.json`, commit, tag `vX.Y.Z` in `bukuwarung/lgtm`.
+  2. `npm run build` in `app/`, then `cargo tauri build --target universal-apple-darwin`; zip `lgtm.app` as `lgtm-X.Y.Z.zip`.
+  3. Package the terminal version (`app/dist` + `app/bin` + `package.json`) as `lgtm-cli-X.Y.Z.tar.gz`.
+  4. `gh release create vX.Y.Z --repo bukuwarung/homebrew-tap lgtm-X.Y.Z.zip lgtm-cli-X.Y.Z.tar.gz`.
+  5. Update `version` and `sha256` (`shasum -a 256`) in `Casks/lgtm.rb` and `Formula/lgtm-cli.rb`, push the tap.
+  6. `brew upgrade` on another account to check.
+  A CI workflow can automate these steps later without changing the repo layout.
 - **Cask:** `depends_on formula: "gh"`, `depends_on macos: ">= :ventura"`, the quarantine postflight, and `caveats` pointing to slackcli and acli (optional) and to `gh auth login`.
 - **Formula `lgtm-cli`:** installs the packaged terminal version, `depends_on "node"` and `"gh"`, links `bin/lgtm`.
-- **Version:** from the tag; shown in Settings; `tauri.conf.json` and `package.json` stamped by the workflow.
+- **Version:** set in `package.json` and `tauri.conf.json` (step 1); shown in Settings.
 *Alternative:* separate public `lgtm-releases` repo plus a tap repo. Two repos to keep in sync for no gain.
 
 ### 7. Data and settings
@@ -68,9 +75,10 @@ Tauri capabilities allow only lgtm's own commands plus the opener, notification,
 
 ## Risks / Trade-offs
 
-- **Quarantine bypass** (decision 5): acceptable for an internal tool from our own workflow; revisit if an Apple Developer account appears (then: sign, notarize, drop the postflight).
+- **Quarantine bypass** (decision 5): acceptable for an internal tool published by its maintainers; revisit if an Apple Developer account appears (then: sign, notarize, drop the postflight).
 - **WebKit gaps** found during the port; mitigated by testing each feature in the app before release.
-- **Two builds to keep working:** the web/desktop split stays in `platform.*.ts` and a few desktop checks; CI builds both.
+- **Two builds to keep working:** the web/desktop split stays in `platform.*.ts` and a few desktop checks; the release checklist builds both.
+- **Manual releases** can drift (a wrong checksum, a forgotten formula bump); the checklist ends with installing from the tap on another account.
 - **Rust in the codebase:** small, mostly process spawning and JSON; covered by unit tests on the parsing/validation parts.
 
 ## Open Questions

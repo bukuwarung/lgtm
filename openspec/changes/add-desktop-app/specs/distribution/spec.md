@@ -18,9 +18,9 @@ The tap and the release assets SHALL live in the public repo `bukuwarung/homebre
 - **WHEN** Homebrew downloads the release asset without any GitHub login
 - **THEN** the download succeeds, while the source repo stays private
 
-### Requirement: Automated releases
-Pushing a `v*` tag in `bukuwarung/lgtm` SHALL build a universal, ad-hoc-signed `lgtm.app` and the terminal package, publish them as a release in the tap repo, and update the cask and formula (version and SHA-256), using a token that can write only to the tap repo. The version SHALL show in Settings.
+### Requirement: Documented manual releases
+The repo SHALL document the release steps a maintainer runs on their Mac: bump the version, build a universal, ad-hoc-signed `lgtm.app` and the terminal package, publish them as a release in the tap repo, and update the cask and formula (version and SHA-256). The version SHALL show in Settings.
 
-#### Scenario: Tag v0.2.0
-- **WHEN** a maintainer pushes the tag `v0.2.0`
-- **THEN** within one workflow run the tap has release v0.2.0 with `lgtm-0.2.0.zip` and `lgtm-cli-0.2.0.tar.gz`, the cask and formula point at them with matching checksums, and the app's Settings shows 0.2.0
+#### Scenario: Releasing v0.2.0
+- **WHEN** a maintainer follows the checklist for `0.2.0`
+- **THEN** the tap has release v0.2.0 with `lgtm-0.2.0.zip` and `lgtm-cli-0.2.0.tar.gz`, the cask and formula point at them with matching checksums, `brew upgrade` installs it, and the app's Settings shows 0.2.0
