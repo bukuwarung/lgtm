@@ -71,7 +71,7 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Set
 
 On by default, each with a switch (and these examples) in ⚙ Settings.
 
-<details open><summary><b>Changes since your last review</b>: re-reviews start with only what changed since you last reviewed.</summary>
+<details open><summary><b>Changes since your last review</b>: re-reviews start with only what changed since you last reviewed, except on your own PRs (a second switch).</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/sinceFirst-dark.png">

@@ -95,6 +95,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
   const [foldNoDiff] = useStoredFlag('hideNoDiff', true);
   const [startSince] = useStoredFlag('sinceFirst', true);
+  const [wholeOnMine] = useStoredFlag('sinceNotOnMine', true); // my own PR opens whole, even after I reviewed it
   const [resumeOn] = useStoredFlag('resumePosition', true);
   const [dimMoved] = useStoredFlag('dimMoved', true);
   const [showIndex, toggleIndex] = useStoredFlag('showIndex', true);
@@ -171,10 +172,10 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       }, () => {});
       const rules = parseGeneratedRules(attrs ?? '');
       getStack(repo, pr).then(setStack, () => {});
-      getMyLastReviewCommit(repo, n).then((sha) => {
+      Promise.all([getMyLastReviewCommit(repo, n), getViewer().catch(() => '')]).then(([sha, me]) => {
         if (sha && sha !== pr.head.sha) {
           setLastReviewed(sha);
-          if (startSince) setSince(true); // re-review: start with just what changed
+          if (startSince && !(wholeOnMine && pr.user.login === me)) setSince(true); // re-review: start with just what changed
         }
       }, () => {});
       setThreads(threads);
