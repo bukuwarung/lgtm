@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
 import { askNotifications, availableUpdate, copyDiagnostics, diagnostics, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
-import { SHORTCUTS } from './review.tsx';
+import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_THEMES, useCodeLook } from './look.ts';
@@ -188,19 +188,7 @@ export function Settings() {
 
       <BackupSection />
 
-      <section>
-        <h3>Keyboard shortcuts</h3>
-        <table class="set-keys">
-          <tbody>
-            {SHORTCUTS.map(([k, d]) => (
-              <tr key={k}>
-                <td><kbd>{k}</kbd></td>
-                <td>{d}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <Shortcuts />
       <About />
     </div>
   );
@@ -235,6 +223,60 @@ function About() {
       </p>
       {text && <textarea class="diag" readOnly rows={8} value={text} onFocus={(e) => e.currentTarget.select()} />}
     </div>
+  );
+}
+
+// The review page's shortcuts: click one, press the new key (Backspace: no key, Esc: keep it). A key another action
+// had moves here, and that action is left without one.
+function Shortcuts() {
+  const [b, setKey, reset] = useBindings();
+  const [editing, setEditing] = useState<Action | null>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') return setEditing(null);
+      if (e.metaKey || e.ctrlKey || e.altKey) return setMsg('Single keys only (Shift is fine): ⌘ shortcuts are fixed.');
+      if (RESERVED.has(e.key)) return setMsg(`${e.key} is taken by the page. Pick another key.`);
+      const key = e.key === 'Backspace' ? '' : e.key;
+      const taken = ACTIONS.find(([a]) => a !== editing && key && b[a] === key);
+      setKey(editing, key);
+      setMsg(taken ? `“${taken[1]}” had ${keyLabel(key)}; it has no key now.` : '');
+      setEditing(null);
+    };
+    addEventListener('keydown', onKey, true); // before the page's own shortcuts
+    return () => removeEventListener('keydown', onKey, true);
+  }, [editing, b]);
+  return (
+    <section>
+      <h3>Keyboard shortcuts</h3>
+      <p class="note">On a PR. Click a key to change it.</p>
+      <table class="set-keys">
+        <tbody>
+          {ACTIONS.map(([a, d]) => (
+            <tr key={a}>
+              <td>
+                <button class={editing === a ? 'key-btn on' : 'key-btn'} onClick={() => (setMsg(''), setEditing(editing === a ? null : a))}>
+                  {editing === a ? 'Press a key…' : <kbd>{keyLabel(b[a])}</kbd>}
+                </button>
+              </td>
+              <td>{d}</td>
+            </tr>
+          ))}
+          {FIXED.filter(([k]) => k !== 'Esc').map(([k, d]) => (
+            <tr key={k}>
+              <td><kbd>{k}</kbd></td>
+              <td>{d}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {editing && <p class="note">Backspace for no key, Esc to keep it.</p>}
+      {msg && <p class="notice">{msg}</p>}
+      <button onClick={() => (reset(), setMsg('Shortcuts back to the defaults.'))}>Reset to defaults</button>
+    </section>
   );
 }
 

@@ -12,6 +12,7 @@ import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
+import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
@@ -118,6 +119,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [me, setMe] = useState('');
   const threadCursor = useRef(-1);
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
+  const [bindings] = useBindings();
   const key = `drafts:${repo}#${n}`;
 
   // Checks are secondary: a failure here shouldn't block the review.
@@ -404,7 +406,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     return true;
   }
 
-  // Keyboard shortcuts (see the ⌨ help). Reassigned every render so it sees current state.
+  // Keyboard shortcuts (see the ⌨ help; rebindable in Settings). Reassigned every render so it sees current state.
   keys.current = (e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') return setRenderAll(true); // then the browser's find opens
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -419,29 +421,30 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     const cur = sections.reduce((c, s, i) => (s.getBoundingClientRect().top <= top ? i : c), -1);
     const path = sections[Math.max(cur, 0)]?.id.slice(2);
     const ordered = threadOrder(shownThreads, drafts, shown);
-    const act: Record<string, () => void> = {
-      j: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
-      k: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
-      n: () => ordered.length && go(Math.min(threadCursor.current + 1, ordered.length - 1)),
-      p: () => ordered.length && go(Math.max(threadCursor.current - 1, 0)),
-      v: () => path && toggleViewed(path),
-      c: () => path && ctx.setTarget({ path, side: 'RIGHT' }),
-      ' ': () => commentAtCurrentLine() || scrollBy({ top: innerHeight * 0.85 }), // nothing to comment on: Space scrolls as usual
-      i: toggleIndex,
-      w: toggleWs,
-      '[': () => stackAt(-1) && (location.hash = `/${repo}/pull/${stackAt(-1)!.number}`),
-      ']': () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
-      '?': () => setHelp(!help),
-      Escape: () => setHelp(false),
+    const act: Record<Action, () => void> = {
+      nextFile: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
+      prevFile: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
+      nextThread: () => ordered.length && go(Math.min(threadCursor.current + 1, ordered.length - 1)),
+      prevThread: () => ordered.length && go(Math.max(threadCursor.current - 1, 0)),
+      viewed: () => path && toggleViewed(path),
+      fileComment: () => path && ctx.setTarget({ path, side: 'RIGHT' }),
+      comment: () => commentAtCurrentLine() || scrollBy({ top: innerHeight * 0.85 }), // nothing to comment on: scroll as Space would
+      index: toggleIndex,
+      whitespace: toggleWs,
+      stackPrev: () => stackAt(-1) && (location.hash = `/${repo}/pull/${stackAt(-1)!.number}`),
+      stackNext: () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
+      help: () => setHelp(!help),
     };
     function go(i: number) {
       threadCursor.current = i;
       jumpTo(ordered[i].id, 'f-' + ordered[i].path);
     }
     const k = e.key === '/' && e.shiftKey ? '?' : e.key;
-    if (act[k]) {
+    if (k === 'Escape') return setHelp(false);
+    const a = ACTIONS.find(([a]) => bindings[a] === k)?.[0];
+    if (a) {
       e.preventDefault();
-      act[k]();
+      act[a]();
     }
   };
 
@@ -464,10 +467,10 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length}
             />
             <div class="ix-foot">
-              <label title="Hide whitespace-only changes (w)">
+              <label title={`Hide whitespace-only changes${hint(bindings.whitespace)}`}>
                 <input type="checkbox" checked={ignoreWs} onChange={toggleWs} /> Ignore whitespace
               </label>
-              <button onClick={() => setHelp(!help)} title="Keyboard shortcuts (?)">Shortcuts</button>
+              <button onClick={() => setHelp(!help)} title={`Keyboard shortcuts${hint(bindings.help)}`}>Shortcuts</button>
             </div>
           </div>
           <Resizer name="index" label="PR index" />
@@ -727,7 +730,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
         <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
-        <label class="viewed-box" title="Mark as viewed on GitHub (v)">
+        <label class="viewed-box" title={`Mark as viewed on GitHub${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').viewed)}`}>
           <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
         </label>
       </header>
@@ -1552,22 +1555,8 @@ function Conversation({ pr, items, lang, repo }: { pr: PR; items: ConversationIt
   );
 }
 
-export const SHORTCUTS: [string, string][] = [
-  ['j / k', 'Next / previous file'],
-  ['n / p', 'Next / previous review thread'],
-  ['v', 'Mark the current file viewed'],
-  ['w', 'Ignore whitespace on/off'],
-  ['Space', 'Comment on the line under the mouse (or at the top of the view)'],
-  ['c', 'Comment on the current file'],
-  ['[ / ]', 'Previous / next PR in the stack'],
-  ['i', 'Show / hide the index'],
-  ['⌘↵', 'Finish review (submit inside the panel)'],
-  ['⌘K', 'Go to a PR, file, thread or check'],
-  ['⌘F', 'Find, in every file'],
-  ['?', 'This help'],
-];
-
 function Help({ onClose, ignoreWs, toggleWs }: { onClose: () => void; ignoreWs: boolean; toggleWs: () => void }) {
+  const [bindings] = useBindings();
   return (
     <div class="help" role="dialog" aria-label="Keyboard shortcuts">
       <div class="row">
@@ -1580,14 +1569,15 @@ function Help({ onClose, ignoreWs, toggleWs }: { onClose: () => void; ignoreWs: 
       </div>
       <table>
         <tbody>
-          {SHORTCUTS.map(([k, d]) => (
-            <tr key={k}>
+          {[...ACTIONS.map(([a, d]) => [keyLabel(bindings[a]), d]), ...FIXED].map(([k, d]) => (
+            <tr key={d}>
               <td><kbd>{k}</kbd></td>
               <td>{d}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      <p class="note">Change them in ⚙ Settings → Keyboard shortcuts.</p>
     </div>
   );
 }

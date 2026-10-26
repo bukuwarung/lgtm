@@ -169,6 +169,8 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 
 ## Keyboard shortcuts
 
+The defaults; change the single-key ones in ⚙ Settings → Keyboard shortcuts.
+
 | Key | Action |
 |---|---|
 | `j` / `k` | Next / previous file |

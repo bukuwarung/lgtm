@@ -310,3 +310,11 @@ test('newer compares versions numerically', async () => {
   assert.ok(!newer('v0.1.0', '0.1.0'));
   assert.ok(!newer('0.1.0', '0.2.0'));
 });
+
+test('rebinding a key moves it off the action that had it', async () => {
+  const { bind, readBindings } = await import('../src/keys.ts');
+  const b = readBindings('{}');
+  assert.deepEqual(bind(b, 'nextFile', 'n'), { nextFile: 'n', nextThread: '' });
+  assert.deepEqual(bind(b, 'nextFile', 'j'), {});
+  assert.equal(readBindings('{"help":"h"}').help, 'h');
+});

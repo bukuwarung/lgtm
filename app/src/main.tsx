@@ -105,9 +105,6 @@ function App() {
     <>
       <nav class="top">
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
-        <a href="#" class="brand" title="lgtm home">
-          <img src="/favicon.png" alt="lgtm" width="22" height="22" />
-        </a>
         <TopActions onRefresh={() => setQueueVersion((v) => v + 1)} />
         <span class="spacer" />
         {update && (
