@@ -283,7 +283,7 @@ Files under `res/drawable*/` whose XML root is `<vector>` SHALL show as images b
 - **THEN** the file shows the illustration on a checkerboard with "New · 192×144dp", and colours referencing resources are drawn grey with a note
 
 ### Requirement: Settings page
-The app SHALL have a Settings page (linked from the top bar) that shows whether the GitHub CLI, slackcli and the Atlassian CLI are signed in, with the commands to install or sign in when one isn't, and lists every preference lgtm keeps: other people's draft PRs, desktop notifications, the team to watch, the PR index, ignore whitespace, the Jira ticket expanded, the Slack message after a review, opening the next PR after a review, and the theme, plus the keyboard shortcuts. A change there SHALL apply to the views already open.
+The app SHALL have a Settings page (linked from the top bar) that shows whether the GitHub CLI, slackcli and the Atlassian CLI are signed in, with the commands to install or sign in when one isn't, and lists every preference lgtm keeps: other people's draft PRs, desktop notifications, the team to watch, the PR index, ignore whitespace, the Jira ticket expanded, the Slack message after a review, opening the next PR after a review, and the theme, plus a switch for each diff helper (since-last-review first, import folding, hiding generated and renamed-only files, collapsing deleted files, dimming moved code, word highlights, rendered markdown, image previews, folding bot comments, resuming the reading position), and the keyboard shortcuts. A change there SHALL apply to the views already open.
 
 #### Scenario: New teammate
 - **WHEN** a teammate without slackcli opens Settings

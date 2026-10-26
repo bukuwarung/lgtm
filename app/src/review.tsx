@@ -86,6 +86,12 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [target, setTarget] = useState<Target | null>(null);
   const [showGenerated, setShowGenerated] = useState(false);
   const [showNoDiff, setShowNoDiff] = useState(false);
+  // Feature switches (Settings → Diff).
+  const [foldGenerated] = useStoredFlag('hideGenerated', true);
+  const [foldNoDiff] = useStoredFlag('hideNoDiff', true);
+  const [startSince] = useStoredFlag('sinceFirst', true);
+  const [resumeOn] = useStoredFlag('resumePosition', true);
+  const [dimMoved] = useStoredFlag('dimMoved', true);
   const [showIndex, toggleIndex] = useStoredFlag('showIndex', true);
   const [checks, setChecks] = useState<Check[] | null>(null);
   const [error, setError] = useState('');
@@ -161,7 +167,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       getMyLastReviewCommit(repo, n).then((sha) => {
         if (sha && sha !== pr.head.sha) {
           setLastReviewed(sha);
-          setSince(true); // re-review: start with just what changed
+          if (startSince) setSince(true); // re-review: start with just what changed
         }
       }, () => {});
       setThreads(threads);
@@ -208,7 +214,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     addEventListener('scroll', onScroll, { passive: true });
     addEventListener('pagehide', save);
     // Pick up where I left off. Files above render lazily and shift things, so settle once more.
-    const resume = resumeAt.current && document.getElementById('f-' + resumeAt.current.path);
+    const resume = resumeOn && resumeAt.current && document.getElementById('f-' + resumeAt.current.path);
     if (resume) {
       const go = () => {
         resume.scrollIntoView();
@@ -226,9 +232,10 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
 
   // Moved code is matched across the whole PR (generated files aside, or their copies would count as moves).
   const moved = useMemo(() => {
+    if (!dimMoved) return new Map<string, Moved>();
     const fs = since && sinceData ? sinceData.files : (data?.files ?? []);
     return movedLines(fs.filter((f) => !f.generated).map((f) => ({ filename: f.filename, hunks: parsePatch(f.patch ?? '') })));
-  }, [data, sinceData, since]);
+  }, [data, sinceData, since, dimMoved]);
 
   // In "since" mode old-side line numbers refer to my last reviewed commit, so old-side threads would sit on the wrong lines.
   const shownThreads = since && sinceData ? threads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : threads;
@@ -345,7 +352,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const visible = files.filter((f) => !f.generated && !f.noDiff);
   const generated = files.filter((f) => f.generated);
   const noDiff = files.filter((f) => f.noDiff && !f.generated);
-  const shown = [...visible, ...(showGenerated ? generated : []), ...(showNoDiff ? noDiff : [])];
+  const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
+  const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : [])];
   const section = (f: File) => (
     <FileSection
       key={f.filename}
@@ -521,13 +529,13 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           <Conversation pr={pr} items={conversation} />
           {visible.map(section)}
           {generated.length > 0 &&
-            (showGenerated ? generated.map(section) : (
+            (genOpen ? generated.map(section) : (
               <button class="gen-row" onClick={() => setShowGenerated(true)}>
                 {generated.length} generated file{generated.length > 1 ? 's' : ''} hidden. Show
               </button>
             ))}
           {noDiff.length > 0 &&
-            (showNoDiff ? noDiff.map(section) : (
+            (noDiffOpen ? noDiff.map(section) : (
               <button class="gen-row" onClick={() => setShowNoDiff(true)}>
                 {noDiff.length} file{noDiff.length > 1 ? 's' : ''} renamed or moved without changes hidden. Show
               </button>
@@ -670,13 +678,16 @@ type SectionProps = {
 
 function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand, changed }: SectionProps) {
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
-  const [rich, setRich] = useState(canRich);
+  const [richFirst] = useStoredFlag('richMarkdown', true);
+  const [previewFirst] = useStoredFlag('previewImages', true);
+  const [collapseDeleted] = useStoredFlag('collapseDeleted', true);
+  const [rich, setRich] = useState(canRich && richFirst);
   // Android drawables preview as images by default; one that isn't a <vector> (a selector, a shape) falls back to source.
   const [canPreview, setCanPreview] = useState(DRAWABLE.test(file.filename) || BITMAP.test(file.filename));
-  const [preview, setPreview] = useState(canPreview);
+  const [preview, setPreview] = useState(canPreview && previewFirst);
   // A deleted file's old contents are mostly noise: one row until asked for, unless a line comment is already on it.
   const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
-  const hideDeleted = file.status === 'removed' && !showDeleted;
+  const hideDeleted = collapseDeleted && file.status === 'removed' && !showDeleted;
   const [ref, near] = useNear<HTMLElement>();
   const hunks = useMemo(() => (ctx.ignoreWs ? ignoreWhitespace : (h: Hunk[]) => h)(parsePatch(file.patch ?? '')), [file.patch, ctx.ignoreWs]);
   const path = file.filename;
@@ -697,7 +708,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
-        {canPreview && !BITMAP.test(file.filename) && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
+        {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
         <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
         <label class="viewed-box" title="Mark as viewed on GitHub (v)">
           <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
@@ -885,7 +896,8 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   useWordHighlights(table, hunks);
   const mv = ctx.moved.get(path);
   // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
-  const folds = useMemo(() => (importSyntax(path) ? importFolds(hunks, importSyntax(path)!) : []), [hunks]);
+  const [foldImports] = useStoredFlag('foldImports', true);
+  const folds = useMemo(() => (foldImports && importSyntax(path) ? importFolds(hunks, importSyntax(path)!) : []), [hunks, foldImports]);
   const root = ownRoot(path);
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set());
   const noted = (side: Side, n: number) =>
@@ -986,8 +998,9 @@ function rangeIn(el: Element | null, start: number, end: number) {
   return null;
 }
 function useWordHighlights(table: { current: HTMLTableElement | null }, hunks: Hunk[]) {
+  const [on] = useStoredFlag('wordDiff', true);
   useLayoutEffect(() => {
-    if (!WORD || !table.current) return;
+    if (!on || !WORD || !table.current) return;
     const mine: [Highlight, Range][] = [];
     hunks.forEach((h, hi) =>
       changePairs(h).forEach(([d, a]) => {
@@ -1225,7 +1238,8 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const first = t.comments.nodes[0];
   const waiting = !!ctx.me && awaitsMe(t, ctx.me, ctx.pr.user.login === ctx.me);
   // Bot-only threads (AI reviewers, linters) start collapsed to their one-line preview.
-  const bot = t.comments.nodes.every((c) => c.author?.__typename === 'Bot');
+  const [foldBots] = useStoredFlag('foldBots', true);
+  const bot = foldBots && t.comments.nodes.every((c) => c.author?.__typename === 'Bot');
 
   async function act(f: () => Promise<void>) {
     setBusy(true);
@@ -1353,6 +1367,7 @@ const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQU
 const botExcerpt = (html: string) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
 
 function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
+  const [foldBots] = useStoredFlag('foldBots', true);
   return (
     <details class="conversation" id="conversation" open>
       <summary>
@@ -1371,7 +1386,7 @@ function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
         );
         const body = c.html && <div class="md" dangerouslySetInnerHTML={{ __html: c.html }} />;
         // Bot reports (CI summaries, AI reviewers, coverage) fold to one line; click to read.
-        return c.bot ? (
+        return c.bot && foldBots ? (
           <details class="comment bot" key={c.id} id={'cv-' + c.id}>
             <summary>{head} <span class="bot-excerpt">{botExcerpt(c.html)}</span></summary>
             {body}

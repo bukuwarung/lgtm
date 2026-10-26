@@ -58,7 +58,12 @@ export function useStoredFlag(key: string, initial: boolean) {
 
 // GitHub is the gh login (in the page); this asks the server about the CLIs it drives: slackcli and acli.
 export type Integrations = { slack: { ok: boolean; error?: string; who?: string }; jira: { ok: boolean; error?: string; site?: string } };
-export const fetchIntegrations = (): Promise<Integrations> => fetch('/integrations').then((r) => r.json());
+export async function fetchIntegrations(): Promise<Integrations> {
+  const res = await fetch('/integrations');
+  // An lgtm started before this page existed doesn't know the route: the page is newer than the running server.
+  if (!res.ok) throw new Error('the running lgtm is older than this page. Restart it (Ctrl-C, then lgtm) and reload.');
+  return res.json();
+}
 
 // Slack DMs go through the local server, which runs slackcli (it holds the Slack sign-in).
 // Whether slackcli is signed in, and if not, why (shown in the submit panel instead of the Slack option).

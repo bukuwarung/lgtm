@@ -70,7 +70,7 @@ To update: `git pull && npm run build` in `app/` (restart `lgtm` only if `app/bi
 
 ## Settings
 
-⚙ Settings (top right) shows whether lgtm can use your GitHub, Slack and Jira sign-ins, with the commands to fix any that can't, and holds every preference: which PRs the list shows, desktop notifications, the team to watch, review defaults (PR index, ignore whitespace, Jira ticket, Slack message, open the next PR) and the theme. Preferences are per browser.
+⚙ Settings (top right) shows whether lgtm can use your GitHub, Slack and Jira sign-ins, with the commands to fix any that can't, and holds every preference: which PRs the list shows, desktop notifications, the team to watch, review defaults (PR index, ignore whitespace, Jira ticket, Slack message, open the next PR), the theme, and a switch for each diff helper: since-last-review, import folding, hidden generated / renamed-only files, collapsed deleted files, moved-code dimming, word highlights, rendered markdown, image previews, folded bot comments and resuming where you left off. Preferences are per browser.
 
 ## Keyboard shortcuts
 
