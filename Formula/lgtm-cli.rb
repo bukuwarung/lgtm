@@ -2,8 +2,8 @@
 class LgtmCli < Formula
   desc "Fast GitHub pull request review in your browser"
   homepage "https://github.com/bukuwarung/lgtm"
-  url "https://github.com/bukuwarung/lgtm/releases/download/v0.1.0/lgtm-cli-0.1.0.tar.gz"
-  sha256 "adaa71e49002bf8159f9fbceddd922604e251dc3f1200a5998c6a9392af10249"
+  url "https://github.com/bukuwarung/lgtm/releases/download/v0.2.0/lgtm-cli-0.2.0.tar.gz"
+  sha256 "b0ae470534a5cf57d9e5a6cc4635d22ba0fbbd283a574f8345361e9c01814af2"
   license "MIT"
 
   depends_on "gh"
