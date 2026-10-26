@@ -149,3 +149,65 @@ export async function fetchJira(key: string): Promise<JiraIssue> {
   if (!res.ok) throw new Error(body.error || 'Could not load the ticket');
   return body;
 }
+
+// --- Native side: the app uses macOS through Tauri plugins; the browser version falls back to web APIs ---
+
+// Notifications: macOS notifications in the app, the Web Notification API in the browser.
+export async function askNotifications(): Promise<boolean> {
+  if (!isDesktop) return (await Notification.requestPermission()) === 'granted';
+  const n = await import('@tauri-apps/plugin-notification');
+  return (await n.isPermissionGranted()) || (await n.requestPermission()) === 'granted';
+}
+export async function notify(title: string, body: string, open: () => void) {
+  if (!isDesktop) {
+    if (Notification.permission !== 'granted') return;
+    const note = new Notification(title, { body });
+    note.onclick = () => {
+      focus();
+      open();
+    };
+    return;
+  }
+  const n = await import('@tauri-apps/plugin-notification');
+  if (await n.isPermissionGranted()) n.sendNotification({ title, body }); // clicking it brings the app forward
+}
+
+// The Dock icon's badge (the app); the browser version shows the count in the tab title instead.
+export async function setBadge(count: number) {
+  if (!isDesktop) return;
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().setBadgeCount(count || undefined);
+}
+
+// Launch at login (the app only).
+export async function launchAtLogin(): Promise<boolean> {
+  return isDesktop && (await import('@tauri-apps/plugin-autostart')).isEnabled();
+}
+export async function setLaunchAtLogin(on: boolean) {
+  const a = await import('@tauri-apps/plugin-autostart');
+  await (on ? a.enable() : a.disable());
+}
+
+// In the app: web links open in the default browser (not inside lgtm), and lgtm://<owner>/<repo>/pull/<n> links
+// open that PR. `go` receives the PR's route ("/owner/repo/pull/n").
+export async function initDesktop(go: (route: string) => void) {
+  if (!isDesktop) return;
+  const { openUrl } = await import('@tauri-apps/plugin-opener');
+  addEventListener(
+    'click',
+    (e) => {
+      const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!a || !/^(https?|mailto):/i.test(a.href) || e.defaultPrevented) return;
+      e.preventDefault();
+      void openUrl(a.href);
+    },
+    true,
+  );
+  const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
+  const open = (urls: string[] | null) => {
+    const m = urls?.[0]?.match(/([^/\s:]+\/[^/\s]+)\/pull\/(\d+)/);
+    if (m) go(`/${m[1]}/pull/${m[2]}`);
+  };
+  open(await getCurrent()); // the link that launched the app
+  await onOpenUrl(open);
+}

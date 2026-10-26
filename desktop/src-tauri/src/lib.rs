@@ -42,6 +42,11 @@ async fn gh_token() -> Result<String, String> {
 pub fn run() {
     adopt_login_path();
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init()) // web links open in the default browser
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_deep_link::init()) // lgtm://<owner>/<repo>/pull/<n>
+        .plugin(tauri_plugin_window_state::Builder::default().build()) // window size and position, remembered
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .invoke_handler(tauri::generate_handler![
             gh_token,
             commands::integrations,

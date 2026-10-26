@@ -16,12 +16,12 @@
 
 ## 3. WebKit and native behaviour
 
-- [ ] 3.1 External links open in the default browser (opener plugin)
-- [ ] 3.2 In-app find bar for ⌘F
-- [ ] 3.3 Native notifications for review requests and re-reviews
-- [ ] 3.4 Dock badge with the "needs your review" count
-- [ ] 3.5 `lgtm://<owner>/<repo>/pull/<n>` deep links open the PR (and focus the window)
-- [ ] 3.6 Remember window size and position; "Launch at login" switch in Settings
+- [x] 3.1 External links open in the default browser (opener plugin)
+- [x] 3.2 In-app find bar for ⌘F
+- [x] 3.3 Native notifications for review requests and re-reviews
+- [x] 3.4 Dock badge with the "needs your review" count
+- [x] 3.5 `lgtm://<owner>/<repo>/pull/<n>` deep links open the PR (and focus the window)
+- [x] 3.6 Remember window size and position; "Launch at login" switch in Settings
 - [ ] 3.7 Walk every feature in the app (Settings examples help) and fix WebKit differences
 
 ## 4. Data

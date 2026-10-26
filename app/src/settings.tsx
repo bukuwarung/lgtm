@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { fetchIntegrations, findSlackPeople, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { askNotifications, fetchIntegrations, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { SHORTCUTS } from './review.tsx';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
@@ -106,7 +106,7 @@ export function Settings() {
             type="checkbox"
             checked={notify}
             onChange={async () => {
-              if (!notify && (await Notification.requestPermission()) !== 'granted') return setErr('Notifications are blocked for this page in your browser settings.');
+              if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications.' : 'Notifications are blocked for this page in your browser settings.');
               toggleNotify();
             }}
           />
@@ -151,6 +151,8 @@ export function Settings() {
         <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo />
         <Flag k="resumePosition" initial={true} label="Reopen a PR where you left off" />
       </section>
+
+      {isDesktop && <LaunchAtLogin />}
 
       <section>
         <h3>Appearance</h3>
@@ -311,6 +313,32 @@ function SlackPeopleSection({ team }: { team: string }) {
           ))}
         </p>
       )}
+    </section>
+  );
+}
+
+// The app only: start lgtm when you log in to your Mac.
+function LaunchAtLogin() {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => void launchAtLogin().then(setOn, () => setOn(false)), []);
+  return (
+    <section>
+      <h3>App</h3>
+      <label class="set-row">
+        <input
+          type="checkbox"
+          checked={!!on}
+          disabled={on === null}
+          onChange={async () => {
+            await setLaunchAtLogin(!on);
+            setOn(await launchAtLogin());
+          }}
+        />
+        <span>
+          Launch at login
+          <small>Start lgtm when you log in to your Mac, so the Dock badge and notifications are there from the start.</small>
+        </span>
+      </label>
     </section>
   );
 }

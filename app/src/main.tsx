@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
-import { readBots, useStoredFlag, useStoredValue } from './platform.ts';
+import { askNotifications, initDesktop, isDesktop, notify as notifyNative, readBots, setBadge, useStoredFlag, useStoredValue } from './platform.ts';
+import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { DemoPage } from './demos.tsx';
 import { useCodeLook } from './look.ts';
@@ -22,6 +23,7 @@ function App() {
   const [queueVersion, setQueueVersion] = useState(0);
   const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
   useCodeLook(); // code colours and font from Settings
+  useEffect(() => void initDesktop((r) => (location.hash = r)), []); // the app: links to the browser, lgtm:// links
   // The PR list's latest items (to pick the next PR to review), and a message to show on the page we move to.
   const queue = useRef<QueueItem[]>([]);
   const [flash, setFlash] = useState<{ route: string; text: string; ok: boolean } | null>(null);
@@ -67,6 +69,7 @@ function App() {
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings">⚙ Settings</a>
         <ThemeToggle />
       </nav>
+      {isDesktop && <FindBar />}
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
         {showPRs && <PRList current={r} version={queueVersion} onItems={(items) => (queue.current = items)} />}
         {r ? (
@@ -226,15 +229,13 @@ function PRList({ current, version, onItems }: { current: { repo: string; n: num
     if (!items || !settled) return;
     const waiting = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);
     document.title = waiting.length ? `(${waiting.length}) lgtm` : 'lgtm';
+    void setBadge(waiting.length); // the app's Dock icon
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
-    if (seen.current && notify && Notification.permission === 'granted')
-      for (const i of waiting.filter((i) => !seen.current!.has(i.id))) {
-        const note = new Notification(`${i.requested ? 'Review requested' : 'Your comments were resolved'}: ${i.title}`, { body: `${i.repo}#${i.number} by ${i.author}`, tag: i.id });
-        note.onclick = () => {
-          focus();
+    if (seen.current && notify)
+      for (const i of waiting.filter((i) => !seen.current!.has(i.id)))
+        void notifyNative(`${i.requested ? 'Review requested' : 'Your comments were resolved'}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, () => {
           location.hash = `/${i.repo}/pull/${i.number}`;
-        };
-      }
+        });
     seen.current = new Set(waiting.map((i) => i.id));
   }, [items, settled]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
@@ -329,7 +330,7 @@ function PRList({ current, version, onItems }: { current: { repo: string; n: num
           aria-pressed={notify}
           class={notify ? 'on' : ''}
           onClick={async () => {
-            if (!notify && (await Notification.requestPermission()) !== 'granted') return setErr('Notifications are blocked for this page in your browser settings.');
+            if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications.' : 'Notifications are blocked for this page in your browser settings.');
             toggleNotify();
           }}
         >

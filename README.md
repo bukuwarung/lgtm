@@ -180,6 +180,6 @@ export PATH="/opt/homebrew/opt/rustup/bin:$PATH"   # rustup is keg-only
 cd desktop && npm install && npm run build         # → src-tauri/target/release/bundle/macos/lgtm.app
 ```
 
-The app does everything the browser version does (GitHub, Slack, Jira, CI logs); links opening in your browser, notifications, the Dock badge and ⌘F find come next. `cargo test -- --ignored --nocapture` in `desktop/src-tauri` checks the app's commands against your real gh, slackcli and acli (read-only; Slack in dry run).
+The app does everything the browser version does (GitHub, Slack, Jira, CI logs), plus a Dock badge with the "needs your review" count, macOS notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, its own ⌘F find bar, a remembered window, and "Launch at login" in Settings. `cargo test -- --ignored --nocapture` in `desktop/src-tauri` checks the app's commands against your real gh, slackcli and acli (read-only; Slack in dry run).
 
 `LGTM_PORT` changes the port (drafts are stored per port), `LGTM_NO_OPEN=1` skips opening a browser tab. Design and specs: [`openspec/changes/add-pr-review-app`](openspec/changes/add-pr-review-app).

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: core APIs and lgtm's own commands, nothing else (no shell or file access).",
+  "description": "The main window: core APIs, lgtm's own commands, and the plugins it needs (links, notifications, lgtm:// links, launch at login). No shell or file access.",
   "windows": [
     "main"
   ],
@@ -15,6 +15,11 @@
     "allow-slack-notify",
     "allow-slack-people-get",
     "allow-slack-people-find",
-    "allow-slack-people-save"
+    "allow-slack-people-save",
+    "core:window:allow-set-badge-count",
+    "opener:default",
+    "notification:default",
+    "deep-link:default",
+    "autostart:default"
   ]
 }

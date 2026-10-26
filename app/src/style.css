@@ -419,3 +419,9 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .hljs-doctag { color: inherit; font-weight: 600; }
 .doc-tags code { padding: 0; background: none; font-size: .92em; color: var(--fg); }
 .doc-render .md code { padding: 0 1px; }
+/* ⌘F find bar (the app) */
+.find-bar { position: fixed; top: 8px; right: 12px; z-index: 50; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgb(0 0 0 / .2); }
+.find-bar input { width: 220px; padding: 3px 8px; }
+.find-count { min-width: 64px; font-size: 12px; color: var(--muted); text-align: center; }
+::highlight(lgtm-find) { background-color: light-dark(#fff3a3, #6b5f1f); }
+::highlight(lgtm-find-current) { background-color: light-dark(#ffb84d, #b3741f); }
