@@ -143,7 +143,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 </picture>
 </details>
 
-<details open><summary><b>Rendered doc comments</b>: KDoc, Javadoc and JSDoc read like IntelliJ's reader mode; edited ones stay source.</summary>
+<details open><summary><b>Rendered doc comments</b>: KDoc, Javadoc and JSDoc read like IntelliJ's reader mode; edited ones too, with what changed highlighted (a second switch).</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/renderDocs-dark.png">

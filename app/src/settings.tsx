@@ -180,7 +180,9 @@ export function Settings() {
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo />
-        <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode; edited ones stay source." demo />
+        <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode." demo>
+          <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source." />
+        </Flag>
         <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Source is a click away per file." demo />
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
         <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo>

@@ -366,3 +366,15 @@ test('estimate: description, code, tests and docs at their own pace; generated f
   assert.equal(e.minutes, 2 + 12 + 4 + 1);
   assert.deepEqual([estimateLabel(3), estimateLabel(19), estimateLabel(64), estimateLabel(90)], ['<5 min', '~20 min', '~1 h', '~1 h 30']);
 });
+
+test('editedDocBlocks: an edited doc comment, from its new version, with the changed parts', async () => {
+  const { editedDocBlocks, docParts } = await import('../src/docs.ts');
+  const h = parsePatch([
+    '@@ -1,6 +1,7 @@', ' /**', '-  * Sums the prices.', '+  * Sums the prices, in cents.', '   *', '   * @param items the cart', '+  * @return the total', '   */', ' fun total() = 0',
+  ].join('\n'));
+  const [b] = editedDocBlocks(h);
+  assert.deepEqual([b.start, b.end, b.kind], [0, 6, '~']);
+  const d = docParts(b.lines!, 'kdoc');
+  assert.deepEqual(d.paras, [{ md: 'Sums the prices, in cents.', changed: true }]);
+  assert.deepEqual(d.tags, [['Params', [['items', 'the cart', false]]], ['Returns', [['', 'the total', true]]]]);
+});

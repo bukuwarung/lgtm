@@ -523,3 +523,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .whats-new-back { position: fixed; inset: 0; z-index: 70; display: flex; justify-content: center; align-items: flex-start; padding-top: 10vh; background: rgb(0 0 0 / .3); }
 .whats-new { display: grid; gap: 10px; width: min(640px, calc(100vw - 32px)); max-height: 75vh; overflow: auto; padding: 16px 20px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
 .whats-new .row { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+/* An edited doc comment, rendered: what changed, marked like a changed markdown block */
+.doc-chg { background: var(--add); box-shadow: -6px 0 0 var(--add), 6px 0 0 var(--add); border-radius: 2px; }
+.diff tr.doc.edited .code::before { content: "±"; }

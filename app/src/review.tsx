@@ -15,7 +15,7 @@ import { MergeBox } from './merge.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, walkthroughPrompt, askPrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
-import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
+import { docBlocks, docParts, docSyntax, editedDocBlocks, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
 import { ago, claudeWalkthrough, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
@@ -1031,7 +1031,11 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   };
   // KDoc / Javadoc / JSDoc comments, rendered like IntelliJ's reader mode; "source" shows the lines again.
   const [renderDocs] = useStoredFlag('renderDocs', true);
-  const docs = useMemo(() => (renderDocs && docSyntax(path) ? docBlocks(hunks) : []), [hunks, renderDocs]);
+  const [renderEdited] = useStoredFlag('renderEditedDocs', true); // edited ones too, changed parts marked
+  const docs = useMemo(
+    () => (renderDocs && docSyntax(path) ? [...docBlocks(hunks), ...(renderEdited ? editedDocBlocks(hunks) : [])] : []),
+    [hunks, renderDocs, renderEdited],
+  );
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
   // A doc comment switched to its source: a header row above its first line switches it back.
@@ -1070,14 +1074,18 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
               const doc = docAt(hi, li);
               if (doc) {
                 if (li !== doc.start) return null;
+                const run = h.lines.slice(doc.start, doc.end + 1);
                 const first = h.lines[doc.start], last = h.lines[doc.end];
+                // An edited one comments on its new version: from its first line there.
+                const at = doc.kind === '~' ? run.find((x) => x.kind !== '-')! : first;
+                const onNum = (e: MouseEvent) => pick(e, doc.kind === '-' ? 'LEFT' : 'RIGHT', doc.kind === '-' ? first.old! : at.new!);
                 return (
-                  <tr class={`ln doc${doc.kind === '+' ? ' a' : doc.kind === '-' ? ' d' : ''}`}>
-                    <td class="num" title={`Lines ${first.old}–${last.old}: comment (shift-click to extend)`} onClick={(e) => pick(e, doc.kind === '-' ? 'LEFT' : 'RIGHT', doc.kind === '-' ? first.old! : first.new!)}>
-                      {first.old ?? ''}
+                  <tr class={`ln doc${doc.kind === '+' ? ' a' : doc.kind === '-' ? ' d' : doc.kind === '~' ? ' edited' : ''}`}>
+                    <td class="num" title={`Lines ${first.old}–${last.old}: comment (shift-click to extend)`} onClick={onNum}>
+                      {run.find((x) => x.old != null)?.old ?? ''}
                     </td>
-                    <td class="num" title={`Lines ${first.new}–${last.new}: comment (shift-click to extend)`} onClick={(e) => pick(e, doc.kind === '-' ? 'LEFT' : 'RIGHT', doc.kind === '-' ? first.old! : first.new!)}>
-                      {first.new ?? ''}
+                    <td class="num" title={`Lines ${at.new}–${last.new}: comment (shift-click to extend)`} onClick={onNum}>
+                      {at.new ?? ''}
                     </td>
                     <td class="code">
                       <DocView doc={doc} syntax={docSyntax(path)!} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
@@ -1152,20 +1160,23 @@ function useWordMarks(hunks: Hunk[]) {
 }
 
 // A documentation comment, rendered: the description as markdown, then the tags (Params, Returns, Throws…).
+// An edited one ('~') marks its changed paragraphs and tags, as rendered markdown marks changed blocks.
 function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'java' | 'jsdoc'; onSource: () => void }) {
-  const { body, tags } = useMemo(() => parseDoc(doc.text, syntax), [doc.text]);
+  const { paras, tags } = useMemo(() => docParts(doc.lines ?? doc.text.split('\n').map((text) => ({ text, changed: false })), syntax), [doc.text]);
   return (
     <div class="doc-render" style={{ marginLeft: `${doc.indent}ch`, width: `calc(100% - ${doc.indent + 3}ch)` }}>
       <button class="link doc-source" title="Show the comment's source lines" onClick={onSource}>&lt;/&gt; source</button>
-      {body && <div class="md" dangerouslySetInnerHTML={{ __html: md.render(body) }} />}
+      {paras.map((p) => (
+        <div class={p.changed ? 'md doc-chg' : 'md'} dangerouslySetInnerHTML={{ __html: md.render(p.md) }} />
+      ))}
       {tags.length > 0 && (
         <dl class="doc-tags">
           {tags.map(([label, items]) => (
             <>
               <dt>{label}:</dt>
               <dd>
-                {items.map(([name, text]) => (
-                  <div>
+                {items.map(([name, text, changed]) => (
+                  <div class={changed ? 'doc-chg' : undefined}>
                     {name && <code>{name}</code>}
                     {name && text && ' – '}
                     <span dangerouslySetInnerHTML={{ __html: md.renderInline(text) }} />

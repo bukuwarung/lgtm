@@ -1,9 +1,10 @@
 import type { Hunk } from './diff.ts';
 
-// Documentation comments (KDoc, Javadoc, JSDoc/TSDoc) in a diff, to show rendered like IntelliJ's reader mode. Only
-// blocks whose lines are all added, all removed or all unchanged qualify: a doc comment edited line by line stays
-// source, so the edit itself is visible. `end` is inclusive.
-export type DocBlock = { hunk: number; start: number; end: number; kind: '+' | '-' | ' '; text: string; indent: number };
+// Documentation comments (KDoc, Javadoc, JSDoc/TSDoc) in a diff, to show rendered like IntelliJ's reader mode: blocks
+// whose lines are all added, all removed or all unchanged (docBlocks), and, if asked, edited ones (editedDocBlocks,
+// kind '~'), rendered from their new version with the changed lines marked. `end` is inclusive.
+export type DocLine = { text: string; changed: boolean };
+export type DocBlock = { hunk: number; start: number; end: number; kind: '+' | '-' | ' ' | '~'; text: string; indent: number; lines?: DocLine[] };
 
 export const docSyntax = (path: string) => (/\.java$/.test(path) ? 'java' : /\.(kt|kts)$/.test(path) ? 'kdoc' : /\.[cm]?[jt]sx?$/.test(path) ? 'jsdoc' : null);
 
@@ -24,15 +25,44 @@ export function docBlocks(hunks: Hunk[]): DocBlock[] {
   return out;
 }
 
-// The comment's content without /**, */ and the leading * of each line.
-const strip = (text: string) =>
-  text
-    .replace(/^\s*\/\*\*/, '')
-    .replace(/\*\/\s*$/, '')
-    .split('\n')
-    .map((l) => l.replace(/^\s*\* ?/, ''))
-    .join('\n')
-    .trim();
+// Doc comments edited line by line: from an opening /** on the new side to its */, plus the removed doc lines just
+// before it (an edited first line). Each new-side line says whether it changed (added, or right after removed lines).
+export function editedDocBlocks(hunks: Hunk[]): DocBlock[] {
+  const out: DocBlock[] = [];
+  hunks.forEach((h, hi) => {
+    const L = h.lines;
+    for (let i = 0; i < L.length; i++) {
+      const open = L[i].kind !== '-' && L[i].text.match(/^(\s*)\/\*\*(?!\/)/);
+      if (!open) continue;
+      let end = i;
+      while (end < L.length && (L[end].kind === '-' || !L[end].text.includes('*/', end === i ? open[0].length : 0))) end++;
+      if (end === L.length) break;
+      let start = i;
+      while (start > 0 && L[start - 1].kind === '-' && /^\s*(\/\*\*|\*)/.test(L[start - 1].text)) start--;
+      const run = L.slice(start, end + 1);
+      if (!run.every((l) => l.kind === run[0].kind)) {
+        const lines: DocLine[] = [];
+        let removed = false;
+        for (const l of run) {
+          if (l.kind === '-') removed = true;
+          else lines.push({ text: l.text, changed: l.kind === '+' || removed }), (removed = false);
+        }
+        if (removed && lines.length) lines[lines.length - 1].changed = true;
+        out.push({ hunk: hi, start, end, kind: '~', text: lines.map((l) => l.text).join('\n'), indent: open[1].length, lines });
+      }
+      i = end;
+    }
+  });
+  return out;
+}
+
+// A line's content without /** (first line), */ (last line) and the leading *.
+const stripLine = (l: string, i: number, n: number) => {
+  let s = l;
+  if (i === 0) s = s.replace(/^\s*\/\*\*/, '');
+  if (i === n - 1) s = s.replace(/\*\/\s*$/, '');
+  return s.replace(/^\s*\* ?/, '');
+};
 
 // Javadoc's HTML and inline tags → markdown (our markdown renderer escapes any HTML left over).
 const javadoc = (s: string) =>
@@ -54,23 +84,49 @@ const TAGS: Record<string, string> = {
   deprecated: 'Deprecated', type: 'Type', template: 'Type params',
 };
 
-// Markdown for the description, then the block tags grouped by label: [label, [name, description][]].
-export function parseDoc(text: string, syntax: 'kdoc' | 'java' | 'jsdoc'): { body: string; tags: [string, [string, string][]][] } {
-  let s = strip(text);
-  if (syntax === 'java') s = javadoc(s);
-  // KDoc/JSDoc links [Foo] / {@link Foo} read as code names.
-  s = s.replace(/\{@link\s+([^}\s|]+)[^}]*\}/g, '`$1`').replace(/(?<![\]`])\[([\w.#]+)\](?![(\[:])/g, '`$1`');
-  const parts = s.split(/^(?=@\w+)/m);
-  const body = parts[0].trim();
-  const tags = new Map<string, [string, string][]>();
-  for (const part of parts.slice(1)) {
-    const m = part.match(/^@(\w+)\s*([\s\S]*)$/);
+// The description as markdown paragraphs, then the block tags grouped by label: [label, [name, description, changed][]].
+// A paragraph or tag is `changed` when any of its lines is.
+export type DocParts = { paras: { md: string; changed: boolean }[]; tags: [string, [string, string, boolean][]][] };
+export function docParts(lines: DocLine[], syntax: 'kdoc' | 'java' | 'jsdoc'): DocParts {
+  const clean = (s: string) => {
+    if (syntax === 'java') s = javadoc(s);
+    // KDoc/JSDoc links [Foo] / {@link Foo} read as code names.
+    return s.replace(/\{@link\s+([^}\s|]+)[^}]*\}/g, '`$1`').replace(/(?<![\]`])\[([\w.#]+)\](?![(\[:])/g, '`$1`');
+  };
+  const text = lines.map((l, i) => ({ text: stripLine(l.text, i, lines.length), changed: l.changed }));
+  // Segments: body paragraphs (split at blank lines), then one per @tag (running to the next).
+  const segs: { tag: boolean; lines: DocLine[] }[] = [];
+  for (const l of text) {
+    const isTag = /^@\w+/.test(l.text.trim());
+    const cur = segs.at(-1);
+    if (isTag) segs.push({ tag: true, lines: [l] });
+    else if (cur?.tag) cur.lines.push(l);
+    else if (!l.text.trim()) (cur?.lines.length ? segs.push({ tag: false, lines: [] }) : null);
+    else if (cur) cur.lines.push(l);
+    else segs.push({ tag: false, lines: [l] });
+  }
+  const paras: DocParts['paras'] = [];
+  const tags = new Map<string, [string, string, boolean][]>();
+  for (const seg of segs.filter((g) => g.lines.length)) {
+    const changed = seg.lines.some((l) => l.changed);
+    const body = clean(seg.lines.map((l) => l.text).join('\n')).trim();
+    if (!seg.tag) {
+      if (body) paras.push({ md: body, changed });
+      continue;
+    }
+    const m = body.match(/^@(\w+)\s*([\s\S]*)$/);
     if (!m || m[1] === 'suppress') continue;
     const label = TAGS[m[1]] ?? m[1];
     let rest = m[2].trim().replace(/^\{[^}]*\}\s*/, ''); // JSDoc {Type}
     let name = '';
     if (['param', 'property', 'throws', 'exception', 'template'].includes(m[1])) [name, rest] = [rest.split(/\s+/)[0], rest.split(/\s+/).slice(1).join(' ')];
-    tags.set(label, [...(tags.get(label) ?? []), [name, rest.replace(/\s+/g, ' ')]]);
+    tags.set(label, [...(tags.get(label) ?? []), [name, rest.replace(/\s+/g, ' '), changed]]);
   }
-  return { body, tags: [...tags] };
+  return { paras, tags: [...tags] };
+}
+
+// Markdown for the description, then the block tags grouped by label: [label, [name, description][]].
+export function parseDoc(text: string, syntax: 'kdoc' | 'java' | 'jsdoc'): { body: string; tags: [string, [string, string][]][] } {
+  const { paras, tags } = docParts(text.split('\n').map((t) => ({ text: t, changed: false })), syntax);
+  return { body: paras.map((p) => p.md).join('\n\n'), tags: tags.map(([label, items]) => [label, items.map(([n, t]) => [n, t] as [string, string])]) };
 }
