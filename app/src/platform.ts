@@ -211,3 +211,38 @@ export async function initDesktop(go: (route: string) => void) {
   open(await getCurrent()); // the link that launched the app
   await onOpenUrl(open);
 }
+
+// --- Export / import: everything lgtm keeps in this browser (or app) — preferences and pending drafts — as one
+// JSON file, to move to the app or another machine. ---
+export type Backup = { lgtm: 1; version: string; exportedAt: string; storage: Record<string, string> };
+
+export function makeBackup(): Backup {
+  const storage: Record<string, string> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)!;
+    storage[k] = localStorage.getItem(k) ?? '';
+  }
+  return { lgtm: 1, version: __APP_VERSION__, exportedAt: new Date().toISOString(), storage };
+}
+
+// Browser: a download. App: saved to ~/Downloads by the app (the page never names a path). Returns where it went.
+export async function saveBackup(): Promise<string> {
+  const text = JSON.stringify(makeBackup(), null, 2);
+  const date = new Date().toISOString().slice(0, 10);
+  if (isDesktop) return command<string>('export_settings', { json: text, date });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = `lgtm-settings-${date}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return `your downloads (${a.download})`;
+}
+
+// Adds the file's settings and drafts, replacing ones with the same name; returns how many entries.
+export function restoreBackup(text: string): number {
+  const b = JSON.parse(text) as Partial<Backup>;
+  if (b?.lgtm !== 1 || typeof b.storage !== 'object' || !b.storage) throw new Error("This isn't an lgtm settings file.");
+  const entries = Object.entries(b.storage).filter(([k, v]) => typeof k === 'string' && typeof v === 'string');
+  for (const [k, v] of entries) localStorage.setItem(k, v);
+  return entries.length;
+}

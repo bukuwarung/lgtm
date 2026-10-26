@@ -16,6 +16,7 @@
     "allow-slack-people-get",
     "allow-slack-people-find",
     "allow-slack-people-save",
+    "allow-export-settings",
     "core:window:allow-set-badge-count",
     "opener:default",
     "notification:default",

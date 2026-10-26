@@ -57,6 +57,7 @@ pub fn run() {
             commands::slack_people_get,
             commands::slack_people_find,
             commands::slack_people_save,
+            commands::export_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lgtm");

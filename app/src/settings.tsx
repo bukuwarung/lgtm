@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { askNotifications, fetchIntegrations, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { askNotifications, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { SHORTCUTS } from './review.tsx';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
@@ -184,6 +184,8 @@ export function Settings() {
         <pre class="code-sample" dangerouslySetInnerHTML={{ __html: highlightCode(SAMPLE, 'kotlin') }} />
       </section>
 
+      <BackupSection />
+
       <section>
         <h3>Keyboard shortcuts</h3>
         <table class="set-keys">
@@ -197,6 +199,7 @@ export function Settings() {
           </tbody>
         </table>
       </section>
+      <p class="note set-version">lgtm {__APP_VERSION__} · {isDesktop ? 'macOS app' : 'browser version'}</p>
     </div>
   );
 }
@@ -339,6 +342,43 @@ function LaunchAtLogin() {
           <small>Start lgtm when you log in to your Mac, so the Dock badge and notifications are there from the start.</small>
         </span>
       </label>
+    </section>
+  );
+}
+
+// Moving to the app or another Mac: preferences and pending drafts as one JSON file.
+function BackupSection() {
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const file = useRef<HTMLInputElement>(null);
+  return (
+    <section>
+      <h3>Backup</h3>
+      <p class="note">Your preferences and pending (unsubmitted) comments live in this {isDesktop ? 'app' : 'browser'}. Export them to move to {isDesktop ? 'the browser version' : 'the macOS app'} or another Mac.</p>
+      <div class="row">
+        <button onClick={() => saveBackup().then((where) => setMsg({ ok: true, text: `Saved to ${where}.` }), (e) => setMsg({ ok: false, text: e.message }))}>Export settings and drafts</button>
+        <button onClick={() => file.current?.click()}>Import…</button>
+        <input
+          ref={file}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={async (e) => {
+            const f = e.currentTarget.files?.[0];
+            e.currentTarget.value = '';
+            if (!f) return;
+            try {
+              const text = await f.text();
+              if (!confirm('Import these settings and drafts? Ones with the same name here are replaced; the page reloads.')) return;
+              const n = restoreBackup(text);
+              setMsg({ ok: true, text: `Imported ${n} entries. Reloading…` });
+              setTimeout(() => location.reload(), 600);
+            } catch (err: any) {
+              setMsg({ ok: false, text: err instanceof SyntaxError ? "This isn't an lgtm settings file." : err.message });
+            }
+          }}
+        />
+      </div>
+      {msg && <p class={msg.ok ? 'notice' : 'error'}>{msg.text}</p>}
     </section>
   );
 }

@@ -341,6 +341,29 @@ pub async fn slack_people_save(map: HashMap<String, String>) -> Result<Value, St
     people()
 }
 
+// --- Settings export (Settings → Backup) ---
+
+/// Saves the page's settings file to ~/Downloads as lgtm-settings-<date>.json (-2, -3… if taken). The app picks the
+/// path, so the page can't write anywhere else; returns where it went.
+#[tauri::command]
+pub async fn export_settings(json: String, date: String) -> Result<String, String> {
+    if json.len() > 20_000_000 || !re(r"^\d{4}-\d{2}-\d{2}$").is_match(&date) {
+        return Err("Bad export".into());
+    }
+    match serde_json::from_str::<Value>(&json) {
+        Ok(v) if v["lgtm"] == json!(1) => {}
+        _ => return Err("Bad export".into()),
+    }
+    let dir = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Downloads");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = (1..100)
+        .map(|n| dir.join(if n == 1 { format!("lgtm-settings-{date}.json") } else { format!("lgtm-settings-{date}-{n}.json") }))
+        .find(|p| !p.exists())
+        .ok_or("Too many exports today in Downloads")?;
+    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,6 +387,14 @@ mod tests {
         assert!(re(PR_REF).is_match("bukuwarung/bukuwarung-edc-app#1725") && !re(PR_REF).is_match("a/b#1;rm"));
         assert!(re(LOGIN).is_match("isfa-buku") && !re(LOGIN).is_match("../etc"));
         assert!(re(SLACK_ID).is_match("U0ABCDEF12") && !re(SLACK_ID).is_match("C123456"));
+    }
+
+    #[test]
+    fn export_refuses_odd_input() {
+        use tauri::async_runtime::block_on;
+        assert!(block_on(export_settings("{\"lgtm\":1}".into(), "today/evil".into())).is_err());
+        assert!(block_on(export_settings("{\"other\":1}".into(), "2026-10-26".into())).is_err());
+        assert!(block_on(export_settings("not json".into(), "2026-10-26".into())).is_err());
     }
 
     #[test]

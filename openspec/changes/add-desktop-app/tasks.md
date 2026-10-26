@@ -26,8 +26,8 @@
 
 ## 4. Data
 
-- [ ] 4.1 Settings → Export / Import (preferences + pending drafts as JSON), in both versions
-- [ ] 4.2 Show the version in Settings
+- [x] 4.1 Settings → Export / Import (preferences + pending drafts as JSON), in both versions
+- [x] 4.2 Show the version in Settings
 
 ## 5. Release and Homebrew
 
