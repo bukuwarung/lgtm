@@ -384,3 +384,14 @@ test('docParts: paragraphs at blank lines and at sentence ends', async () => {
   const lines = ['/**', ' * Transparent host for the gate.', ' * Launched over the homepage. Reuses the', ' * login gate, e.g. the', ' * prompt.', ' *', ' * The window is translucent.', ' */'].map((text) => ({ text, changed: false }));
   assert.deepEqual(docParts(lines, 'kdoc').paras.map((p) => p.md), ['Transparent host for the gate.', 'Launched over the homepage. Reuses the\nlogin gate, e.g. the\nprompt.', 'The window is translucent.']);
 });
+
+test('lineCommentBlocks: // runs as prose, not single lines or commented-out code', async () => {
+  const { lineCommentBlocks, docParts } = await import('../src/docs.ts');
+  const h = parsePatch([
+    '@@ -1,4 +1,9 @@', ' // one line stays inline', ' val a = 1', '+    // Retries the charge with backoff.', '+    // Network errors only: a declined card', '+    // is final.', ' val b = 2',
+    '-// val c = foo();', '-// if (x) {', '+// return bar()',
+  ].join('\n'));
+  const blocks = lineCommentBlocks(h, true);
+  assert.deepEqual(blocks.map((b) => [b.start, b.end, b.kind, b.indent]), [[2, 4, '+', 4]]);
+  assert.deepEqual(docParts(blocks[0].lines!, 'kdoc', 'line').paras.map((p) => p.md), ['Retries the charge with backoff.', 'Network errors only: a declined card\nis final.']);
+});

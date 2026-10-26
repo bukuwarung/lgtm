@@ -4,7 +4,8 @@ import type { Hunk } from './diff.ts';
 // whose lines are all added, all removed or all unchanged (docBlocks), and, if asked, edited ones (editedDocBlocks,
 // kind '~'), rendered from their new version with the changed lines marked. `end` is inclusive.
 export type DocLine = { text: string; changed: boolean };
-export type DocBlock = { hunk: number; start: number; end: number; kind: '+' | '-' | ' ' | '~'; text: string; indent: number; lines?: DocLine[] };
+// style 'line': a run of // comments (lineCommentBlocks) rather than one /** */ comment.
+export type DocBlock = { hunk: number; start: number; end: number; kind: '+' | '-' | ' ' | '~'; text: string; indent: number; lines?: DocLine[]; style?: 'line' };
 
 export const docSyntax = (path: string) => (/\.java$/.test(path) ? 'java' : /\.(kt|kts)$/.test(path) ? 'kdoc' : /\.[cm]?[jt]sx?$/.test(path) ? 'jsdoc' : null);
 
@@ -19,6 +20,43 @@ export function docBlocks(hunks: Hunk[]): DocBlock[] {
       if (end === h.lines.length) break; // runs past the hunk: leave it as source
       const run = h.lines.slice(i, end + 1);
       if (run.every((l) => l.kind === run[0].kind)) out.push({ hunk: hi, start: i, end, kind: run[0].kind, text: run.map((l) => l.text).join('\n'), indent: open[1].length });
+      i = end;
+    }
+  });
+  return out;
+}
+
+// Languages whose line comments are //.
+export const lineCommentSyntax = (path: string) => /\.(kt|kts|java|[cm]?[jt]sx?|swift|go|rs|dart|scala|cs|php|c|cc|cpp|h|hpp|m|mm|groovy|gradle)$/.test(path);
+
+// Runs of two or more // comment lines (comment-only lines) to show as prose: all of one kind, or (with `edited`) edited,
+// read from the new side like editedDocBlocks. A run that reads as commented-out code stays source.
+const LINE = /^(\s*)\/\/(?!\/\/)/;
+const CODEISH = /[;{}]\s*$|^\s*(val|var|fun|if|else|for|while|return|import|package|class|private|public|const|let|def)\b|^\s*[\w.]+\(.*\)\s*$|^\s*[\w.]+\s*=[^=]/;
+export function lineCommentBlocks(hunks: Hunk[], edited: boolean): DocBlock[] {
+  const out: DocBlock[] = [];
+  hunks.forEach((h, hi) => {
+    const L = h.lines;
+    for (let i = 0; i < L.length; i++) {
+      if (!LINE.test(L[i].text)) continue;
+      let end = i;
+      while (end + 1 < L.length && LINE.test(L[end + 1].text)) end++;
+      const run = L.slice(i, end + 1);
+      const same = run.every((l) => l.kind === run[0].kind);
+      const shown = same ? run : run.filter((l) => l.kind !== '-');
+      const body = shown.map((l) => l.text.replace(/^\s*\/\/\/? ?/, ''));
+      const code = body.filter((t) => t.trim() && CODEISH.test(t)).length;
+      if (shown.length >= 2 && (same || edited) && code * 2 < body.filter((t) => t.trim()).length) {
+        let removed = false;
+        const lines: DocLine[] = [];
+        for (const l of run) {
+          if (!same && l.kind === '-') removed = true;
+          else lines.push({ text: l.text, changed: !same && (l.kind === '+' || removed) }), (removed = false);
+        }
+        if (removed && lines.length) lines[lines.length - 1].changed = true;
+        const indent = shown[0].text.match(LINE)![1].length;
+        out.push({ hunk: hi, start: i, end, kind: same ? run[0].kind : '~', text: lines.map((l) => l.text).join('\n'), indent, lines, style: 'line' });
+      }
       i = end;
     }
   });
@@ -87,13 +125,13 @@ const TAGS: Record<string, string> = {
 // The description as markdown paragraphs, then the block tags grouped by label: [label, [name, description, changed][]].
 // A paragraph or tag is `changed` when any of its lines is.
 export type DocParts = { paras: { md: string; changed: boolean }[]; tags: [string, [string, string, boolean][]][] };
-export function docParts(lines: DocLine[], syntax: 'kdoc' | 'java' | 'jsdoc'): DocParts {
+export function docParts(lines: DocLine[], syntax: 'kdoc' | 'java' | 'jsdoc', style?: 'line'): DocParts {
   const clean = (s: string) => {
     if (syntax === 'java') s = javadoc(s);
     // KDoc/JSDoc links [Foo] / {@link Foo} read as code names.
     return s.replace(/\{@link\s+([^}\s|]+)[^}]*\}/g, '`$1`').replace(/(?<![\]`])\[([\w.#]+)\](?![(\[:])/g, '`$1`');
   };
-  const text = lines.map((l, i) => ({ text: stripLine(l.text, i, lines.length), changed: l.changed }));
+  const text = lines.map((l, i) => ({ text: style === 'line' ? l.text.replace(/^\s*\/\/\/? ?/, '') : stripLine(l.text, i, lines.length), changed: l.changed }));
   // Segments: body paragraphs, then one per @tag (running to the next). A paragraph ends at a blank line, or at a line
   // ending a sentence when the next starts one (not lowercase: "e.g." doesn't split); lists and code blocks stay whole.
   const segs: { tag: boolean; lines: DocLine[] }[] = [];

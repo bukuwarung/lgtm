@@ -15,7 +15,7 @@ import { MergeBox } from './merge.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, walkthroughPrompt, askPrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
-import { docBlocks, docParts, docSyntax, editedDocBlocks, type DocBlock } from './docs.ts';
+import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
 import { ago, claudeWalkthrough, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
@@ -1032,9 +1032,16 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   // KDoc / Javadoc / JSDoc comments, rendered like IntelliJ's reader mode; "source" shows the lines again.
   const [renderDocs] = useStoredFlag('renderDocs', true);
   const [renderEdited] = useStoredFlag('renderEditedDocs', true); // edited ones too, changed parts marked
+  const [renderLine] = useStoredFlag('renderLineComments', true); // runs of // comments too
   const docs = useMemo(
-    () => (renderDocs && docSyntax(path) ? [...docBlocks(hunks), ...(renderEdited ? editedDocBlocks(hunks) : [])] : []),
-    [hunks, renderDocs, renderEdited],
+    () =>
+      !renderDocs
+        ? []
+        : [
+            ...(docSyntax(path) ? [...docBlocks(hunks), ...(renderEdited ? editedDocBlocks(hunks) : [])] : []),
+            ...(renderLine && lineCommentSyntax(path) ? lineCommentBlocks(hunks, renderEdited) : []),
+          ],
+    [hunks, renderDocs, renderEdited, renderLine],
   );
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
@@ -1088,7 +1095,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                       {at.new ?? ''}
                     </td>
                     <td class="code">
-                      <DocView doc={doc} syntax={docSyntax(path)!} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
+                      <DocView doc={doc} syntax={docSyntax(path) ?? 'kdoc'} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
                     </td>
                   </tr>
                 );
@@ -1162,7 +1169,7 @@ function useWordMarks(hunks: Hunk[]) {
 // A documentation comment, rendered: the description as markdown, then the tags (Params, Returns, Throws…).
 // An edited one ('~') marks its changed paragraphs and tags, as rendered markdown marks changed blocks.
 function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'java' | 'jsdoc'; onSource: () => void }) {
-  const { paras, tags } = useMemo(() => docParts(doc.lines ?? doc.text.split('\n').map((text) => ({ text, changed: false })), syntax), [doc.text]);
+  const { paras, tags } = useMemo(() => docParts(doc.lines ?? doc.text.split('\n').map((text) => ({ text, changed: false })), syntax, doc.style), [doc.text]);
   return (
     <div class="doc-render" style={{ marginLeft: `${doc.indent}ch`, width: `calc(100% - ${doc.indent + 3}ch)` }}>
       <button class="link doc-source" title="Show the comment's source lines" onClick={onSource}>&lt;/&gt; source</button>

@@ -182,6 +182,7 @@ export function Settings() {
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo />
         <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode." demo>
           <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source." />
+          <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines read as prose. Commented-out code stays source." />
         </Flag>
         <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Source is a click away per file." demo />
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
