@@ -295,3 +295,10 @@ Settings → Appearance SHALL offer code colour themes (each a light and a dark 
 #### Scenario: Switch to Dracula and Fira Code
 - **WHEN** the user picks Dracula and Fira Code
 - **THEN** keywords turn Dracula's pink in dark mode (Alucard's in light mode) and code renders in Fira Code with its ligatures, without fetching anything from a font service
+
+### Requirement: Rendered doc comments
+In Kotlin, Java and TypeScript/JavaScript diffs, a documentation comment (`/** … */`) whose lines are all added, all removed or all unchanged SHALL show rendered in place of its lines: the description as markdown (Javadoc HTML and inline tags converted), then its block tags grouped (Params, Returns, Throws…). A "source" control SHALL bring back its lines, a comment on one of its lines SHALL keep it as source, and a doc comment edited line by line SHALL stay source. A Settings switch turns this off.
+
+#### Scenario: New KDoc
+- **WHEN** a PR adds a function with `/** Sums the prices… @param items … @return … */`
+- **THEN** the diff shows "Sums the prices…" with "Params: items – …" and "Returns: …" beside the + marker, numbered from its first line, and "source" shows the six lines

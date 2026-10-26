@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
-import { highlightCode } from './highlight.ts';
+import { highlightCode, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
+import { parseDoc } from './docs.ts';
 
 // Small, made-up examples of each diff helper, drawn with the app's own styles: shown beside the switches in
 // Settings, and captured as the README's pictures (`npm run demos`). No real code from any PR.
@@ -80,6 +81,20 @@ const MD_SRC = '## Rollout\n\n- Ship behind the `orders_v2` flag\n- **Remove** t
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="72" height="72"><path fill="#92BDFF" d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path fill="#1F5BD8" d="M7 15l3-4 2.5 3 1.5-2 3 3z"/><circle cx="9" cy="8" r="1.6" fill="#F5B83D"/></svg>`;
 
 const BOT_TEXT = 'Coverage report: 82.4% of lines (+0.3%), 71.0% of branches. 14 files changed, 3 with lower coverage: OrderRepository.kt, CartViewModel.kt, PaymentSheet.kt. Details in the CI run.';
+
+const DOC = `/**
+ * Sums the prices of the [Item]s in the cart.
+ *
+ * @param items what's in the cart
+ * @return the total, in cents
+ */
+fun total(items: List<Item>): Long`;
+// The rendered doc (same parsing as the diff), as HTML for a demo row.
+function docHtml(text: string) {
+  const { body, tags } = parseDoc(text.slice(0, text.indexOf('*/') + 2), 'kdoc');
+  const rows = tags.map(([label, items]) => `<dt>${label}:</dt><dd>${items.map(([n, t]) => (n ? `<code>${n}</code> – ` : '') + md.renderInline(t)).join('<br>')}</dd>`).join('');
+  return `<div class="md">${md.render(body)}</div><dl class="doc-tags">${rows}</dl>`;
+}
 
 export type Demo = { title: string; off: ComponentChildren; on: ComponentChildren };
 
@@ -244,6 +259,19 @@ export const DEMOS: Record<string, Demo> = {
             <figcaption>New · 24×24dp</figcaption>
           </figure>
         </div>
+      </File>
+    ),
+  },
+  renderDocs: {
+    title: 'Render doc comments',
+    off: (
+      <File path="Pricing.kt" st="added" add={7} del={0}>
+        <Rows rows={splitLines(kt(DOC)).map((l, i) => ['+', '', 20 + i, l] as Row)} />
+      </File>
+    ),
+    on: (
+      <File path="Pricing.kt" st="added" add={7} del={0}>
+        <Rows rows={[['+', '', 20, `<div class="doc-render" style="width: calc(100% - 3ch)">${docHtml(DOC)}</div>`], ['+', '', 26, 'fun total(items: List<Item>): Long']]} />
       </File>
     ),
   },

@@ -122,6 +122,7 @@
 - [x] 12.43 Mark accounts as bots (Settings): never messaged; their comments and threads treated as bots'
 - [x] 12.44 Off/on examples for each diff switch (Settings + README pictures via `npm run demos`)
 - [x] 12.45 Selectable code colour theme (10 light/dark families) and code font (14 bundled open-source fonts + system)
+- [x] 12.46 Doc comments (KDoc, Javadoc, JSDoc) rendered in the diff, reader-mode style, with a source toggle
 
 ## 13. Verify
 

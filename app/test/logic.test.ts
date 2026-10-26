@@ -274,3 +274,19 @@ test('markBots: comments by accounts marked as bots count as bot comments', () =
   assert.equal(awaitsMe(t, 'me', false), true); // a person replied…
   assert.equal(awaitsMe(marked, 'me', false), false); // …but it's a bot now
 });
+
+test('docBlocks finds whole doc comments of one kind; parseDoc renders KDoc and Javadoc', async () => {
+  const { docBlocks, parseDoc } = await import('../src/docs.ts');
+  const h = parsePatch([
+    '@@ -1,3 +1,9 @@', '+    /**', '+     * Sums the [Item] prices.', '+     *', '+     * @param items the cart', '+     * @return total in cents', '+     */', ' fun total() = 0',
+    ' /** Short. */', '-/** old', '+/** new', ' */',
+  ].join('\n'));
+  const blocks = docBlocks(h);
+  assert.deepEqual(blocks.map((b) => [b.start, b.end, b.kind, b.indent]), [[0, 5, '+', 4], [7, 7, ' ', 0]]); // the mixed one stays source
+  const d = parseDoc(blocks[0].text, 'kdoc');
+  assert.equal(d.body, 'Sums the `Item` prices.');
+  assert.deepEqual(d.tags, [['Params', [['items', 'the cart']]], ['Returns', [['', 'total in cents']]]]);
+  const j = parseDoc('/**\n * Returns the {@code Order} for <b>id</b>.\n * @throws IllegalStateException if missing\n */', 'java');
+  assert.equal(j.body, 'Returns the `Order` for **id**.');
+  assert.deepEqual(j.tags, [['Throws', [['IllegalStateException', 'if missing']]]]);
+});

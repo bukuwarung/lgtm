@@ -13,6 +13,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { vectorToSvg } from './vector.ts';
+import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
 import { reviewOrder } from './files.ts';
 import { fetchJira, notifySlack, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
@@ -917,12 +918,19 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set());
   const noted = (side: Side, n: number) =>
     threads.some((x) => x.diffSide === side && x.line === n) || drafts.some((x) => x.side === side && x.line === n) || (t?.side === side && t.line === n);
-  const foldAt = (hi: number, li: number) =>
-    folds.find(
-      (f) =>
-        f.hunk === hi && li >= f.start && li <= f.end && !openFolds.has(`${hi}-${f.start}`) &&
-        !hunks[hi].lines.slice(f.start, f.end + 1).some((l) => (l.old && noted('LEFT', l.old)) || (l.new && noted('RIGHT', l.new))),
+  // Blocks shown in place of their lines (an import fold, a rendered doc comment), unless opened or commented on.
+  const covering = <B extends { hunk: number; start: number; end: number }>(list: B[], open: Set<string>, hi: number, li: number) =>
+    list.find(
+      (b) =>
+        b.hunk === hi && li >= b.start && li <= b.end && !open.has(`${hi}-${b.start}`) &&
+        !hunks[hi].lines.slice(b.start, b.end + 1).some((l) => (l.old && noted('LEFT', l.old)) || (l.new && noted('RIGHT', l.new))),
     );
+  const foldAt = (hi: number, li: number) => covering(folds, openFolds, hi, li);
+  // KDoc / Javadoc / JSDoc comments, rendered like IntelliJ's reader mode; "source" shows the lines again.
+  const [renderDocs] = useStoredFlag('renderDocs', true);
+  const docs = useMemo(() => (renderDocs && docSyntax(path) ? docBlocks(hunks) : []), [hunks, renderDocs]);
+  const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
+  const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
 
   return (
     <table class="diff" ref={table}>
@@ -954,6 +962,24 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                     </td>
                   </tr>
                 );
+              const doc = docAt(hi, li);
+              if (doc) {
+                if (li !== doc.start) return null;
+                const first = h.lines[doc.start], last = h.lines[doc.end];
+                return (
+                  <tr class={`ln doc${doc.kind === '+' ? ' a' : doc.kind === '-' ? ' d' : ''}`}>
+                    <td class="num" title={`Lines ${first.old}–${last.old}: comment (shift-click to extend)`} onClick={(e) => pick(e, doc.kind === '-' ? 'LEFT' : 'RIGHT', doc.kind === '-' ? first.old! : first.new!)}>
+                      {first.old ?? ''}
+                    </td>
+                    <td class="num" title={`Lines ${first.new}–${last.new}: comment (shift-click to extend)`} onClick={(e) => pick(e, doc.kind === '-' ? 'LEFT' : 'RIGHT', doc.kind === '-' ? first.old! : first.new!)}>
+                      {first.new ?? ''}
+                    </td>
+                    <td class="code">
+                      <DocView doc={doc} syntax={docSyntax(path)!} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
+                    </td>
+                  </tr>
+                );
+              }
               const side: Side = l.kind === '-' ? 'LEFT' : 'RIGHT';
               const num = side === 'LEFT' ? l.old! : l.new!;
               const move = l.kind === '-' ? mv?.old.get(l.old!) : l.kind === '+' ? mv?.new.get(l.new!) : undefined;
@@ -1030,6 +1056,35 @@ function useWordHighlights(table: { current: HTMLTableElement | null }, hunks: H
     for (const [hl, r] of mine) hl.add(r);
     return () => mine.forEach(([hl, r]) => hl.delete(r));
   });
+}
+
+// A documentation comment, rendered: the description as markdown, then the tags (Params, Returns, Throws…).
+function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'java' | 'jsdoc'; onSource: () => void }) {
+  const { body, tags } = useMemo(() => parseDoc(doc.text, syntax), [doc.text]);
+  return (
+    <div class="doc-render" style={{ marginLeft: `${doc.indent}ch`, width: `calc(100% - ${doc.indent + 3}ch)` }}>
+      <button class="link doc-source" title="Show the comment's source lines" onClick={onSource}>source</button>
+      {body && <div class="md" dangerouslySetInnerHTML={{ __html: md.render(body) }} />}
+      {tags.length > 0 && (
+        <dl class="doc-tags">
+          {tags.map(([label, items]) => (
+            <>
+              <dt>{label}:</dt>
+              <dd>
+                {items.map(([name, text]) => (
+                  <div>
+                    {name && <code>{name}</code>}
+                    {name && text && ' – '}
+                    <span dangerouslySetInnerHTML={{ __html: md.renderInline(text) }} />
+                  </div>
+                ))}
+              </dd>
+            </>
+          ))}
+        </dl>
+      )}
+    </div>
+  );
 }
 
 function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {

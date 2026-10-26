@@ -119,6 +119,14 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
+<details><summary><b>Rendered doc comments</b>: KDoc, Javadoc and JSDoc read like IntelliJ's reader mode; edited ones stay source.</summary>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/renderDocs-dark.png">
+  <img alt="Rendered doc comments, off and on" src="docs/features/renderDocs-light.png" width="760">
+</picture>
+</details>
+
 <details><summary><b>Image previews</b>: PNG, WebP, JPEG, GIF (Git LFS too) and Android vector drawables show as pictures.</summary>
 
 <picture>
