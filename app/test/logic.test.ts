@@ -5,7 +5,7 @@ import { awaitsMe, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { reviewOrder } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
-import { highlightCode, highlightHunks, languageFor, splitLines } from '../src/highlight.ts';
+import { highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
 import { isMarkdown, md, renderChunks } from '../src/markdown.ts';
 import { findStacks } from '../src/stacks.ts';
@@ -109,9 +109,11 @@ test('highlight: language lookup and line splitting', () => {
   assert.match(nd[0].html, /<h1 data-src="1-1" data-nd="">/);
   assert.match(nd[1].html, /<li data-src="3-3">one<\/li>/);
   assert.match(nd[2].html, /data-src="7-7">x<\/span><span class="cl" data-src="8-8" data-nd="">y/);
-  const plain = renderChunks('```\nval x = listOf(1)\n```\n', new Set())[0].html;
-  assert.match(plain, /<span class="hljs-keyword">val<\/span>/); // unmarked fence → Kotlin
-  assert.match(md.render('```\nfun f() = 1\n```\n'), /<span class="hljs-keyword">fun<\/span>/);
+  const plain = renderChunks('```\nval x = listOf(1)\n```\n', new Set(), undefined, 'kt')[0].html;
+  assert.match(plain, /<span class="hljs-keyword">val<\/span>/); // unmarked fence → the PR's main language
+  assert.doesNotMatch(renderChunks('```\nval x = 1\n```\n', new Set())[0].html, /hljs/); // no guess given: plain
+  assert.match(md.render('```kotlin\nfun f() = 1\n```\n'), /<span class="hljs-keyword">fun<\/span>/);
+  assert.doesNotMatch(md.render('```\nfun f() = 1\n```\n'), /hljs/); // comments: highlightBlocks picks the language later
   assert.match(md.render('```suggestion\nval a = 2\n```\n'), /^<div class="suggestion"><div class="badge">Suggested change<\/div><pre>/);
   const mmd = renderChunks('```mermaid\ngraph TD\n  A-->B\n```\n', new Set([3]))[0].html;
   assert.match(mmd, /^<div class="mermaid-block" data-src="1-4" data-chg=""><div class="mermaid-svg" data-code="graph TD\n  A--&gt;B\n"><\/div>/);
@@ -257,4 +259,10 @@ test('importFolds for TypeScript: multi-line imports, one count per statement, o
   assert.deepEqual(importFolds(h, 'ts'), [{ hunk: 0, start: 0, end: 8, added: 3, removed: 1, newPackages: ['@scope/lib', 'react'], packageMoved: false }]);
   // `import x = require(...)` must not swallow the rest of the file
   assert.equal(importFolds(parsePatch("@@ -0,0 +1,3 @@\n+import x = require('y');\n+const z = 1;\n+z;"), 'ts')[0]?.end ?? -1, -1);
+});
+
+test('majorityLanguage: the most common code language, markdown and plain text aside', () => {
+  assert.equal(majorityLanguage(['a/A.kt', 'a/B.kt', 'build.gradle.kts', 'x.yaml', 'README.md', 'docs/a.md', 'docs/b.md', 'n.txt']), 'kt');
+  assert.equal(majorityLanguage(['a.ts', 'b.tsx', 'c.yaml']), 'ts');
+  assert.equal(majorityLanguage(['README.md']), undefined);
 });

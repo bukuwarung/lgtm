@@ -68,3 +68,10 @@ The system SHALL let the user comment on any rendered block, anchoring the comme
 #### Scenario: Existing thread
 - **WHEN** a review thread exists on head line 13
 - **THEN** it is shown right under the deepest rendered block (list item, table row, code line, paragraph, …) whose range contains line 13
+
+### Requirement: Language of unmarked code blocks
+A code block without a language SHALL be highlighted as the language of the file its comment is on; in markdown files, in comments on markdown or non-code files, and in the PR conversation, as the PR's most common code language (markdown and plain text not counted). Blocks GitHub marked with a language SHALL keep it.
+
+#### Scenario: Comment on a YAML file
+- **WHEN** a review comment on `module-list.yaml` contains a fenced block with no language
+- **THEN** the block is highlighted as YAML, while the same block in the PR description of a mostly-Kotlin PR is highlighted as Kotlin

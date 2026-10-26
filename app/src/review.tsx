@@ -7,7 +7,7 @@ import {
   awaitsMe, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
-import { highlightCode, highlightHunks, languageFor, splitLines } from './highlight.ts';
+import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
@@ -40,6 +40,8 @@ type Ctx = {
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
   me: string; // my login ('' until known)
   ignoreWs: boolean; // hide whitespace-only changes
+  langFor: (path?: string) => string | undefined; // the language an unmarked code block in a comment on `path` is read as
+  mainLang?: string; // the PR's main code language
   moved: Map<string, Moved>; // code moved without changes, per file
 };
 type Saved = { sha: string; drafts: Draft[] };
@@ -240,7 +242,12 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   // In "since" mode old-side line numbers refer to my last reviewed commit, so old-side threads would sit on the wrong lines.
   const shownThreads = since && sinceData ? threads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : threads;
   const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
-  useEffect(() => void renderMermaid(document.querySelector('main'))); // conversation, threads, drafts
+  useEffect(() => {
+    const main = document.querySelector('main');
+    void renderMermaid(main); // conversation, threads, drafts
+    // Code blocks in comments, in the language of the file they're on (data-lang); see highlightBlocks.
+    main?.querySelectorAll<HTMLElement>('.md[data-lang]').forEach((el) => highlightBlocks(el, el.dataset.lang || undefined));
+  });
 
   if (error) return <p class="error page">{error}</p>;
   if (!data) return <p class="note page">Loading pull request…</p>;
@@ -294,6 +301,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     return true;
   }
 
+  const mainLang = majorityLanguage(data.files.filter((f) => !f.generated).map((f) => f.filename));
   const ctx: Ctx = {
     pr,
     headRepo,
@@ -313,6 +321,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     renderAll,
     since: since && !!sinceData,
     me,
+    mainLang,
+    langFor: (path) => (path && !isMarkdown(path) && languageFor(path)) || mainLang,
     ignoreWs,
     moved,
     repo,
@@ -524,9 +534,9 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
-          {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} />)}
+          {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
-          <Conversation pr={pr} items={conversation} />
+          <Conversation pr={pr} items={conversation} lang={mainLang} />
           {visible.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
@@ -1025,7 +1035,7 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   }, []);
   // Only diff lines take line comments, so sections outside the diff fold away (expandable, read-only).
   const inDiff = useMemo(() => new Set(hunks.flatMap((h) => h.lines.flatMap((l) => l.new ?? []))), [hunks]);
-  const chunks = useMemo(() => (src ? renderChunks(src, file.status === 'added' ? new Set() : addedLines(hunks), inDiff) : []), [src, hunks]);
+  const chunks = useMemo(() => (src ? renderChunks(src, file.status === 'added' ? new Set() : addedLines(hunks), inDiff, ctx.mainLang) : []), [src, hunks]);
   const [openRuns, setOpenRuns] = useState<Set<number>>(new Set());
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
@@ -1219,7 +1229,7 @@ function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; dr
         .map((d) => (
           <div class="draft" key={d.id} id={'d-' + d.id}>
             <div class="badge">Pending · {where(d)}</div>
-            <div class="md" dangerouslySetInnerHTML={{ __html: md.render(d.body) }} />
+            <div class="md" data-lang={ctx.langFor(d.path) ?? ''} dangerouslySetInnerHTML={{ __html: md.render(d.body) }} />
             <div class="row">
               <button onClick={() => ctx.setTarget({ path: d.path, side: d.side, line: d.line, startLine: d.startLine, editId: d.id, body: d.body })}>Edit</button>
               <button onClick={() => ctx.removeDraft(d.id)}>Delete</button>
@@ -1268,7 +1278,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
           <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
-          <div class="md" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+          <div class="md" data-lang={ctx.langFor(t.path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
         </div>
       ))}
       <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && !busy && send()} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder="Reply… (⌘↵ to send)" />
@@ -1325,7 +1335,7 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
 }
 
 // The Jira ticket the PR names, so the review can be held against its intent without leaving the page.
-function Ticket({ id }: { id: string }) {
+function Ticket({ id, lang }: { id: string; lang?: string }) {
   const [issue, setIssue] = useState<JiraIssue | null>(null);
   const [err, setErr] = useState('');
   const [open, toggle] = useStoredFlag('ticketOpen', true);
@@ -1339,7 +1349,7 @@ function Ticket({ id }: { id: string }) {
         <a href={issue.url} target="_blank" rel="noopener">{issue.key}</a> <span class={'jira-st js-' + issue.statusCategory}>{issue.status}</span>{' '}
         <span class="badge">{issue.type}</span> <b>{issue.summary}</b>
       </summary>
-      {html ? <div class="md" dangerouslySetInnerHTML={{ __html: html }} /> : <p class="note">No description.</p>}
+      {html ? <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: html }} /> : <p class="note">No description.</p>}
     </details>
   );
 }
@@ -1366,7 +1376,7 @@ const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQU
 
 const botExcerpt = (html: string) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
 
-function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
+function Conversation({ pr, items, lang }: { pr: PR; items: ConversationItem[]; lang?: string }) {
   const [foldBots] = useStoredFlag('foldBots', true);
   return (
     <details class="conversation" id="conversation" open>
@@ -1375,7 +1385,7 @@ function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
       </summary>
       <div class="comment" id="pr-description">
         <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
-        {pr.body_html ? <div class="md" dangerouslySetInnerHTML={{ __html: pr.body_html }} /> : <p class="note">No description.</p>}
+        {pr.body_html ? <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: pr.body_html }} /> : <p class="note">No description.</p>}
       </div>
       {items.map((c) => {
         const head = (
@@ -1384,7 +1394,7 @@ function Conversation({ pr, items }: { pr: PR; items: ConversationItem[] }) {
             <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
           </>
         );
-        const body = c.html && <div class="md" dangerouslySetInnerHTML={{ __html: c.html }} />;
+        const body = c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />;
         // Bot reports (CI summaries, AI reviewers, coverage) fold to one line; click to read.
         return c.bot && foldBots ? (
           <details class="comment bot" key={c.id} id={'cv-' + c.id}>

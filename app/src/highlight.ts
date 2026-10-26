@@ -44,6 +44,34 @@ export function languageFor(path: string): string | undefined {
 
 export const highlightCode = (code: string, language: string) => hljs.highlight(code, { language, ignoreIllegals: true }).value;
 
+// The PR's main code language: the most common among its files, markdown and plain text aside. Unmarked code blocks
+// in markdown files and in comments not on a code file are read as this.
+export function majorityLanguage(paths: string[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const p of paths) {
+    const lang = languageFor(p);
+    if (!lang || /\.(md|mdx|markdown)$/i.test(p) || hljs.getLanguage(lang)?.name === 'Plain text') continue;
+    const name = hljs.getLanguage(lang)!.name!; // kt and kts are both Kotlin
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const top = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return top && paths.map(languageFor).find((l) => l && hljs.getLanguage(l)?.name === top);
+}
+
+// Highlights code blocks in rendered comment HTML (GitHub's, or ours for drafts). A block GitHub marked keeps its
+// language (re-highlighted in our colours); an unmarked one takes `fallback`. Our own already-highlighted blocks
+// (language-* class), rich-markdown blocks (data-src, per-line spans) and mermaid are left alone.
+export function highlightBlocks(root: ParentNode, fallback?: string) {
+  for (const pre of root.querySelectorAll<HTMLElement>('pre:not([data-hl]):not([data-src])')) {
+    if (pre.querySelector('code[class*="language-"]') || pre.closest('.mermaid-svg, .mermaid-block') || pre.getAttribute('lang') === 'mermaid') continue;
+    // GitHub names a fence's language as <pre lang="…">, or a highlight-source-… wrapper when it coloured it.
+    const named = pre.getAttribute('lang') ?? pre.closest('[class*="highlight-source-"]')?.className.match(/highlight-source-([\w+-]+)/)?.[1];
+    const lang = named ? languageFor('x.' + named) : fallback;
+    pre.dataset.hl = '';
+    if (lang) pre.innerHTML = `<code class="hljs">${highlightCode(pre.textContent ?? '', lang)}</code>`;
+  }
+}
+
 // Split highlighted HTML into lines, closing and re-opening spans that cross a line break.
 export function splitLines(html: string): string[] {
   const out: string[] = [];

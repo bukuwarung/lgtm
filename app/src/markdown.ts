@@ -2,8 +2,12 @@ import MarkdownIt from 'markdown-it';
 import { emojiMap } from './emoji.ts';
 import { highlightCode, languageFor, splitLines } from './highlight.ts';
 
-// A fence with no language is assumed to be Kotlin (the team's main language).
-const fenceLanguage = (info: string) => languageFor('x.' + (info.trim().split(/\s+/)[0] || 'kt'));
+// A fence's language; an unmarked one takes the caller's guess (the commented file's, or the PR's main language).
+// Comments and drafts get theirs afterwards from highlightBlocks, which knows which file they're on.
+const fenceLanguage = (info: string, fallback?: string) => {
+  const named = info.trim().split(/\s+/)[0];
+  return named ? languageFor('x.' + named) : fallback;
+};
 
 // Raw HTML is parsed (so it's recognized) but rendered escaped; PR content never reaches the DOM as HTML.
 export const md = new MarkdownIt({
@@ -69,7 +73,7 @@ md.renderer.rules.fence = (tokens, i, opts, env, self) => {
   }
   const added: Set<number> = env.added;
   const inDiff: Set<number> | undefined = env.inDiff;
-  const lang = fenceLanguage(info);
+  const lang = fenceLanguage(info, env.lang);
   const code = t.content.replace(/\n$/, '');
   const lines = lang ? splitLines(highlightCode(code, lang)) : code.split('\n').map((l) => md.utils.escapeHtml(l));
   const first = t.map[0] + 2; // the opening ``` is line map[0] + 1
@@ -120,8 +124,8 @@ export type Chunk = { start: number; end: number; html: string; inDiff: boolean 
 
 // Split into top-level blocks so threads and drafts can be rendered between them. `inDiff` = head lines inside the
 // diff's hunks; blocks outside it are marked so the view can fold them and keep them uncommentable.
-export function renderChunks(src: string, added: Set<number>, inDiff?: Set<number>): Chunk[] {
-  const env = { added, inDiff };
+export function renderChunks(src: string, added: Set<number>, inDiff?: Set<number>, lang?: string): Chunk[] {
+  const env = { added, inDiff, lang };
   const isIn = (s: number, e: number) => !inDiff || anyIn(inDiff, s, e);
   const out: Chunk[] = [];
   // YAML front matter: show as a code block, and blank it out for markdown-it so line numbers still line up.
