@@ -236,9 +236,32 @@ export const DEMOS: Record<string, Demo> = {
         <Rows rows={MD_SRC.split('\n').map((l, i) => ['+', '', i + 1, md.utils.escapeHtml(l) || ' '] as Row).map((r) => [r[0], r[1], r[2], `<span>${r[3]}</span>`] as Row)} />
       </File>
     ),
+    // Rendered, and still commented line by line: a block's "+" (shown on hover) and a thread under its line.
     on: (
       <File path="docs/rollout.md" add={4} del={0}>
-        <div class="md demo-md" dangerouslySetInnerHTML={{ __html: md.render(MD_SRC) }} />
+        <div class="md demo-md chunk demo-chunk">
+          <h2 data-src="1-1" data-chg="">Rollout</h2>
+          <ul>
+            <li data-src="3-3" data-chg="">
+              Ship behind the <code>orders_v2</code> flag
+              <div class="note-host">
+                <div class="notes">
+                  <div class="thread">
+                    <div class="comment">
+                      <b>you</b> <time>just now</time>
+                      <div class="md">
+                        <p>Who turns the flag on, and when?</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </li>
+            <li data-src="4-4" data-chg="" class="demo-plus">
+              <strong>Remove</strong> the old screen next sprint
+            </li>
+          </ul>
+        </div>
       </File>
     ),
   },

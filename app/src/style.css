@@ -212,7 +212,7 @@ main { padding: 16px; }
 .chunk [data-src], .chunk tr[data-src] > :first-child { position: relative; }
 .chunk [data-chg]:not(:has([data-chg])) { background: var(--add); box-shadow: -6px 0 0 var(--add), 6px 0 0 var(--add); }
 .chunk [data-src]:not(tr, [data-nd]):hover:not(:has([data-src]:hover)):not(:has(.note-host:hover))::before,
-.chunk tr[data-src]:not([data-nd]):hover > :first-child::before {
+.chunk tr[data-src]:not([data-nd]):hover > :first-child::before, .chunk .demo-plus::before {
   content: "+"; position: absolute; left: -36px; top: 0; width: 20px; height: 20px;
   font: bold 14px/20px var(--sans); text-align: center; color: #fff; background: var(--accent); border-radius: 4px; cursor: pointer;
 }
@@ -470,3 +470,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .set-sub { margin: 2px 0 4px 26px; padding: 0 0 0 10px; border: 0; border-left: 2px solid var(--border); min-width: 0; }
 .set-sub:disabled { opacity: .5; }
 .set-sub .set-flag { margin: 0; }
+.demo-chunk { padding-left: 44px; }
+.demo-chunk .thread { padding-left: 12px; }
+.demo-chunk .comment { border-top: 0; padding-top: 0; }
