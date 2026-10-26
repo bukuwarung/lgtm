@@ -7,8 +7,8 @@ lgtm runs as a local server plus a browser tab. That works, but it lives in a ta
 - New macOS desktop app built with **Tauri 2**: its own window and Dock icon, loading the same review UI (`app/src`) bundled into the app. No local server or port.
 - The six local-server routes (`/token`, `/slack`, `/slack-people`, `/jira`, `/job-log`, `/integrations`) become **Rust commands** that run the same CLIs (`gh`, `slackcli`, `acli`) and read/write the same files in `~/.config/lgtm/`. `src/platform.ts` gets a desktop implementation chosen at build time; nothing else in the UI changes.
 - **Native extras:** Dock badge with the "needs your review" count, native notifications, `lgtm://` links (open a PR in the app), external links opening in the default browser, remembered window size and position, and an opt-in "Launch at login" setting.
-- **Releases, by hand for now:** a maintainer builds a universal (Apple Silicon + Intel), ad-hoc-signed app on their Mac, following a short documented checklist, and publishes it to a **public** repo, `bukuwarung/homebrew-tap`, which is also the Homebrew tap.
-- **Homebrew:** `brew install --cask bukuwarung/tap/lgtm` installs the app (depends on `gh`; the cask clears macOS quarantine, since the app isn't notarized). `brew install bukuwarung/tap/lgtm-cli` installs today's terminal `lgtm` (browser version). `brew upgrade` handles updates.
+- **Releases, by hand for now:** a maintainer builds a universal (Apple Silicon + Intel), ad-hoc-signed app on their Mac, with `scripts/release.sh`, and publishes it as a GitHub release of `bukuwarung/lgtm` (now public), which is also the Homebrew tap.
+- **Homebrew:** `brew install --cask bukuwarung/lgtm/lgtm` installs the app (depends on `gh`; the cask clears macOS quarantine, since the app isn't notarized). `brew install bukuwarung/lgtm/lgtm-cli` installs today's terminal `lgtm` (browser version). `brew upgrade` handles updates.
 - The browser version keeps working from the same code.
 
 ## Non-goals
@@ -31,6 +31,6 @@ None. `github-auth`, `slack-notify` and the rest keep their behaviour; only wher
 
 - New `desktop/` (Tauri 2 project: Rust crate, `tauri.conf.json`, capabilities, icons) building `app/`'s UI.
 - `app/src/platform.ts` calls the local server or, inside the app, the matching command (decided at runtime; one UI build serves both).
-- New public repo `bukuwarung/homebrew-tap` (cask, formula, release assets), maintained by hand with the release checklist.
+- `Casks/`, `Formula/` and `scripts/release.sh` in this repo; release assets on its GitHub Releases.
 - Build machines need Rust (`rustup`) and Xcode command-line tools; users need neither.
 - Pending draft comments live in the browser's storage and don't move to the app by themselves (design, decision 7).

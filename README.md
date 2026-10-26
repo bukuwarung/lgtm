@@ -1,6 +1,6 @@
 # lgtm
 
-Fast GitHub PR review in your own browser: every file on one page, markdown first, less noise. It runs on your machine and signs in with your GitHub CLI login.
+Fast GitHub PR review, as a Mac app or in your browser: every file on one page, markdown first, less noise. It runs on your machine and signs in with your GitHub CLI login.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/foldImports-dark.png">
@@ -9,29 +9,34 @@ Fast GitHub PR review in your own browser: every file on one page, markdown firs
 
 ## Install
 
-Node 22+ and the GitHub CLI are required; slackcli (Slack messages) and the Atlassian CLI (Jira tickets) are optional. lgtm never asks for a password or token: it uses these tools' sign-ins.
+With Homebrew (macOS 13+). The app:
 
 ```bash
-brew install gh && gh auth login                                         # required
-brew install shaharia-lab/tap/slackcli && slackcli auth login-auto        # optional: Slack
-brew install atlassian/homebrew-acli/acli && acli jira auth login --web   # optional: Jira
+brew tap bukuwarung/lgtm https://github.com/bukuwarung/lgtm
+brew install --cask bukuwarung/lgtm/lgtm
+gh auth login                                   # once, if you haven't
 ```
 
-```bash
-git clone https://github.com/bukuwarung/lgtm.git
-cd lgtm/app && npm install && npm run build && npm link
-```
-
-If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Settings shows which sign-ins work and how to fix the rest.
-
-## Use
+Or the browser version, the `lgtm` command (needs Node, which Homebrew installs):
 
 ```bash
+brew install bukuwarung/lgtm/lgtm-cli
 lgtm                                          # opens the app on port 4517
 lgtm https://github.com/owner/repo/pull/123   # straight to a PR
 ```
 
-To update: `git pull && npm run build` in `app/`, then `lgtm` (it replaces an older copy that's still running).
+`brew upgrade` updates either. The app isn't notarized (there's no Apple Developer account behind it), so the cask clears macOS's download quarantine on install; you're trusting this repo's releases. Downloading `lgtm-X.Y.Z.zip` from [Releases](https://github.com/bukuwarung/lgtm/releases) by hand instead, macOS blocks the first launch: allow it in System Settings → Privacy & Security → Open Anyway.
+
+Optional, for Slack messages and Jira tickets (lgtm never asks for a password or token: it uses these tools' sign-ins):
+
+```bash
+brew install shaharia-lab/tap/slackcli && slackcli auth login-auto
+brew install atlassian/homebrew-acli/acli && acli jira auth login --web
+```
+
+If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Settings shows which sign-ins work and how to fix the rest.
+
+From source (Node 22+): `cd app && npm install && npm run build && npm link`, then `lgtm`. To update: `git pull && npm run build`, then `lgtm` (it replaces an older copy that's still running). Switching to the Homebrew `lgtm-cli`? `npm unlink -g lgtm` first, or Homebrew can't link its `lgtm`.
 
 ## What it does
 
@@ -199,7 +204,7 @@ npm start       # build, then run the server
 npm run demos   # recapture docs/features/*.png from src/demos.tsx (lgtm must be running)
 ```
 
-**Desktop app (in progress).** `desktop/` wraps the same UI in a macOS app with [Tauri](https://tauri.app) (plan: [`openspec/changes/add-desktop-app`](openspec/changes/add-desktop-app)). To build it you need Rust:
+**Desktop app.** `desktop/` wraps the same UI in a macOS app with [Tauri](https://tauri.app) (plan: [`openspec/changes/add-desktop-app`](openspec/changes/add-desktop-app)). To build it you need Rust:
 
 ```bash
 brew install rustup && rustup default stable
@@ -207,6 +212,14 @@ export PATH="/opt/homebrew/opt/rustup/bin:$PATH"   # rustup is keg-only
 cd desktop && npm install && npm run build         # → src-tauri/target/release/bundle/macos/lgtm.app
 ```
 
-The app does everything the browser version does (GitHub, Slack, Jira, CI logs), plus a Dock badge with the "needs your review" count, macOS notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, its own ⌘F find bar, a remembered window, and "Launch at login" in Settings. Moving over from the browser version: Settings → Backup → Export there, Import in the app (preferences and pending comments). Keep the version in `app/package.json` and `desktop/src-tauri/tauri.conf.json` the same; Settings shows it. `cargo test -- --ignored --nocapture` in `desktop/src-tauri` checks the app's commands against your real gh, slackcli and acli (read-only; Slack in dry run).
+The app does everything the browser version does (GitHub, Slack, Jira, CI logs), plus a Dock badge with the "needs your review" count, macOS notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, its own ⌘F find bar, a remembered window, and "Launch at login" in Settings. Moving over from the browser version: Settings → Backup → Export there, Import in the app (preferences and pending comments). `cargo test -- --ignored --nocapture` in `desktop/src-tauri` checks the app's commands against your real gh, slackcli and acli (read-only; Slack in dry run).
+
+**Releasing.** On a Mac with Rust and both targets (`rustup target add aarch64-apple-darwin x86_64-apple-darwin`):
+
+```bash
+scripts/release.sh 0.2.0
+```
+
+It sets the version everywhere (Settings shows it), runs the tests, builds a universal, ad-hoc-signed `lgtm.app` and the browser version's tarball, and points [`Casks/lgtm.rb`](Casks/lgtm.rb) and [`Formula/lgtm-cli.rb`](Formula/lgtm-cli.rb) at them (version, SHA-256). Then it prints the two publishing commands: push the commit, and `gh release create` with both files. This repo is its own Homebrew tap, so `brew upgrade` picks the release up once both are out.
 
 `LGTM_PORT` changes the port (drafts are stored per port), `LGTM_NO_OPEN=1` skips opening a browser tab. Design and specs: [`openspec/changes/add-pr-review-app`](openspec/changes/add-pr-review-app).

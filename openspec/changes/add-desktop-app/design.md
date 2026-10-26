@@ -36,28 +36,20 @@ Input validation is carried over unchanged (repo/login/key/ID patterns, recipien
 Apps opened from Finder or the Dock don't inherit the shell's `PATH`, so `/opt/homebrew/bin` is missing. At startup the app reads `PATH` from the user's login shell (`$SHELL -lc 'printf %s "$PATH"'`, with a short timeout) and falls back to prepending `/opt/homebrew/bin:/usr/local/bin`. The Settings "Accounts" check shows any CLI still not found.
 
 ### 5. Unsigned (ad-hoc) app, quarantine cleared by the cask
-Without an Apple Developer account the app gets Tauri's ad-hoc signature, enough to run on Apple Silicon. Downloads carry the `com.apple.quarantine` flag, and macOS 15+ blocks such apps until the user clicks "Open Anyway" in System Settings. The cask removes the flag after install:
+Without an Apple Developer account the app gets an ad-hoc signature (`signingIdentity: "-"`, the whole bundle sealed), enough to run on Apple Silicon and Intel. Downloads carry the `com.apple.quarantine` flag, and macOS 15+ blocks such apps until the user clicks "Open Anyway" in System Settings. The cask removes the flag after install (Homebrew 7's declarative steps):
 ```ruby
-postflight do
-  system_command "xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/lgtm.app"]
+postflight_steps do
+  run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/lgtm.app"]
 end
 ```
-*Trade-off:* installing skips Gatekeeper for lgtm, so trust rests on the tap and on who can publish to it (its maintainers). The README says so, and documents the manual "Open Anyway" path for a download by hand.
+*Trade-off:* installing skips Gatekeeper for lgtm, so trust rests on the repo and on who can publish releases (its maintainers). The README says so, and documents the manual "Open Anyway" path for a download by hand.
 
-### 6. Releases and tap in one public repo: `bukuwarung/homebrew-tap`
-A tap must be a repo named `homebrew-*`, and Homebrew can only download from public URLs. One public repo holds both: `Casks/lgtm.rb`, `Formula/lgtm-cli.rb`, and GitHub Releases with the assets. The source stays private in `bukuwarung/lgtm`.
-- **Releasing, by hand** (a checklist in the README's Develop section, run on a maintainer's Mac):
-  1. Bump the version in `app/package.json` and `desktop/tauri.conf.json`, commit, tag `vX.Y.Z` in `bukuwarung/lgtm`.
-  2. `npm run build` in `app/`, then `cargo tauri build --target universal-apple-darwin`; zip `lgtm.app` as `lgtm-X.Y.Z.zip`.
-  3. Package the terminal version (`app/dist` + `app/bin` + `package.json`) as `lgtm-cli-X.Y.Z.tar.gz`.
-  4. `gh release create vX.Y.Z --repo bukuwarung/homebrew-tap lgtm-X.Y.Z.zip lgtm-cli-X.Y.Z.tar.gz`.
-  5. Update `version` and `sha256` (`shasum -a 256`) in `Casks/lgtm.rb` and `Formula/lgtm-cli.rb`, push the tap.
-  6. `brew upgrade` on another account to check.
-  A CI workflow can automate these steps later without changing the repo layout.
-- **Cask:** `depends_on formula: "gh"`, `depends_on macos: ">= :ventura"`, the quarantine postflight, and `caveats` pointing to slackcli and acli (optional) and to `gh auth login`.
-- **Formula `lgtm-cli`:** installs the packaged terminal version, `depends_on "node"` and `"gh"`, links `bin/lgtm`.
-- **Version:** set in `package.json` and `tauri.conf.json` (step 1); shown in Settings.
-*Alternative:* separate public `lgtm-releases` repo plus a tap repo. Two repos to keep in sync for no gain.
+### 6. The source repo is the tap
+`bukuwarung/lgtm` is public, so it holds everything: `Casks/lgtm.rb`, `Formula/lgtm-cli.rb`, and GitHub Releases with the assets. A repo not named `homebrew-*` needs its URL when tapping: `brew tap bukuwarung/lgtm https://github.com/bukuwarung/lgtm`.
+- **Releasing, by hand:** `scripts/release.sh X.Y.Z` on a maintainer's Mac sets the version (`app/package.json`, `tauri.conf.json`, `Cargo.toml`), runs the tests, builds the universal app (`--target universal-apple-darwin`) and zips it with `ditto` as `lgtm-X.Y.Z.zip`, packages the terminal version (`app/bin`, `app/dist`, `package.json`) as `lgtm-cli-X.Y.Z.tar.gz`, and writes version and SHA-256 into the cask and formula. Then: push, `gh release create vX.Y.Z` with both files, and `brew upgrade` to check. A CI workflow can take this over later.
+- **Cask:** `depends_on formula: "gh"`, `depends_on macos: :ventura`, the quarantine step, `zap` for its data, and `caveats` pointing to `gh auth login` and the optional slackcli and acli.
+- **Formula `lgtm-cli`:** installs the packaged terminal version into `libexec`, `depends_on "node"` and `"gh"`, and puts `lgtm` on the PATH running Homebrew's node.
+*Alternative:* a separate `bukuwarung/homebrew-tap` (the plan while the source was private). Not needed now.
 
 ### 7. Data and settings
 Preferences and pending drafts live in the web view's `localStorage`, which is per app (and per browser origin today), so moving to the app starts fresh. Settings gains **Export / Import** (a JSON file of preferences and drafts) in both versions, so a user can carry them over once. Files in `~/.config/lgtm/` (Slack mapping, threads) are shared by both versions as before.
