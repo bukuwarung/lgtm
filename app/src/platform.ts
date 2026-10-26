@@ -253,6 +253,24 @@ export async function openClaude(url: string) {
   location.href = url;
 }
 
+// Claude Code sessions whose first prompt links a PR, newest first (Settings → Claude Code; read from the Claude app's
+// local records).
+export type ClaudeSession = { id: string; title: string; lastActivityAt: number; prs: string[] };
+export async function getClaudeSessions(): Promise<ClaudeSession[]> {
+  if (isDesktop) return command<ClaudeSession[]>('claude_sessions');
+  const res = await fetch('/claude-sessions');
+  if (!res.ok) throw new Error('Could not read Claude sessions');
+  return res.json();
+}
+
+const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+const UNITS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]] as const;
+export function ago(when: string | number) {
+  const s = (new Date(when).getTime() - Date.now()) / 1000;
+  const u = UNITS.find(([, n]) => Math.abs(s) >= n);
+  return u ? rtf.format(Math.round(s / u[1]), u[0]) : 'just now';
+}
+
 // Per repo, the local checkout Claude Code should work in (Settings → Claude Code): { "owner/repo": "/path" }.
 export function claudeFolder(repo: string): string | undefined {
   try {

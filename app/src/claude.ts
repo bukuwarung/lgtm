@@ -9,6 +9,7 @@ export function claudeNewLink(prompt: string, folder?: string): string {
   return `claude://code/new?${p}`;
 }
 export const CLAUDE_CONTINUE = 'claude://code/continue?session=last';
+export const claudeContinueLink = (id: string) => `claude://code/continue?session=${encodeURIComponent(id)}`;
 
 const quote = (text: string, room = 1500) => (text.length > room ? text.slice(0, room) + '…' : text).trim().replace(/^/gm, '> ');
 

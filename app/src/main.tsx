@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
-import { askNotifications, initDesktop, isDesktop, notify as notifyNative, readBots, setBadge, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, askNotifications, initDesktop, isDesktop, notify as notifyNative, readBots, setBadge, useStoredFlag, useStoredValue } from './platform.ts';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { DemoPage } from './demos.tsx';
@@ -200,14 +200,6 @@ const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string]>> = {
   BEHIND: ['behind base', ''],
   DIRTY: ['conflicts', 'p-bad'],
 };
-
-const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-const UNITS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]] as const;
-function ago(iso: string) {
-  const s = (Date.parse(iso) - Date.now()) / 1000;
-  const u = UNITS.find(([, n]) => Math.abs(s) >= n);
-  return u ? rtf.format(Math.round(s / u[1]), u[0]) : 'just now';
-}
 
 function PRList({ hidden, current, version, onItems }: { hidden: boolean; current: { repo: string; n: number } | null; version: number; onItems: (items: QueueItem[]) => void }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);

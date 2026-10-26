@@ -9,7 +9,7 @@ import { parseDoc } from './docs.ts';
 type Row = [kind: '+' | '-' | ' ', old: number | '', now: number | '', code: string, cls?: string];
 const kt = (code: string) => highlightCode(code, 'kotlin');
 
-function Rows({ rows }: { rows: Row[] }) {
+function Rows({ rows, extra }: { rows: Row[]; extra?: ComponentChildren }) {
   return (
     <table class="diff">
       <tbody>
@@ -20,6 +20,7 @@ function Rows({ rows }: { rows: Row[] }) {
             <td class="code" dangerouslySetInnerHTML={{ __html: code.startsWith('<') ? code : kt(code) }} />
           </tr>
         ))}
+        {extra}
       </tbody>
     </table>
   );
@@ -317,14 +318,194 @@ export function DemoPair({ k, active }: { k: string; active?: boolean }) {
   );
 }
 
+// Scenes of the app for the README's "What it does" (#/demo/scene-<key>): made-up PRs drawn with the app's own markup.
+type Item = { g: string; title: string; meta: string; layer?: string; pills: [cls: string, text: ComponentChildren][] };
+const size = (a: number, d: number, f: number): [string, ComponentChildren] => ['p-size', <><b class="a">+{a}</b> <b class="d">−{d}</b> · {f} files</>];
+const QUEUE: [g: string, label: string, items: Item[]][] = [
+  ['needs', 'Needs your review', [
+    { g: 'needs', title: 'Retry failed payments with backoff', meta: 'acme/shop#412 · rina · 20 minutes ago', pills: [['p-strong', '↻ re-review'], size(84, 12, 4)] },
+    { g: 'needs', title: 'Cart: keep the promo code after login', layer: '2/3 ', meta: 'acme/shop#409 · budi · 2 hours ago', pills: [['p-warn', '2 unsent comments'], size(156, 40, 7)] },
+    { g: 'needs', title: 'Move order history to the new API', meta: 'acme/app#88 · sari · yesterday', pills: [['p-bad', 'CI failing'], ['p-bad', 'conflicts'], size(610, 233, 18)] },
+  ]],
+  ['changes', 'You requested changes', [
+    { g: 'changes', title: 'Add the refund screen', meta: 'acme/app#85 · dewi · 3 days ago', pills: [['p-reply', '💬 1 awaiting your reply'], size(342, 8, 11)] },
+  ]],
+  ['approved', 'You approved', [
+    { g: 'approved', title: 'Bump Kotlin to 2.1', meta: 'acme/app#90 · eko · 5 hours ago', pills: [['p-ok', 'PR approved'], size(6, 6, 2)] },
+  ]],
+];
+
+const SNIPPET: Row[] = [
+  [' ', 30, 30, 'suspend fun charge(order: Order): Result<Receipt> {'],
+  ['-', 31, '', '    return api.charge(order.id)'],
+  ['+', '', 31, '    return retry(times = 3, backoff = 2.seconds) {'],
+  ['+', '', 32, '        api.charge(order.id)'],
+  ['+', '', 33, '    }.onFailure { e -> if (e !is IOException && attempts >= 3) log.warn("gave up: $e") }'],
+  [' ', 32, 34, '}'],
+];
+
+const Thread = ({ who, when, html }: { who: string; when: string; html: string }) => (
+  <tr>
+    <td colSpan={3} class="notes-cell">
+      <div class="notes">
+        <details class="thread" open>
+          <summary />
+          <div class="comment">
+            <b>{who}</b> <time>{when}</time> <button class="copy-link">🔗</button> <span class="claude-menu"><button class="copy-link">✳</button></span>
+            <div class="md" dangerouslySetInnerHTML={{ __html: html }} />
+          </div>
+          <div class="editor">
+            <div class="ed-bar">
+              <button type="button" class="ed-tab on">Write</button>
+              <button type="button" class="ed-tab">Preview</button>
+              <span class="spacer" />
+              {['B', 'I', '</>', '🔗', '❝', '•', '±'].map((t) => <button type="button" class="ed-tool">{t}</button>)}
+            </div>
+            <div class="ed-write">
+              <textarea rows={2} placeholder="Reply… (⌘↵ to send)" value="Good call :+1: I'll make the backoff configurable" />
+            </div>
+          </div>
+          <div class="row">
+            <button>Resolve conversation</button>
+          </div>
+        </details>
+      </div>
+    </td>
+  </tr>
+);
+
+const Bar = ({ menu }: { menu?: boolean }) => (
+  <div class="bar">
+    <button>⇤ Index</button>
+    <h1>
+      <a><span class="pr-num">#412</span> Retry failed payments with backoff</a>
+    </h1>
+    <a class="bar-slack">💬 @rina</a>
+    <span class="claude-menu">
+      <button class="claude-btn">✳ Claude</button>
+      {menu && (
+        <span class="claude-pop" role="menu">
+          <button role="menuitem">New Claude Code session</button>
+          <button role="menuitem">Continue “Review retry backoff in payments” · 2 hours ago</button>
+          <button role="menuitem">Continue last session</button>
+        </span>
+      )}
+    </span>
+    <div class="submit">
+      <button class="primary">Finish review</button>
+    </div>
+  </div>
+);
+
+export const SCENES: Record<string, { title: string; width: number; body: ComponentChildren }> = {
+  queue: {
+    title: 'Your queue',
+    width: 420,
+    body: (
+      <aside class="side prs">
+        <div class="side-scroll">
+          <div class="pr-tabs" role="tablist">
+            <button role="tab" aria-selected="true">Reviewing <span class="count">5</span></button>
+            <button role="tab" aria-selected="false">Your PRs <span class="count">2</span></button>
+            <button role="tab" aria-selected="false">Team <span class="count">9</span></button>
+          </div>
+          {QUEUE.map(([g, label, items]) => (
+            <details open class={`pr-group g-${g}`}>
+              <summary>
+                <span class="gdot" /> {label} <span class="count">{items.length}</span>
+              </summary>
+              {items.map((i) => (
+                <a class={`pr-item g-${i.g}`}>
+                  <span class="pr-title">{i.title}</span>
+                  <span class="meta">
+                    {i.layer && <b class="layer">{i.layer}</b>}
+                    {i.meta}
+                  </span>
+                  <span class="pills">{i.pills.map(([cls, t]) => <span class={`pill ${cls}`}>{t}</span>)}</span>
+                </a>
+              ))}
+            </details>
+          ))}
+        </div>
+      </aside>
+    ),
+  },
+  review: {
+    title: 'Reading',
+    width: 860,
+    body: (
+      <>
+        <Bar />
+        <div class="scene-main">
+          <details class="ticket">
+            <summary>
+              <a>SHOP-231</a> <span class="jira-st js-indeterminate">In progress</span> <span class="badge">Story</span> <b>Payments survive a flaky gateway</b>
+            </summary>
+          </details>
+          <div class="pills pr-status">
+            <span class="pill p-strong">↻ re-review</span>
+            <span class="pill p-ok">checks passing</span>
+            {(([c, t]) => <span class={`pill ${c}`}>{t}</span>)(size(84, 12, 4))}
+          </div>
+          <div class="since on">
+            Showing 2 commits since your last review. <button>Show all changes</button>
+          </div>
+          <File path="payments/PaymentService.kt" add={3} del={1}>
+            <Rows rows={SNIPPET} />
+          </File>
+        </div>
+      </>
+    ),
+  },
+  comment: {
+    title: 'Commenting',
+    width: 860,
+    body: (
+      <File path="payments/PaymentService.kt" add={3} del={1}>
+        <Rows
+          rows={SNIPPET.slice(0, 5)}
+          extra={<Thread who="you" when="10 minutes ago" html={md.render('Can we stop retrying on a declined card? Only network errors are worth another try.\n\n```suggestion\n    return retry(times = 3, backoff = 2.seconds, retryIf = { it is IOException }) {\n```')} />}
+        />
+      </File>
+    ),
+  },
+  claude: { title: 'Claude Code', width: 860, body: <Bar menu /> },
+  merge: {
+    title: 'Your PRs',
+    width: 860,
+    body: (
+      <div class="merge m-wait">
+        <div class="merge-head">
+          <b>Waiting on requirements</b>
+          <span class="merge-why">1 approving review required · 2 checks running</span>
+        </div>
+        <div class="merge-row">
+          <button>Update branch</button>
+          <select>
+            <option>Squash and merge</option>
+          </select>
+          <button class="primary" disabled>Squash and merge</button>
+          <button>Enable auto-merge</button>
+        </div>
+      </div>
+    ),
+  },
+};
+
 // #/demo/<key>[/light|/dark]: one example on its own, for the README pictures.
 export function DemoPage({ k: route }: { k: string }) {
   const [k, theme] = route.split('/');
   if (theme) document.documentElement.dataset.theme = theme;
   return (
-    <div class="demo-page">
-      <h3>{DEMOS[k]?.title ?? k}</h3>
-      <DemoPair k={k} />
-    </div>
+    SCENES[k.replace(/^scene-/, '')] && k.startsWith('scene-') ? (
+      <div class="demo-page scene" style={{ width: SCENES[k.slice(6)].width }}>
+        {SCENES[k.slice(6)].body}
+      </div>
+    ) : (
+      <div class="demo-page">
+        <h3>{DEMOS[k]?.title ?? k}</h3>
+        <DemoPair k={k} />
+      </div>
+    )
   );
 }

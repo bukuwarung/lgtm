@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const ORIGIN = `http://127.0.0.1:${process.env.LGTM_PORT ?? 4517}`;
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const KEYS = ['sinceFirst', 'foldImports', 'hideGenerated', 'hideNoDiff', 'collapseDeleted', 'dimMoved', 'wordDiff', 'ignoreWs', 'richMarkdown', 'renderDocs', 'previewImages', 'foldBots'];
+const KEYS = ['sinceFirst', 'foldImports', 'hideGenerated', 'hideNoDiff', 'collapseDeleted', 'dimMoved', 'wordDiff', 'ignoreWs', 'richMarkdown', 'renderDocs', 'previewImages', 'foldBots', 'scene-queue', 'scene-review', 'scene-comment', 'scene-claude', 'scene-merge'];
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'features');
 mkdirSync(OUT, { recursive: true });
 

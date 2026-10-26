@@ -341,6 +341,83 @@ pub async fn slack_people_save(map: HashMap<String, String>) -> Result<Value, St
     people()
 }
 
+// --- Claude Code sessions per PR (Settings → Claude Code) ---
+// Same as the server's claudeSessions(): Claude desktop's record per Code session (desktop id, title, transcript id)
+// plus the transcript's first prompt; a session belongs to the PRs linked in that prompt. Internal formats: if they
+// change, this finds nothing rather than failing.
+
+fn home() -> std::path::PathBuf {
+    std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
+}
+
+/// PR links and owner/repo#123 references in a text, as links.
+pub fn prs_in(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for c in re(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)\b").captures_iter(text) {
+        let (repo, n) = (c.get(1).or(c.get(3)).unwrap().as_str(), c.get(2).or(c.get(4)).unwrap().as_str());
+        let url = format!("https://github.com/{repo}/pull/{n}");
+        if !out.contains(&url) {
+            out.push(url);
+        }
+    }
+    out
+}
+
+/// The first user message of a transcript (reading at most 4 MB to get there).
+fn first_prompt(path: &std::path::Path) -> String {
+    use std::io::Read;
+    let Ok(f) = std::fs::File::open(path) else { return String::new() };
+    let mut buf = Vec::new();
+    let _ = f.take(4 << 20).read_to_end(&mut buf);
+    for line in String::from_utf8_lossy(&buf).lines().filter(|l| l.contains("\"type\":\"user\"")) {
+        if let Ok(v) = serde_json::from_str::<Value>(line) {
+            let c = &v["message"]["content"];
+            return match c {
+                Value::String(s) => s.clone(),
+                Value::Array(parts) => parts.iter().filter_map(|p| p["text"].as_str()).collect::<Vec<_>>().join("\n"),
+                _ => String::new(),
+            };
+        }
+    }
+    String::new()
+}
+
+#[tauri::command]
+pub async fn claude_sessions() -> Vec<Value> {
+    let root = home().join("Library/Application Support/Claude/claude-code-sessions");
+    let projects: Vec<std::path::PathBuf> = std::fs::read_dir(home().join(".claude/projects")).map(|d| d.flatten().map(|e| e.path()).collect()).unwrap_or_default();
+    let mut records = vec![];
+    let mut stack = vec![(root, 0)];
+    while let Some((dir, depth)) = stack.pop() {
+        for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().to_string();
+            if p.is_dir() && depth < 3 {
+                stack.push((p, depth + 1));
+            } else if name.starts_with("local_") && name.ends_with(".json") {
+                records.push(p);
+            }
+        }
+    }
+    let (id_re, cli_re) = (re(r"^local_[A-Za-z0-9-]{1,64}$"), re(r"^[\w-]+$"));
+    let mut out: Vec<Value> = records
+        .iter()
+        .filter_map(|f| {
+            let s: Value = serde_json::from_str(&std::fs::read_to_string(f).ok()?).ok()?;
+            let (id, cli) = (s["sessionId"].as_str()?, s["cliSessionId"].as_str()?);
+            if s["isArchived"] == json!(true) || !id_re.is_match(id) || !cli_re.is_match(cli) {
+                return None;
+            }
+            let transcript = projects.iter().map(|d| d.join(format!("{cli}.jsonl"))).find(|t| t.exists())?;
+            let prs = prs_in(&first_prompt(&transcript));
+            let last = s["lastActivityAt"].as_str().and_then(|v| v.parse::<f64>().ok()).or(s["lastActivityAt"].as_f64()).unwrap_or(0.0);
+            (!prs.is_empty()).then(|| json!({ "id": id, "title": s["title"].as_str().unwrap_or(""), "lastActivityAt": last, "prs": prs }))
+        })
+        .collect();
+    out.sort_by(|a, b| b["lastActivityAt"].as_f64().partial_cmp(&a["lastActivityAt"].as_f64()).unwrap_or(std::cmp::Ordering::Equal));
+    out
+}
+
 // --- Settings export (Settings → Backup) ---
 
 /// Saves the page's settings file to ~/Downloads as lgtm-settings-<date>.json (-2, -3… if taken). The app picks the
@@ -395,6 +472,12 @@ mod tests {
         assert!(block_on(export_settings("{\"lgtm\":1}".into(), "today/evil".into())).is_err());
         assert!(block_on(export_settings("{\"other\":1}".into(), "2026-10-26".into())).is_err());
         assert!(block_on(export_settings("not json".into(), "2026-10-26".into())).is_err());
+    }
+
+    #[test]
+    fn prs_in_finds_links_and_refs_once() {
+        let t = "Look at https://github.com/o/r/pull/7 (o/r#7) and acme/app#12, not o/r#7x";
+        assert_eq!(prs_in(t), vec!["https://github.com/o/r/pull/7", "https://github.com/acme/app/pull/12"]);
     }
 
     #[test]

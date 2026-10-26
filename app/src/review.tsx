@@ -12,11 +12,11 @@ import { isMarkdown, md, renderChunks } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
-import { CLAUDE_CONTINUE, claudeNewLink, commentPrompt, prPrompt } from './claude.ts';
+import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
 import { reviewOrder } from './files.ts';
-import { claudeFolder, fetchJira, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { ago, claudeFolder, fetchJira, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -489,7 +489,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               💬 @{t.login}
             </a>
           ))}
-          <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} label="Claude" />
+          <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
           {layer >= 0 && (
             <span class="stack-nav" title="This PR's stack ([ and ] to move)">
               {stackAt(-1) ? <a href={`#/${repo}/pull/${stackAt(-1)!.number}`} title={`#${stackAt(-1)!.number} ${stackAt(-1)!.title}`}>‹</a> : <span class="off">‹</span>}
@@ -1363,7 +1363,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
           <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
-          <ClaudeMenu repo={ctx.repo} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
+          <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
           <div class="md" data-lang={ctx.langFor(t.path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
         </div>
       ))}
@@ -1441,10 +1441,16 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
 }
 
 // "✳": hand this PR or comment to Claude Code: a new session with the prompt filled in (in the repo's folder, if set
-// in Settings), or the last session with the prompt copied to paste (that link can't carry a prompt).
-function ClaudeMenu({ prompt, repo, label }: { prompt: string; repo: string; label?: string }) {
+// in Settings), or an earlier session with the prompt copied to paste (that link can't carry a prompt): the last one, or,
+// with Settings → Claude Code → "Find sessions per PR", the ones started on this PR.
+function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: string; prUrl: string; label?: string }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
+  const [findSessions] = useStoredFlag('claudeSessions', true);
+  const [sessions, setSessions] = useState<ClaudeSession[]>([]);
+  useEffect(() => {
+    if (open && findSessions) getClaudeSessions().then((all) => setSessions(all.filter((s) => s.prs.includes(prUrl))), () => setSessions([]));
+  }, [open, findSessions, prUrl]);
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -1466,17 +1472,21 @@ function ClaudeMenu({ prompt, repo, label }: { prompt: string; repo: string; lab
           <button role="menuitem" onClick={() => (setOpen(false), void openClaude(claudeNewLink(prompt, claudeFolder(repo))))}>
             New Claude Code session
           </button>
-          <button
-            role="menuitem"
-            onClick={async () => {
-              setOpen(false);
-              await navigator.clipboard.writeText(prompt).catch(() => {});
-              void openClaude(CLAUDE_CONTINUE);
-              flash('Prompt copied: paste it in the session (⌘V)');
-            }}
-          >
-            Continue last session (prompt copied)
-          </button>
+          {[...sessions.map((s) => ({ key: s.id, link: claudeContinueLink(s.id), text: `Continue “${s.title || 'Untitled'}” · ${ago(s.lastActivityAt)}` })), { key: 'last', link: CLAUDE_CONTINUE, text: 'Continue last session' }].map((o) => (
+            <button
+              key={o.key}
+              role="menuitem"
+              title="Opens the session; the prompt is copied to paste"
+              onClick={async () => {
+                setOpen(false);
+                await navigator.clipboard.writeText(prompt).catch(() => {});
+                void openClaude(o.link);
+                flash('Prompt copied: paste it in the session (⌘V)');
+              }}
+            >
+              {o.text}
+            </button>
+          ))}
         </span>
       )}
       {note && <span class="claude-note">{note}</span>}
@@ -1522,7 +1532,7 @@ function Conversation({ pr, items, lang, repo }: { pr: PR; items: ConversationIt
           <>
             <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}>{STATE_LABEL[c.state] ?? c.state}</span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
-            {c.html && <ClaudeMenu repo={repo} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
+            {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
           </>
         );
         const body = c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />;

@@ -4,7 +4,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, extname, join, normalize, sep } from 'node:path';
@@ -237,6 +237,72 @@ async function jiraIssue(key) {
   return { key, url: `${site}/browse/${key}`, summary: f.summary, status: f.status?.name, statusCategory: f.status?.statusCategory?.key, type: f.issuetype?.name, description: f.description ?? null };
 }
 
+// --- Claude Code sessions per PR (Settings → Claude Code) ---
+// Claude desktop keeps a record per Code session (its desktop id, title, transcript id) and Claude Code a transcript
+// whose first message is the prompt. A session belongs to the PRs whose links appear in that first prompt (lgtm's
+// "✳ Claude" puts the PR link there). Claude's internal formats: if they change, this finds nothing rather than failing.
+const CLAUDE_SESSIONS = join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
+const CLAUDE_PROJECTS = join(homedir(), '.claude', 'projects');
+// PR links, or owner/repo#123 references (both normalised to the link).
+const PR_REF_IN_TEXT = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)|\b([\w.-]+\/[\w.-]+)#(\d+)\b/g;
+const prsIn = (text) => [...new Set([...text.matchAll(PR_REF_IN_TEXT)].map((m) => `https://github.com/${m[1] ?? m[3]}/pull/${m[2] ?? m[4]}`))];
+
+// The text of a transcript's first user message (reading at most 4 MB to get there).
+async function firstPrompt(file) {
+  const fh = await openFile(file).catch(() => null);
+  if (!fh) return '';
+  try {
+    const buf = Buffer.alloc(4 << 20);
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    for (const line of buf.subarray(0, bytesRead).toString('utf8').split('\n')) {
+      if (!line.includes('"type":"user"')) continue;
+      try {
+        const c = JSON.parse(line).message?.content;
+        return typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => x?.text ?? '').join('\n') : '';
+      } catch {}
+    }
+    return '';
+  } finally {
+    await fh.close();
+  }
+}
+
+const promptCache = new Map(); // transcript file → { mtime, prs }
+async function claudeSessions() {
+  const files = [];
+  const walk = async (dir, depth) => {
+    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      const p = join(dir, e.name);
+      if (e.isDirectory() && depth < 3) await walk(p, depth + 1);
+      else if (e.isFile() && /^local_[\w-]+\.json$/.test(e.name)) files.push(p);
+    }
+  };
+  await walk(CLAUDE_SESSIONS, 0);
+  const projects = await readdir(CLAUDE_PROJECTS).catch(() => []);
+  const out = [];
+  for (const f of files) {
+    const s = await readFile(f, 'utf8').then(JSON.parse).catch(() => null);
+    if (!s || s.isArchived || !/^local_[A-Za-z0-9-]{1,64}$/.test(s.sessionId ?? '') || !/^[\w-]+$/.test(s.cliSessionId ?? '')) continue;
+    let transcript = null;
+    for (const d of projects) {
+      const t = join(CLAUDE_PROJECTS, d, `${s.cliSessionId}.jsonl`);
+      const st = await stat(t).catch(() => null);
+      if (st) {
+        transcript = { t, mtime: st.mtimeMs };
+        break;
+      }
+    }
+    if (!transcript) continue;
+    let hit = promptCache.get(transcript.t);
+    if (!hit || hit.mtime !== transcript.mtime) {
+      hit = { mtime: transcript.mtime, prs: prsIn(await firstPrompt(transcript.t)) };
+      promptCache.set(transcript.t, hit);
+    }
+    if (hit.prs.length) out.push({ id: s.sessionId, title: s.title ?? '', lastActivityAt: Number(s.lastActivityAt) || 0, prs: hit.prs });
+  }
+  return out.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+}
+
 const json = (res, status, value) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(value));
 
 // LGTM_NO_OPEN=1: don't open a browser tab (tests, or running lgtm as a background service).
@@ -264,7 +330,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/job-log') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams;
     return jobLog(q.get('repo') ?? '', q.get('job') ?? '').then(
@@ -282,6 +348,7 @@ const server = createServer(async (req, res) => {
       return json(res, 500, { error: e.message });
     }
   }
+  if (path === '/claude-sessions') return claudeSessions().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/integrations') {
     const plain = (s = '') => s.replace(/\x1b\[[0-9;]*m/g, ''); // the CLIs colour their output
     const [slack, jira] = await Promise.all([

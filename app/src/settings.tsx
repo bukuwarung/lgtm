@@ -413,6 +413,12 @@ function ClaudeFolders() {
         ✳ Claude (on a PR or a comment) opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt. Set where each repo is checked
         out so the session starts there.
       </p>
+      <Flag
+        k="claudeSessions"
+        initial={true}
+        label="Find sessions per PR"
+        hint="The ✳ menu also lists sessions started on that PR, to continue one. lgtm reads the Claude app's session records on this Mac (titles and first prompts) and keeps nothing."
+      />
       {!repos ? (
         <p class="note">Loading…</p>
       ) : (

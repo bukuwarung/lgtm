@@ -37,19 +37,44 @@ To update: `git pull && npm run build` in `app/`, then `lgtm` (it replaces an ol
 
 **Your queue.** Tabs for PRs to review, your own PRs, and a GitHub team you watch, grouped by where they stand. Each PR shows its size and what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, and `↻ re-review` when it's back on your plate. Refreshes every 3 minutes, with optional desktop notifications.
 
-**Reading.** Every changed file on one page, markdown first and tests right after their source. Syntax highlighting in your pick of code themes (IntelliJ, GitHub, VS Code, One, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night, Nord) and free fonts (JetBrains Mono, Fira Code, Cascadia Code, Geist Mono, Iosevka and more), the Jira ticket and PR status on top, a jump index of comments, checks (with failed-job logs), threads and files, and navigation for stacked PRs. It reopens where you left off and marks files changed since your last visit.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-queue-dark.png">
+  <img alt="The PR list: Reviewing, Your PRs and Team tabs, PRs grouped by where they stand, with pills for what needs you" src="docs/features/scene-queue-light.png" width="380">
+</picture>
+
+**Reading.** Every changed file on one page, markdown first and tests right after their source. The Jira ticket and PR status on top, a jump index of comments, checks (with failed-job logs), threads and files, and navigation for stacked PRs. It reopens where you left off and marks files changed since your last visit. Syntax highlighting in your pick of code themes (IntelliJ, GitHub, VS Code, One, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night, Nord) and free fonts (JetBrains Mono, Fira Code, Cascadia Code, Geist Mono, Iosevka and more), with code ligatures (`->` as →, `>=` as ≥) in the fonts that have them.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-review-dark.png">
+  <img alt="A PR: the bar with ✳ Claude and Finish review, the Jira ticket, status pills, changes since your last review, and a diff" src="docs/features/scene-review-light.png" width="760">
+</picture>
 
 **Commenting.** Line, range and file comments everywhere, rendered markdown included. An editor with preview, `:emoji:` and `@mention` completion, and suggested changes. Drafts survive reloads and go out as one review, with the verdict pre-picked from your comments; then lgtm opens the next PR that needs you. Optional Slack DM to the author, one thread per PR.
 
-**Claude Code.** ✳ Claude on the PR bar or on any comment opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt (in the repo's local folder, set in Settings), or copies the prompt and reopens your last session.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-comment-dark.png">
+  <img alt="A review thread under a diff line, with a suggested change and a reply being written" src="docs/features/scene-comment-light.png" width="760">
+</picture>
+
+**Claude Code.** ✳ Claude on the PR bar or on any comment opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt (in the repo's local folder, set in Settings). Or it copies the prompt and reopens a session you already have: your last one, or one started on that PR (lgtm finds those in the Claude app's local session records; switch it off in Settings).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-claude-dark.png">
+  <img alt="The ✳ Claude menu: a new session, a session started on this PR, or the last session" src="docs/features/scene-claude-light.png" width="760">
+</picture>
 
 **Your PRs.** A merge box with what's blocking and the controls: ready for review, update branch, merge, auto-merge.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-merge-dark.png">
+  <img alt="The merge box: what is blocking, update branch, merge method, merge and auto-merge" src="docs/features/scene-merge-light.png" width="760">
+</picture>
+
 ## Less to read
 
-On by default, each with a switch (and these examples) in ⚙ Settings. Click one to see it.
+On by default, each with a switch (and these examples) in ⚙ Settings.
 
-<details><summary><b>Changes since your last review</b>: re-reviews start with only what changed since you last reviewed.</summary>
+<details open><summary><b>Changes since your last review</b>: re-reviews start with only what changed since you last reviewed.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/sinceFirst-dark.png">
@@ -57,7 +82,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Fold imports</b>: package and import blocks fold to one line that names only new outside libraries.</summary>
+<details open><summary><b>Fold imports</b>: package and import blocks fold to one line that names only new outside libraries.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/foldImports-dark.png">
@@ -65,7 +90,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Hide generated files</b>: files marked <code>linguist-generated</code> wait behind one row.</summary>
+<details open><summary><b>Hide generated files</b>: files marked <code>linguist-generated</code> wait behind one row.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/hideGenerated-dark.png">
@@ -73,7 +98,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Hide moved files</b>: files renamed or moved without changes wait behind one row.</summary>
+<details open><summary><b>Hide moved files</b>: files renamed or moved without changes wait behind one row.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/hideNoDiff-dark.png">
@@ -81,7 +106,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Collapse deleted files</b>: a deleted file is one row until you open it.</summary>
+<details open><summary><b>Collapse deleted files</b>: a deleted file is one row until you open it.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/collapseDeleted-dark.png">
@@ -89,7 +114,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Dim moved code</b>: code moved without changes is dimmed, with where it came from.</summary>
+<details open><summary><b>Dim moved code</b>: code moved without changes is dimmed, with where it came from.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/dimMoved-dark.png">
@@ -97,7 +122,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Word highlights</b>: the changed words inside a line stand out.</summary>
+<details open><summary><b>Word highlights</b>: the changed words inside a line stand out.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/wordDiff-dark.png">
@@ -105,7 +130,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Ignore whitespace</b>: re-indented lines read as unchanged (<code>w</code>).</summary>
+<details open><summary><b>Ignore whitespace</b>: re-indented lines read as unchanged (<code>w</code>).</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/ignoreWs-dark.png">
@@ -113,7 +138,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Rendered markdown</b>: markdown shows rendered, still commentable line by line.</summary>
+<details open><summary><b>Rendered markdown</b>: markdown shows rendered, still commentable line by line.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/richMarkdown-dark.png">
@@ -121,7 +146,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Rendered doc comments</b>: KDoc, Javadoc and JSDoc read like IntelliJ's reader mode; edited ones stay source.</summary>
+<details open><summary><b>Rendered doc comments</b>: KDoc, Javadoc and JSDoc read like IntelliJ's reader mode; edited ones stay source.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/renderDocs-dark.png">
@@ -129,7 +154,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Image previews</b>: PNG, WebP, JPEG, GIF (Git LFS too) and Android vector drawables show as pictures.</summary>
+<details open><summary><b>Image previews</b>: PNG, WebP, JPEG, GIF (Git LFS too) and Android vector drawables show as pictures.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/previewImages-dark.png">
@@ -137,7 +162,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings. Click on
 </picture>
 </details>
 
-<details><summary><b>Fold bot comments</b>: CI and AI-reviewer comments fold to one line.</summary>
+<details open><summary><b>Fold bot comments</b>: CI and AI-reviewer comments fold to one line.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/foldBots-dark.png">
