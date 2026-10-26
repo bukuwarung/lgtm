@@ -510,3 +510,4 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .ask-panel textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .ask-answer { font-size: 14px; }
 .thread[open] > summary > * { display: none; } /* open, the summary is only the toggle */
+.pill.p-time { font-variant-numeric: tabular-nums; }

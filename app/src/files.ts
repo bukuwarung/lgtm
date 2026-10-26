@@ -27,3 +27,26 @@ export function untested(files: { filename: string; status: string; additions: n
     .filter((f) => !isTest(f.filename) && !/(^|\/)test_[^/]+$/.test(f.filename) && !tested.has(base(f.filename)))
     .map((f) => f.filename);
 }
+
+// A rough time to review a PR, in minutes: reading its description, then its changes. Code at about 5 changed lines a
+// minute, tests twice that, docs faster still; deleted lines at a third; generated files and lockfiles skipped.
+const SKIP = /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Podfile\.lock|Cargo\.lock|go\.sum|gradle\.lockfile)$|(^|\/)(generated|build|dist)\/|\.(min\.js|pb\.go|g\.dart|snap|svg|png|jpe?g|webp|gif)$/;
+export type Estimate = { minutes: number; words: number; code: number; tests: number; docs: number };
+export function estimate(files: { path: string; additions: number; deletions: number }[], description: string | null): Estimate {
+  const e: Estimate = { minutes: 0, words: (description ?? '').split(/\s+/).filter(Boolean).length, code: 0, tests: 0, docs: 0 };
+  for (const f of files.filter((f) => !SKIP.test(f.path))) {
+    const lines = f.additions + f.deletions / 3;
+    if (isMarkdown(f.path)) e.docs += lines;
+    else if (isTest(f.path) || /(^|\/)test_[^/]+$/.test(f.path)) e.tests += lines;
+    else e.code += lines;
+  }
+  e.minutes = e.words / 200 + e.code / 5 + e.tests / 10 + e.docs / 30;
+  return e;
+}
+// "~5 min", "~40 min", "~1 h 30": rounded to what an estimate can claim.
+export function estimateLabel(minutes: number): string {
+  if (minutes < 5) return '<5 min';
+  if (minutes < 60) return `~${Math.round(minutes / 5) * 5} min`;
+  const q = Math.round(minutes / 15) * 15;
+  return `~${Math.floor(q / 60)} h${q % 60 ? ` ${q % 60}` : ''}`;
+}

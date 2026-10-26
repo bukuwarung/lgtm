@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { reviewOrder, untested } from '../src/files.ts';
+import { estimate, estimateLabel, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -350,4 +350,19 @@ test('rangeChange: what became of commented lines', () => {
   assert.deepEqual(rangeChange(patch, 2, 4)!.map((l) => l.kind + l.text), ['-c', '+C']);
   assert.equal(rangeChange('@@ -1,2 +1,3 @@\n a\n+x\n b', 2, 2), null); // inserted before the range
   assert.deepEqual(rangeChange('@@ -1,3 +1,4 @@\n a\n b\n+x\n c', 2, 3)!.map((l) => l.kind + l.text), ['+x']); // inside it
+});
+
+test('estimate: description, code, tests and docs at their own pace; generated files skipped', () => {
+  const e = estimate(
+    [
+      { path: 'src/Pay.kt', additions: 50, deletions: 30 }, // 60 code lines
+      { path: 'src/PayTest.kt', additions: 40, deletions: 0 }, // 40 test lines
+      { path: 'README.md', additions: 30, deletions: 0 }, // 30 doc lines
+      { path: 'package-lock.json', additions: 5000, deletions: 4000 }, // skipped
+    ],
+    'word '.repeat(400),
+  );
+  assert.deepEqual([e.code, e.tests, e.docs, e.words], [60, 40, 30, 400]);
+  assert.equal(e.minutes, 2 + 12 + 4 + 1);
+  assert.deepEqual([estimateLabel(3), estimateLabel(19), estimateLabel(64), estimateLabel(90)], ['<5 min', '~20 min', '~1 h', '~1 h 30']);
 });

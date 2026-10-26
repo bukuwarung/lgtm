@@ -1,9 +1,10 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getEmails, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
+import { getEmails, getEstimates, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
+import { estimateLabel } from './files.ts';
 import { ago, askNotifications, availableUpdate, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
@@ -338,7 +339,13 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
     requested.current = t;
     if (!t) return;
     setTeamErr('');
-    getTeamPRs(t).then((d) => setTeamData({ team: t, ...d }), (e) => setTeamErr(e.message));
+    getTeamPRs(t).then((d) => {
+      setTeamData({ team: t, ...d });
+      getEstimates(d.items.map((i) => i.id)).then(
+        (est) => setTeamData((cur) => (cur?.team === t ? { ...cur, items: cur.items.map((i) => ({ ...i, estimate: est.get(i.id) })) } : cur)),
+        () => {},
+      );
+    }, (e) => setTeamErr(e.message));
   };
   useEffect(() => {
     if (tab === 'team' && !teams) getTeams().then(setTeams, (e) => setTeamErr(e.message));
@@ -352,8 +359,9 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
     getReviewQueue().then(async (items) => {
       setSettled(false);
       setItems(items);
-      const st = await getThreadStatus(items, readBots()).catch(() => null); // secondary: the list works without it
-      if (st) setItems(items.map((i) => ({ ...i, thread: st.get(i.id) })));
+      // Secondary: the list works without them.
+      const [st, est] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items.map((i) => i.id)).catch(() => null)]);
+      setItems(items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id) })));
       setSettled(true);
     }, (e) => setErr(e.message));
   };
@@ -427,6 +435,12 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}>{MERGE_PILL[i.mergeState]![0]}</span>}
         {kind === MINE && i.autoMerge && <span class="pill">auto-merge on</span>}
         {kind === MINE && MINE.groupOf(i) === 'm-waiting' && <Waiting i={i} />}
+        {i.estimate && <span
+          class="pill p-time"
+          title={`Rough time to review: the description (${i.estimate.words} words), then ${Math.round(i.estimate.code)} lines of code, ${Math.round(i.estimate.tests)} of tests and ${Math.round(i.estimate.docs)} of docs (deleted lines count a third; generated files and lockfiles are skipped)${i.files > 100 ? '. Only the first 100 files are counted' : ''}`}
+        >
+          ⏱ {estimateLabel(i.estimate.minutes)}
+        </span>}
         <span class="pill p-size" title={`${i.files} changed files`}>
           <b class="a">+{i.additions}</b> <b class="d">−{i.deletions}</b> · {i.files} file{i.files === 1 ? '' : 's'}
         </span>

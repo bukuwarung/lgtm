@@ -1,5 +1,6 @@
 import { setEmojiMap } from './emoji.ts';
 import { fetchToken, recordError } from './platform.ts';
+import { estimate, type Estimate } from './files.ts';
 
 export type PR = {
   number: number;
@@ -76,6 +77,7 @@ export type QueueItem = {
   thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
+  estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
 export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean };
 
@@ -572,6 +574,17 @@ export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { commen
 // Per PR in the list: how many review threads wait on my reply (see awaitsMe), and whether every thread I'm in is
 // resolved (then a PR I reviewed is ready for another look). One query for all of them.
 export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
+// Each PR's rough time to review, asked after the list shows (its description and per-file line counts would slow the
+// list down).
+export async function getEstimates(ids: string[]): Promise<Map<string, Estimate>> {
+  const out = new Map<string, Estimate>();
+  for (let k = 0; k < ids.length; k += 100) {
+    const d = await graphql(`query($ids:[ID!]!){nodes(ids:$ids){... on PullRequest{id body files(first:100){nodes{path additions deletions}}}}}`, { ids: ids.slice(k, k + 100) });
+    for (const p of d.nodes) if (p?.id) out.set(p.id, estimate(p.files?.nodes ?? [], p.body));
+  }
+  return out;
+}
+
 export async function getThreadStatus(items: QueueItem[], bots: Set<string> = new Set()): Promise<Map<string, ThreadStatus>> {
   const me = await getViewer();
   const ask = items.filter((i) => i.mine || i.myState);
