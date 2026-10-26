@@ -3,6 +3,16 @@ import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from '
 import { fetchIntegrations, findSlackPeople, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { SHORTCUTS } from './review.tsx';
 import { DemoPair } from './demos.tsx';
+import { highlightCode } from './highlight.ts';
+import { CODE_FONTS, CODE_THEMES, useCodeLook } from './look.ts';
+
+// Shows every token the themes colour: keywords, annotations, types, strings, numbers, properties, named arguments,
+// `it`, constants, comments, and ligatures (->, !=, ===).
+const SAMPLE = `// Totals for the cart, in cents
+@JvmStatic
+fun total(items: List<Item>, fee: Int = 0): Long =
+    items.filter { it.qty != 0 }.sumOf { it.price * it.qty } + fee
+val label = "Total: \${format(total(cart.items, fee = MAX_FEE))}" // -> shown at checkout`;
 
 export const THEMES = [['', 'Auto', '◐'], ['light', 'Light', '☀'], ['dark', 'Dark', '☾']] as const;
 
@@ -46,6 +56,7 @@ function Status({ ok, children }: { ok: boolean | null; children: preact.Compone
 // Preferences live in this browser; changing one here updates the open views at once.
 export function Settings() {
   const [theme, setTheme] = useTheme();
+  const look = useCodeLook();
   const [team, setTeam] = useStoredValue('team', '');
   const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
   const [teams, setTeams] = useState<string[] | null>(null);
@@ -152,6 +163,22 @@ export function Settings() {
             ))}
           </span>
         </div>
+        <label class="set-row">
+          <span>Code colours</span>
+          <select value={look.theme} onChange={(e) => look.setTheme(e.currentTarget.value)}>
+            {Object.entries(CODE_THEMES).map(([k, t]) => <option value={k}>{t.name}</option>)}
+          </select>
+        </label>
+        <label class="set-row">
+          <span>
+            Code font
+            <small>Free, open-source fonts, bundled with lgtm.</small>
+          </span>
+          <select value={look.font} onChange={(e) => look.setFont(e.currentTarget.value)}>
+            {Object.entries(CODE_FONTS).map(([k, f]) => <option value={k}>{f.name}</option>)}
+          </select>
+        </label>
+        <pre class="code-sample" dangerouslySetInnerHTML={{ __html: highlightCode(SAMPLE, 'kotlin') }} />
       </section>
 
       <section>

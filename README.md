@@ -37,7 +37,7 @@ To update: `git pull && npm run build` in `app/`, then `lgtm` (it replaces an ol
 
 **Your queue.** Tabs for PRs to review, your own PRs, and a GitHub team you watch, grouped by where they stand. Each PR shows its size and what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, and `↻ re-review` when it's back on your plate. Refreshes every 3 minutes, with optional desktop notifications.
 
-**Reading.** Every changed file on one page, markdown first and tests right after their source. Syntax highlighting (Kotlin in IntelliJ colours), the Jira ticket and PR status on top, a jump index of comments, checks (with failed-job logs), threads and files, and navigation for stacked PRs. It reopens where you left off and marks files changed since your last visit.
+**Reading.** Every changed file on one page, markdown first and tests right after their source. Syntax highlighting in your pick of code themes (IntelliJ, GitHub, VS Code, One, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night, Nord) and free fonts (JetBrains Mono, Fira Code, Cascadia Code, Geist Mono, Iosevka and more), the Jira ticket and PR status on top, a jump index of comments, checks (with failed-job logs), threads and files, and navigation for stacked PRs. It reopens where you left off and marks files changed since your last visit.
 
 **Commenting.** Line, range and file comments everywhere, rendered markdown included. An editor with preview, `:emoji:` and `@mention` completion, and suggested changes. Drafts survive reloads and go out as one review, with the verdict pre-picked from your comments; then lgtm opens the next PR that needs you. Optional Slack DM to the author, one thread per PR.
 

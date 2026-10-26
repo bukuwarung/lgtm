@@ -121,6 +121,7 @@
 - [x] 12.42 Drop the committed team Slack mapping; the mapping lives only in each user's config, built in Settings
 - [x] 12.43 Mark accounts as bots (Settings): never messaged; their comments and threads treated as bots'
 - [x] 12.44 Off/on examples for each diff switch (Settings + README pictures via `npm run demos`)
+- [x] 12.45 Selectable code colour theme (10 light/dark families) and code font (14 bundled open-source fonts + system)
 
 ## 13. Verify
 

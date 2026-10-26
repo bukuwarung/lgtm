@@ -401,3 +401,4 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; }
 .demo-page .demo-pair { margin: 0; font-size: 13px; }
 @media (max-width: 760px) { .demo-pair { grid-template-columns: 1fr; margin-left: 0; } }
 .demo-side .file-h:last-child { border-bottom: 0; border-radius: 6px; }
+.code-sample { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: 13px; line-height: 1.5; overflow-x: auto; }

@@ -7,6 +7,7 @@ import { findStacks } from './stacks.ts';
 import { readBots, useStoredFlag, useStoredValue } from './platform.ts';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { DemoPage } from './demos.tsx';
+import { useCodeLook } from './look.ts';
 import { Resizer } from './resizer.tsx';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
@@ -20,6 +21,7 @@ function App() {
   const [route, setRoute] = useState(location.hash);
   const [queueVersion, setQueueVersion] = useState(0);
   const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
+  useCodeLook(); // code colours and font from Settings
   // The PR list's latest items (to pick the next PR to review), and a message to show on the page we move to.
   const queue = useRef<QueueItem[]>([]);
   const [flash, setFlash] = useState<{ route: string; text: string; ok: boolean } | null>(null);

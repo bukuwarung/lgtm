@@ -288,3 +288,10 @@ The app SHALL have a Settings page (linked from the top bar) that shows whether 
 #### Scenario: New teammate
 - **WHEN** a teammate without slackcli opens Settings
 - **THEN** Slack shows ✕ with slackcli's error and the install and sign-in commands, while GitHub and Jira show their own status
+
+### Requirement: Code colours and font
+Settings → Appearance SHALL offer code colour themes (each a light and a dark palette, shown by the app's light or dark mode) and code fonts chosen from free, open-source monospace fonts bundled with lgtm and loaded only when picked, with a live sample. The choice SHALL apply to all code: diffs, rendered markdown and comments.
+
+#### Scenario: Switch to Dracula and Fira Code
+- **WHEN** the user picks Dracula and Fira Code
+- **THEN** keywords turn Dracula's pink in dark mode (Alucard's in light mode) and code renders in Fira Code with its ligatures, without fetching anything from a font service
