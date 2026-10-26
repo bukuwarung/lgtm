@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-people-save"
+description = "Enables the slack_people_save command without any pre-configured scope."
+commands.allow = ["slack_people_save"]
+
+[[permission]]
+identifier = "deny-slack-people-save"
+description = "Denies the slack_people_save command without any pre-configured scope."
+commands.deny = ["slack_people_save"]

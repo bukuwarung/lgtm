@@ -7,12 +7,12 @@
 
 ## 2. Port the server routes
 
-- [ ] 2.1 `integrations` (slackcli + acli status) and `jira_issue`
-- [ ] 2.2 `slack_status`, `slack_notify` (threads file, atomic writes, dry run)
-- [ ] 2.3 `slack_people_get/find/save`
-- [ ] 2.4 `job_log`
-- [ ] 2.5 Carry over input validation; unit tests for validation and parsing in Rust
-- [ ] 2.6 Capabilities and CSP locked to lgtm's commands and the needed hosts
+- [x] 2.1 `integrations` (slackcli + acli status) and `jira_issue`
+- [x] 2.2 `slack_status`, `slack_notify` (threads file, atomic writes, dry run)
+- [x] 2.3 `slack_people_get/find/save`
+- [x] 2.4 `job_log`
+- [x] 2.5 Carry over input validation; unit tests for validation and parsing in Rust
+- [x] 2.6 Capabilities and CSP locked to lgtm's commands and the needed hosts
 
 ## 3. WebKit and native behaviour
 

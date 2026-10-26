@@ -15,7 +15,7 @@ import { MergeBox } from './merge.tsx';
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docSyntax, parseDoc, type DocBlock } from './docs.ts';
 import { reviewOrder } from './files.ts';
-import { fetchJira, isDesktop, notifySlack, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { fetchJira, notifySlack, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -1423,7 +1423,6 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
   const [err, setErr] = useState('');
   const [open, toggle] = useStoredFlag('ticketOpen', true);
   useEffect(() => void fetchJira(id).then(setIssue, (e) => setErr(e.message)), [id]);
-  if (err && isDesktop) return null; // Jira comes to the app in phase 2
   if (err) return <p class="note ticket-err">Jira {id}: {err}</p>;
   if (!issue) return null;
   const html = md.render(adfToMarkdown(issue.description));

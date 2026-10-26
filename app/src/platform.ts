@@ -19,15 +19,15 @@ export const storage = {
 // Inside the macOS app (desktop/, Tauri) the page reaches the CLIs through app commands instead of the local server.
 export const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => (await import('@tauri-apps/api/core')).invoke<T>(cmd, args);
-// ponytail: phase 1 of the app ports only the token; Slack, Jira, job logs and integration status follow in phase 2.
-const NOT_YET = "Not in the desktop app yet. Use lgtm in the browser for this for now.";
-const desktopNotYet = () => {
-  if (isDesktop) throw new Error(NOT_YET);
-};
+// Tauri rejects with the command's error string; make it an Error like the web path's.
+const command = <T>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
+  invoke<T>(cmd, args).catch((e) => {
+    throw e instanceof Error ? e : new Error(String(e));
+  });
 
 // The local server (or, in the app, its command) answers with `gh auth token`.
 export async function fetchToken(): Promise<string> {
-  if (isDesktop) return invoke<string>('gh_token');
+  if (isDesktop) return command<string>('gh_token');
   const res = await fetch('/token');
   if (!res.ok) throw new Error((await res.text()) || 'Could not get a token from the lgtm server.');
   return res.text();
@@ -87,8 +87,9 @@ export function useStoredFlag(key: string, initial: boolean) {
 // GitHub login → Slack user ID, kept in your lgtm config; finding goes through slackcli.
 export type SlackPeople = { mine: Record<string, string> };
 export type SlackMatch = { login: string; id?: string; label?: string; display?: string; via?: 'email' | 'name' | 'username' };
-async function call<T>(method: string, body?: unknown): Promise<T> {
-  desktopNotYet();
+async function call<T>(method: string, body?: any): Promise<T> {
+  if (isDesktop)
+    return method === 'GET' ? command<T>('slack_people_get') : method === 'POST' ? command<T>('slack_people_find', body) : command<T>('slack_people_save', { map: body });
   const res = await fetch('/slack-people', { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
   const d = await res.json().catch(() => ({ error: 'the running lgtm is older than this page. Restart it (Ctrl-C, then lgtm) and reload.' }));
   if (!res.ok) throw new Error(d.error);
@@ -101,7 +102,7 @@ export const saveSlackPeople = (map: Record<string, string>) => call<SlackPeople
 // GitHub is the gh login (in the page); this asks the server about the CLIs it drives: slackcli and acli.
 export type Integrations = { slack: { ok: boolean; error?: string; who?: string }; jira: { ok: boolean; error?: string; site?: string } };
 export async function fetchIntegrations(): Promise<Integrations> {
-  if (isDesktop) return { slack: { ok: false, error: NOT_YET }, jira: { ok: false, error: NOT_YET } };
+  if (isDesktop) return command<Integrations>('integrations');
   const res = await fetch('/integrations').catch(() => {
     throw new Error("lgtm isn't running. Start it with the lgtm command, then reload.");
   });
@@ -115,7 +116,7 @@ export async function fetchIntegrations(): Promise<Integrations> {
 // `pr` ("owner/repo#12") also returns links to that PR's Slack threads.
 export type SlackThread = { login: string; url: string };
 export const slackStatus = (pr: string): Promise<{ configured: boolean; error?: string; threads: SlackThread[] }> =>
-  isDesktop ? Promise.resolve({ configured: false, error: NOT_YET, threads: [] }) :
+  isDesktop ? command<{ configured: boolean; error?: string; threads: SlackThread[] }>('slack_status', { pr }).then((d) => ({ ...d, error: d.error ?? undefined })) :
   fetch(`/slack?pr=${encodeURIComponent(pr)}`)
     .then((r) => r.json())
     .then((d) => ({ configured: !!d.configured, error: d.error, threads: d.threads ?? [] }), (e) => ({ configured: false, error: e.message, threads: [] }));
@@ -123,7 +124,7 @@ export const slackStatus = (pr: string): Promise<{ configured: boolean; error?: 
 export type SlackResult = { login: string; ok: boolean; threaded?: boolean; error?: string };
 // `thread` ("owner/repo#12") keeps one Slack thread per PR and person; later reviews reply in it.
 export async function notifySlack(recipients: { login: string; emails: string[] }[], text: string, thread: string): Promise<SlackResult[]> {
-  desktopNotYet();
+  if (isDesktop) return command<SlackResult[]>('slack_notify', { recipients, text, thread });
   const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text, thread }) });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
@@ -132,7 +133,7 @@ export async function notifySlack(recipients: { login: string; emails: string[] 
 
 // Last lines of a failed GitHub Actions job's log, fetched by the local server with gh.
 export async function fetchJobLog(repo: string, job: number): Promise<string> {
-  desktopNotYet();
+  if (isDesktop) return command<string>('job_log', { repo, job });
   const res = await fetch(`/job-log?repo=${encodeURIComponent(repo)}&job=${job}`);
   const text = await res.text();
   if (!res.ok) throw new Error(text || 'Could not load the log');
@@ -142,7 +143,7 @@ export async function fetchJobLog(repo: string, job: number): Promise<string> {
 export type JiraIssue = { key: string; url: string; summary: string; status?: string; statusCategory?: string; type?: string; description: any };
 // A Jira ticket through the local server's acli.
 export async function fetchJira(key: string): Promise<JiraIssue> {
-  desktopNotYet();
+  if (isDesktop) return command<JiraIssue>('jira_issue', { key });
   const res = await fetch(`/jira?key=${encodeURIComponent(key)}`);
   const body = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(body.error || 'Could not load the ticket');

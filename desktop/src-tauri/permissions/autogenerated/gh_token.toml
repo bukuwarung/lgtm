@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-gh-token"
+description = "Enables the gh_token command without any pre-configured scope."
+commands.allow = ["gh_token"]
+
+[[permission]]
+identifier = "deny-gh-token"
+description = "Denies the gh_token command without any pre-configured scope."
+commands.deny = ["gh_token"]

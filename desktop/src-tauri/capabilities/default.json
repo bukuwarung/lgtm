@@ -1,7 +1,20 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: core APIs and lgtm's own commands only (no shell or file access).",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "The main window: core APIs and lgtm's own commands, nothing else (no shell or file access).",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "allow-gh-token",
+    "allow-integrations",
+    "allow-jira-issue",
+    "allow-job-log",
+    "allow-slack-status",
+    "allow-slack-notify",
+    "allow-slack-people-get",
+    "allow-slack-people-find",
+    "allow-slack-people-save"
+  ]
 }

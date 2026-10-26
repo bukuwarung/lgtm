@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-status"
+description = "Enables the slack_status command without any pre-configured scope."
+commands.allow = ["slack_status"]
+
+[[permission]]
+identifier = "deny-slack-status"
+description = "Denies the slack_status command without any pre-configured scope."
+commands.deny = ["slack_status"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-notify"
+description = "Enables the slack_notify command without any pre-configured scope."
+commands.allow = ["slack_notify"]
+
+[[permission]]
+identifier = "deny-slack-notify"
+description = "Denies the slack_notify command without any pre-configured scope."
+commands.deny = ["slack_notify"]

@@ -1,5 +1,9 @@
 // lgtm as a macOS app: the review UI (app/dist) in a window, with the local server's routes as commands that run
-// the same CLIs. Phase 1: the GitHub token. See openspec/changes/add-desktop-app.
+// the same CLIs. See openspec/changes/add-desktop-app.
+mod cli;
+mod commands;
+mod config;
+
 use std::process::Command;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -38,7 +42,17 @@ async fn gh_token() -> Result<String, String> {
 pub fn run() {
     adopt_login_path();
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![gh_token])
+        .invoke_handler(tauri::generate_handler![
+            gh_token,
+            commands::integrations,
+            commands::jira_issue,
+            commands::job_log,
+            commands::slack_status,
+            commands::slack_notify,
+            commands::slack_people_get,
+            commands::slack_people_find,
+            commands::slack_people_save,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running lgtm");
 }
