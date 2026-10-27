@@ -26,7 +26,7 @@ brew install shaharia-lab/tap/slackcli && slackcli auth login-auto
 brew install atlassian/homebrew-acli/acli && acli jira auth login --web
 ```
 
-If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Settings shows which sign-ins work and how to fix the rest.
+If the org enforces SSO, authorize the gh token for it when GitHub asks. On first launch lgtm shows which sign-ins work and how to set up the rest (⚙ Settings has it later).
 
 ## What it does
 
@@ -53,7 +53,7 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Set
 
 **Claude Code.** ✳ Claude on the PR bar or on any comment opens the PR's Claude Code session in the Claude desktop app. Without one yet, it starts it with the PR or comment in the prompt (in the repo's local folder, set in Settings) and links it as soon as it begins; with one (a green dot, "working…" or "waiting for you" beside it), it goes straight back to it, and a comment's ✳ leaves that comment for it: say "check lgtm" in the session. ⌥-click starts a new session anyway. ✳ Ask Claude appears when you select code and answers a question about it, through the `claude` CLI with your Claude login.
 
-And the other way: Settings → Claude Code → Install adds an `lgtm-review` skill to Claude Code. When a PR is ready for you to review, Claude offers to open it here (it asks once and remembers), linked to its session: ✳ Claude on that PR goes back to it, and after you submit your review lgtm offers to send it the outcome, your verdict and comments, to address. Once Claude has addressed them, it can reply on each thread and resolve it (it asks you once), and the PR shows "✳ updated" in the list when it pushes. A newer lgtm updates the installed skill itself.
+And the other way: Settings → Claude Code → Install adds an `lgtm-review` skill to Claude Code. When a PR is ready for you to review, Claude offers to open it here (it asks once and remembers), linked to its session: ✳ Claude on that PR goes back to it, and after you submit your review lgtm offers to send it the outcome, your verdict and comments, to address. Once Claude has addressed them, it can reply on each thread and resolve it (it asks you once), and the PR shows "✳ updated" in the list when it pushes, or "✳ waiting for you" (counted in the Dock badge) when the session needs your answer. A newer lgtm updates the installed skill itself.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-claude-dark.png">

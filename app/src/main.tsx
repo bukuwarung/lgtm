@@ -5,7 +5,7 @@ import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeam
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, askNotifications, availableUpdate, keepSkillCurrent, linkClaude, linkedClaude, newer, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, askNotifications, availableUpdate, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -138,6 +138,7 @@ function App() {
       </nav>
       {isDesktop && <FindBar />}
       <WhatsNew />
+      <SetupCheck />
       {toast && (
         <div class="toast" role="status">
           {toast.text}
@@ -175,6 +176,61 @@ function App() {
         )}
       </div>
     </>
+  );
+}
+
+// First run: what lgtm can use and how to set up what's missing, once (Settings has all of it later). GitHub is signed
+// in by the time this shows; Slack, Jira and the Claude Code skill are optional.
+function SetupCheck() {
+  const [open, setOpen] = useState(() => {
+    try {
+      return !localStorage.getItem('setupSeen');
+    } catch {
+      return false;
+    }
+  });
+  const [ints, setInts] = useState<Integrations | null>(null);
+  const [skill, setSkill] = useState<SkillStatus | null>(null);
+  const check = () => {
+    setInts(null);
+    fetchIntegrations().then(setInts, () => setInts({ slack: { ok: false, error: "couldn't check" }, jira: { ok: false, error: "couldn't check" } }));
+    claudeSkill().then(setSkill, () => setSkill(null));
+  };
+  useEffect(() => void (open && check()), []);
+  if (!open) return null;
+  const done = () => {
+    try {
+      localStorage.setItem('setupSeen', '1');
+    } catch {}
+    setOpen(false);
+  };
+  const row = (ok: boolean | null, name: string, what: string, fix: preact.ComponentChildren) => (
+    <div class="set-int">
+      <span class={ok == null ? 'ck ck-pending' : ok ? 'ck ck-success' : 'ck ck-neutral'}>{ok == null ? '●' : ok ? '✓' : '–'}</span>
+      <div>
+        <b>{name}</b> <span class="note">{what}</span>
+        {ok === false && <div class="setup-fix">{fix}</div>}
+      </div>
+    </div>
+  );
+  return (
+    <div class="whats-new-back" onMouseDown={(e) => e.target === e.currentTarget && done()}>
+      <div class="whats-new" role="dialog" aria-label="Set up lgtm">
+        <div class="row">
+          <b>Welcome to lgtm</b>
+          <span class="spacer" />
+          <button onClick={check}>Check again</button>
+          <button class="primary" onClick={done}>Done</button>
+        </div>
+        <p class="note">lgtm borrows the sign-ins of these tools and stores no tokens. Only GitHub is required; the rest you can set up now or later in ⚙ Settings.</p>
+        {row(true, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', null)}
+        {row(ints ? ints.slack.ok : null, 'Slack', '(optional) DM the author when you finish a review.', <pre>brew install shaharia-lab/tap/slackcli && slackcli auth login-auto</pre>)}
+        {row(ints ? ints.jira.ok : null, 'Jira', "(optional) The PR's ticket above its files.", <pre>brew install atlassian/homebrew-acli/acli && acli jira auth login --web</pre>)}
+        {row(skill ? skill.current : null, 'Claude Code skill', '(optional) Claude opens PRs ready for review here, linked to its session.', (
+          <button onClick={() => claudeSkill(true).then(setSkill, () => {})}>{skill?.installed ? 'Update the skill' : 'Install the skill'}</button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -448,12 +504,29 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
   }, []);
   const [notify] = useStoredFlag('notifyRequests', false);
   const seen = useRef<Set<string> | null>(null);
+  // The Claude Code sessions linked to listed PRs, and what each is doing, every 15 seconds.
+  const [claude, setClaude] = useState<Map<string, 'working' | 'waiting' | 'idle'>>(new Map());
+  const linkedIds = [...new Set((items ?? []).map((i) => linkedClaude(i.repo, i.number)?.id).filter((x): x is string => !!x))].sort().join(' ');
+  useEffect(() => {
+    if (!linkedIds) return setClaude(new Map());
+    let stop = false;
+    const look = () =>
+      Promise.all(linkedIds.split(' ').map(async (id) => [id, (await claudeSessionState(id).catch(() => null))?.state ?? 'idle'] as const)).then(
+        (r) => !stop && setClaude(new Map(r)),
+      );
+    look();
+    const t = setInterval(look, 15_000);
+    return () => ((stop = true), clearInterval(t));
+  }, [linkedIds]);
+  const claudeWaiting = (i: QueueItem) => claude.get(linkedClaude(i.repo, i.number)?.id ?? '') === 'waiting';
   useEffect(() => void (items && onItems(items)), [items]);
   useEffect(() => {
     if (!items || !settled) return;
     const waiting = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);
-    document.title = waiting.length ? `(${waiting.length}) lgtm` : 'lgtm';
-    void setBadge(waiting.length); // the app's Dock icon
+    // The badge also counts PRs whose Claude Code session is waiting for you.
+    const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length;
+    document.title = count ? `(${count}) lgtm` : 'lgtm';
+    void setBadge(count); // the app's Dock icon
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     if (seen.current && notify)
       for (const i of waiting.filter((i) => !seen.current!.has(i.id)))
@@ -461,7 +534,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
           location.hash = `/${i.repo}/pull/${i.number}`;
         });
     seen.current = new Set(waiting.map((i) => i.id));
-  }, [items, settled]);
+  }, [items, settled, claude]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
@@ -496,6 +569,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}>{MERGE_PILL[i.mergeState]![0]}</span>}
         {kind === MINE && i.autoMerge && <span class="pill">auto-merge on</span>}
+        {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer">✳ waiting for you</span>}
         {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here">✳ updated</span>}
         {kind === MINE && MINE.groupOf(i) === 'm-waiting' && <Waiting i={i} />}
         {i.estimate && <span

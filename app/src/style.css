@@ -525,3 +525,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .claude-state { font-size: 12px; color: var(--muted); }
 .claude-state.waiting { color: light-dark(#9a6700, #cc7832); font-weight: 600; }
 .pill.p-claude { color: var(--addfg); border-color: currentColor; }
+.pill.p-claude-wait { color: light-dark(#9a6700, #cc7832); border-color: currentColor; font-weight: 600; }
+.setup-fix { margin-top: 4px; }
+.setup-fix pre { margin: 0; padding: 4px 8px; background: var(--soft); border-radius: 4px; font-size: 12px; white-space: pre-wrap; }
