@@ -5,7 +5,7 @@ import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeam
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, askNotifications, availableUpdate, getGhAccounts, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -43,7 +43,10 @@ function App() {
     location.hash = to.slice(1);
   };
 
-  const signIn = () => loadToken().then(() => setState('in'), (e) => setState({ error: e.message }));
+  const signIn = () =>
+    loadToken()
+      .then(() => getViewer().then(setAccount, () => {})) // this account's drafts and the like (platform.ts own)
+      .then(() => setState('in'), (e) => setState({ error: e.message }));
   useEffect(() => {
     const onHash = () => (takeClaudeLink(), setRoute(location.hash));
     addEventListener('hashchange', onHash);
@@ -581,7 +584,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
   }, []);
   const unsent = (i: QueueItem) => {
     try {
-      return JSON.parse(localStorage.getItem(`drafts:${i.repo}#${i.number}`) ?? 'null')?.drafts.length ?? 0;
+      return JSON.parse(localStorage.getItem(own(`drafts:${i.repo}#${i.number}`)) ?? 'null')?.drafts.length ?? 0;
     } catch {
       return 0;
     }

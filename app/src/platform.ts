@@ -1,17 +1,38 @@
 import { useEffect, useState } from 'preact/hooks';
 
+// Each GitHub account's own data lives under its login, so switching accounts (the avatar) never mixes them: unsent
+// drafts, what you'd seen of a PR, Claude session links, the PR list's team, and the saved PR copies. Settings are
+// shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
+// existed, and a Claude link taken from the address before sign-in (so it's the newer one).
+const OWN = /^(drafts:|visit:|claudeFrom:|team$)/;
+let account = '';
+export const own = (key: string) => (account && OWN.test(key) ? `@${account}/${key}` : key);
+export function setAccount(login: string) {
+  account = login;
+  if (!login) return;
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (!OWN.test(k)) continue;
+      localStorage.setItem(own(k), localStorage.getItem(k)!);
+      localStorage.removeItem(k);
+    }
+  } catch {
+    // stays where it was
+  }
+}
+
 // The page is served by bin/lgtm.mjs on a fixed 127.0.0.1 port, so localStorage persists drafts across runs.
 export const storage = {
   get: async <T>(key: string): Promise<T | undefined> => {
-    const v = localStorage.getItem(key);
+    const v = localStorage.getItem(own(key));
     return v == null ? undefined : JSON.parse(v);
   },
   set: async (key: string, value: unknown) => {
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(own(key), JSON.stringify(value));
     dispatchEvent(new Event('lgtm:storage')); // the PR list shows unsent comments
   },
   remove: async (key: string) => {
-    localStorage.removeItem(key);
+    localStorage.removeItem(own(key));
     dispatchEvent(new Event('lgtm:storage'));
   },
 };
@@ -31,7 +52,7 @@ const done = <T>(r: IDBRequest<T>) => new Promise<T>((ok, no) => ((r.onsuccess =
 export const prCache = {
   async get<T>(key: string): Promise<{ v: T; at: number } | undefined> {
     try {
-      return await done((await openCache()).transaction('prs').objectStore('prs').get(key));
+      return await done((await openCache()).transaction('prs').objectStore('prs').get(`@${account}/${key}`));
     } catch {
       return undefined;
     }
@@ -39,7 +60,7 @@ export const prCache = {
   async set(key: string, v: unknown) {
     try {
       const store = (await openCache()).transaction('prs', 'readwrite').objectStore('prs');
-      store.put({ v, at: Date.now() }, key);
+      store.put({ v, at: Date.now() }, `@${account}/${key}`);
       const [keys, rows] = await Promise.all([done(store.getAllKeys()), done(store.getAll())]);
       const old = keys.map((k, i) => [k, rows[i].at] as const).sort((a, b) => b[1] - a[1]).slice(PR_CACHE_SIZE);
       for (const [k] of old) store.delete(k);
@@ -105,7 +126,7 @@ export async function getGhAccounts(): Promise<GhAccount[]> {
 export function useStoredValue(key: string, initial: string) {
   const read = () => {
     try {
-      return localStorage.getItem(key) ?? initial;
+      return localStorage.getItem(own(key)) ?? initial;
     } catch {
       return initial;
     }
@@ -119,7 +140,7 @@ export function useStoredValue(key: string, initial: string) {
   const set = (v: string) => {
     setValue(v);
     try {
-      localStorage.setItem(key, v);
+      localStorage.setItem(own(key), v);
     } catch {
       // not remembered
     }
@@ -354,13 +375,13 @@ const SESSION_ID = /^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{
 export function linkClaude(repo: string, n: number, id: string) {
   if (!SESSION_ID.test(id)) return;
   try {
-    localStorage.setItem(`claudeFrom:${repo}#${n}`, JSON.stringify({ id, at: Date.now() }));
+    localStorage.setItem(own(`claudeFrom:${repo}#${n}`), JSON.stringify({ id, at: Date.now() }));
   } catch {}
   dispatchEvent(new Event('lgtm:claude-link')); // ✳ Claude buttons show it
 }
 export function unlinkClaude(repo: string, n: number) {
   try {
-    localStorage.removeItem(`claudeFrom:${repo}#${n}`);
+    localStorage.removeItem(own(`claudeFrom:${repo}#${n}`));
   } catch {}
   dispatchEvent(new Event('lgtm:claude-link'));
 }
@@ -383,7 +404,7 @@ export function linkNewClaude(repo: string, n: number, prUrl: string) {
 }
 export function linkedClaude(repo: string, n: number): { id: string; at: number; seen?: number } | null {
   try {
-    const v = JSON.parse(localStorage.getItem(`claudeFrom:${repo}#${n}`) ?? 'null');
+    const v = JSON.parse(localStorage.getItem(own(`claudeFrom:${repo}#${n}`)) ?? 'null');
     return v && SESSION_ID.test(v.id) ? v : null;
   } catch {
     return null;
@@ -394,7 +415,7 @@ export function seenClaudePR(repo: string, n: number) {
   const l = linkedClaude(repo, n);
   if (!l) return;
   try {
-    localStorage.setItem(`claudeFrom:${repo}#${n}`, JSON.stringify({ ...l, seen: Date.now() }));
+    localStorage.setItem(own(`claudeFrom:${repo}#${n}`), JSON.stringify({ ...l, seen: Date.now() }));
   } catch {}
 }
 
