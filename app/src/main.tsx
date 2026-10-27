@@ -146,6 +146,7 @@ function App() {
       {/* In the app the window has no title bar: this bar holds the traffic lights (left) and drags the window. */}
       <nav class="top" data-tauri-drag-region>
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
+        <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings">⚙ Settings</a>
         <TopActions
           refreshing={refreshing}
           onRefresh={() => {
@@ -169,7 +170,6 @@ function App() {
             ⬆ {update}
           </a>
         )}
-        <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings">⚙ Settings</a>
         <ThemeToggle />
       </nav>
       {isDesktop && <FindBar />}
