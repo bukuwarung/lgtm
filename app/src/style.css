@@ -637,3 +637,8 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .ix-person.dim-click { cursor: default; }
 .ix-ask-slack { display: grid; gap: 4px; margin: 4px 8px 6px 14px; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .ix-ask-slack textarea { font-size: calc(12px * var(--ts)); resize: vertical; }
+/* A reviewer's verdict, coloured like the pills. */
+.ix-meta.v-APPROVED { color: var(--pill-ok); }
+.ix-meta.v-CHANGES_REQUESTED { color: var(--pill-bad); }
+.ix-meta.v-WAITING { color: var(--pill-warn); }
+.ix-meta.v-COMMENTED { color: var(--pill-info); }

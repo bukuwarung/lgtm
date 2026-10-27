@@ -136,11 +136,11 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
   };
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
   // Who's reviewing: each person's latest verdict, "waiting" for ones asked who haven't answered (again).
-  const reviewers = new Map<string, { meta: string; id?: string }>();
-  for (const c of conversation) if (c.state && !c.bot && c.author !== pr.user.login) reviewers.set(c.author, { meta: VERDICT[c.state], id: c.id });
+  const reviewers = new Map<string, { meta: string; tone: string; id?: string }>();
+  for (const c of conversation) if (c.state && !c.bot && c.author !== pr.user.login) reviewers.set(c.author, { meta: VERDICT[c.state], tone: c.state, id: c.id });
   for (const r of pr.requested_reviewers ?? [])
-    if (r.type !== 'Bot') reviewers.set(r.login, { meta: reviewers.has(r.login) ? 'asked again' : 'waiting', id: reviewers.get(r.login)?.id });
-  for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting' });
+    if (r.type !== 'Bot') reviewers.set(r.login, { meta: reviewers.has(r.login) ? 'asked again' : 'waiting', tone: 'WAITING', id: reviewers.get(r.login)?.id });
+  for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting', tone: 'WAITING' });
 
   return (
     <div class="index">
@@ -160,7 +160,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
           <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
             <span class="ix-label">
               {!who.startsWith('team ') && <img src={`https://github.com/${encodeURIComponent(who)}.png?size=40`} alt="" />}
-              {who.startsWith('team ') ? who : '@' + who} <span class="ix-meta">{r.meta}</span>
+              {who.startsWith('team ') ? who : '@' + who} <span class={`ix-meta v-${r.tone}`}>{r.meta}</span>
             </span>
           </button>
         ))}
