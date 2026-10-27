@@ -81,15 +81,8 @@ const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
 type Notice = { text: string; ok: boolean };
 // onReviewed: the review is in and the user chose to move on (with the Slack result, if any, to show next).
-// Has a person been asked to review (or reviewed) yet: requested by name or as a team, or a review from someone
-// other than the author.
-const reviewerAsked = (pr: PR, conversation: ConversationItem[], bots: Set<string>) =>
-  (pr.requested_reviewers ?? []).some((u) => u.type !== 'Bot' && !bots.has(u.login)) ||
-  (pr.requested_teams ?? []).length > 0 ||
-  conversation.some((c) => c.state && !c.bot && !bots.has(c.author) && c.author !== pr.user.login);
-
-// On my own PR with nobody asked to review it yet: who to ask (this repo's recent reviewers, else the PR list's team),
-// least busy first. A click asks them on GitHub and, unless unticked, on Slack too.
+// On my own PR, in the index's Reviewers: who to ask (this repo's recent reviewers, else the PR list's team), least
+// busy first. A click asks them on GitHub and, unless unticked, on Slack too.
 function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void }) {
   const [team] = useStoredValue('team', '');
   const [picks, setPicks] = useState<ReviewerPick[] | null>(null);
@@ -120,39 +113,35 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
       onAsked(`Asked @${login} on GitHub; Slack failed (${e.message}).`, false);
     }
   };
-  const asked = Object.keys(state).filter((l) => state[l] === 'asked');
   return (
-    <section class="ask-reviewer">
-      {asked.length ? (
-        <>
-          <b>Asked {asked.map((l) => '@' + l).join(', ')}.</b> Anyone else?
-        </>
-      ) : (
-        <>
-          <b>Nobody's reviewing this yet.</b> Ask someone, least busy first:
-        </>
-      )}
-      {err && <p class="warn">{err}</p>}
-      <div class="ask-picks">
-        {picks == null && !err && <span class="note">Finding who's free…</span>}
-        {picks?.length === 0 && <span class="note">No one to suggest: nobody has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</span>}
-        {picks?.slice(0, 5).map((p) => (
-          <button disabled={!!state[p.login]} class={state[p.login] ?? ''} title={`${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review`} onClick={() => ask(p.login)}>
-            <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />
-            <span>@{p.login}</span>
-            <small>{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? '✓ asked' : p.load ? `${p.load} waiting` : 'free'}</small>
-          </button>
-        ))}
-      </div>
+    <div class="ix-ask">
+      {err && <p class="warn ix-pad">{err}</p>}
+      {picks == null && !err && <p class="note ix-pad">Finding who's free…</p>}
+      {picks?.length === 0 && <p class="note ix-pad">No one to suggest: nobody else has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</p>}
+      {picks?.slice(0, 5).map((p) => (
+        <button
+          class={`ix-item ix-person ${state[p.login] ?? ''}`}
+          disabled={!!state[p.login]}
+          title={`Ask @${p.login} to review: ${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review`}
+          onClick={() => ask(p.login)}
+        >
+          <span class="ix-label">
+            <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />@{p.login}{' '}
+            <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? '✓ asked' : p.load ? `${p.load} waiting` : 'free'}</span>
+          </span>
+        </button>
+      ))}
       {slackOk ? (
-        <label class="ask-slack">
-          <input type="checkbox" checked={slack} onChange={(e) => setSlack(e.currentTarget.checked)} /> Also message them on Slack:
-          {slack && <input type="text" value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label="Slack message" />}
+        <label class="ix-ask-slack">
+          <span>
+            <input type="checkbox" checked={slack} onChange={(e) => setSlack(e.currentTarget.checked)} /> Also message them on Slack
+          </span>
+          {slack && <textarea rows={2} value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label="Slack message" />}
         </label>
       ) : (
-        <small class="note">Slack isn't set up, so this only asks on GitHub.</small>
+        <p class="note ix-pad">Slack isn't set up, so this only asks on GitHub.</p>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -651,6 +640,18 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               files={shown}
               viewed={viewed}
               me={me}
+              ask={
+                !!me && pr.user.login === me && !pr.draft && (
+                  <AskReviewer
+                    pr={pr}
+                    repo={repo}
+                    n={n}
+                    skip={new Set([me, ...bots, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => c.state).map((c) => c.author)])}
+                    slackOk={slackPeople !== null}
+                    onAsked={(text, ok) => setNotice({ ok, text })}
+                  />
+                )
+              }
               counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length}
             />
           </div>
@@ -712,16 +713,6 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
             )}
           </div>
           {notice && <p class={notice.ok ? 'notice' : 'warn'}>{notice.text}</p>}
-          {!!me && pr.user.login === me && !pr.draft && !reviewerAsked(pr, conversation, bots) && (
-            <AskReviewer
-              pr={pr}
-              repo={repo}
-              n={n}
-              skip={new Set([me, ...bots])}
-              slackOk={slackPeople !== null}
-              onAsked={(text, ok) => setNotice({ ok, text })}
-            />
-          )}
           {lastReviewed && (
             <div class={since ? 'since on' : 'since'}>
               <SinceSummary

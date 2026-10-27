@@ -105,10 +105,11 @@ type IndexProps = {
   viewed: Set<string>;
   counts: Counts;
   me: string;
+  ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -134,6 +135,12 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
     );
   };
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
+  // Who's reviewing: each person's latest verdict, "waiting" for ones asked who haven't answered (again).
+  const reviewers = new Map<string, { meta: string; id?: string }>();
+  for (const c of conversation) if (c.state && !c.bot && c.author !== pr.user.login) reviewers.set(c.author, { meta: VERDICT[c.state], id: c.id });
+  for (const r of pr.requested_reviewers ?? [])
+    if (r.type !== 'Bot') reviewers.set(r.login, { meta: reviewers.has(r.login) ? 'asked again' : 'waiting', id: reviewers.get(r.login)?.id });
+  for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting' });
 
   return (
     <div class="index">
@@ -146,6 +153,30 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             {conversation.map((c, i) => c.bot && convEntry(c, i))}
           </details>
         )}
+      </Section>
+
+      <Section title="Reviewers" count={reviewers.size}>
+        {[...reviewers].map(([who, r]) => (
+          <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
+            <span class="ix-label">
+              {!who.startsWith('team ') && <img src={`https://github.com/${encodeURIComponent(who)}.png?size=40`} alt="" />}
+              {who.startsWith('team ') ? who : '@' + who} <span class="ix-meta">{r.meta}</span>
+            </span>
+          </button>
+        ))}
+        {ask &&
+          (reviewers.size ? (
+            <details class="ix-ckgroup">
+              <summary>+ Ask someone else</summary>
+              {ask}
+            </details>
+          ) : (
+            <>
+              <p class="note ix-pad">Nobody's been asked yet. Least busy first:</p>
+              {ask}
+            </>
+          ))}
+        {!ask && !reviewers.size && <p class="note ix-pad">Nobody yet.</p>}
       </Section>
 
       <Section

@@ -631,13 +631,9 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .account-menu > button small { color: var(--muted); font-weight: 400; }
 .account-check { margin-left: auto; color: var(--accent); }
 .account-menu .note { margin: 4px 8px 2px; font-size: calc(12px * var(--ts)); }
-/* On my own PR with no reviewer: who to ask. */
-.ask-reviewer { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; background: var(--soft); }
-.ask-picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-.ask-picks button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; background: var(--bg); }
-.ask-picks button:hover:not(:disabled) { border-color: var(--accent); }
-.ask-picks img { width: 22px; height: 22px; border-radius: 50%; }
-.ask-picks small { color: var(--muted); }
-.ask-slack { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: calc(13px * var(--ts)); }
-.ask-slack input[type=text] { flex: 1; min-width: 260px; }
-.ask-picks button.asked small { color: var(--pill-ok); }
+/* The index's Reviewers: people with their avatar; who to ask on my own PR. */
+.ix-person img { width: 16px; height: 16px; margin-right: 5px; border-radius: 50%; vertical-align: -3px; }
+.ix-person.asked .ix-meta { color: var(--pill-ok); }
+.ix-person.dim-click { cursor: default; }
+.ix-ask-slack { display: grid; gap: 4px; margin: 4px 8px 6px 14px; font-size: calc(12px * var(--ts)); color: var(--muted); }
+.ix-ask-slack textarea { font-size: calc(12px * var(--ts)); resize: vertical; }
