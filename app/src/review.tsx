@@ -13,11 +13,11 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, walkthroughPrompt, askPrompt, commentPrompt, prPrompt } from './claude.ts';
+import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, walkthroughPrompt, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
-import { ago, claudeWalkthrough, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { ago, backToClaude, claudeWalkthrough, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -339,6 +339,16 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     const sha = drafts.length ? saved.sha : head;
     if (sha !== head && !confirm('New commits were pushed after you started this review. Submit your comments against the older commit?')) return false;
     await submitReview(pr.node_id, sha, event, body, drafts);
+    // A Claude Code session sent this PR here: offer to send it the outcome (a message stays up past moving on).
+    const from = linkedClaude(repo, n);
+    if (from) {
+      const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
+      dispatchEvent(
+        new CustomEvent('lgtm:toast', {
+          detail: { text: 'A Claude Code session sent this PR.', action: ['Send it your review', () => void backToClaude(from.id, text).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
+        }),
+      );
+    }
     saveDrafts([]);
     onSubmitted();
     let result: Notice | null = null;
@@ -1587,8 +1597,13 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
   const [note, setNote] = useState('');
   const [findSessions] = useStoredFlag('claudeSessions', true);
   const [sessions, setSessions] = useState<ClaudeSession[]>([]);
+  const [all, setAll] = useState<ClaudeSession[]>([]);
+  const [owner, name, , num] = prUrl.replace('https://github.com/', '').split('/');
+  const from = linkedClaude(`${owner}/${name}`, Number(num)); // the session that sent this PR here, if one did
+  const fromSession = from && all.find((s) => s.id === from.id || s.cli === from.id);
   useEffect(() => {
-    if (open && findSessions) getClaudeSessions().then((all) => setSessions(all.filter((s) => s.prs.includes(prUrl))), () => setSessions([]));
+    if (open && (findSessions || from))
+      getClaudeSessions().then((list) => (setAll(list), setSessions(findSessions ? list.filter((s) => s.prs.includes(prUrl) && s !== list.find((x) => x.id === from?.id || x.cli === from?.id)) : [])), () => setSessions([]));
   }, [open, findSessions, prUrl]);
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -1616,6 +1631,15 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
           <button role="menuitem" onClick={() => (setOpen(false), void openClaude(claudeNewLink(prompt, claudeFolder(repo))))}>
             New Claude Code session
           </button>
+          {from && (
+            <button
+              role="menuitem"
+              title="The Claude Code session that sent this PR here; the prompt is copied to paste"
+              onClick={async () => (setOpen(false), flash(await backToClaude(from.id, prompt)))}
+            >
+              Back to the session that sent this{fromSession ? ` · “${fromSession.title || 'Untitled'}”` : ''}
+            </button>
+          )}
           {[...sessions.map((s) => ({ key: s.id, link: claudeContinueLink(s.id), text: `Continue “${s.title || 'Untitled'}” · ${ago(s.lastActivityAt)}` })), { key: 'last', link: CLAUDE_CONTINUE, text: 'Continue last session' }].map((o) => (
             <button
               key={o.key}

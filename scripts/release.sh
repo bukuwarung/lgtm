@@ -16,7 +16,7 @@ sed -i '' -E "1,5 s/^version = \"[^\"]*\"/version = \"$v\"/" desktop/src-tauri/C
 (cd app && npm ci && npm test)
 (cd desktop && npm ci && npm run build -- --target universal-apple-darwin) # builds app/ first
 ditto -c -k --keepParent desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/lgtm.app "$out/lgtm-$v.zip"
-tar -czf "$out/lgtm-cli-$v.tar.gz" -C app bin dist package.json
+tar -czf "$out/lgtm-cli-$v.tar.gz" -C app bin dist package.json claude-skill.md
 
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 sed -i '' -E "s/^  version \"[^\"]*\"/  version \"$v\"/; s/^  sha256 \"[^\"]*\"/  sha256 \"$(sha "$out/lgtm-$v.zip")\"/" Casks/lgtm.rb

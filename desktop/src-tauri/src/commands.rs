@@ -411,7 +411,7 @@ pub async fn claude_sessions() -> Vec<Value> {
             let transcript = projects.iter().map(|d| d.join(format!("{cli}.jsonl"))).find(|t| t.exists())?;
             let prs = prs_in(&first_prompt(&transcript));
             let last = s["lastActivityAt"].as_str().and_then(|v| v.parse::<f64>().ok()).or(s["lastActivityAt"].as_f64()).unwrap_or(0.0);
-            (!prs.is_empty()).then(|| json!({ "id": id, "title": s["title"].as_str().unwrap_or(""), "lastActivityAt": last, "prs": prs }))
+            Some(json!({ "id": id, "cli": cli, "title": s["title"].as_str().unwrap_or(""), "lastActivityAt": last, "prs": prs }))
         })
         .collect();
     out.sort_by(|a, b| b["lastActivityAt"].as_f64().partial_cmp(&a["lastActivityAt"].as_f64()).unwrap_or(std::cmp::Ordering::Equal));
@@ -469,6 +469,20 @@ pub async fn self_update(app: tauri::AppHandle) -> Result<(), String> {
         return Err(format!("brew upgrade failed: {}", last_line(&plain(&upgrade.stderr))));
     }
     app.restart()
+}
+
+/// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md, built in by build.rs),
+/// installed for the user in ~/.claude/skills; as the server's claudeSkill().
+const SKILL: &str = include_str!(concat!(env!("OUT_DIR"), "/claude-skill.md"));
+#[tauri::command]
+pub async fn claude_skill(install: bool) -> Result<Value, String> {
+    let path = home().join(".claude").join("skills").join("lgtm-review").join("SKILL.md");
+    if install {
+        std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+        std::fs::write(&path, SKILL).map_err(|e| e.to_string())?;
+    }
+    let have = std::fs::read_to_string(&path).ok();
+    Ok(json!({ "installed": have.is_some(), "current": have.as_deref() == Some(SKILL), "path": path.to_string_lossy() }))
 }
 
 /// Text onto the clipboard (Help → Copy Diagnostics comes from the menu, without the click a web page needs).

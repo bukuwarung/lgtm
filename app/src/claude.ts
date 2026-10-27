@@ -89,3 +89,21 @@ export function askPrompt(
     `Question: ${question}`,
   ].join('\n\n');
 }
+
+// After a review of a PR a Claude Code session sent to lgtm: the outcome, as a message for that session.
+export function reviewDonePrompt(
+  pr: { html_url: string; number: number; title: string },
+  event: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT',
+  body: string,
+  comments: { path: string; line?: number; body: string }[],
+): string {
+  const verdict = { APPROVE: 'approved it', REQUEST_CHANGES: 'requested changes', COMMENT: 'commented' }[event];
+  const list = comments.map((c) => `- \`${c.path}${c.line ? `:${c.line}` : ''}\`: ${c.body.replace(/\s+/g, ' ').trim().slice(0, 500)}`);
+  const text = [
+    `I reviewed ${pr.html_url} (#${pr.number} ${pr.title}) in lgtm and ${verdict}.`,
+    body.trim() && `My summary:\n${quote(body, 1500)}`,
+    list.length && `My comments (${list.length}):\n${list.join('\n')}`,
+    list.length || event === 'REQUEST_CHANGES' ? 'Please address them, then tell me what changed.' : '',
+  ].filter(Boolean).join('\n\n');
+  return text.length > 8000 ? text.slice(0, 7999) + '…' : text;
+}

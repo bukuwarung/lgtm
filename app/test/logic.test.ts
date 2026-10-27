@@ -395,3 +395,11 @@ test('lineCommentBlocks: // runs as prose, not single lines or commented-out cod
   assert.deepEqual(blocks.map((b) => [b.start, b.end, b.kind, b.indent]), [[2, 4, '+', 4]]);
   assert.deepEqual(docParts(blocks[0].lines!, 'kdoc', 'line').paras.map((p) => p.md), ['Retries the charge with backoff.', 'Network errors only: a declined card\nis final.']);
 });
+
+test('reviewDonePrompt: the review, as a message back to the Claude session', async () => {
+  const { reviewDonePrompt } = await import('../src/claude.ts');
+  const p = reviewDonePrompt({ html_url: 'https://github.com/o/r/pull/7', number: 7, title: 'Retry payments' }, 'REQUEST_CHANGES', 'Close.', [{ path: 'Pay.kt', line: 12, body: 'Stop retrying\non declines.' }]);
+  assert.match(p, /^I reviewed https:\/\/github\.com\/o\/r\/pull\/7 \(#7 Retry payments\) in lgtm and requested changes\./);
+  assert.match(p, /- `Pay\.kt:12`: Stop retrying on declines\./);
+  assert.match(p, /Please address them/);
+});

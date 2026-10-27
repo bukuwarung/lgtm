@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { askNotifications, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
@@ -575,6 +575,28 @@ function BackupSection() {
   );
 }
 
+// The lgtm-review skill for Claude Code: lets Claude open PRs ready for review here, linked back to its session.
+function ClaudeSkill() {
+  const [s, setS] = useState<SkillStatus | null>(null);
+  const [err, setErr] = useState('');
+  useEffect(() => void claudeSkill().then(setS, (e) => setErr(e.message)), []);
+  const install = () => claudeSkill(true).then((x) => (setS(x), setErr('')), (e) => setErr(e.message));
+  return (
+    <div class="set-row">
+      <span>
+        Claude Code skill
+        <small>
+          Lets Claude open a pull request that's ready for review here, with a link back to its session: ✳ Claude then offers "Back to the session
+          that sent this", and after your review, to send it the outcome. Claude asks once whether you want this.
+          {s?.installed && <> Installed in <code>{s.path}</code>.</>}
+        </small>
+        {err && <small class="error">{err}</small>}
+      </span>
+      {s && (s.current ? <span class="ck ck-success" title="Installed and up to date">✓</span> : <button onClick={install}>{s.installed ? 'Update' : 'Install'}</button>)}
+    </div>
+  );
+}
+
 // Claude Code: which local checkout a new session for each repo opens in (the ✳ Claude menu). Without one, Claude
 // asks for a folder itself.
 function ClaudeFolders() {
@@ -603,6 +625,7 @@ function ClaudeFolders() {
         ✳ Claude (on a PR or a comment) opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt. Set where each repo is checked
         out so the session starts there.
       </p>
+      <ClaudeSkill />
       <Flag
         k="claudeSessions"
         initial={true}

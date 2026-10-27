@@ -317,9 +317,19 @@ async function claudeSessions() {
       hit = { mtime: transcript.mtime, prs: prsIn(await firstPrompt(transcript.t)) };
       promptCache.set(transcript.t, hit);
     }
-    if (hit.prs.length) out.push({ id: s.sessionId, title: s.title ?? '', lastActivityAt: Number(s.lastActivityAt) || 0, prs: hit.prs });
+    out.push({ id: s.sessionId, cli: s.cliSessionId, title: s.title ?? '', lastActivityAt: Number(s.lastActivityAt) || 0, prs: hit.prs });
   }
   return out.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+}
+
+// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md), installed for the user.
+const SKILL = join(homedir(), '.claude', 'skills', 'lgtm-review', 'SKILL.md');
+const skillText = () => readFile(new URL('../claude-skill.md', import.meta.url), 'utf8');
+async function claudeSkill(install) {
+  const want = await skillText();
+  if (install) await mkdir(dirname(SKILL), { recursive: true }).then(() => writeFile(SKILL, want));
+  const have = await readFile(SKILL, 'utf8').catch(() => null);
+  return { installed: have != null, current: have === want, path: SKILL };
 }
 
 const json = (res, status, value) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(value));
@@ -338,8 +348,10 @@ try {
   process.exit(1);
 }
 
+// lgtm https://github.com/o/r/pull/1[?claude=<session>]: the PR, and the Claude Code session that sent it (skill).
 const pr = process.argv[2]?.match(/github\.com\/[^/]+\/[^/]+\/pull\/\d+/)?.[0];
-const url = ORIGIN + '/' + (pr ? '#https://' + pr : '');
+const from = process.argv[2]?.match(/[?&]claude=([\w-]{1,80})/)?.[1];
+const url = ORIGIN + '/' + (pr ? '#https://' + pr + (from ? '?claude=' + from : '') : '');
 
 const server = createServer(async (req, res) => {
   // DNS-rebinding guard: a hostile site resolving its own name to 127.0.0.1 sends its own Host header.
@@ -349,7 +361,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/walkthrough'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/walkthrough', '/claude-skill'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/walkthrough' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -372,6 +384,7 @@ const server = createServer(async (req, res) => {
       return json(res, 500, { error: e.message });
     }
   }
+  if (path === '/claude-skill') return claudeSkill(req.method === 'POST').then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-sessions') return claudeSessions().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/integrations') {
     const plain = (s = '') => s.replace(/\x1b\[[0-9;]*m/g, ''); // the CLIs colour their output

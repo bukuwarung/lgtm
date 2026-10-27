@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-claude-skill"
+description = "Enables the claude_skill command without any pre-configured scope."
+commands.allow = ["claude_skill"]
+
+[[permission]]
+identifier = "deny-claude-skill"
+description = "Denies the claude_skill command without any pre-configured scope."
+commands.deny = ["claude_skill"]

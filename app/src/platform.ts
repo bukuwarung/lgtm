@@ -274,7 +274,8 @@ export async function initDesktop(go: (route: string) => void) {
   const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
   const open = (urls: string[] | null) => {
     const m = urls?.[0]?.match(/([^/\s:]+\/[^/\s]+)\/pull\/(\d+)/);
-    if (m) go(`/${m[1]}/pull/${m[2]}`);
+    const from = urls?.[0]?.match(/[?&]claude=([\w-]{1,80})/)?.[1]; // the Claude Code session that sent it (its skill)
+    if (m) go(`/${m[1]}/pull/${m[2]}${from ? `?claude=${from}` : ''}`);
   };
   open(await getCurrent()); // the link that launched the app
   await onOpenUrl(open);
@@ -321,6 +322,46 @@ export async function claudeWalkthrough(input: string): Promise<string> {
   const d = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(d.error ?? 'Walkthrough failed');
   return d.text;
+}
+
+// The Claude Code session that sent a PR here (its lgtm-review skill opens lgtm://owner/repo/pull/n?claude=<id>): the
+// Claude app's id (local_…) or the CLI's (a UUID), kept per PR.
+const SESSION_ID = /^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+export function linkClaude(repo: string, n: number, id: string) {
+  if (!SESSION_ID.test(id)) return;
+  try {
+    localStorage.setItem(`claudeFrom:${repo}#${n}`, JSON.stringify({ id, at: Date.now() }));
+  } catch {}
+}
+export function linkedClaude(repo: string, n: number): { id: string; at: number } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(`claudeFrom:${repo}#${n}`) ?? 'null');
+    return v && SESSION_ID.test(v.id) ? v : null;
+  } catch {
+    return null;
+  }
+}
+// Back to a session with a prompt: the Claude app's session reopens with the prompt copied to paste; a CLI-only
+// session gets `claude --resume <id> '<prompt>'` copied, to run in Terminal. Says which it did.
+export async function backToClaude(id: string, prompt: string): Promise<string> {
+  const local = id.startsWith('local_') ? id : (await getClaudeSessions().catch(() => [])).find((s) => s.cli === id)?.id;
+  if (local) {
+    await navigator.clipboard.writeText(prompt).catch(() => {});
+    await openClaude(`claude://code/continue?session=${encodeURIComponent(local)}`);
+    return 'Prompt copied: paste it in the session (⌘V)';
+  }
+  await navigator.clipboard.writeText(`claude --resume ${id} '${prompt.replace(/'/g, `'\\''`)}'`).catch(() => {});
+  return 'A Terminal session: the command to resume it with this prompt is copied; paste it in Terminal';
+}
+
+// The Claude Code skill (app/claude-skill.md) in ~/.claude/skills: whether it's there and current; install writes it.
+export type SkillStatus = { installed: boolean; current: boolean; path: string };
+export async function claudeSkill(install = false): Promise<SkillStatus> {
+  if (isDesktop) return command<SkillStatus>('claude_skill', { install });
+  const res = await fetch('/claude-skill', { method: install ? 'POST' : 'GET' });
+  const d = await res.json().catch(() => ({ error: res.statusText }));
+  if (!res.ok) throw new Error(d.error ?? 'Could not reach the skill');
+  return d;
 }
 
 // The app: upgrade through Homebrew and restart (resolves only on failure: success restarts the app).
@@ -409,7 +450,7 @@ export async function openClaude(url: string) {
 
 // Claude Code sessions whose first prompt links a PR, newest first (Settings → Claude Code; read from the Claude app's
 // local records).
-export type ClaudeSession = { id: string; title: string; lastActivityAt: number; prs: string[] };
+export type ClaudeSession = { id: string; cli: string; title: string; lastActivityAt: number; prs: string[] };
 export async function getClaudeSessions(): Promise<ClaudeSession[]> {
   if (isDesktop) return command<ClaudeSession[]>('claude_sessions');
   const res = await fetch('/claude-sessions');

@@ -5,7 +5,7 @@ import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeam
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, askNotifications, availableUpdate, newer, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, askNotifications, availableUpdate, linkClaude, newer, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -41,7 +41,7 @@ function App() {
 
   const signIn = () => loadToken().then(() => setState('in'), (e) => setState({ error: e.message }));
   useEffect(() => {
-    const onHash = () => setRoute(location.hash);
+    const onHash = () => (takeClaudeLink(), setRoute(location.hash));
     addEventListener('hashchange', onHash);
     void signIn();
     return () => removeEventListener('hashchange', onHash);
@@ -76,6 +76,12 @@ function App() {
     else if (id === 'diagnostics')
       void copyDiagnostics().then(() => say({ text: 'Diagnostics copied: paste them into your bug report' }), () => say({ text: "Couldn't copy the diagnostics" }));
   };
+  useEffect(() => {
+    // Other parts of the page show a message here too (the review page, after a review a Claude session sent).
+    const t = (e: Event) => say((e as CustomEvent).detail, 20000);
+    addEventListener('lgtm:toast', t);
+    return () => removeEventListener('lgtm:toast', t);
+  }, []);
   useEffect(() => {
     const h = (e: Event) => onMenu.current((e as CustomEvent<string>).detail);
     addEventListener('lgtm:menu', h);
@@ -567,5 +573,15 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
     </aside>
   );
 }
+
+// A PR opened with ?claude=<session> (the lgtm-review skill): remember the session for that PR, and drop it from the route.
+function takeClaudeLink() {
+  const from = location.hash.match(/[?&]claude=([\w-]{1,80})/)?.[1];
+  const r = from && parseRoute(location.hash);
+  if (!r) return;
+  linkClaude(r.repo, r.n, from!);
+  history.replaceState(null, '', `#/${r.repo}/pull/${r.n}`);
+}
+takeClaudeLink();
 
 render(<App />, document.getElementById('app')!);

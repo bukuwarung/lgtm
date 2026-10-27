@@ -10,7 +10,7 @@ class LgtmCli < Formula
   depends_on "node"
 
   def install
-    libexec.install "bin", "dist", "package.json"
+    libexec.install Dir["*"] # bin, dist, package.json, claude-skill.md
     (bin/"lgtm").write_env_script libexec/"bin/lgtm.mjs", PATH: "#{formula_opt_bin("node")}:$PATH"
   end
 
