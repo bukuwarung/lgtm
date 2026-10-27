@@ -161,14 +161,23 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   }, []);
 
   const [, setEmojiReady] = useState(false);
+  // The top bar's ↻ loads the PR again, as on opening it, minus what only opening does (scrolling back to where
+  // you were, starting on what's new).
+  const [reloads, setReloads] = useState(0);
   useEffect(() => {
+    const again = () => setReloads((r) => r + 1);
+    addEventListener('lgtm:refresh', again);
+    return () => removeEventListener('lgtm:refresh', again);
+  }, []);
+  useEffect(() => {
+    const first = reloads === 0;
     getEmojis().then(() => setEmojiReady(true), () => {});
     loadChecks();
     getStatus(repo, n).then(setStatus, () => {});
     getViewed(repo, n).then(setViewedPaths, () => {});
     (async () => {
       const [stored, visit] = await Promise.all([storage.get<Saved>(key), storage.get<Visit>(visitKey).catch(() => undefined)]);
-      if (visit) resumeAt.current = visit.at;
+      if (visit && first) resumeAt.current = visit.at;
       // Show a PR's last-loaded copy at once (marked as updating), then the fresh one.
       type Loaded = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null };
       let fresh = false;
@@ -184,11 +193,13 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         setSaved(stored ?? { sha: d.pr.head.sha, drafts: [] });
         setData({ pr: d.pr, headRepo, files: prepare(d.files, rules), rules });
       };
-      prCache.get<Loaded>(`${repo}#${n}`).then((c) => {
-        if (!c || fresh) return;
-        setStale(c.at);
-        show(c.v);
-      });
+      if (first)
+        prCache.get<Loaded>(`${repo}#${n}`).then((c) => {
+          if (!c || fresh) return;
+          setStale(c.at);
+          show(c.v);
+        });
+      else setStale(Date.now()); // the page as it is stays, marked as updating
       let pr: PR;
       let loaded: Loaded;
       try {
@@ -202,7 +213,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         ]);
         loaded = { pr, files, threads, conversation, attrs };
       } catch (e: any) {
-        if (!shownHead) throw e;
+        if (first && !shownHead) throw e;
+        setStale(null);
         return setNotice({ ok: false, text: `Couldn't refresh this PR (${e.message}); showing the copy loaded earlier.` });
       }
       fresh = true;
@@ -230,11 +242,11 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         if (sha && sha !== pr.head.sha) {
           getCompare(repo, sha, pr.head.sha).then((c) => setNewCommits(c.commits), () => {});
           setLastReviewed(sha);
-          if (startSince && !(wholeOnMine && pr.user.login === me)) setSince(true); // re-review: start with just what changed
+          if (first && startSince && !(wholeOnMine && pr.user.login === me)) setSince(true); // re-review: start with just what changed
         }
       }, () => {});
     })().catch((e) => setError(e.message));
-  }, []);
+  }, [reloads]);
 
   useEffect(() => {
     if (!since || !lastReviewed || !data || sinceData) return;

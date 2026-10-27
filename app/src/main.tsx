@@ -23,6 +23,7 @@ function App() {
   const [state, setState] = useState<'loading' | 'in' | { error: string }>('loading');
   const [route, setRoute] = useState(location.hash);
   const [queueVersion, setQueueVersion] = useState(0);
+  const [refreshing, setRefreshing] = useState(false); // ↻: until the list's next load lands
   const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
   const look = useCodeLook(); // code colours and font, and text sizes, from Settings
   // Glass (Settings → Appearance), unless macOS asks for less transparency.
@@ -145,7 +146,16 @@ function App() {
       {/* In the app the window has no title bar: this bar holds the traffic lights (left) and drags the window. */}
       <nav class="top" data-tauri-drag-region>
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
-        <TopActions onRefresh={() => setQueueVersion((v) => v + 1)} />
+        <TopActions
+          refreshing={refreshing}
+          onRefresh={() => {
+            // The PR list, and the PR that's open (it shows "updating…" meanwhile).
+            setRefreshing(true);
+            setTimeout(() => setRefreshing(false), 15_000); // a failed load still stops the spinning
+            setQueueVersion((v) => v + 1);
+            dispatchEvent(new Event('lgtm:refresh'));
+          }}
+        />
         <span class="spacer" />
         <CommandBar queue={() => queue.current} parse={parseRoute} />
         <span class="spacer" />
@@ -178,7 +188,7 @@ function App() {
       )}
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
         {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
-        <PRList hidden={!showPRs} current={r} version={queueVersion} onItems={(items) => (queue.current = items)} />
+        <PRList hidden={!showPRs} current={r} version={queueVersion} onItems={(items) => ((queue.current = items), setRefreshing(false))} />
         {r ? (
           <Review
             key={route}
@@ -327,13 +337,15 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
   );
 }
 
-// The top bar's PR list actions: refresh it, desktop notifications on/off.
-function TopActions({ onRefresh }: { onRefresh: () => void }) {
+// The top bar's actions: refresh the PR list and the open PR, desktop notifications on/off.
+function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
   const [err, setErr] = useState('');
   const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
   return (
     <div class="top-actions">
-      <button type="button" title="Refresh the PR list (also every 3 minutes)" onClick={onRefresh}>↻</button>
+      <button type="button" class={refreshing ? 'refreshing' : ''} title="Refresh the PR list and the open PR (the list also every 3 minutes)" onClick={onRefresh}>
+        <span>↻</span>
+      </button>
       <button
         type="button"
         title={notify ? 'Desktop notifications for new review requests: on' : 'Notify me about new review requests'}

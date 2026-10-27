@@ -615,3 +615,6 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .scroll-marks .m-view:hover, .scroll-marks:active .m-view { background: color-mix(in srgb, var(--fg) 36%, transparent); }
 .set-size { display: flex; align-items: center; gap: 8px; font-size: calc(12px * var(--ts)); color: var(--muted); font-variant-numeric: tabular-nums; }
 .set-size input[type=range] { width: 160px; }
+.top-actions button > span { display: inline-block; }
+.top-actions button.refreshing > span { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
