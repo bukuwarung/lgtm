@@ -51,13 +51,13 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. ⚙ Set
   <img alt="A review thread under a diff line, with a suggested change and a reply being written" src="docs/features/scene-comment-light.png" width="760">
 </picture>
 
-**Claude Code.** ✳ Claude on the PR bar or on any comment opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt (in the repo's local folder, set in Settings). ✳ Ask Claude appears when you select code and answers a question about it, through the `claude` CLI with your Claude login. Or it copies the prompt and reopens a session already about that PR: one started on it (lgtm finds those in the Claude app's local session records; switch it off in Settings), or the one that sent it here (see below).
+**Claude Code.** ✳ Claude on the PR bar or on any comment opens the PR's Claude Code session in the Claude desktop app. Without one yet, it starts it with the PR or comment in the prompt (in the repo's local folder, set in Settings) and links it as soon as it begins; with one (a green dot), it goes straight back to it, a comment copied to paste. ⌥-click starts a new session anyway. ✳ Ask Claude appears when you select code and answers a question about it, through the `claude` CLI with your Claude login.
 
-And the other way: Settings → Claude Code → Install adds an `lgtm-review` skill to Claude Code. When a PR is ready for you to review, Claude offers to open it here (it asks once and remembers), with a link to its session: ✳ Claude on that PR offers "Back to the session that sent this", and after you submit your review lgtm offers to send it the outcome, your verdict and comments, to address.
+And the other way: Settings → Claude Code → Install adds an `lgtm-review` skill to Claude Code. When a PR is ready for you to review, Claude offers to open it here (it asks once and remembers), linked to its session: ✳ Claude on that PR goes back to it, and after you submit your review lgtm offers to send it the outcome, your verdict and comments, to address.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-claude-dark.png">
-  <img alt="The ✳ Claude menu: a new session, or a session started on this PR" src="docs/features/scene-claude-light.png" width="760">
+  <img alt="✳ Claude with a linked session (the green dot)" src="docs/features/scene-claude-light.png" width="760">
 </picture>
 
 **Your PRs.** A merge box with what's blocking and the controls: ready for review, update branch, merge, auto-merge. A PR waiting for review shows for how long, and after a day `🔔 nudge` reminds the requested reviewers on Slack (it asks before sending).

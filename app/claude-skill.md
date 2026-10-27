@@ -6,8 +6,8 @@ description: Open a GitHub pull request for review in lgtm, the user's local PR 
 # Reviewing pull requests in lgtm
 
 lgtm is the user's PR review app (a macOS app, or the `lgtm` command for the browser version). It can open a PR
-straight from a link that also carries this session's ID, so the user can come back here from lgtm: its ✳ Claude menu
-offers "Back to the session that sent this", and after they submit their review it offers to send the outcome here.
+straight from a link that also carries this session's ID, so the user can come back here from lgtm: its ✳ Claude button
+on that PR opens this session, and after they submit their review it offers to send the outcome here.
 
 ## When
 

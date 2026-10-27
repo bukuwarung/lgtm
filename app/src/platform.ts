@@ -332,6 +332,30 @@ export function linkClaude(repo: string, n: number, id: string) {
   try {
     localStorage.setItem(`claudeFrom:${repo}#${n}`, JSON.stringify({ id, at: Date.now() }));
   } catch {}
+  dispatchEvent(new Event('lgtm:claude-link')); // ✳ Claude buttons show it
+}
+export function unlinkClaude(repo: string, n: number) {
+  try {
+    localStorage.removeItem(`claudeFrom:${repo}#${n}`);
+  } catch {}
+  dispatchEvent(new Event('lgtm:claude-link'));
+}
+// A session ✳ Claude just started for this PR: once the Claude app records it (its first message names the PR), link
+// it. Checks every 3 seconds for 10 minutes (the new session may wait for the user to send it).
+const watching = new Set<string>();
+export function linkNewClaude(repo: string, n: number, prUrl: string) {
+  const key = `${repo}#${n}`;
+  if (watching.has(key)) return;
+  watching.add(key);
+  const since = Date.now() - 5000;
+  let tries = 0;
+  const look = async () => {
+    const s = (await getClaudeSessions().catch(() => [])).find((s) => s.prs.includes(prUrl) && s.lastActivityAt >= since);
+    if (s) linkClaude(repo, n, s.id);
+    if (s || ++tries >= 200 || linkedClaude(repo, n)) return void watching.delete(key);
+    setTimeout(look, 3000);
+  };
+  setTimeout(look, 3000);
 }
 export function linkedClaude(repo: string, n: number): { id: string; at: number } | null {
   try {
@@ -343,15 +367,15 @@ export function linkedClaude(repo: string, n: number): { id: string; at: number 
 }
 // Back to a session with a prompt: the Claude app's session reopens with the prompt copied to paste; a CLI-only
 // session gets `claude --resume <id> '<prompt>'` copied, to run in Terminal. Says which it did.
-export async function backToClaude(id: string, prompt: string): Promise<string> {
+export async function backToClaude(id: string, prompt = ''): Promise<string> {
   const local = id.startsWith('local_') ? id : (await getClaudeSessions().catch(() => [])).find((s) => s.cli === id)?.id;
   if (local) {
-    await navigator.clipboard.writeText(prompt).catch(() => {});
+    if (prompt) await navigator.clipboard.writeText(prompt).catch(() => {});
     await openClaude(`claude://code/continue?session=${encodeURIComponent(local)}`);
-    return 'Prompt copied: paste it in the session (⌘V)';
+    return prompt ? 'Prompt copied: paste it in the session (⌘V)' : '';
   }
-  await navigator.clipboard.writeText(`claude --resume ${id} '${prompt.replace(/'/g, `'\\''`)}'`).catch(() => {});
-  return 'A Terminal session: the command to resume it with this prompt is copied; paste it in Terminal';
+  await navigator.clipboard.writeText(`claude --resume ${id}${prompt ? ` '${prompt.replace(/'/g, `'\\''`)}'` : ''}`).catch(() => {});
+  return 'A Terminal session: the command to resume it is copied; paste it in Terminal';
 }
 
 // The Claude Code skill (app/claude-skill.md) in ~/.claude/skills: whether it's there and current; install writes it.

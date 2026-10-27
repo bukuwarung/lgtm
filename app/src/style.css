@@ -431,18 +431,14 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 /* "✳ Claude": send a PR or comment to Claude Code */
 .claude-menu { position: relative; display: inline-flex; align-items: center; gap: 6px; }
 .claude-btn { flex: none; white-space: nowrap; }
-.claude-pop { position: absolute; top: 100%; right: 0; z-index: 20; display: grid; min-width: 260px; width: max-content; max-width: 460px; margin-top: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
-.claude-pop button { border: none; background: none; text-align: left; padding: 6px 10px; border-radius: 4px; font-size: 13px; }
-.claude-pop button:hover { background: var(--soft); }
 .claude-note { position: absolute; top: 100%; right: 0; z-index: 20; margin-top: 4px; padding: 4px 8px; white-space: nowrap; font-size: 12px; background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; }
-.comment .claude-pop, .comment .claude-note { left: 0; right: auto; }
+.comment .claude-note { left: 0; right: auto; }
 .folder-input { width: 100%; box-sizing: border-box; font: 12px var(--mono); }
 /* README scenes (demos.tsx SCENES): the app's pieces, out of their sticky page layout. */
 .demo-page.scene { padding: 12px; }
 .scene .side, .scene .bar { position: static; height: auto; }
 .scene .side { border: 1px solid var(--border); border-radius: 8px; }
 .scene .bar { border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; }
-.scene:has(.claude-pop) { padding-bottom: 120px; }
 .scene-main { padding: 12px 0 0; }
 .scene .file-h { position: static; }
 /* The top bar's Go to / open-a-link box, centred in the bar; its results drop down below it. */
@@ -522,3 +518,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 /* A dev build (not from scripts/release.sh), always visible in the top bar */
 .nav-dev { padding: 1px 8px; border-radius: 6px; font: 700 11px/18px var(--mono); letter-spacing: .04em; color: #fff; background: light-dark(#d1242f, #b62324); white-space: nowrap; }
 .top > :not(.cmd):not(.spacer) { flex-shrink: 0; white-space: nowrap; } /* the box gives way first */
+/* ✳ Claude with a linked session: a dot */
+.claude-dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: var(--addfg); vertical-align: middle; }
+.claude-btn.linked { border-color: var(--addfg); }

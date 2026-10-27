@@ -17,7 +17,7 @@ import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, comment
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
-import { ago, askClaudeCli, backToClaude, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { ago, askClaudeCli, backToClaude, linkNewClaude, unlinkClaude, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -1588,69 +1588,51 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
   );
 }
 
-// "✳": hand this PR or comment to Claude Code: a new session with the prompt filled in (in the repo's folder, if set
-// in Settings), back to the session that sent the PR here, or (Settings → Claude Code → "Find sessions per PR") a
-// session started on it; those links can't carry a prompt, so it's copied to paste.
+// "✳ Claude": this PR's Claude Code session, one click away. With one linked (a dot: the session that sent the PR here,
+// or one this button started), it opens it; a comment's ✳ copies that comment as a prompt to paste. Without one, it
+// starts a session with the PR or comment in the prompt (in the repo's folder, if set in Settings) and links it once
+// the Claude app records it. ⌥-click starts a new one anyway.
 function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: string; prUrl: string; label?: string }) {
-  const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
-  const [findSessions] = useStoredFlag('claudeSessions', true);
-  const [sessions, setSessions] = useState<ClaudeSession[]>([]);
-  const [all, setAll] = useState<ClaudeSession[]>([]);
+  const [title, setTitle] = useState('');
+  const [, setTick] = useState(0);
   const [owner, name, , num] = prUrl.replace('https://github.com/', '').split('/');
-  const from = linkedClaude(`${owner}/${name}`, Number(num)); // the session that sent this PR here, if one did
-  const fromSession = from && all.find((s) => s.id === from.id || s.cli === from.id);
+  const pr = { repo: `${owner}/${name}`, n: Number(num) };
+  const from = linkedClaude(pr.repo, pr.n);
   useEffect(() => {
-    if (open && (findSessions || from))
-      getClaudeSessions().then((list) => (setAll(list), setSessions(findSessions ? list.filter((s) => s.prs.includes(prUrl) && s !== list.find((x) => x.id === from?.id || x.cli === from?.id)) : [])), () => setSessions([]));
-  }, [open, findSessions, prUrl]);
-  const box = useRef<HTMLSpanElement>(null);
+    const t = () => setTick((x) => x + 1);
+    addEventListener('lgtm:claude-link', t);
+    return () => removeEventListener('lgtm:claude-link', t);
+  }, []);
+  // The linked session's title; an app session that's gone (archived, deleted) is let go.
   useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
-    addEventListener('mousedown', close);
-    return () => removeEventListener('mousedown', close);
-  }, [open]);
+    if (!from) return setTitle('');
+    getClaudeSessions().then((list) => {
+      const s = list.find((s) => s.id === from.id || s.cli === from.id);
+      if (s) setTitle(s.title || 'Untitled');
+      else if (from.id.startsWith('local_')) unlinkClaude(pr.repo, pr.n);
+    }, () => {});
+  }, [from?.id]);
   const flash = (text: string) => {
     setNote(text);
     setTimeout(() => setNote(''), 4000);
   };
+  const go = async (e: MouseEvent) => {
+    if (from && !e.altKey) return flash(await backToClaude(from.id, label ? '' : prompt));
+    await openClaude(claudeNewLink(prompt, claudeFolder(repo)));
+    linkNewClaude(pr.repo, pr.n, prUrl);
+  };
+  const what = label ? 'this PR' : 'this comment';
   return (
-    <span class="claude-menu" ref={box}>
-      <button class={label ? 'claude-btn' : 'copy-link'} title={label ? 'Send this PR to Claude Code' : 'Send this comment to Claude Code'} onClick={() => setOpen(!open)}>
+    <span class="claude-menu">
+      <button
+        class={`${label ? 'claude-btn' : 'copy-link'}${from ? ' linked' : ''}`}
+        title={from ? `Open its Claude Code session${title ? `, “${title}”` : ''}${label ? '' : ', with this comment copied to paste'} (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
+        onClick={go}
+      >
         ✳{label ? ` ${label}` : ''}
+        {from && <span class="claude-dot" aria-label="linked to a session" />}
       </button>
-      {open && (
-        <span class="claude-pop" role="menu">
-          {from && (
-            <button
-              role="menuitem"
-              title="The Claude Code session that sent this PR here; the prompt is copied to paste"
-              onClick={async () => (setOpen(false), flash(await backToClaude(from.id, prompt)))}
-            >
-              Back to the session that sent this{fromSession ? ` · “${fromSession.title || 'Untitled'}”` : ''}
-            </button>
-          )}
-          <button role="menuitem" onClick={() => (setOpen(false), void openClaude(claudeNewLink(prompt, claudeFolder(repo))))}>
-            New Claude Code session
-          </button>
-          {sessions.map((s) => ({ key: s.id, link: claudeContinueLink(s.id), text: `Continue “${s.title || 'Untitled'}” · ${ago(s.lastActivityAt)}` })).map((o) => (
-            <button
-              key={o.key}
-              role="menuitem"
-              title="Opens the session; the prompt is copied to paste"
-              onClick={async () => {
-                setOpen(false);
-                await navigator.clipboard.writeText(prompt).catch(() => {});
-                void openClaude(o.link);
-                flash('Prompt copied: paste it in the session (⌘V)');
-              }}
-            >
-              {o.text}
-            </button>
-          ))}
-        </span>
-      )}
       {note && <span class="claude-note">{note}</span>}
     </span>
   );

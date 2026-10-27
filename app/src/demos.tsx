@@ -416,7 +416,7 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
   </tr>
 );
 
-const Bar = ({ menu }: { menu?: boolean }) => (
+const Bar = ({ linked }: { linked?: boolean }) => (
   <div class="bar">
     <button>⇤ Index</button>
     <h1>
@@ -424,13 +424,9 @@ const Bar = ({ menu }: { menu?: boolean }) => (
     </h1>
     <a class="bar-slack">💬 @rina</a>
     <span class="claude-menu">
-      <button class="claude-btn">✳ Claude</button>
-      {menu && (
-        <span class="claude-pop" role="menu">
-          <button role="menuitem">New Claude Code session</button>
-          <button role="menuitem">Continue “Review retry backoff in payments” · 2 hours ago</button>
-        </span>
-      )}
+      <button class={linked ? 'claude-btn linked' : 'claude-btn'}>
+        ✳ Claude{linked && <span class="claude-dot" />}
+      </button>
     </span>
     <div class="submit">
       <button class="primary">Finish review</button>
@@ -510,7 +506,7 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
       </File>
     ),
   },
-  claude: { title: 'Claude Code', width: 860, body: <Bar menu /> },
+  claude: { title: 'Claude Code', width: 860, body: <Bar linked /> },
   merge: {
     title: 'Your PRs',
     width: 860,

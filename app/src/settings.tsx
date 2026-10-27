@@ -587,8 +587,8 @@ function ClaudeSkill() {
       <span>
         Claude Code skill
         <small>
-          Lets Claude open a pull request that's ready for review here, with a link back to its session: ✳ Claude then offers "Back to the session
-          that sent this", and after your review, to send it the outcome. Claude asks once whether you want this.
+          Lets Claude open a pull request that's ready for review here, linked to its session: ✳ Claude on that PR goes back to it, and after
+          your review lgtm offers to send it the outcome. Claude asks once whether you want this.
           {s?.installed && <> Installed in <code>{s.path}</code>.</>}
         </small>
         {err && <small class="error">{err}</small>}
@@ -627,12 +627,6 @@ function ClaudeFolders() {
         out so the session starts there.
       </p>
       <ClaudeSkill />
-      <Flag
-        k="claudeSessions"
-        initial={true}
-        label="Find sessions per PR"
-        hint="The ✳ menu also lists sessions started on that PR, to continue one. lgtm reads the Claude app's session records on this Mac (titles and first prompts) and keeps nothing."
-      />
       {!repos ? (
         <p class="note">Loading…</p>
       ) : (
