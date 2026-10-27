@@ -10,7 +10,7 @@ import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { DemoPage } from './demos.tsx';
-import { useCodeLook } from './look.ts';
+import { CODE_SIZE, TEXT_SIZE, useCodeLook } from './look.ts';
 import { Resizer } from './resizer.tsx';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
@@ -24,7 +24,7 @@ function App() {
   const [route, setRoute] = useState(location.hash);
   const [queueVersion, setQueueVersion] = useState(0);
   const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
-  useCodeLook(); // code colours and font from Settings
+  const look = useCodeLook(); // code colours and font, and text sizes, from Settings
   // Glass (Settings → Appearance), unless macOS asks for less transparency.
   const [glass] = useStoredFlag('glass', true);
   useEffect(() => void document.documentElement.classList.toggle('glass', glass && !matchMedia('(prefers-reduced-transparency: reduce)').matches), [glass]);
@@ -58,6 +58,26 @@ function App() {
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), ms) as unknown as number;
   };
+  // ⌘+ / ⌘− / ⌘0, as in a browser: the text sizes (Settings → Appearance) a step up, down, or back; code keeps pace.
+  // The app's View menu has them (its keys never reach the page); in a browser, the keys here.
+  const textStep = (step: number) => {
+    const text = step ? Math.min(20, Math.max(11, look.textSize + step)) : TEXT_SIZE;
+    const code = step ? Math.min(18, Math.max(10, look.codeSize + step)) : CODE_SIZE;
+    look.setTextSize(String(text));
+    look.setCodeSize(String(code));
+    say({ text: `Text ${text}px · code ${code}px` }, 1500);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const id = e.key === '=' || e.key === '+' ? 'text-bigger' : e.key === '-' ? 'text-smaller' : e.key === '0' ? 'text-reset' : '';
+      if (!id) return;
+      e.preventDefault();
+      onMenu.current(id);
+    };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, []);
 
   // The app's menu bar (desktop/src-tauri/src/lib.rs). A ref, so the handler sees this render's state.
   const onMenu = useRef((_: string) => {});
@@ -75,6 +95,9 @@ function App() {
     else if (id === 'back') history.back();
     else if (id === 'forward') history.forward();
     else if (id === 'toggle-prs') togglePRs();
+    else if (id === 'text-bigger') textStep(1);
+    else if (id === 'text-smaller') textStep(-1);
+    else if (id === 'text-reset') textStep(0);
     else if (id === 'help') void openExternal('https://github.com/bukuwarung/lgtm#readme');
     else if (id === 'diagnostics')
       void copyDiagnostics().then(() => say({ text: 'Diagnostics copied: paste them into your bug report' }), () => say({ text: "Couldn't copy the diagnostics" }));
