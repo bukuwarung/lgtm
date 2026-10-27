@@ -496,8 +496,17 @@ pub async fn claude_session(id: String) -> Result<Value, String> {
     if !session_id_ok(&id) {
         return Err("Bad session id".into());
     }
+    let read = |p: &std::path::Path| {
+        let s = std::fs::read_to_string(p).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok())?;
+        let prior = s["priorCliSessionIds"].as_array().map_or(false, |a| a.iter().any(|x| x.as_str() == Some(&id)));
+        (s["sessionId"].as_str() == Some(&id) || s["cliSessionId"].as_str() == Some(&id) || prior).then_some(s)
+    };
+    // Polled every few seconds: the file it was found in last time first, before looking through them all.
+    let known = SESSION_FILES.lock().unwrap().iter().find(|(k, _)| *k == id).map(|(_, p)| p.clone());
+    let mut hit = known.as_deref().and_then(|p| read(p));
     let mut stack = vec![(home().join("Library").join("Application Support").join("Claude").join("claude-code-sessions"), 0)];
-    while let Some((dir, depth)) = stack.pop() {
+    while hit.is_none() {
+        let Some((dir, depth)) = stack.pop() else { break };
         for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
             let (p, name) = (e.path(), e.file_name().to_string_lossy().to_string());
             if p.is_dir() && depth < 3 {
@@ -507,28 +516,34 @@ pub async fn claude_session(id: String) -> Result<Value, String> {
             if !(name.starts_with("local_") && name.ends_with(".json")) || (id.starts_with("local_") && name != format!("{id}.json")) {
                 continue;
             }
-            let Some(s) = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
-            let prior = s["priorCliSessionIds"].as_array().map_or(false, |a| a.iter().any(|x| x.as_str() == Some(&id)));
-            if s["sessionId"].as_str() != Some(&id) && s["cliSessionId"].as_str() != Some(&id) && !prior {
-                continue;
+            if let Some(s) = read(&p) {
+                let mut files = SESSION_FILES.lock().unwrap();
+                files.retain(|(k, _)| *k != id);
+                files.push((id.clone(), p));
+                hit = Some(s);
+                break;
             }
-            if s["isArchived"] == json!(true) {
-                return Ok(Value::Null);
-            }
-            let num = |k: &str| s[k].as_f64().unwrap_or(0.0);
-            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0);
-            let state = if !s["interruptedAwaitingPerson"].is_null() {
-                "waiting"
-            } else if num("lastActivityAt") - num("lastTurnEdgeAt") > 2000.0 && now - num("lastActivityAt") < 120_000.0 {
-                "working"
-            } else {
-                "idle"
-            };
-            return Ok(json!({ "id": s["sessionId"], "title": s["title"].as_str().unwrap_or(""), "state": state }));
         }
+    }
+    if let Some(s) = hit {
+        if s["isArchived"] == json!(true) {
+            return Ok(Value::Null);
+        }
+        let num = |k: &str| s[k].as_f64().unwrap_or(0.0);
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0);
+        let state = if !s["interruptedAwaitingPerson"].is_null() {
+            "waiting"
+        } else if num("lastActivityAt") - num("lastTurnEdgeAt") > 2000.0 && now - num("lastActivityAt") < 120_000.0 {
+            "working"
+        } else {
+            "idle"
+        };
+        return Ok(json!({ "id": s["sessionId"], "title": s["title"].as_str().unwrap_or(""), "state": state }));
     }
     Ok(Value::Null)
 }
+/// Where each polled session's record was found last time.
+static SESSION_FILES: std::sync::Mutex<Vec<(String, std::path::PathBuf)>> = std::sync::Mutex::new(Vec::new());
 
 /// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md, built in by build.rs),
 /// installed for the user in ~/.claude/skills; as the server's claudeSkill().

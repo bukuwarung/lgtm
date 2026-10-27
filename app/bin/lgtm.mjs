@@ -340,9 +340,16 @@ async function leaveForClaude({ id, text }) {
 
 // A session's title and what it's doing, from its record in the Claude app: waiting for the user (a question or a
 // permission), working (activity past its last turn edge, recently), or idle. A CLI-only session has no record.
+const sessionFiles = new Map(); // session id → the record it was found in last time (it's polled every few seconds)
 async function claudeSession(id) {
   if (!SESSION_ID.test(id ?? '')) throw new Error('Bad session id');
+  const matches = (s) => s && (s.sessionId === id || s.cliSessionId === id || s.priorCliSessionIds?.includes(id));
   let found = null;
+  if (sessionFiles.has(id)) {
+    const s = await readFile(sessionFiles.get(id), 'utf8').then(JSON.parse).catch(() => null);
+    if (matches(s)) found = s;
+    else sessionFiles.delete(id);
+  }
   const walk = async (dir, depth) => {
     for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
       if (found) return;
@@ -351,11 +358,11 @@ async function claudeSession(id) {
       else if (e.isFile() && /^local_[\w-]+\.json$/.test(e.name)) {
         if (id.startsWith('local_') && e.name !== `${id}.json`) continue;
         const s = await readFile(p, 'utf8').then(JSON.parse).catch(() => null);
-        if (s && (s.sessionId === id || s.cliSessionId === id || s.priorCliSessionIds?.includes(id))) found = s;
+        if (matches(s)) (found = s), sessionFiles.set(id, p);
       }
     }
   };
-  await walk(CLAUDE_SESSIONS, 0);
+  if (!found) await walk(CLAUDE_SESSIONS, 0);
   if (!found || found.isArchived) return null;
   const last = Number(found.lastActivityAt) || 0;
   const edge = Number(found.lastTurnEdgeAt) || 0;

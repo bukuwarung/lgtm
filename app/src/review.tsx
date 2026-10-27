@@ -53,7 +53,7 @@ type Ctx = {
 type SinceComment = { kind: 'same' | 'gone' | 'unknown' } | { kind: 'changed'; lines: Line[] };
 type Saved = { sha: string; drafts: Draft[] };
 // My last visit to a PR: each file's blob then, and where I was reading (file + how far into it).
-type Visit = { files: Record<string, string>; at: { path: string; y: number } | null };
+type Visit = { files: Record<string, string>; at: { path: string; y: number } | null; seenAt?: number };
 
 
 function slackText(pr: PR, ref: string, event: ReviewEvent, body: string, comments: number) {
@@ -81,6 +81,21 @@ const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
 type Notice = { text: string; ok: boolean };
 // onReviewed: the review is in and the user chose to move on (with the Slack result, if any, to show next).
+// What you'd seen of each PR you opened (for "changed since your last visit") piles up in localStorage, one record
+// a PR, some of them large; keep the 100 most recent.
+function pruneVisits() {
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith('visit:'));
+  if (keys.length <= 100) return;
+  const when = (k: string) => {
+    try {
+      return Number(JSON.parse(localStorage.getItem(k) ?? '{}').seenAt) || 0;
+    } catch {
+      return 0;
+    }
+  };
+  for (const [k] of keys.map((k) => [k, when(k)] as const).sort((a, b) => a[1] - b[1]).slice(0, keys.length - 100)) localStorage.removeItem(k);
+}
+
 export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: string; n: number; onSubmitted: () => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
@@ -282,7 +297,10 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     };
     let at = where();
     const onScroll = () => (at = where());
-    const save = () => void storage.set(visitKey, { files: Object.fromEntries(data.files.map((f) => [f.filename, f.sha])), at } satisfies Visit);
+    const save = () => {
+      void storage.set(visitKey, { files: Object.fromEntries(data.files.map((f) => [f.filename, f.sha])), at, seenAt: Date.now() } satisfies Visit);
+      pruneVisits();
+    };
     addEventListener('scroll', onScroll, { passive: true });
     addEventListener('pagehide', save);
     // Pick up where I left off. Files above render lazily and shift things, so settle once more.
@@ -1410,10 +1428,17 @@ const MARKS: [string, string, string][] = [
   ['.draft', 'm-draft', 'Your draft'],
 ];
 const LINE_PX = 20; // a diff line, roughly, to weigh files against what's above them
+// A file's share of the strip, worked out once (it's asked for on every scroll frame).
+const stripWeights = new WeakMap<File, number>();
+const stripWeight = (f: File) => {
+  let w = stripWeights.get(f);
+  if (w == null) stripWeights.set(f, (w = 44 + LINE_PX * Math.max(3, (f.patch ?? '').split('\n').length)));
+  return w;
+};
 // The strip's layout now: a page position (document y) to a place on it (0–1), and back.
 function stripLayout(files: File[]) {
   const shown = files.map((f) => [f, document.getElementById('f-' + f.filename)] as const).filter((x): x is [File, HTMLElement] => !!x[1]);
-  const weights = shown.map(([f]) => 44 + LINE_PX * Math.max(3, (f.patch ?? '').split('\n').length));
+  const weights = shown.map(([f]) => stripWeight(f));
   const rects = shown.map(([, e]) => {
     const r = e.getBoundingClientRect();
     return [r.top + scrollY, r.bottom + scrollY];
