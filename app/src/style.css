@@ -342,8 +342,6 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .bar h1 .pr-num { color: var(--muted); font-weight: 400; }
 .pr-status { margin-bottom: 10px; }
 .stack-nav select { max-width: 7.5em; padding: 0 2px; font-size: 12px; background: none; color: inherit; border: 1px solid var(--border); border-radius: 4px; }
-.ix-foot { display: flex; align-items: center; gap: 8px; margin: 12px 8px 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
-.ix-foot button { margin-left: auto; font-size: 12px; }
 .done { display: grid; justify-items: center; align-content: start; gap: 4px; padding-top: 15vh; text-align: center; }
 .done h2 { margin: 12px 0 0; }
 .done p { color: var(--muted); }

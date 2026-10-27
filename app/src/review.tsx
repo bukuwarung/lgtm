@@ -547,12 +547,6 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               me={me}
               counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length}
             />
-            <div class="ix-foot">
-              <label title={`Hide whitespace-only changes${hint(bindings.whitespace)}`}>
-                <input type="checkbox" checked={ignoreWs} onChange={toggleWs} /> Ignore whitespace
-              </label>
-              <button onClick={() => setHelp(!help)} title={`Keyboard shortcuts${hint(bindings.help)}`}>Shortcuts</button>
-            </div>
           </div>
           <Resizer name="index" label="PR index" />
         </aside>
