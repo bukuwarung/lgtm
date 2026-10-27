@@ -528,3 +528,14 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .pill.p-claude-wait { color: light-dark(#9a6700, #cc7832); border-color: currentColor; font-weight: 600; }
 .setup-fix { margin-top: 4px; }
 .setup-fix pre { margin: 0; padding: 4px 8px; background: var(--soft); border-radius: 4px; font-size: 12px; white-space: pre-wrap; }
+/* Pills, legible: neutral ones in near-text colour on a soft fill; coloured ones in brighter shades than the diff's
+   (the dark theme's green and red are dimmed for code) with a light tint of their own colour. */
+:root { --pill-ok: light-dark(#1a7f37, #7fc27a); --pill-bad: light-dark(#cf222e, #f08a84); --pill-warn: light-dark(#9a6700, #e8a95c); --pill-info: light-dark(#0969da, #79b4ff); }
+.pill { color: color-mix(in srgb, var(--fg) 88%, var(--bg)); background: var(--soft); border-color: var(--border); }
+.pill.p-ok, .pill.p-claude { color: var(--pill-ok); }
+.pill.p-bad { color: var(--pill-bad); }
+.pill.p-warn, .pill.p-claude-wait { color: var(--pill-warn); }
+.pill.p-reply { color: var(--pill-info); }
+.pill:is(.p-ok, .p-bad, .p-warn, .p-reply, .p-claude, .p-claude-wait) { border-color: color-mix(in srgb, currentColor 55%, transparent); background: color-mix(in srgb, currentColor 13%, transparent); font-weight: 500; }
+.pill.p-size { background: none; }
+.pill.p-size .a { color: var(--pill-ok); } .pill.p-size .d { color: var(--pill-bad); }
