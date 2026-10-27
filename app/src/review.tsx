@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, requestReview, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, markBots, renderGfm, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -18,7 +18,7 @@ import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
-import { own, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { own, useStoredValue, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -81,6 +81,69 @@ const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
 type Notice = { text: string; ok: boolean };
 // onReviewed: the review is in and the user chose to move on (with the Slack result, if any, to show next).
+// Has a person been asked to review (or reviewed) yet: requested by name or as a team, or a review from someone
+// other than the author.
+const reviewerAsked = (pr: PR, conversation: ConversationItem[], bots: Set<string>) =>
+  (pr.requested_reviewers ?? []).some((u) => u.type !== 'Bot' && !bots.has(u.login)) ||
+  (pr.requested_teams ?? []).length > 0 ||
+  conversation.some((c) => c.state && !c.bot && !bots.has(c.author) && c.author !== pr.user.login);
+
+// On my own PR with nobody asked to review it yet: who to ask (this repo's recent reviewers, else the PR list's team),
+// least busy first. A click asks them on GitHub and, unless unticked, on Slack too.
+function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void }) {
+  const [team] = useStoredValue('team', '');
+  const [picks, setPicks] = useState<ReviewerPick[] | null>(null);
+  const [err, setErr] = useState('');
+  const [slack, setSlack] = useState(true);
+  const [text, setText] = useState('Hi! Could you review my PR when you have a moment? Thank you 🙏');
+  const [busy, setBusy] = useState('');
+  useEffect(() => void suggestReviewers(repo, skip, team).then(setPicks, (e) => setErr(e.message)), [team]);
+  const ask = async (login: string) => {
+    setBusy(login);
+    setErr('');
+    try {
+      await requestReview(repo, n, login);
+    } catch (e: any) {
+      setBusy('');
+      return setErr(`Couldn't ask @${login} on GitHub: ${e.message}`);
+    }
+    if (!(slack && slackOk)) return onAsked(`Asked @${login} for a review.`, true);
+    try {
+      const emails = await getEmails(repo.split('/')[0], [login]);
+      const link = `<${pr.html_url}|${slackEscape(`${repo}#${n} ${pr.title}`)}>`;
+      const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], `${text.trim()}\n${link}`, `${repo}#${n}`);
+      onAsked(r?.ok ? `Asked @${login} for a review, on GitHub and Slack.` : `Asked @${login} on GitHub; Slack didn't reach them (${r?.error ?? 'no reply'}).`, !!r?.ok);
+    } catch (e: any) {
+      onAsked(`Asked @${login} on GitHub; Slack failed (${e.message}).`, false);
+    }
+  };
+  return (
+    <section class="ask-reviewer">
+      <b>Nobody's reviewing this yet.</b> Ask someone, least busy first:
+      {err && <p class="warn">{err}</p>}
+      <div class="ask-picks">
+        {picks == null && !err && <span class="note">Finding who's free…</span>}
+        {picks?.length === 0 && <span class="note">No one to suggest: nobody has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</span>}
+        {picks?.slice(0, 5).map((p) => (
+          <button disabled={!!busy} title={`${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review`} onClick={() => ask(p.login)}>
+            <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />
+            <span>@{p.login}</span>
+            <small>{busy === p.login ? 'asking…' : p.load ? `${p.load} waiting` : 'free'}</small>
+          </button>
+        ))}
+      </div>
+      {slackOk ? (
+        <label class="ask-slack">
+          <input type="checkbox" checked={slack} onChange={(e) => setSlack(e.currentTarget.checked)} /> Also message them on Slack:
+          {slack && <input type="text" value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label="Slack message" />}
+        </label>
+      ) : (
+        <small class="note">Slack isn't set up, so this only asks on GitHub.</small>
+      )}
+    </section>
+  );
+}
+
 // What you'd seen of each PR you opened (for "changed since your last visit") piles up in localStorage, one record
 // a PR, some of them large; keep the 100 most recent.
 function pruneVisits() {
@@ -637,6 +700,16 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
             )}
           </div>
           {notice && <p class={notice.ok ? 'notice' : 'warn'}>{notice.text}</p>}
+          {!!me && pr.user.login === me && !pr.draft && !reviewerAsked(pr, conversation, bots) && (
+            <AskReviewer
+              pr={pr}
+              repo={repo}
+              n={n}
+              skip={new Set([me, ...bots])}
+              slackOk={slackPeople !== null}
+              onAsked={(text, ok) => (setNotice({ ok, text }), dispatchEvent(new Event('lgtm:refresh')))}
+            />
+          )}
           {lastReviewed && (
             <div class={since ? 'since on' : 'since'}>
               <SinceSummary

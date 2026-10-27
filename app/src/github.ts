@@ -11,7 +11,8 @@ export type PR = {
   node_id: string;
   user: { login: string; type: string };
   assignees: { login: string; type: string }[];
-  requested_reviewers?: { login: string }[];
+  requested_reviewers?: { login: string; type?: string }[];
+  requested_teams?: { slug: string }[];
   head: { sha: string; ref: string; repo: { full_name: string; owner: { login: string } } | null };
   base: { ref: string; sha: string };
   draft?: boolean;
@@ -267,6 +268,32 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
       .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot' })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 }
+
+// People to ask for a review of my PR, least busy first: whoever reviewed this repo's recent PRs (they know the code),
+// else the PR list's team. Busy: open PRs in the org that already ask them, by name, for a review.
+export type ReviewerPick = { login: string; load: number; why: string };
+export async function suggestReviewers(repo: string, skip: Set<string>, team: string): Promise<ReviewerPick[]> {
+  const [owner, name] = repo.split('/');
+  const d = await graphql(
+    `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(last:40,states:[OPEN,MERGED]){nodes{reviews(first:30){nodes{author{__typename login}}}}}}}`,
+    { owner, name },
+  );
+  const count = new Map<string, number>();
+  for (const p of d.repository.pullRequests.nodes)
+    for (const login of new Set<string>(p.reviews.nodes.filter((r: any) => r.author?.__typename === 'User').map((r: any) => r.author.login)))
+      count.set(login, (count.get(login) ?? 0) + 1);
+  const fit = (p: { login: string }) => !skip.has(p.login) && !p.login.endsWith('[bot]');
+  let people = [...count].sort((a, b) => b[1] - a[1]).map(([login, k]) => ({ login, why: `reviewed ${k} of the last 40 PRs here` })).filter(fit);
+  if (!people.length && team) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${team.split('/')[1]}` })).filter(fit);
+  people = people.slice(0, 30);
+  if (!people.length) return [];
+  const vars = Object.fromEntries(people.map((p, k) => [`r${k}`, `is:open is:pr archived:false org:${owner} user-review-requested:${p.login}`]));
+  const l = await graphql(`query(${people.map((_, k) => `$r${k}:String!`).join(',')}){${people.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}`, vars);
+  return people.map((p, k) => ({ ...p, load: l[`r${k}`].issueCount as number })).sort((a, b) => a.load - b.load || a.login.localeCompare(b.login));
+}
+
+export const requestReview = (repo: string, n: number, login: string) =>
+  json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'POST', body: JSON.stringify({ reviewers: [login] }) });
 
 let viewer: Promise<string> | undefined;
 export const getViewer = () => (viewer ??= json('/user').then((u) => u.login as string));
