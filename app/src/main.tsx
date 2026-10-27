@@ -25,6 +25,9 @@ function App() {
   const [queueVersion, setQueueVersion] = useState(0);
   const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
   useCodeLook(); // code colours and font from Settings
+  // Glass (Settings → Appearance), unless macOS asks for less transparency.
+  const [glass] = useStoredFlag('glass', true);
+  useEffect(() => void document.documentElement.classList.toggle('glass', glass && !matchMedia('(prefers-reduced-transparency: reduce)').matches), [glass]);
   useEffect(() => void initDesktop((r) => (location.hash = r)), []); // the app: links to the browser, lgtm:// links
   // The PR list's latest items (to pick the next PR to review), and a message to show on the page we move to.
   const queue = useRef<QueueItem[]>([]);

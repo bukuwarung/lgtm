@@ -197,6 +197,7 @@ export function Settings() {
 
       <section>
         <h3>Appearance</h3>
+        <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency." />
         <div class="set-row">
           <span>Theme</span>
           <span class="set-seg" role="radiogroup" aria-label="Theme">

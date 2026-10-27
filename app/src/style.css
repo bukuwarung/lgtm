@@ -539,3 +539,26 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .pill:is(.p-ok, .p-bad, .p-warn, .p-reply, .p-claude, .p-claude-wait) { border-color: color-mix(in srgb, currentColor 55%, transparent); background: color-mix(in srgb, currentColor 13%, transparent); font-weight: 500; }
 .pill.p-size { background: none; }
 .pill.p-size .a { color: var(--pill-ok); } .pill.p-size .d { color: var(--pill-bad); }
+/* Glass (Settings → Appearance), in the spirit of macOS's Liquid Glass: bars the page scrolls under and floating
+   surfaces are translucent and blurred, with a light top edge; buttons in the bars are capsules. Off with the
+   switch, and with "Reduce transparency" (main.tsx doesn't set .glass then). */
+:root {
+  --glass-bg: light-dark(rgb(255 255 255 / .62), rgb(43 43 43 / .6));
+  --glass-solid: light-dark(rgb(255 255 255 / .84), rgb(43 43 43 / .84));
+  --glass-edge: light-dark(rgb(255 255 255 / .85), rgb(255 255 255 / .1));
+  --glass-line: light-dark(rgb(0 0 0 / .09), rgb(255 255 255 / .09));
+  --glass-blur: blur(22px) saturate(180%);
+}
+.glass :is(.top, .bar) { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border-bottom-color: var(--glass-line); }
+.glass .file-h { background: var(--glass-solid); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.glass :is(.find-bar, .toast, .cmd-list, .panel, .claude-note, .ask-panel, .whats-new, .help, .blame-pop) {
+  background: var(--glass-solid); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line); border-radius: 14px; box-shadow: inset 0 1px 0 var(--glass-edge), 0 14px 44px var(--shadow);
+}
+.glass .whats-new-back { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary) { border-radius: 999px; background: color-mix(in srgb, var(--bg) 45%, transparent); border-color: var(--glass-line); box-shadow: inset 0 1px 0 var(--glass-edge); }
+.glass :is(.top, .bar) button.primary { border-radius: 999px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25); }
+.glass .top .cmd input { border-radius: 999px; background: color-mix(in srgb, var(--bg) 55%, transparent); border-color: var(--glass-line); box-shadow: inset 0 1px 0 var(--glass-edge); }
+.glass .nav-dev { border-radius: 999px; }
+/* Inside a bar, a pop-up can only blur the bar itself, so the page would read through it: nearly opaque there. */
+.glass :is(.top, .bar) :is(.cmd-list, .panel, .claude-note) { background: color-mix(in srgb, var(--bg) 95%, transparent); }
