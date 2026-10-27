@@ -420,6 +420,33 @@
 .rich.mdt-linen h2 { font-size: 1.35em; }
 .rich.mdt-linen blockquote { background: var(--doc-code-bg); border-radius: var(--doc-radius); }
 
+/* Linen Night: lgtm's dark companion to Linen (not from markdown.style). Warm charcoal, not black; the same sage. */
+.rich.mdt-linen-night {
+  --doc-font-body: 'Karla Variable', 'Segoe UI', Arial, sans-serif;
+  --doc-size: 17px;
+  --doc-leading: 1.7;
+  --doc-heading-weight: 600;
+  --doc-bg: #23211e;
+  --doc-fg: #d8d2c8;
+  --doc-muted: #9a9389;
+  --doc-heading: #eee9e0;
+  --doc-link: #a9bca4;
+  --doc-accent: #7d8e79;
+  --doc-border: #3a3632;
+  --doc-code-bg: #2d2a26;
+  --doc-code-fg: #e4ddd2;
+  --doc-th-bg: #2f2c28;
+  --doc-radius: 8px;
+  --doc-tok-keyword: #d3a8c6;
+  --doc-tok-string: #a8c49a;
+  --doc-tok-comment: #8a8378;
+  --doc-tok-number: #dfb37f;
+  --doc-tok-title: #a3bcd8;
+}
+.rich.mdt-linen-night h1 { font-size: 2em; letter-spacing: -0.01em; }
+.rich.mdt-linen-night h2 { font-size: 1.35em; }
+.rich.mdt-linen-night blockquote { background: var(--doc-code-bg); border-radius: var(--doc-radius); }
+
 /* Minimal */
 .rich.mdt-minimal {
   --doc-font-body: 'Inter Variable', system-ui, sans-serif;

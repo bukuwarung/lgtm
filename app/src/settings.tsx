@@ -385,7 +385,7 @@ function MarkdownStyle() {
             <button onClick={() => save({ theme: s.theme })}>Reset to the theme</button>
           </p>
           <p class="note">
-            Themes other than lgtm are from <a href="https://markdown.style/themes" target="_blank" rel="noopener">markdown.style</a> (Apache 2.0), with their fonts bundled.
+            Themes other than lgtm and Linen Night (a dark Linen) are from <a href="https://markdown.style/themes" target="_blank" rel="noopener">markdown.style</a> (Apache 2.0), with their fonts bundled.
           </p>
         </div>
         <div class={`md-preview rich ${look.class}`} style={look.style} ref={preview}>

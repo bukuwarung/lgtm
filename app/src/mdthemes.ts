@@ -19,6 +19,7 @@ export const MD_THEMES: MdTheme[] = [
   { id: 'paper', name: 'Paper', group: 'Papers and books', dark: false, fonts: ["Lora", "Source Serif 4"] },
   { id: 'scholar', name: 'Scholar', group: 'Papers and books', dark: false, fonts: ["EB Garamond"] },
   { id: 'linen', name: 'Linen', group: 'Quiet', dark: false, fonts: ["Karla"] },
+  { id: 'linen-night', name: 'Linen Night', group: 'Quiet', dark: true, fonts: ["Karla"] },
   { id: 'minimal', name: 'Minimal', group: 'Quiet', dark: false, fonts: ["Inter"] },
   { id: 'slate', name: 'Slate', group: 'Quiet', dark: false, fonts: ["Inter"] },
   { id: 'editorial', name: 'Editorial', group: 'Bold', dark: false, fonts: ["Playfair Display", "Source Sans 3"] },
