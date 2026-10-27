@@ -96,17 +96,20 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
   const [err, setErr] = useState('');
   const [slack, setSlack] = useState(true);
   const [text, setText] = useState('Hi! Could you review my PR when you have a moment? Thank you 🙏');
-  const [busy, setBusy] = useState('');
+  // Each person on their own: asking one doesn't hold up the others, and ones asked stay marked.
+  const [state, setState] = useState<Record<string, 'asking' | 'asked'>>({});
+  const mark = (login: string, s?: 'asking' | 'asked') => setState((m) => ({ ...m, [login]: s! }));
   useEffect(() => void suggestReviewers(repo, skip, team).then(setPicks, (e) => setErr(e.message)), [team]);
   const ask = async (login: string) => {
-    setBusy(login);
+    mark(login, 'asking');
     setErr('');
     try {
       await requestReview(repo, n, login);
     } catch (e: any) {
-      setBusy('');
+      mark(login);
       return setErr(`Couldn't ask @${login} on GitHub: ${e.message}`);
     }
+    mark(login, 'asked');
     if (!(slack && slackOk)) return onAsked(`Asked @${login} for a review.`, true);
     try {
       const emails = await getEmails(repo.split('/')[0], [login]);
@@ -117,18 +120,27 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
       onAsked(`Asked @${login} on GitHub; Slack failed (${e.message}).`, false);
     }
   };
+  const asked = Object.keys(state).filter((l) => state[l] === 'asked');
   return (
     <section class="ask-reviewer">
-      <b>Nobody's reviewing this yet.</b> Ask someone, least busy first:
+      {asked.length ? (
+        <>
+          <b>Asked {asked.map((l) => '@' + l).join(', ')}.</b> Anyone else?
+        </>
+      ) : (
+        <>
+          <b>Nobody's reviewing this yet.</b> Ask someone, least busy first:
+        </>
+      )}
       {err && <p class="warn">{err}</p>}
       <div class="ask-picks">
         {picks == null && !err && <span class="note">Finding who's free…</span>}
         {picks?.length === 0 && <span class="note">No one to suggest: nobody has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</span>}
         {picks?.slice(0, 5).map((p) => (
-          <button disabled={!!busy} title={`${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review`} onClick={() => ask(p.login)}>
+          <button disabled={!!state[p.login]} class={state[p.login] ?? ''} title={`${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review`} onClick={() => ask(p.login)}>
             <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />
             <span>@{p.login}</span>
-            <small>{busy === p.login ? 'asking…' : p.load ? `${p.load} waiting` : 'free'}</small>
+            <small>{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? '✓ asked' : p.load ? `${p.load} waiting` : 'free'}</small>
           </button>
         ))}
       </div>
@@ -707,7 +719,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               n={n}
               skip={new Set([me, ...bots])}
               slackOk={slackPeople !== null}
-              onAsked={(text, ok) => (setNotice({ ok, text }), dispatchEvent(new Event('lgtm:refresh')))}
+              onAsked={(text, ok) => setNotice({ ok, text })}
             />
           )}
           {lastReviewed && (

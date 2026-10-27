@@ -94,6 +94,9 @@ export async function loadToken() {
 
 async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') {
   const res = await fetch(path.startsWith('https://') ? path : `https://api.github.com${path}`, {
+    // GitHub lets the browser keep a response for 60 seconds: always check it's current (an unchanged one is a cheap
+    // 304), or a refresh, or the page after asking a reviewer, shows the copy from before.
+    cache: 'no-cache',
     ...init,
     headers: {
       Accept: accept,

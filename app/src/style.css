@@ -640,3 +640,4 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .ask-picks small { color: var(--muted); }
 .ask-slack { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: calc(13px * var(--ts)); }
 .ask-slack input[type=text] { flex: 1; min-width: 260px; }
+.ask-picks button.asked small { color: var(--pill-ok); }
