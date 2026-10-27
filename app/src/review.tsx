@@ -1623,14 +1623,6 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
       </button>
       {open && (
         <span class="claude-pop" role="menu">
-          {label && (
-            <button role="menuitem" title="Claude reads the diff and summarizes it above the files" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:walkthrough')))}>
-              Walkthrough of this PR, here
-            </button>
-          )}
-          <button role="menuitem" onClick={() => (setOpen(false), void openClaude(claudeNewLink(prompt, claudeFolder(repo))))}>
-            New Claude Code session
-          </button>
           {from && (
             <button
               role="menuitem"
@@ -1640,6 +1632,14 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
               Back to the session that sent this{fromSession ? ` · “${fromSession.title || 'Untitled'}”` : ''}
             </button>
           )}
+          {label && (
+            <button role="menuitem" title="Claude reads the diff and summarizes it above the files" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:walkthrough')))}>
+              Walkthrough of this PR, here
+            </button>
+          )}
+          <button role="menuitem" onClick={() => (setOpen(false), void openClaude(claudeNewLink(prompt, claudeFolder(repo))))}>
+            New Claude Code session
+          </button>
           {[...sessions.map((s) => ({ key: s.id, link: claudeContinueLink(s.id), text: `Continue “${s.title || 'Untitled'}” · ${ago(s.lastActivityAt)}` })), { key: 'last', link: CLAUDE_CONTINUE, text: 'Continue last session' }].map((o) => (
             <button
               key={o.key}
