@@ -568,26 +568,16 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .glass .nav-dev { border-radius: 999px; }
 /* Inside a bar, a pop-up can only blur the bar itself, so the page would read through it: nearly opaque there. */
 .glass :is(.top, .bar) :is(.cmd-list, .panel, .claude-note) { background: color-mix(in srgb, var(--bg) 95%, transparent); }
-/* Reading layout for rendered markdown files (Settings → Diff → "Show markdown files rendered" → Reading layout):
-   book-like measure and rhythm. Comments keep the compact style. */
-.md-read .rich .chunk { font-size: 15px; line-height: 1.65; }
-.md-read .rich .chunk :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6) { max-width: 72ch; }
-.md-read .rich .chunk p { margin: 0 0 .9em; }
-.md-read .rich .chunk :is(h1, h2, h3, h4, h5, h6) { margin: 1.7em 0 .6em; line-height: 1.25; letter-spacing: -.01em; }
-.md-read .rich .chunk > :first-child { margin-top: .2em; }
-.md-read .rich .chunk h1 { font-size: 1.75em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
-.md-read .rich .chunk h2 { font-size: 1.35em; padding-bottom: .25em; border-bottom: 1px solid var(--border); }
-.md-read .rich .chunk h3 { font-size: 1.12em; }
-.md-read .rich .chunk :is(h4, h5, h6) { font-size: 1em; color: color-mix(in srgb, var(--fg) 80%, var(--bg)); }
-.md-read .rich .chunk :is(ul, ol) { margin: 0 0 .9em; padding-left: 1.5em; }
-.md-read .rich .chunk li { margin: .3em 0; }
-.md-read .rich .chunk li > p { margin: .3em 0; }
-.md-read .rich .chunk table { display: block; max-width: 100%; overflow-x: auto; margin: 0 0 1em; font-size: 13.5px; line-height: 1.45; }
-.md-read .rich .chunk :is(th, td) { padding: 6px 12px; vertical-align: top; }
-.md-read .rich .chunk th { background: var(--soft); text-align: left; font-weight: 600; }
-.md-read .rich .chunk tbody tr:nth-child(even) > td { background: color-mix(in srgb, var(--soft) 55%, transparent); }
-.md-read .rich .chunk blockquote { margin: 0 0 .9em; padding: .4em 1em; color: color-mix(in srgb, var(--fg) 80%, var(--bg)); border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 6px 6px 0; }
-.md-read .rich .chunk blockquote > :last-child { margin-bottom: 0; }
-.md-read .rich .chunk pre { margin: 0 0 1em; font-size: 13px; line-height: 1.55; }
-.md-read .rich .chunk a { text-underline-offset: 2px; }
-.md-read .rich .chunk hr { margin: 2em 0; border: 0; border-top: 1px solid var(--border); }
+/* Settings → Markdown files */
+.md-style { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.md-ctls { display: grid; gap: 8px; }
+.md-ctl { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) auto auto; align-items: center; gap: 8px; font-size: 13px; }
+.md-ctl select { min-width: 0; }
+.md-val { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.md-check { grid-template-columns: 9.5em 1fr; }
+.md-colors { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 4px; }
+.md-color { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.md-color input[type=color] { width: 28px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; }
+.md-reset { padding: 0 6px; font-size: 12px; line-height: 18px; }
+.md-preview { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+@media (max-width: 1100px) { .md-style { grid-template-columns: 1fr; } }

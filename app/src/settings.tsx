@@ -6,6 +6,8 @@ import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_THEMES, useCodeLook } from './look.ts';
+import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, mdStyleProps, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
+import { md } from './markdown.ts';
 
 // Shows every token the themes colour: keywords, annotations, types, strings, numbers, properties, named arguments,
 // `it`, constants, comments, and ligatures (->, !=, ===).
@@ -184,9 +186,7 @@ export function Settings() {
           <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source." />
           <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines read as prose. Commented-out code stays source." />
         </Flag>
-        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Source is a click away per file." demo>
-          <Flag k="mdReading" initial={true} label="Reading layout" hint="Larger text and line spacing, lines of about 72 characters, clearer headings, striped tables." />
-        </Flag>
+        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Source is a click away per file. Their look: Markdown files, below." demo />
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
         <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo>
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
@@ -228,6 +228,8 @@ export function Settings() {
         <pre class="code-sample" dangerouslySetInnerHTML={{ __html: highlightCode(SAMPLE, 'kotlin') }} />
       </section>
 
+      <MarkdownStyle />
+
       <ClaudeFolders />
 
       <BackupSection />
@@ -237,6 +239,140 @@ export function Settings() {
       <SavedReplies />
       <About />
     </div>
+  );
+}
+
+// Markdown files' look: a theme (lgtm's own, or one of markdown.style's), and any of its values yours instead; each
+// override has a ↺ back to the theme's. The preview is the real styling.
+const MD_SAMPLE = [
+  '# Rollout plan',
+  'Ship the new checkout behind the `orders_v2` flag, then remove the old screen once [the dashboard](#) stays green for a week.',
+  '## What changes',
+  '- Payments retry on network errors, never on a declined card',
+  '- The cart keeps its promo code after login',
+  '> Ask what they were trying to do before you ask what is broken.',
+  '| Step | Owner | When |\n|---|---|---|\n| Flag on for staff | Rina | Week 1 |\n| 10% of users | Budi | Week 2 |',
+  '```kotlin\nsuspend fun charge(order: Order) = retry(times = 3) { api.charge(order.id) }\n```',
+].join('\n\n');
+const hex = (rgb: string) => {
+  const m = rgb.match(/\d+(\.\d+)?/g)?.map(Number);
+  if (!m || (m.length > 3 && m[3] === 0)) return '';
+  return '#' + m.slice(0, 3).map((x) => Math.round(x).toString(16).padStart(2, '0')).join('');
+};
+function MarkdownStyle() {
+  const [s, save] = useMdStyle();
+  const look = mdStyleProps(s);
+  const preview = useRef<HTMLDivElement>(null);
+  const [theme, setTheme] = useState<Record<string, string>>({}); // the values in effect, for the controls' labels
+  useLayoutEffect(() => {
+    const el = preview.current;
+    if (!el) return;
+    const cs = getComputedStyle(el);
+    const v: Record<string, string> = {};
+    for (const k of ['--doc-size', '--doc-leading', '--doc-measure', '--doc-space', '--doc-radius']) v[k] = cs.getPropertyValue(k).trim();
+    // Colours: through a probe, so light-dark() and var() come out as plain colours.
+    const probe = document.createElement('span');
+    el.append(probe);
+    for (const [k, , css] of MD_COLORS) {
+      probe.style.background = `var(${css})`;
+      v[k] = hex(getComputedStyle(probe).backgroundColor) || hex(getComputedStyle(document.body).backgroundColor);
+    }
+    probe.remove();
+    setTheme(v);
+  }, [JSON.stringify(s)]);
+  const set = (patch: Partial<MdStyle>) => save({ ...s, ...patch });
+  const unset = (k: keyof MdStyle) => {
+    const n = { ...s };
+    delete n[k];
+    save(n);
+  };
+  const setColor = (k: MdColor, v: string | null) => {
+    const colors = { ...(s.colors ?? {}) };
+    if (v) colors[k] = v;
+    else delete colors[k];
+    save({ ...s, colors });
+  };
+  const reset = (k: keyof MdStyle) => s[k] != null && <button class="md-reset" title="Back to the theme's" onClick={() => unset(k)}>↺</button>;
+  const num = (k: keyof MdStyle, label: string, min: number, max: number, step: number, unit: string, css: string) => {
+    const cur = s[k] as number | undefined;
+    const shown = cur ?? parseFloat(theme[css]) ?? min;
+    return (
+      <label class="md-ctl">
+        <span>{label}</span>
+        <input type="range" min={min} max={max} step={step} value={Number.isFinite(shown) ? shown : min} onInput={(e) => set({ [k]: Number(e.currentTarget.value) })} />
+        <span class="md-val">{cur != null ? `${cur}${unit}` : `${theme[css] || '…'} (theme)`}</span>
+        {reset(k)}
+      </label>
+    );
+  };
+  const fontSelect = (k: 'body' | 'heading', label: string) => (
+    <label class="md-ctl">
+      <span>{label}</span>
+      <select value={s[k] ?? ''} onChange={(e) => (e.currentTarget.value ? set({ [k]: e.currentTarget.value }) : unset(k))}>
+        <option value="">The theme's</option>
+        <optgroup label="Your system">
+          <option value="sans">Sans (the app's)</option>
+          <option value="serif">Serif</option>
+          <option value="mono">Monospace (your code font)</option>
+        </optgroup>
+        <optgroup label="Bundled">
+          {Object.keys(MD_FONTS).map((f) => <option value={f}>{f}</option>)}
+        </optgroup>
+      </select>
+      {reset(k)}
+    </label>
+  );
+  const groups = [...new Set(MD_THEMES.map((t) => t.group))];
+  return (
+    <section>
+      <h3>Markdown files</h3>
+      <p class="note">How markdown files read when shown rendered: pick a theme, then change anything in it.</p>
+      <div class="md-style">
+        <div class="md-ctls">
+          <label class="md-ctl">
+            <span>Theme</span>
+            <select value={s.theme} onChange={(e) => set({ theme: e.currentTarget.value })}>
+              {groups.map((g) => (
+                <optgroup label={g}>
+                  {MD_THEMES.filter((t) => t.group === g).map((t) => <option value={t.id}>{t.name}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          {fontSelect('body', 'Text font')}
+          {fontSelect('heading', 'Heading font')}
+          {num('size', 'Text size', 12, 22, 0.5, 'px', '--doc-size')}
+          {num('leading', 'Line height', 1.2, 2.2, 0.05, '', '--doc-leading')}
+          {num('measure', 'Line width', 24, 80, 1, 'rem', '--doc-measure')}
+          <label class="md-ctl md-check">
+            <span />
+            <span>
+              <input type="checkbox" checked={s.measure === 0} onChange={(e) => (e.currentTarget.checked ? set({ measure: 0 }) : unset('measure'))} /> Full width
+            </span>
+          </label>
+          {num('space', 'Space between blocks', 0.4, 2.4, 0.05, 'rem', '--doc-space')}
+          {num('radius', 'Corners', 0, 14, 1, 'px', '--doc-radius')}
+          <div class="md-colors">
+            {MD_COLORS.map(([k, label]) => (
+              <label class="md-color">
+                <input type="color" value={s.colors?.[k] ?? theme[k] ?? '#000000'} onInput={(e) => setColor(k, e.currentTarget.value)} />
+                <span>{label}</span>
+                {s.colors?.[k] && <button class="md-reset" title="Back to the theme's" onClick={() => setColor(k, null)}>↺</button>}
+              </label>
+            ))}
+          </div>
+          <p>
+            <button onClick={() => save({ theme: s.theme })}>Reset to the theme</button>
+          </p>
+          <p class="note">
+            Themes other than lgtm are from <a href="https://markdown.style/themes" target="_blank" rel="noopener">markdown.style</a> (Apache 2.0), with their fonts bundled.
+          </p>
+        </div>
+        <div class={`md-preview rich ${look.class}`} style={look.style} ref={preview}>
+          <div class="md chunk" dangerouslySetInnerHTML={{ __html: md.render(MD_SAMPLE) }} />
+        </div>
+      </div>
+    </section>
   );
 }
 

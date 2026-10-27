@@ -137,7 +137,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 </picture>
 </details>
 
-<details open><summary><b>Rendered markdown</b>: markdown shows rendered, still commentable line by line.</summary>
+<details open><summary><b>Rendered markdown</b>: markdown shows rendered, still commentable line by line. Pick its look in ⚙ Settings → Markdown files: lgtm's own, or one of the 20 themes from <a href="https://markdown.style/themes">markdown.style</a> (fonts bundled), and change any of its fonts, sizes, spacing or colours.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/richMarkdown-dark.png">
@@ -225,4 +225,4 @@ It sets the version everywhere (Settings shows it), runs the tests, builds a uni
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The markdown themes in `app/src/mdthemes.css` are adapted from [markdown.style](https://markdown.style) (Apache 2.0).

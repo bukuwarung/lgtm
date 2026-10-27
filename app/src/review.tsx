@@ -15,6 +15,7 @@ import { MergeBox } from './merge.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
+import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
 import { ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
@@ -1209,6 +1210,8 @@ function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'j
 }
 
 function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
+  const [mdStyle] = useMdStyle();
+  const look = mdStyleProps(mdStyle); // Settings → Markdown files
   const path = file.filename;
   const [src, setSrc] = useState<string | null>();
   useEffect(() => {
@@ -1285,7 +1288,7 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   };
 
   return (
-    <div class="rich">
+    <div class={`rich ${look.class}`} style={look.style}>
       <Notes ctx={ctx} threads={orphanT} drafts={orphanD} form={t?.side === 'LEFT' && !removed.some((r) => inRun(r, t.line))} />
       {chunks.map((c, i) => {
         if (hidden(i)) {
