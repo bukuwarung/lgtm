@@ -315,12 +315,12 @@ export async function availableUpdate(): Promise<string | null> {
   }
   return newer(saved.latest, __APP_VERSION__) ? saved.latest.replace(/^v/, '') : null;
 }
-// A PR walkthrough from Claude Code (the claude CLI) for a prompt the page builds (claude.ts).
-export async function claudeWalkthrough(input: string): Promise<string> {
-  if (isDesktop) return command<string>('walkthrough', { input });
-  const res = await fetch('/walkthrough', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }) });
+// Claude Code's answer (the claude CLI) to a prompt the page builds (claude.ts: Ask Claude).
+export async function askClaudeCli(input: string): Promise<string> {
+  if (isDesktop) return command<string>('claude_text', { input });
+  const res = await fetch('/claude-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }) });
   const d = await res.json().catch(() => ({ error: res.statusText }));
-  if (!res.ok) throw new Error(d.error ?? 'Walkthrough failed');
+  if (!res.ok) throw new Error(d.error ?? 'Claude failed');
   return d.text;
 }
 

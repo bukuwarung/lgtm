@@ -431,12 +431,12 @@ pub async fn clipboard_pr() -> Option<String> {
     pr_link(&String::from_utf8_lossy(&out.stdout[..out.stdout.len().min(1 << 16)]))
 }
 
-/// The PR walkthrough: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
+/// Ask Claude: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
 /// claudeText()).
 #[tauri::command]
-pub async fn walkthrough(input: String) -> Result<String, String> {
+pub async fn claude_text(input: String) -> Result<String, String> {
     if input.is_empty() || input.len() > 800_000 {
-        return Err("Bad walkthrough request".into());
+        return Err("Bad request for Claude".into());
     }
     let args = ["-p", "--tools", "", "--no-session-persistence", "--output-format", "text"];
     let out = run("claude", &args, Some(&input), std::time::Duration::from_secs(300));

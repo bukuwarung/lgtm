@@ -219,10 +219,10 @@ function jobLog(repo, job) {
     });
 }
 
-// The PR walkthrough: the page's prompt (instructions and the diff) through Claude Code's CLI, signed in like the
+// Ask Claude: the page's prompt (instructions, the file and the question) through Claude Code's CLI, signed in like the
 // others. No tools and no saved session: Claude only reads what it's given and writes text back.
 function claudeText(input) {
-  if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad walkthrough request'));
+  if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
   return new Promise((resolve, reject) => {
     const child = execFile(
       'claude',
@@ -361,8 +361,8 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/walkthrough', '/claude-skill'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
-  if (path === '/walkthrough' && req.method === 'POST') {
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
       .then((text) => json(res, 200, { text }), (e) => json(res, 500, { error: e.message }));

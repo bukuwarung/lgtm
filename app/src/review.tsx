@@ -13,11 +13,11 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { claudeContinueLink, claudeNewLink, walkthroughPrompt, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
+import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
-import { ago, backToClaude, claudeWalkthrough, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { ago, askClaudeCli, backToClaude, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -638,7 +638,6 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
-          <Walkthrough pr={pr} repo={repo} files={data.files} />
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
           {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} />
@@ -1632,11 +1631,6 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
               Back to the session that sent this{fromSession ? ` · “${fromSession.title || 'Untitled'}”` : ''}
             </button>
           )}
-          {label && (
-            <button role="menuitem" title="Claude reads the diff and summarizes it above the files" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:walkthrough')))}>
-              Walkthrough of this PR, here
-            </button>
-          )}
           <button role="menuitem" onClick={() => (setOpen(false), void openClaude(claudeNewLink(prompt, claudeFolder(repo))))}>
             New Claude Code session
           </button>
@@ -1662,83 +1656,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
   );
 }
 
-// "✳ Claude → Walkthrough": Claude Code's summary of the PR, above the files. Kept per PR with the commit it read;
-// file paths in it jump to the file.
-type WalkthroughSaved = { sha: string; text: string; html: string };
-function Walkthrough({ pr, repo, files }: { pr: PR; repo: string; files: File[] }) {
-  const key = `walkthrough:${repo}#${pr.number}`;
-  const read = (): WalkthroughSaved | null => {
-    try {
-      return JSON.parse(localStorage.getItem(key) ?? 'null');
-    } catch {
-      return null;
-    }
-  };
-  const [saved, setSaved] = useState(read);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const run = async () => {
-    setBusy(true);
-    setErr('');
-    try {
-      const text = await claudeWalkthrough(walkthroughPrompt(pr, files));
-      const next = { sha: pr.head.sha, text, html: await renderGfm(text, repo) }; // GitHub sanitizes the HTML
-      try {
-        localStorage.setItem(key, JSON.stringify(next));
-      } catch {}
-      setSaved(next);
-    } catch (e: any) {
-      setErr(e.message);
-    }
-    setBusy(false);
-  };
-  useEffect(() => {
-    const go = () => void run();
-    addEventListener('lgtm:walkthrough', go);
-    return () => removeEventListener('lgtm:walkthrough', go);
-  }, [pr.head.sha, files]);
-  // A path in backticks that names a file in this PR (in full, or by an unambiguous end) jumps to it.
-  const fileFor = (t: string) => {
-    const exact = files.find((f) => f.filename === t);
-    const ends = files.filter((f) => f.filename.endsWith('/' + t));
-    return exact ?? (ends.length === 1 ? ends[0] : undefined);
-  };
-  const body = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    for (const c of body.current?.querySelectorAll('code') ?? []) if (fileFor(c.textContent ?? '')) c.classList.add('wt-file');
-  }, [saved, files]);
-  if (!saved && !busy && !err) return null;
-  return (
-    <details class="walkthrough" open>
-      <summary>
-        ✳ Walkthrough by Claude
-        {saved && saved.sha !== pr.head.sha && <span class="pill p-warn">written before the latest commits</span>}
-        <button disabled={busy} onClick={(e) => (e.preventDefault(), void run())}>{busy ? 'Claude is reading the diff…' : 'Write again'}</button>
-        <button title="Remove" onClick={(e) => (e.preventDefault(), localStorage.removeItem(key), setSaved(null), setErr(''))}>✕</button>
-      </summary>
-      {err && (
-        <p class="error">
-          Couldn't get a walkthrough: {err}
-          {/authenticat|oauth|log ?in/i.test(err) && <> Sign Claude Code in again: run <code>claude</code> in Terminal, then <code>/login</code>.</>}
-        </p>
-      )}
-      {saved && (
-        <div
-          ref={body}
-          class="md"
-          dangerouslySetInnerHTML={{ __html: saved.html }}
-          onClick={(e) => {
-            const f = (e.target as Element).closest('code.wt-file') && fileFor((e.target as Element).textContent ?? '');
-            if (f) document.getElementById('f-' + f.filename)?.scrollIntoView();
-          }}
-        />
-      )}
-    </details>
-  );
-}
-
-// Select code in a file, then "✳ Ask Claude": a question about it, answered by the claude CLI (as the walkthrough)
-// with the file, its diff in this PR and the selection.
+// Select code in a file, then "✳ Ask Claude": a question about it, answered by the claude CLI with the file, its diff in this PR and the selection.
 function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
   const [sel, setSel] = useState<{ path: string; text: string; x: number; y: number } | null>(null);
   const [panel, setPanel] = useState<{ path: string; text: string } | null>(null);
@@ -1770,7 +1688,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
     try {
       const f = files.find((f) => f.filename === panel.path);
       const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
-      const text = await claudeWalkthrough(askPrompt(pr, panel.path, f?.patch, source, panel.text, q.trim()));
+      const text = await askClaudeCli(askPrompt(pr, panel.path, f?.patch, source, panel.text, q.trim()));
       setAnswer({ html: await renderGfm(text, repo) }); // GitHub sanitizes the HTML
     } catch (e: any) {
       setAnswer({ error: e.message });

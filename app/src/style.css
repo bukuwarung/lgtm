@@ -476,14 +476,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .set-replies td { padding: 3px 4px; vertical-align: top; }
 .set-replies td:first-child { width: 120px; }
 .set-replies input, .set-replies textarea { width: 100%; box-sizing: border-box; font: inherit; }
-/* Claude's walkthrough, above the files */
-.walkthrough { margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; }
-.walkthrough > summary { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; cursor: pointer; }
-.walkthrough > summary button { font-weight: 400; font-size: 12px; }
-.walkthrough > summary button:first-of-type { margin-left: auto; }
-.walkthrough .md { font-size: 14px; }
-.walkthrough code.wt-file { cursor: pointer; color: var(--accent); }
-.walkthrough code.wt-file:hover { text-decoration: underline; }
 .g-note { margin-left: 6px; font-weight: 400; color: var(--muted); }
 /* The app: the top bar is the title bar, with room for the traffic lights on the left. */
 .desktop .top { padding-left: 84px; -webkit-user-select: none; user-select: none; }

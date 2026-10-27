@@ -21,7 +21,7 @@
     "allow-clipboard-pr",
     "allow-copy-text",
     "allow-self-update",
-    "allow-walkthrough",
+    "allow-claude-text",
     "allow-claude-skill",
     "core:window:allow-set-badge-count",
     "core:window:allow-start-dragging",

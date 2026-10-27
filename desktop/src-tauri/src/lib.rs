@@ -144,7 +144,7 @@ pub fn run() {
             commands::clipboard_pr,
             commands::copy_text,
             commands::self_update,
-            commands::walkthrough,
+            commands::claude_text,
             commands::claude_skill,
         ])
         .run(tauri::generate_context!())
