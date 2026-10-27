@@ -587,6 +587,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
+        <ScrollMarks />
         <main>
           <div class="pills pr-status">
             {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}>updating…</span>}
@@ -1399,6 +1400,55 @@ function ChunkView({ html, placed, onClick }: { html: string; placed: { line: nu
   );
 
   return <div ref={ref} class="md chunk" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+// Marks along the right edge for where things are on this long page: threads still open (the ones waiting on you
+// stronger), your drafts, and changed or removed parts of rendered docs (in a diff, everything is a change). A click
+// goes there. Kept in step with the page as files load, threads open and comments come in.
+const MARKS: [string, string, string][] = [
+  ['.rich [data-chg]:not(:has([data-chg])):not(.note-host *)', 'm-chg', 'Changed'],
+  ['.rich .removed', 'm-del', 'Removed'],
+  ['details.thread:not(.bot)[open]', 'm-thread', 'Open thread'],
+  ['details.thread.awaiting', 'm-await', 'Waiting on you'],
+  ['.draft', 'm-draft', 'Your draft'],
+];
+function ScrollMarks() {
+  const [marks, setMarks] = useState<{ top: number; cls: string; title: string; el: Element }[]>([]);
+  useEffect(() => {
+    let t = 0;
+    const measure = () => {
+      const h = document.documentElement.scrollHeight;
+      if (h <= innerHeight * 1.5) return setMarks([]);
+      // ponytail: geometry inside off-screen files (content-visibility) forces their layout; fine for the dozens of
+      // marks a PR has, measure per file instead if it ever gets slow.
+      const next = MARKS.flatMap(([sel, cls, title]) =>
+        [...document.querySelectorAll(`main ${sel}`)].map((el) => ({ top: (el.getBoundingClientRect().top + scrollY) / h, cls, title, el })),
+      );
+      setMarks(next);
+    };
+    const soon = () => {
+      clearTimeout(t);
+      t = window.setTimeout(measure, 300);
+    };
+    const ro = new ResizeObserver(soon);
+    ro.observe(document.body);
+    const mo = new MutationObserver(soon);
+    mo.observe(document.querySelector('main') ?? document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['open', 'class'] });
+    soon();
+    return () => {
+      clearTimeout(t);
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, []);
+  if (!marks.length) return null;
+  return (
+    <div class="scroll-marks" aria-hidden="true">
+      {marks.map((m) => (
+        <button class={m.cls} title={m.title} style={{ top: `${m.top * 100}%` }} tabIndex={-1} onClick={() => m.el.scrollIntoView({ block: 'center' })} />
+      ))}
+    </div>
+  );
 }
 
 const where = (d: { side: Side; line?: number; startLine?: number }) =>
