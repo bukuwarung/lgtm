@@ -20,20 +20,26 @@ When a pull request is ready for the user to review:
 
 ## How
 
-1. The session ID: `$CLAUDE_CODE_HOST_SESSION_ID` when it's set (the Claude app), else `$CLAUDE_CODE_SESSION_ID`.
+1. Get the session ID: run `echo "${CLAUDE_CODE_HOST_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"` (the Claude app's ID when
+   there is one, else the CLI's). Use the value it prints, written out, in the steps below.
 2. Open the PR in the app:
 
    ```bash
-   open "lgtm://OWNER/REPO/pull/NUMBER?claude=${CLAUDE_CODE_HOST_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"
+   open "lgtm://OWNER/REPO/pull/NUMBER?claude=SESSION_ID"
    ```
 
 3. If that fails (the app isn't installed), use the browser version, which starts lgtm if needed:
 
    ```bash
-   lgtm "https://github.com/OWNER/REPO/pull/NUMBER?claude=${CLAUDE_CODE_HOST_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"
+   lgtm "https://github.com/OWNER/REPO/pull/NUMBER?claude=SESSION_ID"
    ```
 
-4. Tell the user it's open in lgtm, in one line. If neither works, give them the PR link instead.
+4. Tell the user it's open, in one line, with the links to come back to it, written out in full:
+
+   > Opened in lgtm: [OWNER/REPO#NUMBER](lgtm://OWNER/REPO/pull/NUMBER?claude=SESSION_ID) · [on GitHub](https://github.com/OWNER/REPO/pull/NUMBER)
+
+   With the browser version, link the address the `lgtm` command printed, followed by `#/OWNER/REPO/pull/NUMBER`,
+   instead of the `lgtm://` one. If neither command worked, say so and give just the GitHub link.
 
 When the user comes back with their review (lgtm sends it as a message listing their verdict and comments), work
 through it like any review: address each comment, then say what changed.
