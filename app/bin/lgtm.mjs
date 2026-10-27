@@ -325,6 +325,44 @@ async function claudeSessions() {
 // The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md), installed for the user.
 const SKILL = join(homedir(), '.claude', 'skills', 'lgtm-review', 'SKILL.md');
 const skillText = () => readFile(new URL('../claude-skill.md', import.meta.url), 'utf8');
+// Messages lgtm leaves for a Claude Code session (a comment to address, a review), read by its lgtm-review skill when
+// the user says "check lgtm" there: ~/.config/lgtm/outbox/<session>.md, appended to, deleted by the skill once read.
+const SESSION_ID = /^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const OUTBOX = join(dirname(CONFIG), 'outbox');
+async function leaveForClaude({ id, text }) {
+  if (!SESSION_ID.test(id ?? '') || typeof text !== 'string' || !text.trim() || text.length > 50_000) throw new Error('Bad message for Claude');
+  await mkdir(OUTBOX, { recursive: true });
+  const file = join(OUTBOX, `${id}.md`);
+  const before = await readFile(file, 'utf8').catch(() => '');
+  await writeFile(file, `${before}${before ? '\n\n---\n\n' : ''}<!-- from lgtm, ${new Date().toISOString()} -->\n${text.trim()}\n`);
+  return { path: file };
+}
+
+// A session's title and what it's doing, from its record in the Claude app: waiting for the user (a question or a
+// permission), working (activity past its last turn edge, recently), or idle. A CLI-only session has no record.
+async function claudeSession(id) {
+  if (!SESSION_ID.test(id ?? '')) throw new Error('Bad session id');
+  let found = null;
+  const walk = async (dir, depth) => {
+    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      if (found) return;
+      const p = join(dir, e.name);
+      if (e.isDirectory() && depth < 3) await walk(p, depth + 1);
+      else if (e.isFile() && /^local_[\w-]+\.json$/.test(e.name)) {
+        if (id.startsWith('local_') && e.name !== `${id}.json`) continue;
+        const s = await readFile(p, 'utf8').then(JSON.parse).catch(() => null);
+        if (s && (s.sessionId === id || s.cliSessionId === id || s.priorCliSessionIds?.includes(id))) found = s;
+      }
+    }
+  };
+  await walk(CLAUDE_SESSIONS, 0);
+  if (!found || found.isArchived) return null;
+  const last = Number(found.lastActivityAt) || 0;
+  const edge = Number(found.lastTurnEdgeAt) || 0;
+  const state = found.interruptedAwaitingPerson ? 'waiting' : last - edge > 2000 && Date.now() - last < 120_000 ? 'working' : 'idle';
+  return { id: found.sessionId, title: found.title ?? '', state };
+}
+
 async function claudeSkill(install) {
   const want = await skillText();
   if (install) await mkdir(dirname(SKILL), { recursive: true }).then(() => writeFile(SKILL, want));
@@ -361,7 +399,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -384,6 +422,8 @@ const server = createServer(async (req, res) => {
       return json(res, 500, { error: e.message });
     }
   }
+  if (path === '/claude-outbox' && req.method === 'POST') return readJson(req).then(leaveForClaude).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
+  if (path === '/claude-session') return claudeSession(new URL(req.url ?? '/', ORIGIN).searchParams.get('id')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-skill') return claudeSkill(req.method === 'POST').then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-sessions') return claudeSessions().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/integrations') {

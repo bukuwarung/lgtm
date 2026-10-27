@@ -77,6 +77,7 @@ export type QueueItem = {
   thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
+  lastCommitAt: string; // the head commit's time
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
 export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean };
@@ -153,7 +154,7 @@ const QUEUE = `query{viewer{login}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}}
 fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{login}
-  additions deletions changedFiles commits(last:1){nodes{commit{statusCheckRollup{state}}}} repository{nameWithOwner}
+  additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
@@ -200,6 +201,7 @@ const toItem = (p: any): QueueItem => ({
       reviewDecision: p.reviewDecision,
       mergeState: p.mergeStateStatus,
       ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+      lastCommitAt: p.commits.nodes[0]?.commit.committedDate ?? '',
       additions: p.additions,
       deletions: p.deletions,
       files: p.changedFiles,

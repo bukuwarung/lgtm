@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-claude-outbox"
+description = "Enables the claude_outbox command without any pre-configured scope."
+commands.allow = ["claude_outbox"]
+
+[[permission]]
+identifier = "deny-claude-outbox"
+description = "Denies the claude_outbox command without any pre-configured scope."
+commands.deny = ["claude_outbox"]

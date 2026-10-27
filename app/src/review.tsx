@@ -17,7 +17,7 @@ import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, comment
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
-import { ago, askClaudeCli, backToClaude, linkNewClaude, unlinkClaude, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -127,6 +127,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [me, setMe] = useState('');
   const [stale, setStale] = useState<number | null>(null); // showing the copy loaded at this time, while refreshing
   const threadCursor = useRef(-1);
+  useEffect(() => seenClaudePR(repo, n), []); // for the list's "✳ updated"
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   const [bindings] = useBindings();
   const key = `drafts:${repo}#${n}`;
@@ -345,7 +346,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
       dispatchEvent(
         new CustomEvent('lgtm:toast', {
-          detail: { text: 'A Claude Code session sent this PR.', action: ['Send it your review', () => void backToClaude(from.id, text).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
+          detail: { text: 'This PR has a Claude Code session.', action: ['Send it your review', () => void backToClaude(from.id, text).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
         }),
       );
     }
@@ -1594,7 +1595,8 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
 // the Claude app records it. ⌥-click starts a new one anyway.
 function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: string; prUrl: string; label?: string }) {
   const [note, setNote] = useState('');
-  const [title, setTitle] = useState('');
+  const [session, setSession] = useState<SessionState>(null);
+  const title = session?.title ?? '';
   const [, setTick] = useState(0);
   const [owner, name, , num] = prUrl.replace('https://github.com/', '').split('/');
   const pr = { repo: `${owner}/${name}`, n: Number(num) };
@@ -1604,14 +1606,20 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
     addEventListener('lgtm:claude-link', t);
     return () => removeEventListener('lgtm:claude-link', t);
   }, []);
-  // The linked session's title; an app session that's gone (archived, deleted) is let go.
+  // The linked session's title and state (working, waiting for you), every 10 seconds; an app session that's gone
+  // (archived, deleted) is let go.
   useEffect(() => {
-    if (!from) return setTitle('');
-    getClaudeSessions().then((list) => {
-      const s = list.find((s) => s.id === from.id || s.cli === from.id);
-      if (s) setTitle(s.title || 'Untitled');
-      else if (from.id.startsWith('local_')) unlinkClaude(pr.repo, pr.n);
-    }, () => {});
+    if (!from) return setSession(null);
+    let stop = false;
+    const look = () =>
+      claudeSessionState(from.id).then((s) => {
+        if (stop) return;
+        setSession(s);
+        if (!s && from.id.startsWith('local_')) unlinkClaude(pr.repo, pr.n);
+      }, () => {});
+    look();
+    const t = setInterval(look, 10_000);
+    return () => ((stop = true), clearInterval(t));
   }, [from?.id]);
   const flash = (text: string) => {
     setNote(text);
@@ -1627,11 +1635,13 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
     <span class="claude-menu">
       <button
         class={`${label ? 'claude-btn' : 'copy-link'}${from ? ' linked' : ''}`}
-        title={from ? `Open its Claude Code session${title ? `, “${title}”` : ''}${label ? '' : ', with this comment copied to paste'} (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
+        title={from ? `Open its Claude Code session${title ? `, “${title}”` : ''}${label ? '' : ', with this comment left for it'} (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
         onClick={go}
       >
         ✳{label ? ` ${label}` : ''}
-        {from && <span class="claude-dot" aria-label="linked to a session" />}
+        {from && <span class={`claude-dot${session?.state === 'waiting' ? ' waiting' : ''}`} aria-label="linked to a session" />}
+        {label && session?.state === 'working' && <span class="claude-state"> working…</span>}
+        {label && session?.state === 'waiting' && <span class="claude-state waiting"> waiting for you</span>}
       </button>
       {note && <span class="claude-note">{note}</span>}
     </span>

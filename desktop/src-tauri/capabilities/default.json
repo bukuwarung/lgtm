@@ -23,6 +23,8 @@
     "allow-self-update",
     "allow-claude-text",
     "allow-claude-skill",
+    "allow-claude-outbox",
+    "allow-claude-session",
     "core:window:allow-set-badge-count",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",

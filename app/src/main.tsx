@@ -5,7 +5,7 @@ import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeam
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, askNotifications, availableUpdate, linkClaude, newer, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, askNotifications, availableUpdate, keepSkillCurrent, linkClaude, linkedClaude, newer, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -107,6 +107,7 @@ function App() {
 
   const [update, setUpdate] = useState<string | null>(null);
   useEffect(() => void availableUpdate().then(setUpdate), []);
+  useEffect(() => void keepSkillCurrent(), []); // a newer lgtm's skill replaces the installed one
 
   if (route.startsWith('#/demo/')) return <DemoPage k={route.slice(7)} />; // README pictures; no sign-in needed
   if (state === 'loading') return null;
@@ -332,6 +333,11 @@ const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string]>> = {
 };
 
 const DAY = 24 * 3600 * 1000;
+// A PR linked to a Claude Code session with commits since it was last opened here (or linked).
+const clauded = (i: QueueItem) => {
+  const l = linkedClaude(i.repo, i.number);
+  return !!l && !!i.lastCommitAt && Date.parse(i.lastCommitAt) > (l.seen ?? l.at);
+};
 const idleDays = (i: QueueItem) => (Date.now() - Date.parse(i.updatedAt)) / DAY;
 // On my PRs waiting for review: how long, and (after a day) a Slack nudge to the requested reviewers. Two clicks:
 // the first says who gets it, the second sends.
@@ -490,6 +496,7 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}>{MERGE_PILL[i.mergeState]![0]}</span>}
         {kind === MINE && i.autoMerge && <span class="pill">auto-merge on</span>}
+        {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here">✳ updated</span>}
         {kind === MINE && MINE.groupOf(i) === 'm-waiting' && <Waiting i={i} />}
         {i.estimate && <span
           class="pill p-time"

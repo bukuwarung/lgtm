@@ -357,7 +357,7 @@ export function linkNewClaude(repo: string, n: number, prUrl: string) {
   };
   setTimeout(look, 3000);
 }
-export function linkedClaude(repo: string, n: number): { id: string; at: number } | null {
+export function linkedClaude(repo: string, n: number): { id: string; at: number; seen?: number } | null {
   try {
     const v = JSON.parse(localStorage.getItem(`claudeFrom:${repo}#${n}`) ?? 'null');
     return v && SESSION_ID.test(v.id) ? v : null;
@@ -365,17 +365,55 @@ export function linkedClaude(repo: string, n: number): { id: string; at: number 
     return null;
   }
 }
-// Back to a session with a prompt: the Claude app's session reopens with the prompt copied to paste; a CLI-only
-// session gets `claude --resume <id> '<prompt>'` copied, to run in Terminal. Says which it did.
-export async function backToClaude(id: string, prompt = ''): Promise<string> {
-  const local = id.startsWith('local_') ? id : (await getClaudeSessions().catch(() => [])).find((s) => s.cli === id)?.id;
+// The time the PR was last opened here, kept with its link: "✳ updated" in the list means commits since.
+export function seenClaudePR(repo: string, n: number) {
+  const l = linkedClaude(repo, n);
+  if (!l) return;
+  try {
+    localStorage.setItem(`claudeFrom:${repo}#${n}`, JSON.stringify({ ...l, seen: Date.now() }));
+  } catch {}
+}
+
+// A message for a session, left where its lgtm-review skill reads it when the user says "check lgtm" there.
+export async function leaveForClaude(id: string, text: string): Promise<void> {
+  if (isDesktop) return void (await command('claude_outbox', { id, text }));
+  const res = await fetch('/claude-outbox', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, text }) });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Could not leave the message');
+}
+
+// A session's title and what it's doing (from the Claude app's record): null when there's no record (a Terminal
+// session) or it's archived.
+export type SessionState = { id: string; title: string; state: 'working' | 'waiting' | 'idle' } | null;
+export async function claudeSessionState(id: string): Promise<SessionState> {
+  if (isDesktop) return command<SessionState>('claude_session', { id });
+  const res = await fetch(`/claude-session?id=${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error('Could not read the session');
+  return res.json();
+}
+
+// Back to a session, with a message if there is one: the message is left for it (the user says "check lgtm" there;
+// copied to paste if that fails), then the Claude app's session opens, or a Terminal session's `claude --resume` is
+// copied. Says what it did.
+export async function backToClaude(id: string, message = ''): Promise<string> {
+  let note = '';
+  if (message)
+    note = await leaveForClaude(id, message).then(
+      () => 'Left for the session: say “check lgtm” there',
+      async () => (await navigator.clipboard.writeText(message).catch(() => {}), 'Copied: paste it in the session (⌘V)'),
+    );
+  const local = id.startsWith('local_') ? id : (await claudeSessionState(id).catch(() => null))?.id;
   if (local) {
-    if (prompt) await navigator.clipboard.writeText(prompt).catch(() => {});
     await openClaude(`claude://code/continue?session=${encodeURIComponent(local)}`);
-    return prompt ? 'Prompt copied: paste it in the session (⌘V)' : '';
+    return note;
   }
-  await navigator.clipboard.writeText(`claude --resume ${id}${prompt ? ` '${prompt.replace(/'/g, `'\\''`)}'` : ''}`).catch(() => {});
+  await navigator.clipboard.writeText(`claude --resume ${id}${message ? " 'check lgtm'" : ''}`).catch(() => {});
   return 'A Terminal session: the command to resume it is copied; paste it in Terminal';
+}
+
+// The installed skill, kept the same as this lgtm's (after an update), without asking: only if it's installed.
+export async function keepSkillCurrent() {
+  const s = await claudeSkill().catch(() => null);
+  if (s?.installed && !s.current) await claudeSkill(true).catch(() => {});
 }
 
 // The Claude Code skill (app/claude-skill.md) in ~/.claude/skills: whether it's there and current; install writes it.

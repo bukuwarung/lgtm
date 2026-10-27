@@ -471,6 +471,65 @@ pub async fn self_update(app: tauri::AppHandle) -> Result<(), String> {
     app.restart()
 }
 
+/// Messages for a Claude Code session, read by its skill ("check lgtm"); as the server's leaveForClaude().
+fn session_id_ok(id: &str) -> bool {
+    re(r"^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$").is_match(id)
+}
+#[tauri::command]
+pub async fn claude_outbox(id: String, text: String) -> Result<Value, String> {
+    if !session_id_ok(&id) || text.trim().is_empty() || text.len() > 50_000 {
+        return Err("Bad message for Claude".into());
+    }
+    let dir = home().join(".config").join("lgtm").join("outbox");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = dir.join(format!("{id}.md"));
+    let before = std::fs::read_to_string(&file).unwrap_or_default();
+    let stamp = std::process::Command::new("date").args(["-u", "+%Y-%m-%dT%H:%M:%SZ"]).output().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
+    let sep = if before.is_empty() { "" } else { "\n\n---\n\n" };
+    std::fs::write(&file, format!("{before}{sep}<!-- from lgtm, {stamp} -->\n{}\n", text.trim())).map_err(|e| e.to_string())?;
+    Ok(json!({ "path": file.to_string_lossy() }))
+}
+
+/// A session's title and state from the Claude app's record; as the server's claudeSession().
+#[tauri::command]
+pub async fn claude_session(id: String) -> Result<Value, String> {
+    if !session_id_ok(&id) {
+        return Err("Bad session id".into());
+    }
+    let mut stack = vec![(home().join("Library").join("Application Support").join("Claude").join("claude-code-sessions"), 0)];
+    while let Some((dir, depth)) = stack.pop() {
+        for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let (p, name) = (e.path(), e.file_name().to_string_lossy().to_string());
+            if p.is_dir() && depth < 3 {
+                stack.push((p, depth + 1));
+                continue;
+            }
+            if !(name.starts_with("local_") && name.ends_with(".json")) || (id.starts_with("local_") && name != format!("{id}.json")) {
+                continue;
+            }
+            let Some(s) = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
+            let prior = s["priorCliSessionIds"].as_array().map_or(false, |a| a.iter().any(|x| x.as_str() == Some(&id)));
+            if s["sessionId"].as_str() != Some(&id) && s["cliSessionId"].as_str() != Some(&id) && !prior {
+                continue;
+            }
+            if s["isArchived"] == json!(true) {
+                return Ok(Value::Null);
+            }
+            let num = |k: &str| s[k].as_f64().unwrap_or(0.0);
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0);
+            let state = if !s["interruptedAwaitingPerson"].is_null() {
+                "waiting"
+            } else if num("lastActivityAt") - num("lastTurnEdgeAt") > 2000.0 && now - num("lastActivityAt") < 120_000.0 {
+                "working"
+            } else {
+                "idle"
+            };
+            return Ok(json!({ "id": s["sessionId"], "title": s["title"].as_str().unwrap_or(""), "state": state }));
+        }
+    }
+    Ok(Value::Null)
+}
+
 /// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md, built in by build.rs),
 /// installed for the user in ~/.claude/skills; as the server's claudeSkill().
 const SKILL: &str = include_str!(concat!(env!("OUT_DIR"), "/claude-skill.md"));
