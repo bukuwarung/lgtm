@@ -427,9 +427,9 @@ const Bar = ({ menu }: { menu?: boolean }) => (
       <button class="claude-btn">✳ Claude</button>
       {menu && (
         <span class="claude-pop" role="menu">
+          <button role="menuitem">Walkthrough of this PR, here</button>
           <button role="menuitem">New Claude Code session</button>
           <button role="menuitem">Continue “Review retry backoff in payments” · 2 hours ago</button>
-          <button role="menuitem">Continue last session</button>
         </span>
       )}
     </span>

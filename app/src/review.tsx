@@ -13,7 +13,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { CLAUDE_CONTINUE, claudeContinueLink, claudeNewLink, walkthroughPrompt, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
+import { claudeContinueLink, claudeNewLink, walkthroughPrompt, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { reviewOrder, untested } from './files.ts';
@@ -1590,8 +1590,8 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
 }
 
 // "✳": hand this PR or comment to Claude Code: a new session with the prompt filled in (in the repo's folder, if set
-// in Settings), or an earlier session with the prompt copied to paste (that link can't carry a prompt): the last one, or,
-// with Settings → Claude Code → "Find sessions per PR", the ones started on this PR.
+// in Settings), back to the session that sent the PR here, or (Settings → Claude Code → "Find sessions per PR") a
+// session started on it; those links can't carry a prompt, so it's copied to paste.
 function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: string; prUrl: string; label?: string }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
@@ -1640,7 +1640,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
           <button role="menuitem" onClick={() => (setOpen(false), void openClaude(claudeNewLink(prompt, claudeFolder(repo))))}>
             New Claude Code session
           </button>
-          {[...sessions.map((s) => ({ key: s.id, link: claudeContinueLink(s.id), text: `Continue “${s.title || 'Untitled'}” · ${ago(s.lastActivityAt)}` })), { key: 'last', link: CLAUDE_CONTINUE, text: 'Continue last session' }].map((o) => (
+          {sessions.map((s) => ({ key: s.id, link: claudeContinueLink(s.id), text: `Continue “${s.title || 'Untitled'}” · ${ago(s.lastActivityAt)}` })).map((o) => (
             <button
               key={o.key}
               role="menuitem"
