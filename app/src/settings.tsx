@@ -246,7 +246,8 @@ function About() {
   useEffect(() => void availableUpdate().then(setUpdate), []);
   return (
     <div class="note set-version">
-      lgtm {__APP_VERSION__} · {isDesktop ? 'macOS app' : 'browser version'}
+      lgtm {__APP_VERSION__}
+      {__DEV_BUILD__ && <b> dev{__COMMIT__ && ` (${__COMMIT__})`}</b>} · {isDesktop ? 'macOS app' : 'browser version'}
       {update && (
         <p class="notice">
           lgtm {update} is out. Update with <code>{UPGRADE}</code>{!isDesktop && <> (or <code>git pull</code> and <code>npm run build</code> from source)</>}.

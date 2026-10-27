@@ -119,8 +119,14 @@ function App() {
       <nav class="top" data-tauri-drag-region>
         <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
         <TopActions onRefresh={() => setQueueVersion((v) => v + 1)} />
+        <span class="spacer" />
         <CommandBar queue={() => queue.current} parse={parseRoute} />
         <span class="spacer" />
+        {__DEV_BUILD__ && (
+          <span class="nav-dev" title={`A development build, not a release${__COMMIT__ ? ` (commit ${__COMMIT__})` : ''}`}>
+            DEV{__COMMIT__ && ` · ${__COMMIT__}`}
+          </span>
+        )}
         {update && (
           <a href="#/settings" class="nav-btn nav-update" title={`lgtm ${update} is out: see Settings`}>
             ⬆ {update}

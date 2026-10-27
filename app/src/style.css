@@ -446,7 +446,7 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .scene-main { padding: 12px 0 0; }
 .scene .file-h { position: static; }
 /* The top bar's Go to / open-a-link box, centred in the bar; its results drop down below it. */
-.cmd { position: absolute; left: 50%; transform: translateX(-50%); width: clamp(240px, 34vw, 520px); }
+.cmd { position: relative; flex: 0 1 520px; min-width: 160px; } /* between the spacers: centred when there's room, never over the buttons */
 .cmd input { width: 100%; box-sizing: border-box; padding: 4px 10px; }
 .cmd-list { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); width: max(100%, 520px); z-index: 50; list-style: none; margin: 0; padding: 4px; max-height: 60vh; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
 .cmd-list li { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 400; }
@@ -527,3 +527,6 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 /* An edited doc comment, rendered: what changed, marked like a changed markdown block */
 .doc-chg { background: var(--add); box-shadow: -6px 0 0 var(--add), 6px 0 0 var(--add); border-radius: 2px; }
 .diff tr.doc.edited .code::before { content: "±"; }
+/* A dev build (not from scripts/release.sh), always visible in the top bar */
+.nav-dev { padding: 1px 8px; border-radius: 6px; font: 700 11px/18px var(--mono); letter-spacing: .04em; color: #fff; background: light-dark(#d1242f, #b62324); white-space: nowrap; }
+.top > :not(.cmd):not(.spacer) { flex-shrink: 0; white-space: nowrap; } /* the box gives way first */
