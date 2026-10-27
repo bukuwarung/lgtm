@@ -1,11 +1,11 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, loadToken, type QueueItem } from './github.ts';
+import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadToken, type QueueItem } from './github.ts';
 import { Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, askNotifications, availableUpdate, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, askNotifications, availableUpdate, getGhAccounts, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -171,6 +171,7 @@ function App() {
           </a>
         )}
         <ThemeToggle />
+        <AccountMenu />
       </nav>
       {isDesktop && <FindBar />}
       <WhatsNew />
@@ -364,6 +365,59 @@ function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshi
 }
 
 // Cycles auto → light → dark; index.html applies the saved choice before first paint.
+// The GitHub account lgtm uses, as its avatar. A click lists the accounts gh is signed in to; picking another
+// switches (the page loads again as that account). Settings → Accounts has the same choice.
+const avatarOf = (login: string) => `https://github.com/${encodeURIComponent(login)}.png?size=64`;
+function AccountMenu() {
+  const [me, setMe] = useState('');
+  const [accounts, setAccounts] = useState<GhAccount[] | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => void getViewer().then(setMe, () => {}), []);
+  useEffect(() => {
+    if (!open) return;
+    getGhAccounts().then(setAccounts, () => setAccounts([]));
+    const away = (e: Event) => !(e.target as Element).closest?.('.account') && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', esc);
+    return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
+  }, [open]);
+  if (!me) return null;
+  const use = (a: GhAccount) => {
+    if (a.login === me) return setOpen(false);
+    if (a.active) localStorage.removeItem('ghAccount'); // gh's active one: follow gh
+    else localStorage.setItem('ghAccount', a.login);
+    location.reload(); // everything loaded so far was as the other account
+  };
+  return (
+    <span class="account">
+      <button class="account-btn" title={`GitHub: @${me}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <img src={avatarOf(me)} alt={`@${me}`} />
+      </button>
+      {open && (
+        <div class="account-menu" role="menu">
+          <div class="account-head">GitHub accounts in gh</div>
+          {accounts == null ? (
+            <p class="note">Loading…</p>
+          ) : (
+            accounts.map((a) => (
+              <button role="menuitemradio" aria-checked={a.login === me} class={a.login === me ? 'on' : ''} onClick={() => use(a)}>
+                <img src={avatarOf(a.login)} alt="" />
+                <span>{a.login}</span>
+                {a.active && <small>gh's active</small>}
+                {a.login === me && <span class="account-check">✓</span>}
+              </button>
+            ))
+          )}
+          <p class="note">
+            Add one with <code>gh auth login</code>, then open this again.
+          </p>
+        </div>
+      )}
+    </span>
+  );
+}
+
 function ThemeToggle() {
   const [theme, setTheme] = useTheme();
   const i = THEMES.findIndex(([t]) => t === theme);

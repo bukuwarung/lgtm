@@ -68,12 +68,36 @@ const command = <T>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
     throw e instanceof Error ? e : new Error(String(e));
   });
 
-// The local server (or, in the app, its command) answers with `gh auth token`.
+// The gh account lgtm uses (Settings → Accounts), when gh is signed in to more than one; '' is gh's active one.
+export const ghAccount = () => {
+  try {
+    return localStorage.getItem('ghAccount') ?? '';
+  } catch {
+    return '';
+  }
+};
+
+// The local server (or, in the app, its command) answers with `gh auth token`. An account gh has since signed out
+// of falls back to its active one.
 export async function fetchToken(): Promise<string> {
-  if (isDesktop) return command<string>('gh_token');
-  const res = await fetch('/token');
-  if (!res.ok) throw new Error((await res.text()) || 'Could not get a token from the lgtm server.');
-  return res.text();
+  const user = ghAccount();
+  try {
+    if (isDesktop) return await command<string>('gh_token', { user });
+    const res = await fetch('/token?user=' + encodeURIComponent(user));
+    if (!res.ok) throw new Error((await res.text()) || 'Could not get a token from the lgtm server.');
+    return await res.text();
+  } catch (e) {
+    if (!user) throw e;
+    localStorage.removeItem('ghAccount');
+    return fetchToken();
+  }
+}
+
+export type GhAccount = { login: string; active: boolean };
+export async function getGhAccounts(): Promise<GhAccount[]> {
+  if (isDesktop) return command<GhAccount[]>('gh_accounts');
+  const res = await fetch('/gh-accounts');
+  return res.ok ? res.json() : [];
 }
 
 // A remembered on/off UI preference (sidebar visibility etc.). Storage failures just mean it isn't remembered.
@@ -201,8 +225,8 @@ export async function notifySlack(recipients: { login: string; emails: string[] 
 
 // Last lines of a failed GitHub Actions job's log, fetched by the local server with gh.
 export async function fetchJobLog(repo: string, job: number): Promise<string> {
-  if (isDesktop) return command<string>('job_log', { repo, job });
-  const res = await fetch(`/job-log?repo=${encodeURIComponent(repo)}&job=${job}`);
+  if (isDesktop) return command<string>('job_log', { repo, job, user: ghAccount() });
+  const res = await fetch(`/job-log?repo=${encodeURIComponent(repo)}&job=${job}&user=${encodeURIComponent(ghAccount())}`);
   const text = await res.text();
   if (!res.ok) throw new Error(text || 'Could not load the log');
   return text;

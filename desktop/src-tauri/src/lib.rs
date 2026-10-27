@@ -25,17 +25,11 @@ fn adopt_login_path() {
     std::env::set_var("PATH", path);
 }
 
-/// The GitHub CLI's token, read on every call so `gh auth login` / `gh auth switch` apply on reload.
+/// The GitHub CLI's token, read on every call so `gh auth login` / `gh auth switch` apply on reload; `user`, the
+/// account Settings → Accounts picked (none: gh's active one).
 #[tauri::command]
-async fn gh_token() -> Result<String, String> {
-    let out = Command::new("gh").args(["auth", "token"]).output().map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => "The GitHub CLI isn't installed.".to_string(),
-        _ => e.to_string(),
-    })?;
-    if !out.status.success() {
-        return Err("The GitHub CLI isn't signed in.".into());
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+async fn gh_token(user: Option<String>) -> Result<String, String> {
+    commands::gh_token_of(user.as_deref().unwrap_or(""))
 }
 
 /// The menu bar. Custom items reach the UI as a "menu" event carrying the item's id (main.tsx handles them); the
@@ -138,6 +132,7 @@ pub fn run() {
             commands::integrations,
             commands::jira_issue,
             commands::job_log,
+            commands::gh_accounts,
             commands::slack_status,
             commands::slack_notify,
             commands::slack_people_get,

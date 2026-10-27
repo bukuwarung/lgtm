@@ -13,8 +13,14 @@ pub struct Out {
 }
 
 pub fn run(program: &str, args: &[&str], input: Option<&str>, timeout: Duration) -> Out {
+    run_env(program, args, input, timeout, &[])
+}
+
+/// As run, with these environment variables set for it.
+pub fn run_env(program: &str, args: &[&str], input: Option<&str>, timeout: Duration, env: &[(&str, &str)]) -> Out {
     let child = Command::new(program)
         .args(args)
+        .envs(env.iter().copied())
         .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

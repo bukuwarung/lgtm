@@ -618,3 +618,16 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .top-actions button > span { display: inline-block; }
 .top-actions button.refreshing > span { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* The account (top bar): its avatar, and the accounts to switch to. */
+.account { position: relative; display: inline-flex; }
+.account-btn { padding: 2px; border-radius: 999px; line-height: 0; }
+.account-btn img { width: 24px; height: 24px; border-radius: 50%; }
+.account-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; gap: 2px; min-width: 240px; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
+.account-head { padding: 4px 8px 6px; font-size: calc(12px * var(--ts)); color: var(--muted); }
+.account-menu > button { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: none; text-align: left; }
+.account-menu > button:hover { background: var(--soft); }
+.account-menu > button.on { font-weight: 600; }
+.account-menu > button img { width: 22px; height: 22px; border-radius: 50%; }
+.account-menu > button small { color: var(--muted); font-weight: 400; }
+.account-check { margin-left: auto; color: var(--accent); }
+.account-menu .note { margin: 4px 8px 2px; font-size: calc(12px * var(--ts)); }

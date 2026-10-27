@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { ghAccount, getGhAccounts, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
@@ -112,8 +112,10 @@ export function Settings() {
   const [me, setMe] = useState<string | null>(null);
   const [ints, setInts] = useState<Integrations | null>(null);
   const [err, setErr] = useState('');
+  const [accounts, setAccounts] = useState<GhAccount[] | null>(null);
   useEffect(() => {
     getViewer().then(setMe, () => setMe(''));
+    getGhAccounts().then(setAccounts, () => setAccounts([]));
     getTeams().then(setTeams, () => setTeams([]));
     fetchIntegrations().then(setInts, (e) => setErr(e.message));
   }, []);
@@ -139,6 +141,31 @@ export function Settings() {
         <Status ok={me == null ? null : !!me}>
           <b>GitHub</b> {me ? <>signed in as <code>@{me}</code> through the GitHub CLI</> : me === '' ? 'not signed in' : 'checking…'}
           {me === '' && <pre>gh auth login</pre>}
+          {accounts && accounts.length > 1 ? (
+            <label class="gh-account">
+              Account lgtm uses{' '}
+              <select
+                value={ghAccount()}
+                onChange={(e) => {
+                  const v = e.currentTarget.value;
+                  if (v) localStorage.setItem('ghAccount', v);
+                  else localStorage.removeItem('ghAccount');
+                  location.reload(); // everything loaded so far was as the other account
+                }}
+              >
+                <option value="">gh's active one ({accounts.find((a) => a.active)?.login ?? '?'})</option>
+                {accounts.map((a) => (
+                  <option value={a.login}>{a.login}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            accounts?.length === 1 && (
+              <small>
+                Signed in to more than one GitHub account in gh (<code>gh auth login</code> adds one)? You'll pick here which lgtm uses.
+              </small>
+            )
+          )}
         </Status>
         <Status ok={ints ? ints.slack.ok : null}>
           <b>Slack</b> (review DMs){' '}

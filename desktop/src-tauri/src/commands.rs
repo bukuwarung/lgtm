@@ -1,6 +1,6 @@
 // The local server's routes (app/bin/lgtm.mjs) as app commands: same CLIs, same inputs, same validation, same
 // results. Keep the two in step when either changes.
-use crate::cli::{last_line, parse_json, plain, run, SECONDS_30};
+use crate::cli::{last_line, parse_json, plain, run, run_env, SECONDS_30};
 use crate::config;
 use regex::Regex;
 use serde::Deserialize;
@@ -126,16 +126,51 @@ pub fn log_tail(raw: &str) -> String {
     lines[end.saturating_sub(60)..end].join("\n")
 }
 
+/// gh's token for one of the accounts it's signed in to (Settings → Accounts picks it); empty, its active one.
+pub fn gh_token_of(user: &str) -> Result<String, String> {
+    let mut args = vec!["auth", "token"];
+    if !user.is_empty() {
+        if !re(r"^[A-Za-z0-9-]{1,39}$").is_match(user) {
+            return Err("Bad account".into());
+        }
+        args.extend(["--user", user]);
+    }
+    let o = run("gh", &args, None, SECONDS_30);
+    if o.missing {
+        return Err("The GitHub CLI isn't installed.".into());
+    }
+    if !o.ok {
+        return Err(if user.is_empty() { "The GitHub CLI isn't signed in.".into() } else { format!("The GitHub CLI isn't signed in as {user}.") });
+    }
+    Ok(o.stdout.trim().to_string())
+}
+
+/// The accounts gh is signed in to on github.com, and which is its active one. (gh exits non-zero when any account
+/// has a problem, but still prints them all.)
 #[tauri::command]
-pub async fn job_log(repo: String, job: u64) -> Result<String, String> {
+pub async fn gh_accounts() -> Result<Value, String> {
+    let o = run("gh", &["auth", "status", "--json", "hosts"], None, SECONDS_30);
+    let v: Value = serde_json::from_str(&o.stdout).unwrap_or(Value::Null);
+    let all = v["hosts"]["github.com"].as_array().cloned().unwrap_or_default();
+    Ok(json!(all.iter().filter(|a| a["state"] == "success").map(|a| json!({ "login": a["login"], "active": a["active"] == json!(true) })).collect::<Vec<_>>()))
+}
+
+#[tauri::command]
+pub async fn job_log(repo: String, job: u64, user: Option<String>) -> Result<String, String> {
     if !re(r"^[\w.-]+/[\w.-]+$").is_match(&repo) {
         return Err("Bad job".into());
     }
     let path = format!("repos/{repo}/actions/jobs/{job}/logs");
+    // gh api as the account lgtm uses.
+    let token = match user.as_deref().filter(|u| !u.is_empty()) {
+        Some(u) => Some(gh_token_of(u)?),
+        None => None,
+    };
+    let env: Vec<(&str, &str)> = token.as_deref().map(|t| ("GH_TOKEN", t)).into_iter().collect();
     // Newer gh refuses to print escape sequences without --allow-escape-sequences; older gh doesn't know the flag.
-    let mut o = run("gh", &["api", "--allow-escape-sequences", &path], None, SECONDS_30);
+    let mut o = run_env("gh", &["api", "--allow-escape-sequences", &path], None, SECONDS_30, &env);
     if !o.ok && o.stderr.contains("unknown flag") {
-        o = run("gh", &["api", &path], None, SECONDS_30);
+        o = run_env("gh", &["api", &path], None, SECONDS_30, &env);
     }
     if !o.ok {
         return Err(last_line(&o.stderr));

@@ -24,8 +24,26 @@ const CONFIG = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), '
 const THREADS = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'slack-threads.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' };
 
-// Read per request so `gh auth login` / `gh auth switch` take effect on reload.
-const ghToken = () => execFileSync('gh', ['auth', 'token'], { encoding: 'utf8' }).trim();
+// Read per request so `gh auth login` / `gh auth switch` take effect on reload. `user`: one of the accounts gh is
+// signed in to (Settings → Accounts picks it); none, gh's active one.
+const GH_LOGIN = /^[A-Za-z0-9-]{1,39}$/;
+const ghToken = (user = '') => {
+  if (user && !GH_LOGIN.test(user)) throw new Error('Bad account');
+  return execFileSync('gh', ['auth', 'token', ...(user ? ['--user', user] : [])], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+};
+// The accounts gh is signed in to on github.com, and which is its active one. (gh exits non-zero when any account
+// has a problem, but still prints them all.)
+const ghAccounts = () =>
+  new Promise((resolve) =>
+    execFile('gh', ['auth', 'status', '--json', 'hosts'], { timeout: 30000 }, (_err, stdout) => {
+      try {
+        const all = JSON.parse(stdout).hosts?.['github.com'] ?? [];
+        resolve(all.filter((a) => a.state === 'success').map((a) => ({ login: a.login, active: !!a.active })));
+      } catch {
+        resolve([]);
+      }
+    }),
+  );
 
 async function readConfig() {
   try {
@@ -198,12 +216,18 @@ async function readJson(req) {
 }
 
 // Tail of a GitHub Actions job log, via gh (the logs API redirects to storage the page can't read cross-origin).
-function jobLog(repo, job) {
+function jobLog(repo, job, user) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(job)) return Promise.reject(new Error('Bad job'));
+  let env;
+  try {
+    env = user ? { ...process.env, GH_TOKEN: ghToken(user) } : undefined; // gh api as the account lgtm uses
+  } catch (e) {
+    return Promise.reject(e);
+  }
   // Newer gh refuses to print escape sequences without --allow-escape-sequences; older gh doesn't know the flag.
   const run = (extra) =>
     new Promise((resolve, reject) =>
-      execFile('gh', ['api', ...extra, `repos/${repo}/actions/jobs/${job}/logs`], { maxBuffer: 1 << 27, timeout: 30000 }, (err, stdout, stderr) =>
+      execFile('gh', ['api', ...extra, `repos/${repo}/actions/jobs/${job}/logs`], { maxBuffer: 1 << 27, timeout: 30000, env }, (err, stdout, stderr) =>
         err ? reject(new Error(stderr.trim().split('\n').pop() || err.message)) : resolve(stdout),
       ),
     );
@@ -406,7 +430,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -414,7 +438,7 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/job-log') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams;
-    return jobLog(q.get('repo') ?? '', q.get('job') ?? '').then(
+    return jobLog(q.get('repo') ?? '', q.get('job') ?? '', q.get('user') ?? '').then(
       (text) => res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }).end(text),
       (e) => res.writeHead(500, { 'Content-Type': 'text/plain' }).end(e.message),
     );
@@ -464,12 +488,15 @@ const server = createServer(async (req, res) => {
     }
   }
   if (path === '/token') {
+    const user = new URL(req.url ?? '/', ORIGIN).searchParams.get('user') ?? '';
     try {
-      return res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }).end(ghToken());
+      const token = ghToken(user); // before any header goes out: a failure answers 500
+      return res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }).end(token);
     } catch {
-      return res.writeHead(500).end('gh is not signed in. Run `gh auth login`, then reload.');
+      return res.writeHead(500).end(user ? `gh isn't signed in as ${user}.` : 'gh is not signed in. Run `gh auth login`, then reload.');
     }
   }
+  if (path === '/gh-accounts') return ghAccounts().then((r) => json(res, 200, r));
 
   const file = normalize(join(DIST, path === '/' ? 'index.html' : path));
   if (!file.startsWith(DIST.endsWith(sep) ? DIST : DIST + sep)) return res.writeHead(404).end();

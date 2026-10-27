@@ -1,7 +1,7 @@
 // Only lgtm's own commands are callable from the page, each granted by name in capabilities/default.json.
 const COMMANDS: &[&str] = &[
     "gh_token", "integrations", "jira_issue", "job_log", "slack_status", "slack_notify",
-    "slack_people_get", "slack_people_find", "slack_people_save", "export_settings", "claude_sessions", "clipboard_pr", "copy_text", "self_update", "claude_text", "claude_skill", "claude_outbox", "claude_session",
+    "slack_people_get", "slack_people_find", "slack_people_save", "export_settings", "claude_sessions", "clipboard_pr", "copy_text", "self_update", "claude_text", "claude_skill", "claude_outbox", "claude_session", "gh_accounts",
 ];
 
 fn main() {
