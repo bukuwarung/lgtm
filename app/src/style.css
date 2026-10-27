@@ -581,3 +581,8 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .md-reset { padding: 0 6px; font-size: 12px; line-height: 18px; }
 .md-preview { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
 @media (max-width: 1100px) { .md-style { grid-template-columns: 1fr; } }
+.md-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.md-theme { display: grid; gap: 4px; padding: 4px; text-align: center; font-size: 12px; border: 1px solid var(--border); border-radius: 8px; background: none; }
+.md-theme.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.md-theme .md-thumb.rich { --doc-size: 10px; --doc-measure: none; --doc-space: .4rem; height: 72px; overflow: hidden; padding: 8px 10px; border-radius: 5px; text-align: left; pointer-events: none; }
+.md-theme .md-thumb.rich h3 { margin: 0 0 .3em; font-size: 1.5em; }

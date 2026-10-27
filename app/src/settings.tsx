@@ -6,7 +6,7 @@ import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_THEMES, useCodeLook } from './look.ts';
-import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, mdStyleProps, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
+import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 
 // Shows every token the themes colour: keywords, annotations, types, strings, numbers, properties, named arguments,
@@ -322,23 +322,28 @@ function MarkdownStyle() {
       {reset(k)}
     </label>
   );
-  const groups = [...new Set(MD_THEMES.map((t) => t.group))];
+  useEffect(() => MD_THEMES.forEach((t) => loadMdFonts({ theme: t.id })), []); // for the previews
   return (
     <section>
       <h3>Markdown files</h3>
       <p class="note">How markdown files read when shown rendered: pick a theme, then change anything in it.</p>
+      <div class="md-themes" role="radiogroup" aria-label="Theme">
+        {MD_THEMES.map((t) => (
+          <button role="radio" aria-checked={s.theme === t.id} class={s.theme === t.id ? 'md-theme on' : 'md-theme'} title={t.group} onClick={() => set({ theme: t.id })}>
+            <div class={`rich mdt mdt-${t.id} md-thumb`} aria-hidden="true">
+              <div class="md chunk">
+                <h3>Rollout</h3>
+                <p>
+                  Behind a <a>flag</a>, then <code>remove()</code>.
+                </p>
+              </div>
+            </div>
+            <span>{t.name}</span>
+          </button>
+        ))}
+      </div>
       <div class="md-style">
         <div class="md-ctls">
-          <label class="md-ctl">
-            <span>Theme</span>
-            <select value={s.theme} onChange={(e) => set({ theme: e.currentTarget.value })}>
-              {groups.map((g) => (
-                <optgroup label={g}>
-                  {MD_THEMES.filter((t) => t.group === g).map((t) => <option value={t.id}>{t.name}</option>)}
-                </optgroup>
-              ))}
-            </select>
-          </label>
           {fontSelect('body', 'Text font')}
           {fontSelect('heading', 'Heading font')}
           {num('size', 'Text size', 12, 22, 0.5, 'px', '--doc-size')}
