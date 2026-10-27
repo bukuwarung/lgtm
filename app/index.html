@@ -7,6 +7,8 @@
   <script>
     // Apply the saved theme before first paint (no flash).
     try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+    // And the text sizes (look.ts).
+    try { const s = document.documentElement.style, ts = localStorage.getItem('textSize'), cs = localStorage.getItem('codeSize'); if (ts) s.setProperty('--ts', ts / 14); if (cs) s.setProperty('--cs', cs / 12); } catch {}
   </script>
   <link rel="stylesheet" href="/src/style.css">
 </head>

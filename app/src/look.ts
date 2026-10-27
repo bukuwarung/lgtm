@@ -83,7 +83,11 @@ export const CODE_FONTS: Record<string, { name: string; family: string; load?: (
 
 const FALLBACK = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
-// Applies the saved code theme and font to the page (once, in App), and gives Settings the setters.
+// The text sizes, in px: the app's text and the diff's code (style.css scales every size by --ts / --cs).
+export const TEXT_SIZE = 14;
+export const CODE_SIZE = 12;
+
+// Applies the saved code theme and font, and the text sizes, to the page (once, in App), and gives Settings the setters.
 export function useCodeLook() {
   const [theme, setTheme] = useStoredValue('codeTheme', 'intellij');
   const [font, setFont] = useStoredValue('codeFont', 'jetbrains');
@@ -96,5 +100,9 @@ export function useCodeLook() {
     void f.load?.();
     document.documentElement.style.setProperty('--mono', `${f.family}, ${FALLBACK}`);
   }, [font]);
-  return { theme, setTheme, font, setFont };
+  const [textSize, setTextSize] = useStoredValue('textSize', String(TEXT_SIZE));
+  const [codeSize, setCodeSize] = useStoredValue('codeSize', String(CODE_SIZE));
+  useEffect(() => document.documentElement.style.setProperty('--ts', String(Number(textSize) / TEXT_SIZE)), [textSize]);
+  useEffect(() => document.documentElement.style.setProperty('--cs', String(Number(codeSize) / CODE_SIZE)), [codeSize]);
+  return { theme, setTheme, font, setFont, textSize: Number(textSize), setTextSize, codeSize: Number(codeSize), setCodeSize };
 }

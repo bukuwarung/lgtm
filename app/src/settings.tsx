@@ -5,7 +5,7 @@ import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
-import { CODE_FONTS, CODE_THEMES, useCodeLook } from './look.ts';
+import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook } from './look.ts';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 
@@ -237,6 +237,28 @@ export function Settings() {
             ))}
           </span>
         </div>
+        <label class="set-row">
+          <span>
+            Text size
+            <small>The app's own text: lists, comments, menus. Markdown files have theirs, below.</small>
+          </span>
+          <span class="set-size">
+            <input type="range" min={11} max={20} step={0.5} value={look.textSize} onInput={(e) => look.setTextSize(e.currentTarget.value)} />
+            <span>{look.textSize}px</span>
+            {look.textSize !== TEXT_SIZE && <button class="md-reset" title="Back to 14px" onClick={() => look.setTextSize(String(TEXT_SIZE))}>↺</button>}
+          </span>
+        </label>
+        <label class="set-row">
+          <span>
+            Code size
+            <small>Code in diffs.</small>
+          </span>
+          <span class="set-size">
+            <input type="range" min={10} max={18} step={0.5} value={look.codeSize} onInput={(e) => look.setCodeSize(e.currentTarget.value)} />
+            <span>{look.codeSize}px</span>
+            {look.codeSize !== CODE_SIZE && <button class="md-reset" title="Back to 12px" onClick={() => look.setCodeSize(String(CODE_SIZE))}>↺</button>}
+          </span>
+        </label>
         <label class="set-row">
           <span>Code colours</span>
           <select value={look.theme} onChange={(e) => look.setTheme(e.currentTarget.value)}>
