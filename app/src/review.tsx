@@ -581,7 +581,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
-        <ScrollMarks />
+        <ScrollMarks files={shown} />
         <main>
           <div class="pills pr-status">
             {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}>updating…</span>}
@@ -1397,8 +1397,11 @@ function ChunkView({ html, placed, onClick }: { html: string; placed: { line: nu
 }
 
 // Marks along the right edge for where things are on this long page: threads still open (the ones waiting on you
-// stronger), your drafts, and changed or removed parts of rendered docs (in a diff, everything is a change). A click
-// goes there. Kept in step with the page as files load, threads open and comments come in.
+// stronger), your drafts, and changed or removed parts of rendered docs (in a diff, everything is a change), plus a
+// box for the part on screen. A click on a mark goes there.
+// The strip is laid out by file, not by pixel: files render only near the screen, so the page's height keeps changing
+// as you scroll, and marks placed by pixel would jump. What's above the files takes its height; each file a share by
+// its diff's length (fixed from the start); a mark sits at its place within its file.
 const MARKS: [string, string, string][] = [
   ['.rich [data-chg]:not(:has([data-chg])):not(.note-host *)', 'm-chg', 'Changed'],
   ['.rich .removed', 'm-del', 'Removed'],
@@ -1406,19 +1409,55 @@ const MARKS: [string, string, string][] = [
   ['details.thread.awaiting', 'm-await', 'Waiting on you'],
   ['.draft', 'm-draft', 'Your draft'],
 ];
-function ScrollMarks() {
-  const [marks, setMarks] = useState<{ top: number; cls: string; title: string; el: Element }[]>([]);
+const LINE_PX = 20; // a diff line, roughly, to weigh files against what's above them
+function ScrollMarks({ files }: { files: File[] }) {
+  const [marks, setMarks] = useState<{ at: number; cls: string; title: string; el: Element }[]>([]);
+  const [view, setView] = useState<[number, number] | null>(null);
+  const filesRef = useRef(files);
+  filesRef.current = files;
   useEffect(() => {
+    // A page position (document y) to a place on the strip, 0–1.
+    const layout = () => {
+      const els = filesRef.current.map((f) => document.getElementById('f-' + f.filename)).filter((e): e is HTMLElement => !!e);
+      const weights = filesRef.current.filter((f) => document.getElementById('f-' + f.filename)).map((f) => 44 + LINE_PX * Math.max(3, (f.patch ?? '').split('\n').length));
+      const rects = els.map((e) => {
+        const r = e.getBoundingClientRect();
+        return [r.top + scrollY, r.bottom + scrollY];
+      });
+      const head = rects[0]?.[0] ?? document.documentElement.scrollHeight;
+      const total = head + weights.reduce((a, b) => a + b, 0);
+      return (y: number) => {
+        if (y <= head) return Math.max(0, y) / total;
+        let acc = head;
+        for (let k = 0; k < rects.length; k++) {
+          const [top, bottom] = rects[k];
+          const end = rects[k + 1]?.[0] ?? Infinity; // the gap after a file counts as its end
+          if (y < end) return (acc + weights[k] * Math.min(1, (y - top) / Math.max(1, bottom - top))) / total;
+          acc += weights[k];
+        }
+        return 1;
+      };
+    };
     let t = 0;
+    let frame = 0;
+    const placeView = () => {
+      if (document.documentElement.scrollHeight <= innerHeight * 1.5) return setView(null);
+      const at = layout();
+      const css = getComputedStyle(document.documentElement);
+      const top = scrollY + parseFloat(css.getPropertyValue('--nav')) + parseFloat(css.getPropertyValue('--bar')); // below the bars
+      setView([at(top), at(scrollY + innerHeight)]);
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(placeView);
+    };
     const measure = () => {
-      const h = document.documentElement.scrollHeight;
-      if (h <= innerHeight * 1.5) return setMarks([]);
+      placeView();
+      if (document.documentElement.scrollHeight <= innerHeight * 1.5) return setMarks([]);
+      const at = layout();
       // ponytail: geometry inside off-screen files (content-visibility) forces their layout; fine for the dozens of
       // marks a PR has, measure per file instead if it ever gets slow.
-      const next = MARKS.flatMap(([sel, cls, title]) =>
-        [...document.querySelectorAll(`main ${sel}`)].map((el) => ({ top: (el.getBoundingClientRect().top + scrollY) / h, cls, title, el })),
-      );
-      setMarks(next);
+      setMarks(MARKS.flatMap(([sel, cls, title]) => [...document.querySelectorAll(`main ${sel}`)].map((el) => ({ at: at(el.getBoundingClientRect().top + scrollY), cls, title, el }))));
     };
     const soon = () => {
       clearTimeout(t);
@@ -1428,18 +1467,22 @@ function ScrollMarks() {
     ro.observe(document.body);
     const mo = new MutationObserver(soon);
     mo.observe(document.querySelector('main') ?? document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['open', 'class'] });
+    addEventListener('scroll', onScroll, { passive: true });
     soon();
     return () => {
       clearTimeout(t);
+      cancelAnimationFrame(frame);
       ro.disconnect();
       mo.disconnect();
+      removeEventListener('scroll', onScroll);
     };
   }, []);
-  if (!marks.length) return null;
+  if (!view) return null;
   return (
     <div class="scroll-marks" aria-hidden="true">
+      {view && <div class="m-view" style={{ top: `${view[0] * 100}%`, height: `${Math.max(1, (view[1] - view[0]) * 100)}%` }} />}
       {marks.map((m) => (
-        <button class={m.cls} title={m.title} style={{ top: `${m.top * 100}%` }} tabIndex={-1} onClick={() => m.el.scrollIntoView({ block: 'center' })} />
+        <button class={m.cls} title={m.title} style={{ top: `${m.at * 100}%` }} tabIndex={-1} onClick={() => m.el.scrollIntoView({ block: 'center' })} />
       ))}
     </div>
   );

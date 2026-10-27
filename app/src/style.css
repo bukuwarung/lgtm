@@ -607,3 +607,4 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .set-toc button.on { color: var(--fg); background: var(--soft); font-weight: 600; }
 .settings > section { scroll-margin-top: calc(var(--nav) + 16px); }
 @media (max-width: 900px) { .settings { display: block; } .set-toc { display: none; } }
+.scroll-marks .m-view { position: absolute; left: -2px; right: -2px; min-height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 14%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent); box-sizing: border-box; }
