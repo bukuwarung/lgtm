@@ -27,6 +27,8 @@ function App() {
   useCodeLook(); // code colours and font from Settings
   // Glass (Settings → Appearance), unless macOS asks for less transparency.
   const [glass] = useStoredFlag('glass', true);
+  const [mdRead] = useStoredFlag('mdReading', true); // reading layout for rendered markdown files
+  useEffect(() => void document.documentElement.classList.toggle('md-read', mdRead), [mdRead]);
   useEffect(() => void document.documentElement.classList.toggle('glass', glass && !matchMedia('(prefers-reduced-transparency: reduce)').matches), [glass]);
   useEffect(() => void initDesktop((r) => (location.hash = r)), []); // the app: links to the browser, lgtm:// links
   // The PR list's latest items (to pick the next PR to review), and a message to show on the page we move to.
