@@ -149,3 +149,61 @@ export function renderChunks(src: string, added: Set<number>, inDiff?: Set<numbe
 }
 
 export const isMarkdown = (path: string) => /\.(md|mdx|markdown)$/i.test(path);
+
+// GitHub's anchor for a heading: lowercase, punctuation dropped, spaces to dashes (a repeat gets -1, -2…).
+export const headingSlug = (text: string) =>
+  text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
+
+// Rendered docs, tidied (idempotent, so it can run after every render): headings get their anchor (data-slug) and,
+// with `linkTo`, a ¶ that copies a link to the section; a bare link longer than a line's worth shows as
+// host/…/last-part (the full one in its tooltip).
+export function tidyDoc(root: HTMLElement | null, linkTo?: (slug: string) => string) {
+  if (!root) return;
+  const seen = new Map<string, number>();
+  for (const h of root.querySelectorAll<HTMLElement>(':is(h1, h2, h3, h4, h5, h6):not(.note-host *)')) {
+    const text = [...h.childNodes].filter((n) => !(n instanceof Element && n.matches('.hd-link'))).map((n) => n.textContent).join('');
+    const base = headingSlug(text);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    h.dataset.slug = n ? `${base}-${n}` : base;
+    if (linkTo && !h.querySelector('.hd-link')) {
+      const b = document.createElement('button');
+      b.className = 'hd-link';
+      b.title = 'Copy a link to this section';
+      b.textContent = '¶';
+      h.append(b);
+    }
+  }
+  for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href^="http"]:not([data-short])')) {
+    const text = a.textContent?.trim() ?? '';
+    a.dataset.short = '';
+    if (text !== a.href && text !== a.getAttribute('href')) continue;
+    if (text.length <= 60) continue;
+    const u = new URL(a.href);
+    const parts = u.pathname.split('/').filter(Boolean);
+    a.textContent = u.host + (parts.length > 1 ? `/…/${parts.at(-1)}` : parts.length ? `/${parts[0]}` : '') + (u.hash.length > 1 ? u.hash : '');
+    a.title = a.href;
+  }
+}
+
+// A click in a tidied doc: ¶ copies the section's link; a link to #section scrolls there instead of leaving.
+export function onDocClick(e: MouseEvent, root: HTMLElement | null, linkTo?: (slug: string) => string) {
+  const t = e.target as Element;
+  const hd = t.closest<HTMLElement>('.hd-link');
+  if (hd && linkTo) {
+    e.preventDefault();
+    const slug = hd.closest<HTMLElement>('[data-slug]')!.dataset.slug!;
+    void navigator.clipboard.writeText(linkTo(slug)).then(() => {
+      hd.textContent = 'Copied';
+      setTimeout(() => (hd.textContent = '¶'), 1500);
+    });
+    return;
+  }
+  const a = t.closest('a');
+  const href = a?.getAttribute('href');
+  if (!root || !href?.startsWith('#') || href.length < 2) return;
+  e.preventDefault(); // never a route change (the app's routes live in the hash)
+  const slug = decodeURIComponent(href.slice(1)).replace(/^user-content-/, '').toLowerCase();
+  // ponytail: a heading inside a folded section isn't in the page, so its link does nothing; unfold it if missed.
+  root.querySelector(`[data-slug="${CSS.escape(slug)}"]`)?.scrollIntoView({ block: 'start' });
+}

@@ -586,3 +586,8 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .md-theme.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .md-theme .md-thumb.rich { --doc-size: 10px; --doc-measure: none; --doc-space: .4rem; height: 72px; overflow: hidden; padding: 8px 10px; border-radius: 5px; text-align: left; pointer-events: none; }
 .md-theme .md-thumb.rich h3 { margin: 0 0 .3em; font-size: 1.5em; }
+.md-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; font-size: 13px; }
+/* Rendered docs: a section's ¶ (copy a link), shown on hover; a jump to a section clears the bars. */
+[data-slug] { scroll-margin-top: calc(var(--nav) + var(--bar) + 16px); }
+.hd-link { margin-left: .4em; padding: 0 .3em; border: 0; background: none; color: var(--muted); font: 400 .7em var(--sans); opacity: 0; vertical-align: middle; cursor: pointer; }
+:is(h1, h2, h3, h4, h5, h6):hover > .hd-link, .hd-link:focus-visible { opacity: 1; }

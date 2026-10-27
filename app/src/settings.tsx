@@ -6,7 +6,7 @@ import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_THEMES, useCodeLook } from './look.ts';
-import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
+import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 
 // Shows every token the themes colour: keywords, annotations, types, strings, numbers, properties, named arguments,
@@ -260,7 +260,8 @@ const hex = (rgb: string) => {
   return '#' + m.slice(0, 3).map((x) => Math.round(x).toString(16).padStart(2, '0')).join('');
 };
 function MarkdownStyle() {
-  const [s, save] = useMdStyle();
+  const [mode, setMode] = useState<'light' | 'dark'>(useAppDark() ? 'dark' : 'light');
+  const [s, save, same] = useMdStyle(mode);
   const look = mdStyleProps(s);
   const preview = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Record<string, string>>({}); // the values in effect, for the controls' labels
@@ -326,7 +327,21 @@ function MarkdownStyle() {
   return (
     <section>
       <h3>Markdown files</h3>
-      <p class="note">How markdown files read when shown rendered: pick a theme, then change anything in it.</p>
+      <p class="note">How markdown files and PR descriptions read: pick a theme, then change anything in it. One for light mode, and one for dark if you like.</p>
+      <div class="md-mode">
+        <span class="set-seg" role="radiogroup" aria-label="Style for">
+          {(['light', 'dark'] as const).map((m) => (
+            <button role="radio" aria-checked={mode === m} class={mode === m ? 'on' : ''} onClick={() => setMode(m)}>
+              {m === 'light' ? '☀ In light mode' : '☾ In dark mode'}
+            </button>
+          ))}
+        </span>
+        {mode === 'dark' && (
+          <label>
+            <input type="checkbox" checked={same} onChange={(e) => save(e.currentTarget.checked ? null : { ...s })} /> Same as in light mode
+          </label>
+        )}
+      </div>
       <div class="md-themes" role="radiogroup" aria-label="Theme">
         {MD_THEMES.map((t) => (
           <button role="radio" aria-checked={s.theme === t.id} class={s.theme === t.id ? 'md-theme on' : 'md-theme'} title={t.group} onClick={() => set({ theme: t.id })}>

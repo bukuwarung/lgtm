@@ -1,7 +1,7 @@
 // Styles for rendered markdown files: lgtm's own (follows the app's colours) and the free themes of markdown.style
 // (https://markdown.style/themes, Apache 2.0), whose CSS is in mdthemes.css. Fonts are bundled and load only for the
 // style in use (as the code fonts do). Settings → Markdown files picks a theme and overrides any of its values.
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { useStoredValue } from './platform.ts';
 import './mdthemes.css';
 
@@ -111,9 +111,30 @@ export function loadMdFonts(s: MdStyle) {
   for (const f of fams) void MD_FONTS[f]?.load();
 }
 
-export function useMdStyle() {
-  const [raw, setRaw] = useStoredValue('mdStyle', '{"theme":"lgtm"}');
+// Whether the app is dark now: its theme setting (Settings → Appearance), or the system's when that's Auto.
+export function useAppDark() {
+  const [theme] = useStoredValue('theme', '');
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  const [sys, setSys] = useState(mq.matches);
+  useEffect(() => {
+    const f = () => setSys(mq.matches);
+    mq.addEventListener('change', f);
+    return () => mq.removeEventListener('change', f);
+  }, []);
+  return theme ? theme === 'dark' : sys;
+}
+
+// A style for light mode and one for dark (unset: the light one). Without `mode`, the one for the app's mode now.
+// Returns the style, its setter (null: dark goes back to the light one), and whether dark is the light one.
+export function useMdStyle(mode?: 'light' | 'dark') {
+  const dark = useAppDark();
+  const [light, setLight] = useStoredValue('mdStyle', '{"theme":"lgtm"}');
+  const [darkRaw, setDark] = useStoredValue('mdStyleDark', '');
+  const m = mode ?? (dark ? 'dark' : 'light');
+  const same = m === 'dark' && !darkRaw;
+  const raw = m === 'dark' && darkRaw ? darkRaw : light;
   const s = readMdStyle(raw);
   useEffect(() => loadMdFonts(s), [raw]);
-  return [s, (next: MdStyle) => setRaw(JSON.stringify(next))] as const;
+  const save = (next: MdStyle | null) => (m === 'dark' ? setDark(next ? JSON.stringify(next) : '') : setLight(JSON.stringify(next ?? { theme: 'lgtm' })));
+  return [s, save, same] as const;
 }

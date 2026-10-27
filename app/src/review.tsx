@@ -8,7 +8,7 @@ import {
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
-import { isMarkdown, md, renderChunks } from './markdown.ts';
+import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
@@ -1213,6 +1213,9 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle); // Settings → Markdown files
   const path = file.filename;
+  const root = useRef<HTMLDivElement>(null);
+  const linkTo = (slug: string) => `https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${path}#${slug}`;
+  useEffect(() => tidyDoc(root.current, linkTo));
   const [src, setSrc] = useState<string | null>();
   useEffect(() => {
     getRaw(ctx.headRepo, path, ctx.pr.head.sha).then(setSrc, () => setSrc(null));
@@ -1288,7 +1291,7 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   };
 
   return (
-    <div class={`rich ${look.class}`} style={look.style}>
+    <div class={`rich ${look.class}`} style={look.style} ref={root} onClick={(e) => onDocClick(e, root.current, linkTo)}>
       <Notes ctx={ctx} threads={orphanT} drafts={orphanD} form={t?.side === 'LEFT' && !removed.some((r) => inRun(r, t.line))} />
       {chunks.map((c, i) => {
         if (hidden(i)) {
@@ -1761,6 +1764,8 @@ function Conversation({ pr, items, lang, repo, me }: { pr: PR; items: Conversati
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle); // the description reads like a markdown file (Settings → Markdown files)
+  const desc = useRef<HTMLDivElement>(null);
+  useEffect(() => tidyDoc(desc.current), [pr.body_html]);
   return (
     <details class="conversation" id="conversation" open>
       <summary>
@@ -1769,7 +1774,7 @@ function Conversation({ pr, items, lang, repo, me }: { pr: PR; items: Conversati
       <div class="comment" id="pr-description">
         <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
         {pr.body_html ? (
-          <div class={`rich pr-desc ${look.class}`} style={look.style}>
+          <div class={`rich pr-desc ${look.class}`} style={look.style} ref={desc} onClick={(e) => onDocClick(e, desc.current)}>
             <div class="md chunk" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: pr.body_html }} />
           </div>
         ) : (
