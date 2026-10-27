@@ -1410,42 +1410,59 @@ const MARKS: [string, string, string][] = [
   ['.draft', 'm-draft', 'Your draft'],
 ];
 const LINE_PX = 20; // a diff line, roughly, to weigh files against what's above them
+// The strip's layout now: a page position (document y) to a place on it (0–1), and back.
+function stripLayout(files: File[]) {
+  const shown = files.map((f) => [f, document.getElementById('f-' + f.filename)] as const).filter((x): x is [File, HTMLElement] => !!x[1]);
+  const weights = shown.map(([f]) => 44 + LINE_PX * Math.max(3, (f.patch ?? '').split('\n').length));
+  const rects = shown.map(([, e]) => {
+    const r = e.getBoundingClientRect();
+    return [r.top + scrollY, r.bottom + scrollY];
+  });
+  const head = rects[0]?.[0] ?? document.documentElement.scrollHeight;
+  const total = head + weights.reduce((a, b) => a + b, 0);
+  const at = (y: number) => {
+    if (y <= head) return Math.max(0, y) / total;
+    let acc = head;
+    for (let k = 0; k < rects.length; k++) {
+      const [top, bottom] = rects[k];
+      const end = rects[k + 1]?.[0] ?? Infinity; // the gap after a file counts as its end
+      if (y < end) return (acc + weights[k] * Math.min(1, (y - top) / Math.max(1, bottom - top))) / total;
+      acc += weights[k];
+    }
+    return 1;
+  };
+  const yAt = (f: number) => {
+    let v = Math.max(0, Math.min(1, f)) * total;
+    if (v <= head) return v;
+    v -= head;
+    for (let k = 0; k < rects.length; k++) {
+      if (v <= weights[k] || k === rects.length - 1) return rects[k][0] + (rects[k][1] - rects[k][0]) * Math.min(1, v / weights[k]);
+      v -= weights[k];
+    }
+    return head;
+  };
+  return { at, yAt };
+}
+const barsHeight = () => {
+  const css = getComputedStyle(document.documentElement);
+  return parseFloat(css.getPropertyValue('--nav')) + parseFloat(css.getPropertyValue('--bar'));
+};
+
+// It is the page's scrollbar too (the browser's own is hidden while it shows): drag the box, or click the strip.
 function ScrollMarks({ files }: { files: File[] }) {
   const [marks, setMarks] = useState<{ at: number; cls: string; title: string; el: Element }[]>([]);
   const [view, setView] = useState<[number, number] | null>(null);
   const filesRef = useRef(files);
   filesRef.current = files;
+  const rail = useRef<HTMLDivElement>(null);
+  const grab = useRef<number | null>(null); // while dragging: where in the box it was taken, as a strip fraction
   useEffect(() => {
-    // A page position (document y) to a place on the strip, 0–1.
-    const layout = () => {
-      const els = filesRef.current.map((f) => document.getElementById('f-' + f.filename)).filter((e): e is HTMLElement => !!e);
-      const weights = filesRef.current.filter((f) => document.getElementById('f-' + f.filename)).map((f) => 44 + LINE_PX * Math.max(3, (f.patch ?? '').split('\n').length));
-      const rects = els.map((e) => {
-        const r = e.getBoundingClientRect();
-        return [r.top + scrollY, r.bottom + scrollY];
-      });
-      const head = rects[0]?.[0] ?? document.documentElement.scrollHeight;
-      const total = head + weights.reduce((a, b) => a + b, 0);
-      return (y: number) => {
-        if (y <= head) return Math.max(0, y) / total;
-        let acc = head;
-        for (let k = 0; k < rects.length; k++) {
-          const [top, bottom] = rects[k];
-          const end = rects[k + 1]?.[0] ?? Infinity; // the gap after a file counts as its end
-          if (y < end) return (acc + weights[k] * Math.min(1, (y - top) / Math.max(1, bottom - top))) / total;
-          acc += weights[k];
-        }
-        return 1;
-      };
-    };
     let t = 0;
     let frame = 0;
     const placeView = () => {
       if (document.documentElement.scrollHeight <= innerHeight * 1.5) return setView(null);
-      const at = layout();
-      const css = getComputedStyle(document.documentElement);
-      const top = scrollY + parseFloat(css.getPropertyValue('--nav')) + parseFloat(css.getPropertyValue('--bar')); // below the bars
-      setView([at(top), at(scrollY + innerHeight)]);
+      const { at } = stripLayout(filesRef.current);
+      setView([at(scrollY + barsHeight()), at(scrollY + innerHeight)]);
     };
     const onScroll = () => {
       cancelAnimationFrame(frame);
@@ -1454,7 +1471,7 @@ function ScrollMarks({ files }: { files: File[] }) {
     const measure = () => {
       placeView();
       if (document.documentElement.scrollHeight <= innerHeight * 1.5) return setMarks([]);
-      const at = layout();
+      const { at } = stripLayout(filesRef.current);
       // ponytail: geometry inside off-screen files (content-visibility) forces their layout; fine for the dozens of
       // marks a PR has, measure per file instead if it ever gets slow.
       setMarks(MARKS.flatMap(([sel, cls, title]) => [...document.querySelectorAll(`main ${sel}`)].map((el) => ({ at: at(el.getBoundingClientRect().top + scrollY), cls, title, el }))));
@@ -1477,10 +1494,34 @@ function ScrollMarks({ files }: { files: File[] }) {
       removeEventListener('scroll', onScroll);
     };
   }, []);
+  useEffect(() => {
+    document.documentElement.classList.toggle('own-scrollbar', !!view);
+    return () => document.documentElement.classList.remove('own-scrollbar');
+  }, [!!view]);
   if (!view) return null;
+  const toStrip = (e: PointerEvent) => {
+    const r = rail.current!.getBoundingClientRect();
+    return (e.clientY - r.top) / r.height;
+  };
+  const scrollToStrip = (f: number) => scrollTo({ top: stripLayout(filesRef.current).yAt(f) - barsHeight() });
   return (
-    <div class="scroll-marks" aria-hidden="true">
-      {view && <div class="m-view" style={{ top: `${view[0] * 100}%`, height: `${Math.max(1, (view[1] - view[0]) * 100)}%` }} />}
+    <div
+      class="scroll-marks"
+      ref={rail}
+      onPointerDown={(e) => {
+        if ((e.target as Element).closest('button')) return;
+        const f = toStrip(e);
+        const inBox = f >= view[0] && f <= view[1];
+        grab.current = inBox ? f - view[0] : (view[1] - view[0]) / 2; // the strip: the box centres there
+        if (!inBox) scrollToStrip(f - grab.current);
+        rail.current!.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      }}
+      onPointerMove={(e) => grab.current != null && scrollToStrip(toStrip(e) - grab.current)}
+      onPointerUp={() => (grab.current = null)}
+      onPointerCancel={() => (grab.current = null)}
+    >
+      <div class="m-view" style={{ top: `${view[0] * 100}%`, height: `${Math.max(1, (view[1] - view[0]) * 100)}%` }} />
       {marks.map((m) => (
         <button class={m.cls} title={m.title} style={{ top: `${m.at * 100}%` }} tabIndex={-1} onClick={() => m.el.scrollIntoView({ block: 'center' })} />
       ))}

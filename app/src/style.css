@@ -590,8 +590,10 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .hd-link { margin-left: .4em; padding: 0 .3em; border: 0; background: none; color: var(--muted); font: 400 .7em var(--sans); opacity: 0; vertical-align: middle; cursor: pointer; }
 :is(h1, h2, h3, h4, h5, h6):hover > .hd-link, .hd-link:focus-visible { opacity: 1; }
 /* Marks along the right edge (ScrollMarks): the page's whole length mapped onto the space below the bars. */
-.scroll-marks { position: fixed; z-index: 5; top: calc(var(--nav) + var(--bar) + 6px); bottom: 6px; right: 12px; width: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 5%, transparent); pointer-events: none; }
-.scroll-marks > button { position: absolute; left: 0; width: 8px; height: 6px; min-height: 0; margin-top: -3px; padding: 0; border: 0; border-radius: 2px; pointer-events: auto; cursor: pointer; opacity: .85; }
+.scroll-marks { position: fixed; z-index: 5; top: calc(var(--nav) + var(--bar) + 6px); bottom: 6px; right: 3px; width: 10px; border-radius: 5px; background: color-mix(in srgb, var(--fg) 5%, transparent); touch-action: none; user-select: none; }
+html.own-scrollbar { scrollbar-width: none; }
+html.own-scrollbar::-webkit-scrollbar { display: none; }
+.scroll-marks > button { position: absolute; left: 1px; width: 8px; height: 6px; min-height: 0; margin-top: -3px; padding: 0; border: 0; border-radius: 2px; pointer-events: auto; cursor: pointer; opacity: .85; }
 .scroll-marks > button:hover { opacity: 1; transform: scaleX(1.6); }
 .scroll-marks .m-chg { background: var(--addfg); }
 .scroll-marks .m-del { background: var(--delfg); }
@@ -607,4 +609,4 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .set-toc button.on { color: var(--fg); background: var(--soft); font-weight: 600; }
 .settings > section { scroll-margin-top: calc(var(--nav) + 16px); }
 @media (max-width: 900px) { .settings { display: block; } .set-toc { display: none; } }
-.scroll-marks .m-view { position: absolute; left: -2px; right: -2px; min-height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 14%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent); box-sizing: border-box; }
+.scroll-marks .m-view { position: absolute; left: 0; right: 0; cursor: grab; min-height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 14%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent); box-sizing: border-box; }
