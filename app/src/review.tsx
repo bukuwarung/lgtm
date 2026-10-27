@@ -1759,6 +1759,8 @@ const botExcerpt = (html: string, max = 100) => (new DOMParser().parseFromString
 
 function Conversation({ pr, items, lang, repo, me }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string }) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
+  const [mdStyle] = useMdStyle();
+  const look = mdStyleProps(mdStyle); // the description reads like a markdown file (Settings → Markdown files)
   return (
     <details class="conversation" id="conversation" open>
       <summary>
@@ -1766,7 +1768,13 @@ function Conversation({ pr, items, lang, repo, me }: { pr: PR; items: Conversati
       </summary>
       <div class="comment" id="pr-description">
         <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
-        {pr.body_html ? <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: pr.body_html }} /> : <p class="note">No description.</p>}
+        {pr.body_html ? (
+          <div class={`rich pr-desc ${look.class}`} style={look.style}>
+            <div class="md chunk" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: pr.body_html }} />
+          </div>
+        ) : (
+          <p class="note">No description.</p>
+        )}
       </div>
       {items.map((c) => {
         const head = (
