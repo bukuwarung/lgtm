@@ -5,26 +5,42 @@ import { useEffect, useState } from 'preact/hooks';
 import { useStoredValue } from './platform.ts';
 import './mdthemes.css';
 
-export type MdTheme = { id: string; name: string; group: string; dark: boolean; fonts: string[] };
+// base: a night version's light theme, whose rules it shares (mdthemes.css).
+export type MdTheme = { id: string; name: string; group: string; dark: boolean; fonts: string[]; base?: string };
 export const MD_THEMES: MdTheme[] = [
   { id: 'lgtm', name: 'lgtm', group: 'Follows the app', dark: false, fonts: [] },
   { id: 'atlas', name: 'Atlas', group: 'Reports', dark: false, fonts: ["Public Sans"] },
+  { id: 'atlas-night', name: 'Atlas Night', group: 'Reports', dark: true, fonts: ["Public Sans"], base: 'atlas' },
   { id: 'meridian', name: 'Meridian', group: 'Reports', dark: false, fonts: ["Manrope"] },
+  { id: 'meridian-night', name: 'Meridian Night', group: 'Reports', dark: true, fonts: ["Manrope"], base: 'meridian' },
   { id: 'signal', name: 'Signal', group: 'Reports', dark: false, fonts: ["DM Sans"] },
+  { id: 'signal-night', name: 'Signal Night', group: 'Reports', dark: true, fonts: ["DM Sans"], base: 'signal' },
   { id: 'handbook', name: 'Handbook', group: 'Docs and code', dark: false, fonts: ["IBM Plex Sans", "IBM Plex Mono"] },
+  { id: 'handbook-night', name: 'Handbook Night', group: 'Docs and code', dark: true, fonts: ["IBM Plex Sans", "IBM Plex Mono"], base: 'handbook' },
   { id: 'mono', name: 'Mono', group: 'Docs and code', dark: false, fonts: ["IBM Plex Mono"] },
+  { id: 'mono-night', name: 'Mono Night', group: 'Docs and code', dark: true, fonts: ["IBM Plex Mono"], base: 'mono' },
   { id: 'repo', name: 'Repo', group: 'Docs and code', dark: false, fonts: ["JetBrains Mono"] },
+  { id: 'repo-night', name: 'Repo Night', group: 'Docs and code', dark: true, fonts: ["JetBrains Mono"], base: 'repo' },
   { id: 'folio', name: 'Folio', group: 'Papers and books', dark: false, fonts: ["Fraunces", "Libre Baskerville"] },
+  { id: 'folio-night', name: 'Folio Night', group: 'Papers and books', dark: true, fonts: ["Fraunces", "Libre Baskerville"], base: 'folio' },
   { id: 'journal', name: 'Journal', group: 'Papers and books', dark: false, fonts: ["Crimson Pro"] },
+  { id: 'journal-night', name: 'Journal Night', group: 'Papers and books', dark: true, fonts: ["Crimson Pro"], base: 'journal' },
   { id: 'paper', name: 'Paper', group: 'Papers and books', dark: false, fonts: ["Lora", "Source Serif 4"] },
+  { id: 'paper-night', name: 'Paper Night', group: 'Papers and books', dark: true, fonts: ["Lora", "Source Serif 4"], base: 'paper' },
   { id: 'scholar', name: 'Scholar', group: 'Papers and books', dark: false, fonts: ["EB Garamond"] },
+  { id: 'scholar-night', name: 'Scholar Night', group: 'Papers and books', dark: true, fonts: ["EB Garamond"], base: 'scholar' },
   { id: 'linen', name: 'Linen', group: 'Quiet', dark: false, fonts: ["Karla"] },
-  { id: 'linen-night', name: 'Linen Night', group: 'Quiet', dark: true, fonts: ["Karla"] },
+  { id: 'linen-night', name: 'Linen Night', group: 'Quiet', dark: true, fonts: ["Karla"], base: 'linen' },
   { id: 'minimal', name: 'Minimal', group: 'Quiet', dark: false, fonts: ["Inter"] },
+  { id: 'minimal-night', name: 'Minimal Night', group: 'Quiet', dark: true, fonts: ["Inter"], base: 'minimal' },
   { id: 'slate', name: 'Slate', group: 'Quiet', dark: false, fonts: ["Inter"] },
+  { id: 'slate-night', name: 'Slate Night', group: 'Quiet', dark: true, fonts: ["Inter"], base: 'slate' },
   { id: 'editorial', name: 'Editorial', group: 'Bold', dark: false, fonts: ["Playfair Display", "Source Sans 3"] },
+  { id: 'editorial-night', name: 'Editorial Night', group: 'Bold', dark: true, fonts: ["Playfair Display", "Source Sans 3"], base: 'editorial' },
   { id: 'pop', name: 'Pop', group: 'Bold', dark: false, fonts: ["Space Grotesk", "Work Sans"] },
+  { id: 'pop-night', name: 'Pop Night', group: 'Bold', dark: true, fonts: ["Space Grotesk", "Work Sans"], base: 'pop' },
   { id: 'swiss', name: 'Swiss', group: 'Bold', dark: false, fonts: ["Archivo"] },
+  { id: 'swiss-night', name: 'Swiss Night', group: 'Bold', dark: true, fonts: ["Archivo"], base: 'swiss' },
   { id: 'carbon', name: 'Carbon', group: 'Dark', dark: true, fonts: ["Inter", "JetBrains Mono"] },
   { id: 'ember', name: 'Ember', group: 'Dark', dark: true, fonts: ["Figtree"] },
   { id: 'nocturne', name: 'Nocturne', group: 'Dark', dark: true, fonts: ["Newsreader"] },
@@ -105,7 +121,8 @@ export function mdStyleProps(s: MdStyle): { class: string; style: Record<string,
   if (s.heading && fontStack(s.heading)) style['--doc-font-heading'] = fontStack(s.heading);
   for (const [k, , v] of MD_COLORS) if (s.colors?.[k]) style[v] = s.colors[k]!;
   if (s.colors?.code) style['--doc-th-bg'] = s.colors.code;
-  return { class: `mdt mdt-${s.theme}`, style };
+  const base = MD_THEMES.find((t) => t.id === s.theme)?.base;
+  return { class: `mdt ${base ? `mdt-${base} ` : ''}mdt-${s.theme}`, style };
 }
 export function loadMdFonts(s: MdStyle) {
   const fams = [...(MD_THEMES.find((t) => t.id === s.theme)?.fonts ?? []), s.body ?? '', s.heading ?? ''];
@@ -125,8 +142,9 @@ export function useAppDark() {
   return theme ? theme === 'dark' : sys;
 }
 
-// A style for light mode and one for dark (unset: the light one). Without `mode`, the one for the app's mode now.
-// Returns the style, its setter (null: dark goes back to the light one), and whether dark is the light one.
+// A style for light mode and one for dark. Dark unset follows light: its theme's night version if it has one (your
+// fonts and sizes kept, its colours its own), else the same. Without `mode`, the one for the app's mode now.
+// Returns the style, its setter (null: dark goes back to following light), and whether dark follows light.
 export function useMdStyle(mode?: 'light' | 'dark') {
   const dark = useAppDark();
   const [light, setLight] = useStoredValue('mdStyle', '{"theme":"lgtm"}');
@@ -134,8 +152,9 @@ export function useMdStyle(mode?: 'light' | 'dark') {
   const m = mode ?? (dark ? 'dark' : 'light');
   const same = m === 'dark' && !darkRaw;
   const raw = m === 'dark' && darkRaw ? darkRaw : light;
-  const s = readMdStyle(raw);
-  useEffect(() => loadMdFonts(s), [raw]);
+  let s = readMdStyle(raw);
+  if (same && MD_THEMES.some((t) => t.id === `${s.theme}-night`)) s = { ...s, theme: `${s.theme}-night`, colors: undefined };
+  useEffect(() => loadMdFonts(s), [raw, m]);
   const save = (next: MdStyle | null) => (m === 'dark' ? setDark(next ? JSON.stringify(next) : '') : setLight(JSON.stringify(next ?? { theme: 'lgtm' })));
   return [s, save, same] as const;
 }

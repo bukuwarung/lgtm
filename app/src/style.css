@@ -600,3 +600,12 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .scroll-marks .m-thread { background: color-mix(in srgb, var(--accent) 55%, var(--muted)); }
 .scroll-marks .m-await { background: var(--accent); height: 8px; margin-top: -4px; z-index: 1; }
 .scroll-marks .m-draft { background: #d4a72c; z-index: 1; }
+/* Settings: a side panel of its sections, beside them (gone when the window is narrow). */
+.settings { display: grid; grid-template-columns: 160px minmax(0, 960px); column-gap: 28px; max-width: calc(960px + 188px); }
+.settings > :not(.set-toc) { grid-column: 2; }
+.set-toc { grid-column: 1; grid-row: 1 / span 100; align-self: start; position: sticky; top: calc(var(--nav) + 16px); display: grid; gap: 1px; padding-top: 4px; }
+.set-toc button { padding: 5px 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 13px; text-align: left; }
+.set-toc button:hover { color: var(--fg); background: var(--soft); }
+.set-toc button.on { color: var(--fg); background: var(--soft); font-weight: 600; }
+.settings > section { scroll-margin-top: calc(var(--nav) + 16px); }
+@media (max-width: 900px) { .settings { display: block; } .set-toc { display: none; } }

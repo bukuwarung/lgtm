@@ -420,33 +420,6 @@
 .rich.mdt-linen h2 { font-size: 1.35em; }
 .rich.mdt-linen blockquote { background: var(--doc-code-bg); border-radius: var(--doc-radius); }
 
-/* Linen Night: lgtm's dark companion to Linen (not from markdown.style). Warm charcoal, not black; the same sage. */
-.rich.mdt-linen-night {
-  --doc-font-body: 'Karla Variable', 'Segoe UI', Arial, sans-serif;
-  --doc-size: 17px;
-  --doc-leading: 1.7;
-  --doc-heading-weight: 600;
-  --doc-bg: #23211e;
-  --doc-fg: #d8d2c8;
-  --doc-muted: #9a9389;
-  --doc-heading: #eee9e0;
-  --doc-link: #a9bca4;
-  --doc-accent: #7d8e79;
-  --doc-border: #3a3632;
-  --doc-code-bg: #2d2a26;
-  --doc-code-fg: #e4ddd2;
-  --doc-th-bg: #2f2c28;
-  --doc-radius: 8px;
-  --doc-tok-keyword: #d3a8c6;
-  --doc-tok-string: #a8c49a;
-  --doc-tok-comment: #8a8378;
-  --doc-tok-number: #dfb37f;
-  --doc-tok-title: #a3bcd8;
-}
-.rich.mdt-linen-night h1 { font-size: 2em; letter-spacing: -0.01em; }
-.rich.mdt-linen-night h2 { font-size: 1.35em; }
-.rich.mdt-linen-night blockquote { background: var(--doc-code-bg); border-radius: var(--doc-radius); }
-
 /* Minimal */
 .rich.mdt-minimal {
   --doc-font-body: 'Inter Variable', system-ui, sans-serif;
@@ -652,6 +625,283 @@
 .rich.mdt-terminal h1 { font-size: 1.5em; }
 .rich.mdt-terminal h2 { font-size: 1.2em; }
 .rich.mdt-terminal h1::before, .rich.mdt-terminal h2::before { content: '> '; color: var(--doc-accent); }
+
+/* Night versions: lgtm's dark companions to the light themes above (not from markdown.style). Each keeps its
+   theme's fonts, sizes and rules (both classes apply) and swaps only the colours; Linen Night's are hand-picked,
+   the rest derived from the theme's own (same hues, lightness turned around). */
+.rich.mdt-atlas-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #242a30;
+  --doc-th-bg: #102a43;
+  --doc-border: #3c444e;
+  --doc-fg: #d4d9dd;
+  --doc-heading: #e8edf3;
+  --doc-muted: #989da4;
+  --doc-code-fg: #dde0e4;
+  --doc-link: #79c9ec;
+  --doc-accent: #79c9ec;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-meridian-night {
+  --doc-bg: #23201a;
+  --doc-code-bg: #2e2c26;
+  --doc-th-bg: #2a342f;
+  --doc-border: #4a4740;
+  --doc-fg: #d9d9d9;
+  --doc-heading: #e9f1ef;
+  --doc-muted: #a0a09c;
+  --doc-code-fg: #e0e0e0;
+  --doc-link: #87debf;
+  --doc-accent: #87debf;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-signal-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #2a2a2a;
+  --doc-th-bg: #392d26;
+  --doc-border: #454545;
+  --doc-fg: #d9d9d9;
+  --doc-heading: #ededed;
+  --doc-muted: #9e9e9e;
+  --doc-code-fg: #e0e0e0;
+  --doc-link: #eca779;
+  --doc-accent: #eca179;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-handbook-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #27292d;
+  --doc-th-bg: #2b2d33;
+  --doc-border: #414449;
+  --doc-fg: #d6d9db;
+  --doc-heading: #ecedee;
+  --doc-muted: #9a9ea2;
+  --doc-code-fg: #dee0e2;
+  --doc-link: #9684e1;
+  --doc-accent: #9684e1;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-mono-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #2a2a2a;
+  --doc-th-bg: #2f2f2f;
+  --doc-border: #454545;
+  --doc-fg: #d9d9d9;
+  --doc-heading: #ededed;
+  --doc-muted: #9e9e9e;
+  --doc-code-fg: #e0e0e0;
+  --doc-link: #79ecc8;
+  --doc-accent: #79ecc8;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-repo-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #252a2f;
+  --doc-th-bg: #2a2f35;
+  --doc-border: #3f454a;
+  --doc-fg: #d6d8db;
+  --doc-heading: #ecedee;
+  --doc-muted: #999ea3;
+  --doc-code-fg: #dee0e2;
+  --doc-link: #79aeec;
+  --doc-accent: #d1d9e0;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-folio-night {
+  --doc-bg: #23201a;
+  --doc-code-bg: #302b24;
+  --doc-th-bg: #353129;
+  --doc-border: #4c473e;
+  --doc-fg: #dad9d7;
+  --doc-heading: #eeedec;
+  --doc-muted: #a29e9a;
+  --doc-code-fg: #e2e0df;
+  --doc-link: #d1b494;
+  --doc-accent: #d0b695;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-journal-night {
+  --doc-bg: #23201a;
+  --doc-code-bg: #302c24;
+  --doc-th-bg: #363128;
+  --doc-border: #4a4740;
+  --doc-fg: #d9d9d9;
+  --doc-heading: #ededed;
+  --doc-muted: #a19f9b;
+  --doc-code-fg: #e0e0e0;
+  --doc-link: #e08585;
+  --doc-accent: #e08585;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-paper-night {
+  --doc-bg: #23211a;
+  --doc-code-bg: #302c24;
+  --doc-th-bg: #373127;
+  --doc-border: #4d473d;
+  --doc-fg: #dbd9d7;
+  --doc-heading: #eeedec;
+  --doc-muted: #a39e9a;
+  --doc-code-fg: #e2e0df;
+  --doc-link: #dba68a;
+  --doc-accent: #d7af8e;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-scholar-night {
+  --doc-bg: #23211a;
+  --doc-code-bg: #312c23;
+  --doc-th-bg: #373227;
+  --doc-border: #4b473f;
+  --doc-fg: #d9d9d9;
+  --doc-heading: #ededed;
+  --doc-muted: #a19e9b;
+  --doc-code-fg: #e0e0e0;
+  --doc-link: #e08585;
+  --doc-accent: #e08585;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-linen-night {
+  --doc-bg: #23211e;
+  --doc-fg: #d8d2c8;
+  --doc-muted: #9a9389;
+  --doc-heading: #eee9e0;
+  --doc-link: #a9bca4;
+  --doc-accent: #7d8e79;
+  --doc-border: #3a3632;
+  --doc-code-bg: #2d2a26;
+  --doc-code-fg: #e4ddd2;
+  --doc-th-bg: #2f2c28;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-minimal-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #2a2a2a;
+  --doc-th-bg: #2f2f2f;
+  --doc-border: #454545;
+  --doc-fg: #d9d9d9;
+  --doc-heading: #ededed;
+  --doc-muted: #9e9e9e;
+  --doc-code-fg: #e0e0e0;
+  --doc-link: #b2b2b2;
+  --doc-accent: #d4d4d4;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-slate-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #28292c;
+  --doc-th-bg: #2c2e32;
+  --doc-border: #414448;
+  --doc-fg: #d3d8de;
+  --doc-heading: #eaecf1;
+  --doc-muted: #9a9da2;
+  --doc-code-fg: #dce0e5;
+  --doc-link: #799dec;
+  --doc-accent: #799dec;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-editorial-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #2a2a2a;
+  --doc-th-bg: #2f2f2f;
+  --doc-border: #454545;
+  --doc-fg: #d9d9d9;
+  --doc-heading: #ededed;
+  --doc-muted: #9e9e9e;
+  --doc-code-fg: #e0e0e0;
+  --doc-link: #ec798e;
+  --doc-accent: #ec798e;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-pop-night {
+  --doc-bg: #23221a;
+  --doc-code-bg: #322e22;
+  --doc-th-bg: #393426;
+  --doc-border: #89898f;
+  --doc-fg: #d7d7da;
+  --doc-heading: #ededee;
+  --doc-muted: #9b9ba1;
+  --doc-code-fg: #dfdfe1;
+  --doc-link: #79a1ec;
+  --doc-accent: #ec798c;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-swiss-night {
+  --doc-bg: #1f1f1f;
+  --doc-code-bg: #2a2a2a;
+  --doc-th-bg: #2f2f2f;
+  --doc-border: #8c8c8c;
+  --doc-fg: #d9d9d9;
+  --doc-heading: #ededed;
+  --doc-muted: #9e9e9e;
+  --doc-code-fg: #e0e0e0;
+  --doc-link: #ec7c79;
+  --doc-accent: #ec7c79;
+  --doc-tok-keyword: #d3a8e2;
+  --doc-tok-string: #a8c99a;
+  --doc-tok-comment: #8c8a86;
+  --doc-tok-number: #e2b37f;
+  --doc-tok-title: #9fbde0;
+}
+.rich.mdt-repo-night tbody tr:nth-child(even) { background: var(--doc-code-bg); }
 
 /* lgtm's own pieces inside a styled file: the theme's page colour behind the whole body, changed blocks tinted from the
    page colour (not the app's), and comment threads keeping the app's look. */

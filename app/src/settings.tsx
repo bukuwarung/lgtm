@@ -71,6 +71,9 @@ export function Settings() {
   const [q, setQ] = useState('');
   const [found, setFound] = useState(true);
   const page = useRef<HTMLDivElement>(null);
+  // The side panel: every section by its title (the ones search keeps), the one you're in marked.
+  const [toc, setToc] = useState<{ id: string; name: string }[]>([]);
+  const [cur, setCur] = useState('');
   useLayoutEffect(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     const has = (el: Element) => words.every((w) => (el.textContent ?? '').toLowerCase().includes(w));
@@ -83,7 +86,24 @@ export function Settings() {
       any ||= !sec.hidden;
     }
     setFound(any);
+    const list = [...(page.current?.querySelectorAll<HTMLElement>(':scope > section:not([hidden])') ?? [])].flatMap((sec) => {
+      const name = sec.querySelector(':scope > h3')?.textContent ?? '';
+      if (!name) return [];
+      sec.id ||= 'set-' + name.toLowerCase().replace(/\W+/g, '-');
+      return [{ id: sec.id, name }];
+    });
+    if (list.map((t) => t.id).join() !== toc.map((t) => t.id).join()) setToc(list);
   });
+  useEffect(() => {
+    const spy = () => {
+      let c = '';
+      for (const sec of page.current?.querySelectorAll<HTMLElement>(':scope > section[id]:not([hidden])') ?? []) if (sec.getBoundingClientRect().top < innerHeight * 0.3) c = sec.id;
+      setCur(c);
+    };
+    spy();
+    addEventListener('scroll', spy, { passive: true });
+    return () => removeEventListener('scroll', spy);
+  }, []);
   const [keys] = useBindings();
   const also = (k: string) => (k ? `Also ${keyLabel(k)} on a PR.` : undefined);
   const [team, setTeam] = useStoredValue('team', '');
@@ -100,6 +120,13 @@ export function Settings() {
 
   return (
     <div class="page settings" ref={page}>
+      <nav class="set-toc" aria-label="Settings sections">
+        {toc.map((t) => (
+          <button class={cur === t.id ? 'on' : ''} onClick={() => document.getElementById(t.id)?.scrollIntoView({ block: 'start' })}>
+            {t.name}
+          </button>
+        ))}
+      </nav>
       <div class="set-head">
         <h2>Settings</h2>
         <input type="search" class="set-search" placeholder="Search settings" value={q} onInput={(e) => setQ(e.currentTarget.value)} aria-label="Search settings" />
@@ -327,7 +354,7 @@ function MarkdownStyle() {
   return (
     <section>
       <h3>Markdown files</h3>
-      <p class="note">How markdown files and PR descriptions read: pick a theme, then change anything in it. One for light mode, and one for dark if you like.</p>
+      <p class="note">How markdown files and PR descriptions read: pick a theme, then change anything in it. In dark mode they follow your light-mode theme (its night version), or pick another.</p>
       <div class="md-mode">
         <span class="set-seg" role="radiogroup" aria-label="Style for">
           {(['light', 'dark'] as const).map((m) => (
@@ -338,12 +365,12 @@ function MarkdownStyle() {
         </span>
         {mode === 'dark' && (
           <label>
-            <input type="checkbox" checked={same} onChange={(e) => save(e.currentTarget.checked ? null : { ...s })} /> Same as in light mode
+            <input type="checkbox" checked={same} onChange={(e) => save(e.currentTarget.checked ? null : { ...s })} /> Follow light mode{same && s.theme.endsWith('-night') ? ` (${MD_THEMES.find((t) => t.id === s.theme)?.name})` : ''}
           </label>
         )}
       </div>
       <div class="md-themes" role="radiogroup" aria-label="Theme">
-        {MD_THEMES.map((t) => (
+        {MD_THEMES.filter((t) => (mode === 'dark' ? t.dark || t.id === 'lgtm' : !t.base)).map((t) => (
           <button role="radio" aria-checked={s.theme === t.id} class={s.theme === t.id ? 'md-theme on' : 'md-theme'} title={t.group} onClick={() => set({ theme: t.id })}>
             <div class={`rich mdt mdt-${t.id} md-thumb`} aria-hidden="true">
               <div class="md chunk">
