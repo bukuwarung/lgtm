@@ -71,10 +71,15 @@ export function CommandBar({ queue, parse }: { queue: () => QueueItem[]; parse: 
   };
   return (
     <div class="cmd">
+      <svg class="cmd-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+      </svg>
+      {!q && <kbd class="cmd-kbd">⌘K</kbd>}
       <input
         ref={input}
         value={q}
-        placeholder="Go to a PR, file or thread, or paste a PR link  ⌘K"
+        placeholder="Go to a PR, file or thread, or paste a PR link"
         aria-label="Go to, or open a PR link"
         onFocus={open}
         onBlur={() => setTimeout(() => setList(null), 150)}
