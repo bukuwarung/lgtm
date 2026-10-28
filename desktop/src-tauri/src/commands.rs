@@ -859,6 +859,6 @@ mod live {
         let sent = block_on(slack_notify(vec![Recipient { login: "nobody-unmapped".into(), emails: vec![] }], "test".into(), "bukuwarung/lgtm#1".into())).expect("notify");
         println!("slack_notify (dry run, unmapped): {}", sent[0]["error"]);
         assert_eq!(sent[0]["ok"], json!(false));
-        assert!(block_on(job_log("bad repo".into(), 1)).is_err());
+        assert!(block_on(job_log("bad repo".into(), 1, None)).is_err());
     }
 }
