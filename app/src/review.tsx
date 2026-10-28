@@ -940,7 +940,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   return (
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref}>
       <header class="file-h">
-        <span class="st">{file.status}</span>
+        <span class={`st s-${file.status}`}>{file.status}</span>
         {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
             src/), cut from the left (the nearest folders stay); the full path on hover. */}
         <a

@@ -162,6 +162,11 @@ main { padding: 16px; }
 .file-name b { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 calc(13px * var(--ts)) var(--mono); }
 .file-dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: calc(11px * var(--ts)) var(--mono); color: var(--muted); }
 .st { font-size: calc(11px * var(--ts)); padding: 0 6px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); }
+/* A file's status at a glance, in the index dots' colours. */
+.st[class*=s-] { --st: var(--modfg); color: var(--st); border-color: color-mix(in srgb, var(--st) 45%, transparent); background: color-mix(in srgb, var(--st) 14%, transparent); font-weight: 600; }
+.st.s-added { --st: var(--addfg); }
+.st.s-removed { --st: var(--delfg); }
+.st.s-renamed, .st.s-copied { --st: var(--accent); }
 .counts { font: calc(12px * var(--ts)) var(--mono); }
 .counts .a { color: var(--addfg); }
 .counts .d { color: var(--delfg); }
