@@ -306,7 +306,6 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
   const [foldNoDiff] = useStoredFlag('hideNoDiff', true);
   const [startSince] = useStoredFlag('sinceFirst', true);
-  const [wholeOnMine] = useStoredFlag('sinceNotOnMine', true); // my own PR opens whole, even after I reviewed it
   const [resumeOn] = useStoredFlag('resumePosition', true);
   const [dimMoved] = useStoredFlag('dimMoved', true);
   const [showIndex, toggleIndex] = useStoredFlag('showIndex', true);
@@ -422,13 +421,15 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         setMine([pr.user, ...pr.assignees].some((u) => u.login === me));
       }, () => {});
       getStack(repo, pr).then(setStack, () => {});
+      // My "reviews" of my own PR are only replies to threads: no "since your last review" there.
       Promise.all([getMyLastReview(repo, n), getViewer().catch(() => '')]).then(([last, me]) => {
+        if (pr.user.login === me) return;
         const sha = last?.sha;
         if (last) setLastReviewAt(last.at);
         if (sha && sha !== pr.head.sha) {
           getCompare(repo, sha, pr.head.sha).then((c) => setNewCommits(c.commits), () => {});
           setLastReviewed(sha);
-          if (first && startSince && !(wholeOnMine && pr.user.login === me)) setSince(true); // re-review: start with just what changed
+          if (first && startSince) setSince(true); // re-review: start with just what changed
         }
       }, () => {});
     })().catch((e) => setError(e.message));
