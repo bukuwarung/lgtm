@@ -179,13 +179,16 @@ async function findSlack(people) {
         break;
       }
     }
-    for (const [query, via] of [[p.name, 'name'], [p.login.split(/[-_]/)[0], 'username']]) {
-      if (found || typeof query !== 'string' || query.trim().length < 3 || query.startsWith('-')) continue;
+    // Who else it could be, when there's no single match, to pick from (and a search typed by hand, first).
+    const candidates = [];
+    for (const [query, via] of [[p.query, 'search'], [p.name, 'name'], [p.login.split(/[-_]/)[0], 'username']]) {
+      if (found || typeof query !== 'string' || query.trim().length < 2 || query.startsWith('-')) continue;
       const r = await slackcli(['search', 'people', query.slice(0, 100), '--json', '--limit', '5']);
       const live = r.ok ? (parseJson(r.stdout)?.people ?? []).filter((u) => !u.deleted && !u.is_bot) : [];
-      if (live.length === 1) found = one(live[0], via);
+      if (live.length === 1 && via !== 'search') found = one(live[0], via);
+      for (const u of live) if (candidates.length < 6 && !candidates.some((c) => c.id === u.id)) candidates.push(one(u, via));
     }
-    out.push({ login: p.login, ...(found ?? {}) });
+    out.push({ login: p.login, ...(found ?? (candidates.length ? { candidates } : {})) });
   }
   return out;
 }

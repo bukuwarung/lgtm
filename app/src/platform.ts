@@ -119,6 +119,33 @@ let slackEmojiList: Promise<Record<string, string>> | undefined;
 export const getSlackEmoji = () =>
   (slackEmojiList ??= (isDesktop ? command<Record<string, string>>('slack_emoji') : fetch('/slack-emoji').then((r) => (r.ok ? r.json() : {}))).catch(() => ({})));
 
+// People met on PRs you open (authors, reviewers, commenters), so Settings → Slack people lists them to map, not just
+// your team; the 200 most recent.
+export function rememberPeople(logins: string[]) {
+  try {
+    const was: string[] = JSON.parse(localStorage.getItem('peopleSeen') ?? '[]');
+    const now = [...new Set([...logins.filter((l) => l && !l.endsWith('[bot]') && l !== 'ghost'), ...was])].slice(0, 200);
+    localStorage.setItem('peopleSeen', JSON.stringify(now));
+  } catch {
+    // not remembered
+  }
+}
+export const peopleSeen = (): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem('peopleSeen') ?? '[]');
+  } catch {
+    return [];
+  }
+};
+// Open Settings → Slack people at someone, to map them (it looks them up on Slack there).
+export function mapOnSlack(login: string) {
+  rememberPeople([login]);
+  try {
+    localStorage.setItem('slackPeopleFocus', login);
+  } catch {}
+  location.hash = '/settings';
+}
+
 export type GhAccount = { login: string; active: boolean };
 export async function getGhAccounts(): Promise<GhAccount[]> {
   if (isDesktop) return command<GhAccount[]>('gh_accounts');
@@ -204,7 +231,7 @@ export function useFoldBots(myPR: boolean) {
 
 // GitHub login → Slack user ID, kept in your lgtm config; finding goes through slackcli.
 export type SlackPeople = { mine: Record<string, string> };
-export type SlackMatch = { login: string; id?: string; label?: string; display?: string; via?: 'email' | 'name' | 'username' };
+export type SlackMatch = { login: string; id?: string; label?: string; display?: string; via?: 'email' | 'name' | 'username' | 'search'; candidates?: Omit<SlackMatch, 'login' | 'candidates'>[] };
 async function call<T>(method: string, body?: any): Promise<T> {
   if (isDesktop)
     return method === 'GET' ? command<T>('slack_people_get') : method === 'POST' ? command<T>('slack_people_find', body) : command<T>('slack_people_save', { map: body });
@@ -214,7 +241,7 @@ async function call<T>(method: string, body?: any): Promise<T> {
   return d;
 }
 export const getSlackPeople = () => call<SlackPeople>('GET');
-export const findSlackPeople = (people: { login: string; name: string | null; emails: string[] }[]) => call<SlackMatch[]>('POST', { people });
+export const findSlackPeople = (people: { login: string; name: string | null; emails: string[]; query?: string }[]) => call<SlackMatch[]>('POST', { people });
 export const saveSlackPeople = (map: Record<string, string>) => call<SlackPeople>('PUT', map);
 
 // GitHub is the gh login (in the page); this asks the server about the CLIs it drives: slackcli and acli.

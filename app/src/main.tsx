@@ -2,7 +2,7 @@ import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadToken, type QueueItem } from './github.ts';
-import { Review } from './review.tsx';
+import { NoticeText, Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
 import { ago, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
@@ -210,7 +210,11 @@ function App() {
             <img src="/favicon.png" alt="" width="96" height="96" />
             <h2>All caught up!</h2>
             <p>No pull requests need your review right now.</p>
-            {flash?.route === route && <p class={flash.ok ? 'notice' : 'warn'}>{flash.text}</p>}
+            {flash?.route === route && (
+              <p class={flash.ok ? 'notice' : 'warn'}>
+                <NoticeText text={flash.text} />
+              </p>
+            )}
           </div>
         ) : (
           <p class="note page empty">Pick a pull request from the list, or paste a PR link in the box at the top (⌘K).</p>

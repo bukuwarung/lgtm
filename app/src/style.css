@@ -725,3 +725,10 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .emoji-list button { display: flex; align-items: center; gap: 8px; padding: 3px 8px; border: 0; border-radius: 5px; background: none; text-align: left; font: calc(12px * var(--ts)) var(--mono); color: var(--fg); }
 .emoji-list button.on, .emoji-list button:hover { background: var(--soft); }
 .emoji-list img { width: 18px; height: 18px; object-fit: contain; }
+.notice-cta { margin-left: 10px; padding: 1px 10px; font-size: calc(12px * var(--ts)); }
+.set-people tr.focus td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.slack-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.slack-pick > button { padding: 1px 10px; font-size: calc(12px * var(--ts)); }
+.slack-pick > button small { color: var(--muted); }
+.slack-pick form { display: flex; gap: 6px; flex: 1; min-width: 260px; }
+.slack-pick input { flex: 1; padding: 2px 8px; font-size: calc(12px * var(--ts)); }

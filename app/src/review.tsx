@@ -19,7 +19,7 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { gradleModules, moduleName, reviewOrder, untested } from './files.ts';
-import { own, useStoredValue, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { below, jumpTo, ModuleIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -247,6 +247,22 @@ function PRSkeleton() {
   );
 }
 
+// A notice, with a way to fix it when it's someone Slack can't place: "Find @x on Slack" opens Settings → Slack people
+// at them. Shared with the PR list's notices (main.tsx).
+export function NoticeText({ text }: { text: string }) {
+  const who = [...new Set([...text.matchAll(/no Slack user known: map @([\w-]+)/g)].map((m) => m[1]))];
+  return (
+    <>
+      {text}
+      {who.map((l) => (
+        <button class="notice-cta" onClick={() => mapOnSlack(l)}>
+          Find @{l} on Slack
+        </button>
+      ))}
+    </>
+  );
+}
+
 // What you'd seen of each PR you opened (for "changed since your last visit") piles up in localStorage, one record
 // a PR, some of them large; keep the 100 most recent.
 function pruneVisits() {
@@ -414,6 +430,13 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       }, () => {});
     })().catch((e) => setError(e.message));
   }, [reloads]);
+
+  // Everyone on this PR, for Settings → Slack people to offer mapping (not just your team).
+  useEffect(() => {
+    if (!data) return;
+    const pr = data.pr;
+    rememberPeople([pr.user.login, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => !c.bot).map((c) => c.author)]);
+  }, [data, conversation]);
 
   // The file header's height, for the hunk header pinned under it (style.css); it changes with the text size.
   useEffect(() => {
@@ -874,7 +897,11 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               </span>
             )}
           </div>
-          {notice && <p class={notice.ok ? 'notice' : 'warn'}>{notice.text}</p>}
+          {notice && (
+            <p class={notice.ok ? 'notice' : 'warn'}>
+              <NoticeText text={notice.text} />
+            </p>
+          )}
           {lastReviewed && (
             <div class={since ? 'since on' : 'since'}>
               <SinceSummary

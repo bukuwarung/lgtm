@@ -359,7 +359,9 @@ pub async fn slack_people_get() -> Result<Value, String> {
 pub struct Person {
     login: String,
     name: Option<String>,
+    #[serde(default)]
     emails: Vec<String>,
+    query: Option<String>, // a search typed in Settings, to find them by
 }
 
 /// Best guesses for people without a mapping: an exact email match first, then their GitHub name, then their login's
@@ -387,8 +389,10 @@ pub async fn slack_people_find(people: Vec<Person>) -> Result<Vec<Value>, String
             }
         }
         let stem = p.login.split(['-', '_']).next().unwrap_or("").to_string();
-        for (query, via) in [(p.name.clone().unwrap_or_default(), "name"), (stem, "username")] {
-            if found.is_some() || query.trim().chars().count() < 3 || query.starts_with('-') {
+        // Who else it could be, when there's no single match, to pick from (and a search typed by hand, first).
+        let mut candidates: Vec<Value> = vec![];
+        for (query, via) in [(p.query.clone().unwrap_or_default(), "search"), (p.name.clone().unwrap_or_default(), "name"), (stem, "username")] {
+            if found.is_some() || query.trim().chars().count() < 2 || query.starts_with('-') {
                 continue;
             }
             let q: String = query.chars().take(100).collect();
@@ -398,13 +402,20 @@ pub async fn slack_people_find(people: Vec<Person>) -> Result<Vec<Value>, String
             } else {
                 vec![]
             };
-            if live.len() == 1 {
+            if live.len() == 1 && via != "search" {
                 found = Some(one(&live[0], via));
+            }
+            for u in &live {
+                if candidates.len() < 6 && !candidates.iter().any(|c| c["id"] == u["id"]) {
+                    candidates.push(one(u, via));
+                }
             }
         }
         let mut row = json!({ "login": p.login });
         if let Some(Value::Object(m)) = found {
             row.as_object_mut().unwrap().extend(m);
+        } else if !candidates.is_empty() {
+            row["candidates"] = json!(candidates);
         }
         out.push(row);
     }

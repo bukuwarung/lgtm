@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis, getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
@@ -769,8 +769,42 @@ const VIA: Record<string, string> = { email: 'same email', name: 'same name', us
 
 // Who lgtm messages on Slack for each GitHub login. People come from the watched team and your review queue; for the
 // unmapped ones, "Find" asks Slack (email first, then name) and each match waits for your OK before it's saved.
+// Someone Slack had no single match for: who it might be (Save one), or a search of your own (a name, @handle or
+// email).
+function SlackPick({ m, busy, onSave, onSearch }: { m: SlackMatch; busy: boolean; onSave: (id: string) => void; onSearch: (q: string) => void }) {
+  const [q, setQ] = useState('');
+  return (
+    <div class="slack-pick">
+      {m.candidates?.length ? (
+        m.candidates.map((c) => (
+          <button disabled={busy} title={`Map to ${c.label}${c.display ? ` (${c.display})` : ''}`} onClick={() => onSave(c.id!)}>
+            {c.label}
+            {c.display && c.display !== c.label && <small> {c.display}</small>}
+          </button>
+        ))
+      ) : (
+        <small class="inline">No one found on Slack.</small>
+      )}
+      <form onSubmit={(e) => (e.preventDefault(), q.trim() && onSearch(q))}>
+        <input value={q} onInput={(e) => setQ(e.currentTarget.value)} placeholder="Search Slack: name, @handle, email" aria-label="Search Slack" />
+        <button disabled={busy || !q.trim()}>Search</button>
+      </form>
+    </div>
+  );
+}
+
 function SlackPeopleSection({ team }: { team: string }) {
   const [everyone, setLogins] = useState<string[] | null>(null);
+  // Sent here to map someone ("Find @x on Slack" on a notice): them, scrolled to and looked up on Slack.
+  const [focus] = useState(() => {
+    try {
+      const l = localStorage.getItem('slackPeopleFocus');
+      localStorage.removeItem('slackPeopleFocus');
+      return l;
+    } catch {
+      return null;
+    }
+  });
   const { bots, toggleBot } = useBots();
   const logins = everyone && everyone.filter((l) => !bots.has(l));
   const [org, setOrg] = useState('');
@@ -782,7 +816,8 @@ function SlackPeopleSection({ team }: { team: string }) {
     getSlackPeople().then(setMap, (e) => setErr(e.message));
     Promise.all([team ? getTeamMembers(team).catch(() => []) : [], getReviewQueue().catch(() => []), getViewer()]).then(([members, queue, me]) => {
       setOrg(team.split('/')[0] || queue[0]?.repo.split('/')[0] || '');
-      const people = new Set([...members, ...queue.map((i) => i.author)]);
+      // Your team, the people in your PR list (authors, and reviewers asked), and everyone met on PRs you've opened.
+      const people = new Set([...members, ...queue.flatMap((i) => [i.author, ...i.pendingReviewers]), ...peopleSeen(), ...(focus ? [focus] : [])]);
       people.delete(me);
       setLogins([...people].filter((l) => !l.endsWith('[bot]') && l !== 'ghost').sort((a, b) => a.localeCompare(b)));
     });
@@ -808,6 +843,20 @@ function SlackPeopleSection({ team }: { team: string }) {
     });
   const save = (entries: Record<string, string>) => run('save', async () => setMap(await saveSlackPeople(entries)));
   const suggested = Object.values(matches).filter((m) => m.id && !current(m.login));
+  // One person, looked up on Slack again: by their GitHub name and emails, or what you typed.
+  const lookUp = (login: string, query = '') =>
+    run('find', async () => {
+      const people = await getPeople(org, [login]);
+      const found = await findSlackPeople([{ login, ...people[login], query: query.trim() || undefined }]);
+      setMatches((m) => ({ ...m, ...Object.fromEntries(found.map((x) => [x.login, x])) }));
+    });
+  const looked = useRef(false);
+  useEffect(() => {
+    if (!focus || !logins || !map || !org || looked.current) return;
+    looked.current = true;
+    document.getElementById('slack-' + focus)?.scrollIntoView({ block: 'center' });
+    if (!current(focus)) lookUp(focus);
+  }, [logins, map, org]);
 
   return (
     <section>
@@ -835,7 +884,7 @@ function SlackPeopleSection({ team }: { team: string }) {
             {logins.map((l) => {
               const m = matches[l];
               return (
-                <tr key={l}>
+                <tr key={l} id={'slack-' + l} class={l === focus ? 'focus' : ''}>
                   <td>
                     @{l}{' '}
                     <button class="link" title="Treat as a bot: no Slack messages; comments fold like bots'" disabled={!!busy} onClick={() => toggleBot(l)}>
@@ -855,9 +904,12 @@ function SlackPeopleSection({ team }: { team: string }) {
                         <button disabled={!!busy} onClick={() => save({ [l]: m.id! })}>Save</button>
                       </>
                     ) : m ? (
-                      <small class="inline">no single match; add it to the config by hand</small>
+                      <SlackPick m={m} busy={!!busy} onSave={(id) => save({ [l]: id })} onSearch={(q) => lookUp(l, q)} />
                     ) : (
-                      <small class="inline">not mapped</small>
+                      <>
+                        <small class="inline">not mapped</small>{' '}
+                        <button class="link" disabled={!!busy || !org} onClick={() => lookUp(l)}>find</button>
+                      </>
                     )}
                   </td>
                 </tr>
