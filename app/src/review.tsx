@@ -1703,32 +1703,48 @@ const stripWeight = (f: File) => {
   if (w == null) stripWeights.set(f, (w = 44 + LINE_PX * Math.max(3, (f.patch ?? '').split('\n').length)));
   return w;
 };
-// WebKit (the app's) doesn't hold your place when something above the screen changes height, as a file does when
-// it's first drawn (it stood in at an estimate till then): what you're reading jumps. Where the browser doesn't
-// (or it's turned off: overflow-anchor), hold it by hand: a file wholly above the screen that grows or shrinks
-// scrolls the page by as much.
+// WebKit (the app's) doesn't hold your place when something above what you're reading changes height, as a file
+// does when it's first drawn, or a markdown file when its rendered view arrives: what you're reading jumps. Where the
+// browser doesn't (or it's turned off: overflow-anchor), lgtm does, as browsers that do it: it keeps the first line
+// you can see (below the pinned headers) where it was, and should that line be replaced (a "Loading…" giving way to
+// the file), the next file's top. Both are noted on every scroll; when any file changes size, the page scrolls by
+// however far they moved, before it's drawn.
 function HoldPlace() {
   useEffect(() => {
     if (CSS.supports('overflow-anchor', 'auto') && getComputedStyle(document.documentElement).overflowAnchor !== 'none') return;
     const main = document.querySelector('main');
     if (!main) return;
-    const sizes = new WeakMap<Element, number>();
-    const ro = new ResizeObserver((entries) => {
+    let refs: { el: Element; top: number }[] = [];
+    const note = () => {
+      refs = [];
+      const x = main.getBoundingClientRect().left + 80;
       const top = barsHeight();
-      let shift = 0;
-      for (const e of entries) {
-        const h = e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height;
-        const before = sizes.get(e.target);
-        sizes.set(e.target, h);
-        if (before != null && e.target.getBoundingClientRect().bottom <= top) shift += h - before;
+      for (let y = top + 8; y < innerHeight - 20; y += 12) {
+        const el = document.elementFromPoint(x, y);
+        // Pinned headers stay put, so they can't say where you are.
+        if (el && main.contains(el) && !el.closest('.file-h, tr.hunk, .pill-pop')) {
+          refs.push({ el, top: el.getBoundingClientRect().top });
+          break;
+        }
       }
-      if (shift) scrollBy(0, shift);
+      const next = [...main.querySelectorAll(':scope > section.file')].find((f) => f.getBoundingClientRect().top >= top);
+      if (next) refs.push({ el: next, top: next.getBoundingClientRect().top });
+    };
+    const ro = new ResizeObserver(() => {
+      const ref = refs.find((r) => r.el.isConnected);
+      if (ref) {
+        const moved = ref.el.getBoundingClientRect().top - ref.top;
+        if (Math.abs(moved) >= 1) scrollBy(0, moved);
+      }
+      note();
     });
     const watch = () => main.querySelectorAll(':scope > section.file').forEach((f) => ro.observe(f));
     watch();
+    note();
     const mo = new MutationObserver(watch); // files shown later (generated ones, opened)
     mo.observe(main, { childList: true });
-    return () => (ro.disconnect(), mo.disconnect());
+    addEventListener('scroll', note, { passive: true });
+    return () => (ro.disconnect(), mo.disconnect(), removeEventListener('scroll', note));
   }, []);
   return null;
 }
