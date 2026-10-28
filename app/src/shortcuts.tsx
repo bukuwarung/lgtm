@@ -78,6 +78,13 @@ const Icon = ({ d }: { d: string }) => (
   </svg>
 );
 
+// Code changed without its tests: an amber struck-out flask, explained on hover.
+export const NoTestMark = ({ title }: { title: string }) => (
+  <span class="badge no-test" role="img" title={title} aria-label="No test changes">
+    <Icon d={ICON_NO_TEST} />
+  </span>
+);
+
 // Ask a reviewer on Slack (your "Asking someone to review" message, Settings → Slack messages): a speech bubble
 // beside them, ✓ once sent, red if it wasn't.
 const ICON_SLACK = 'M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z';
@@ -383,9 +390,7 @@ function ModuleTrees({ files, modules, counts, viewed, onViewed }: { files: File
           <summary title={m === '.' ? 'The root project' : m ? `Module ${moduleName(m)}, in ${m}/` : 'Not in a module'}>
             <span class="tree-dir-name">{m === '' ? 'Other files' : <><ModuleIcon /> {m === '.' ? ': (root)' : moduleName(m)}</>}</span> <span class="count">{fs.length}</span>
             {flagTests && m !== '' && codeWithoutTests(fs) && (
-              <span class="badge no-test" role="img" title="No test changes: this module's code changes, but none of its tests" aria-label="No test changes">
-                <Icon d={ICON_NO_TEST} />
-              </span>
+              <NoTestMark title="No test changes: this module's code changes, but none of its tests" />
             )}
             <ViewedMark paths={fs.map((f) => f.filename)} viewed={viewed} onViewed={onViewed} what={m === '' ? 'these files' : 'this module'} />
           </summary>

@@ -23,7 +23,7 @@ import { gradleModules, moduleName, reviewOrder, untested } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
-import { below, jumpTo, ModuleIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
+import { below, jumpTo, ModuleIcon, NoTestMark, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -1171,7 +1171,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
         </span>
         {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
-        {ctx.untested.has(file.filename) && <span class="badge no-test" title="The PR changes this code but no test with its name">no test change</span>}
+        {ctx.untested.has(file.filename) && <NoTestMark title="No test change: the PR changes this code but no test with its name" />}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
