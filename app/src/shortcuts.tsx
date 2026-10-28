@@ -77,6 +77,24 @@ const Icon = ({ d }: { d: string }) => (
   </svg>
 );
 
+// Ask a reviewer on Slack (your "Asking someone to review" message, Settings → Slack messages): a speech bubble
+// beside them, ✓ once sent, red if it wasn't.
+const ICON_SLACK = 'M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z';
+function SlackAsk({ login, ask }: { login: string; ask: (login: string) => Promise<boolean> }) {
+  const [state, setState] = useState<'' | 'asking' | 'sent' | 'failed'>('');
+  return (
+    <button
+      class={`ix-icon-btn${state === 'asking' ? ' busy' : state === 'sent' ? ' done' : state === 'failed' ? ' failed' : ''}`}
+      title={state === 'sent' ? `Asked @${login} on Slack` : state === 'failed' ? "Couldn't reach them on Slack: click to try again" : `Ask @${login} for a review on Slack`}
+      aria-label={`Ask @${login} on Slack`}
+      disabled={state === 'asking' || state === 'sent'}
+      onClick={() => (setState('asking'), ask(login).then((ok) => setState(ok ? 'sent' : 'failed')))}
+    >
+      <Icon d={state === 'sent' ? ICON_CHECK : ICON_SLACK} />
+    </button>
+  );
+}
+
 // Every failed GitHub Actions job run again, a run at a time (Jenkins and other CI aren't GitHub's to rerun).
 function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[]; onRefresh: () => void }) {
   const [state, setState] = useState<'' | 'asking' | 'queued' | string>('');
@@ -164,11 +182,14 @@ type IndexProps = {
   me: string;
   ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
   modules?: Map<string, string>; // each file's Gradle module (files.ts gradleModules), when grouping by them
+  // On my own PR, with Slack: ask a reviewer there (one I have no Slack thread with about it yet); false if it failed.
+  slackAsk?: (login: string) => Promise<boolean>;
+  slackWith?: Set<string>; // reviewers I already have a Slack thread with about this PR
   onViewed: OnViewed;
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -217,12 +238,15 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
 
       <Section title="Reviewers" count={reviewers.size}>
         {[...reviewers].map(([who, r]) => (
-          <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
-            <span class="ix-label">
-              {!who.startsWith('team ') && <img src={`https://github.com/${encodeURIComponent(who)}.png?size=40`} alt="" />}
-              {who.startsWith('team ') ? who : '@' + who} <span class={`ix-meta v-${r.tone}`}>{r.meta}</span>
-            </span>
-          </button>
+          <div class="ix-check">
+            <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
+              <span class="ix-label">
+                {!who.startsWith('team ') && <img src={`https://github.com/${encodeURIComponent(who)}.png?size=40`} alt="" />}
+                {who.startsWith('team ') ? who : '@' + who} <span class={`ix-meta v-${r.tone}`}>{r.meta}</span>
+              </span>
+            </button>
+            {slackAsk && !who.startsWith('team ') && !slackWith?.has(who) && <SlackAsk login={who} ask={slackAsk} />}
+          </div>
         ))}
         {ask &&
           (reviewers.size ? (

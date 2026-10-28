@@ -668,6 +668,21 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     });
   }
   const toggleViewed = (path: string) => markViewed([path], !viewed.has(path));
+  // Ask a reviewer on Slack, from the index (my own PR): the "ask" message (Settings → Slack messages); its thread
+  // then shows by the title.
+  async function askOnSlack(login: string): Promise<boolean> {
+    try {
+      const emails = await getEmails(repo.split('/')[0], [login]);
+      const text = fillSlack(slackTemplate('ask'), prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
+      const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], text, `${repo}#${n}`);
+      setNotice(r?.ok ? { ok: true, text: `Asked @${login} for a review on Slack.` } : { ok: false, text: `Slack didn't reach @${login}: ${r?.error ?? 'no reply'}` });
+      if (r?.ok) slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {});
+      return !!r?.ok;
+    } catch (e: any) {
+      setNotice({ ok: false, text: `Slack failed: ${e.message}` });
+      return false;
+    }
+  }
 
   const visible = files.filter((f) => !f.generated && !f.noDiff);
   const generated = files.filter((f) => f.generated);
@@ -767,6 +782,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               files={shown}
               viewed={viewed}
               onViewed={markViewed}
+              slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
+              slackWith={new Set(slackThreads.map((t) => t.login))}
               me={me}
               modules={byModule ? modules : undefined}
               ask={
