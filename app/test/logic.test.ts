@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { enclosing, addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
-import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
+import { awaitsMe, markBots, repoPath, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { codeWithoutTests, estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -482,4 +482,15 @@ test('fillSlack: values, tags, and no empty lines left behind', async () => {
   assert.equal(fillSlack('Hi {@them}, {@author} and {@bob-2}: {title}\n{note}', v), 'Hi <@gh:*>, <@gh:ann> and <@gh:bob-2>: Fix &lt;a&gt; &amp; b');
   assert.equal(fillSlack('Hi {@recipient}', v), 'Hi <@gh:*>');
   assert.equal(fillSlack('{unknown} stays', v), '{unknown} stays');
+});
+
+test('repoPath: a markdown image link as a path in the repo', () => {
+  const up = '..';
+  assert.equal(repoPath('images/flow.png', 'docs/features'), 'docs/features/images/flow.png');
+  assert.equal(repoPath('./a%20b.png?raw=1', 'docs'), 'docs/a b.png');
+  assert.equal(repoPath([up, up, 'assets', 'x.svg'].join('/'), 'docs/features/ui'), 'docs/assets/x.svg');
+  assert.equal(repoPath('/public/logo.png', 'docs'), 'public/logo.png');
+  assert.equal(repoPath('flow.png', ''), 'flow.png');
+  assert.equal(repoPath('https://x/y.png', 'docs'), null);
+  assert.equal(repoPath('data:image/png;base64,AA', 'docs'), null);
 });

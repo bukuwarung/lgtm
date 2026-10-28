@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, requestReview, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, markBots, renderGfm, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -692,6 +692,30 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     });
   }
   const toggleViewed = (path: string) => markViewed([path], !viewed.has(path));
+  // Ask a reviewer to look again, from the index (my own PR): a re-request on GitHub, then the "again" message on Slack
+  // (in your thread with them; none if that message is emptied, or there's no Slack). The PR reloads to show them asked.
+  async function reRequest(login: string): Promise<boolean> {
+    try {
+      await requestReview(repo, n, login);
+    } catch (e: any) {
+      setNotice({ ok: false, text: `Couldn't ask @${login} again on GitHub: ${e.message}` });
+      return false;
+    }
+    let note = `Asked @${login} to review again.`;
+    const text = fillSlack(slackTemplate('again'), prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
+    if (text && slackPeople !== null) {
+      try {
+        const emails = await getEmails(repo.split('/')[0], [login]);
+        const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], text, `${repo}#${n}`);
+        note = r?.ok ? `Asked @${login} to review again, on GitHub and Slack.` : `Asked @${login} again on GitHub; Slack didn't reach them: ${r?.error ?? 'no reply'}`;
+      } catch (e: any) {
+        note = `Asked @${login} again on GitHub; Slack failed (${e.message}).`;
+      }
+    }
+    setNotice({ ok: !note.includes("didn't") && !note.includes('failed'), text: note });
+    dispatchEvent(new Event('lgtm:refresh'));
+    return true;
+  }
   // Ask a reviewer on Slack, from the index (my own PR): the "ask" message (Settings → Slack messages); its thread
   // then shows by the title.
   async function askOnSlack(login: string): Promise<boolean> {
@@ -808,6 +832,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               onViewed={markViewed}
               slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
               slackWith={new Set(slackThreads.map((t) => t.login))}
+              reRequest={!!me && pr.user.login === me ? reRequest : undefined}
               me={me}
               modules={byModule ? modules : undefined}
               ask={
@@ -1570,7 +1595,10 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const path = file.filename;
   const root = useRef<HTMLDivElement>(null);
   const linkTo = (slug: string) => `https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${path}#${slug}`;
-  useEffect(() => tidyDoc(root.current, linkTo));
+  useEffect(() => {
+    tidyDoc(root.current, linkTo);
+    signRelativeImages(root.current, ctx.headRepo, ctx.pr.head.sha, dir(path)); // its images, by their path in the repo
+  });
   const [src, setSrc] = useState<string | null>();
   useEffect(() => {
     getRaw(ctx.headRepo, path, ctx.pr.head.sha).then(setSrc, () => setSrc(null));

@@ -372,6 +372,29 @@ export function signRepoImages(root: ParentNode | null) {
   }
 }
 
+// Images a rendered markdown file shows by a path relative to it (images/flow.png, ../x.png, or /docs/x.png from the
+// repo's root): the file at the PR's commit, by the API's signed link (the page's own address isn't the repo).
+// A markdown file's image link as a path in the repo; null for a full address (https:, data:) or a #fragment.
+export function repoPath(src: string, fileDir: string): string | null {
+  if (/^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(src)) return null;
+  const path: string[] = [];
+  for (const p of (src.startsWith('/') ? src.slice(1) : `${fileDir ? fileDir + '/' : ''}${src}`).split(/[?#]/)[0].split('/'))
+    if (p === '..') path.pop();
+    else if (p && p !== '.') path.push(decodeURIComponent(p));
+  return path.join('/');
+}
+export function signRelativeImages(root: ParentNode | null, repo: string, ref: string, fileDir: string) {
+  for (const img of root?.querySelectorAll<HTMLImageElement>('img[src]:not([data-signed]):not(.emoji)') ?? []) {
+    const path = repoPath(img.getAttribute('src')!, fileDir);
+    if (!path) continue;
+    img.dataset.signed = '';
+    const key = `${repo}@${ref}:${path}`;
+    let url = signedImages.get(key);
+    if (!url) signedImages.set(key, (url = getDownloadUrl(repo, path, ref).catch(() => null)));
+    void url.then((u) => u && (img.src = u));
+  }
+}
+
 
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}

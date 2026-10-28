@@ -3,7 +3,7 @@ import { slackEscape } from './platform.ts';
 // The messages lgtm sends on Slack, as templates you can change (Settings → Slack messages). {name} fills in a value;
 // {@recipient} (who gets it; {@them}, its first name, too), {@author} and {@any-github-login} tag that person on Slack (the sender turns <@gh:…> into a Slack mention,
 // through the Slack people mapping; someone it can't place stays @login).
-export type SlackKind = 'review' | 'nudge' | 'ask';
+export type SlackKind = 'review' | 'nudge' | 'ask' | 'again';
 export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string; fields: string }> = {
   review: {
     label: 'After your review, to the author and assignees',
@@ -20,12 +20,19 @@ export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string;
     initial: 'Hi! Could you review my PR when you have a moment? Thank you 🙏\n{pr}',
     fields: '',
   },
+  again: {
+    label: 'Asking a reviewer to look again (re-request on your PR); empty: no Slack message',
+    initial: 'Addressed your comments 🙏 Could you take another look at {pr}?',
+    fields: '',
+  },
 };
 export const COMMON_FIELDS = '{pr} the PR, linked · {title} · {url} · {repo} · {number} · {author} · {@recipient} tags who gets it · {@author} tags the author · {@login} tags anyone';
 
+// Your wording, else lgtm's. Emptied, "again" sends nothing; the others fall back to lgtm's.
 export const slackTemplate = (k: SlackKind) => {
   try {
-    return localStorage.getItem('slackMsg.' + k) || SLACK_MESSAGES[k].initial;
+    const mine = localStorage.getItem('slackMsg.' + k);
+    return k === 'again' ? mine ?? SLACK_MESSAGES[k].initial : mine || SLACK_MESSAGES[k].initial;
   } catch {
     return SLACK_MESSAGES[k].initial;
   }

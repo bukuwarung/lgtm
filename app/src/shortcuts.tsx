@@ -95,6 +95,24 @@ function SlackAsk({ login, ask }: { login: string; ask: (login: string) => Promi
   );
 }
 
+// Ask a reviewer who's reviewed to look again (after you've pushed fixes): a re-request on GitHub, and on Slack your
+// "look again" message in your thread with them. ✓ once asked.
+const ICON_AGAIN = 'M13 8a5 5 0 1 1-1.6-3.7M13.2 2.2v3h-3';
+function ReRequest({ login, again }: { login: string; again: (login: string) => Promise<boolean> }) {
+  const [state, setState] = useState<'' | 'asking' | 'done' | 'failed'>('');
+  return (
+    <button
+      class={`ix-icon-btn${state === 'asking' ? ' busy' : state === 'done' ? ' done' : state === 'failed' ? ' failed' : ''}`}
+      title={state === 'done' ? `Asked @${login} to look again` : state === 'failed' ? "Couldn't ask: click to try again" : `Ask @${login} to review again`}
+      aria-label={`Ask @${login} to review again`}
+      disabled={state === 'asking' || state === 'done'}
+      onClick={() => (setState('asking'), again(login).then((ok) => setState(ok ? 'done' : 'failed')))}
+    >
+      <Icon d={state === 'done' ? ICON_CHECK : ICON_AGAIN} />
+    </button>
+  );
+}
+
 // Every failed GitHub Actions job run again, a run at a time (Jenkins and other CI aren't GitHub's to rerun).
 function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[]; onRefresh: () => void }) {
   const [state, setState] = useState<'' | 'asking' | 'queued' | string>('');
@@ -185,11 +203,12 @@ type IndexProps = {
   // On my own PR, with Slack: ask a reviewer there (one I have no Slack thread with about it yet); false if it failed.
   slackAsk?: (login: string) => Promise<boolean>;
   slackWith?: Set<string>; // reviewers I already have a Slack thread with about this PR
+  reRequest?: (login: string) => Promise<boolean>; // on my own PR: ask a reviewer who's reviewed to look again
   onViewed: OnViewed;
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -245,6 +264,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
                 {who.startsWith('team ') ? who : '@' + who} <span class={`ix-meta v-${r.tone}`}>{r.meta}</span>
               </span>
             </button>
+            {reRequest && r.id && r.tone !== 'WAITING' && <ReRequest login={who} again={reRequest} />}
             {slackAsk && !who.startsWith('team ') && !slackWith?.has(who) && <SlackAsk login={who} ask={slackAsk} />}
           </div>
         ))}
