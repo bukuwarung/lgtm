@@ -1270,6 +1270,18 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const t = ctx.target?.path === path ? ctx.target : null;
 
   const pick = (e: MouseEvent, side: Side, line: number) => {
+    // ⌥-click: a link to the line on GitHub at this PR's commit (the old file for a removed line), to share.
+    if (e.altKey) {
+      const url =
+        side === 'LEFT'
+          ? `https://github.com/${ctx.repo}/blob/${ctx.pr.base.sha}/${file.previous_filename ?? path}#L${line}`
+          : `https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${path}#L${line}`;
+      void navigator.clipboard.writeText(url).then(
+        () => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Link to line ${line} copied`, ms: 2500 } })),
+        () => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: "Couldn't copy the link", ms: 2500 } })),
+      );
+      return;
+    }
     if (side === 'LEFT' && ctx.since) return;
     if (e.shiftKey && t?.side === side && t.line) {
       const start = Math.min(t.startLine ?? t.line, line), end = Math.max(t.line, line);
@@ -1421,8 +1433,8 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                     </tr>
                   )}
                   <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`}>
-                    <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
-                    <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
+                    <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
+                    <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />
                   </tr>
                   {notes(side, num)}

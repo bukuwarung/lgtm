@@ -2,7 +2,7 @@ import { useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
 import { codeWithoutTests, moduleName } from './files.ts';
 import type { ComponentChildren } from 'preact';
-import { awaitsMe, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, so there's nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean };
@@ -67,9 +67,43 @@ function Entry({ label, meta, sub, dim, onClick }: { label: string; meta?: strin
   );
 }
 
-function CheckEntry({ c, repo }: { c: Check; repo: string }) {
+// Every failed GitHub Actions job run again, a run at a time (Jenkins and other CI aren't GitHub's to rerun).
+function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[]; onRefresh: () => void }) {
+  const [state, setState] = useState<'' | 'asking' | 'queued' | string>('');
+  const runs = [...new Set(checks.map(runOf))] as string[];
+  const go = (e: Event) => {
+    e.preventDefault(); // not the section's own click (fold it)
+    e.stopPropagation();
+    setState('asking');
+    Promise.all(runs.map((r) => rerunFailedJobs(repo, r))).then(
+      () => (setState('queued'), setTimeout(onRefresh, 3000)),
+      (err) => setState(`couldn't: ${err.message}`),
+    );
+  };
+  return (
+    <button
+      class="ix-rerun"
+      disabled={state === 'asking' || state === 'queued'}
+      title={state.startsWith('couldn') ? state : `Run the ${checks.length} failed GitHub Actions job${checks.length > 1 ? 's' : ''} again`}
+      onClick={go}
+    >
+      {state === 'asking' ? '…' : state === 'queued' ? 'queued ✓' : 'rerun failed'}
+    </button>
+  );
+}
+
+function CheckEntry({ c, repo, onRefresh }: { c: Check; repo: string; onRefresh: () => void }) {
   const [log, setLog] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [rerun, setRerun] = useState<'' | 'asking' | 'queued' | string>('');
+  // Run this job again (GitHub Actions only); the checks reload once it's queued.
+  const again = () => {
+    setRerun('asking');
+    rerunJob(repo, c.jobId!).then(
+      () => (setRerun('queued'), setTimeout(onRefresh, 3000)),
+      (e) => setRerun(`couldn't: ${e.message}`),
+    );
+  };
   const toggle = () => {
     setOpen(!open);
     if (log === null) fetchJobLog(repo, c.jobId!).then(setLog, (e) => setLog(`Couldn't load the log: ${e.message}`));
@@ -84,9 +118,14 @@ function CheckEntry({ c, repo }: { c: Check; repo: string }) {
           {c.summary && <span class="ix-sub">{c.summary}</span>}
         </a>
         {c.state === 'failure' && c.jobId && (
-          <button class="ix-log-btn" title="Show the end of the job log" onClick={toggle}>
-            {open ? 'hide log' : 'log'}
-          </button>
+          <>
+            <button class="ix-log-btn" title={rerun.startsWith('couldn') ? rerun : 'Run this job again (and the jobs that wait on it)'} disabled={rerun === 'asking' || rerun === 'queued'} onClick={again}>
+              {rerun === 'asking' ? '…' : rerun === 'queued' ? 'queued ✓' : rerun ? 'retry' : 'rerun'}
+            </button>
+            <button class="ix-log-btn" title="Show the end of the job log" onClick={toggle}>
+              {open ? 'hide log' : 'log'}
+            </button>
+          </>
         )}
       </div>
       {open && <pre class="ix-log">{log ?? 'Loading…'}</pre>}
@@ -118,6 +157,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
   const failing = checks?.filter((c) => c.state === 'failure').length ?? 0;
+  const rerunnable = checks?.filter((c) => c.state === 'failure' && c.jobId && runOf(c)) ?? [];
   const bots = conversation.filter((c) => c.bot);
   const convEntry = (c: ConversationItem, i: number) => (
     <Entry key={c.id} label={c.author} meta={c.state ? VERDICT[c.state] : 'commented'} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
@@ -188,6 +228,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         extra={
           <>
             {failing > 0 && <span class="ck-sum ck-failure">{failing} failing</span>}
+            {rerunnable.length > 0 && <RerunFailed repo={repo} checks={rerunnable} onRefresh={onRefreshChecks} />}
             {pending > 0 && <span class="ck-sum ck-pending">{pending} running</span>}
             <span
               class="ix-refresh"
@@ -210,13 +251,13 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
           <p class="note ix-pad">No checks.</p>
         ) : (
           <>
-            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} />)}
+            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} />)}
             {([['success', 'passed'], ['neutral', 'skipped or cancelled']] as const).map(([state, label]) => {
               const group = checks.filter((c) => c.state === state);
               return group.length > 0 && (
                 <details class="ix-ckgroup">
                   <summary><span class={'ck ck-' + state}>{CHECK_ICON[state]}</span> {group.length} {label}</summary>
-                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} />)}
+                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} />)}
                 </details>
               );
             })}

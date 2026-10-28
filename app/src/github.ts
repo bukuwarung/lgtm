@@ -415,6 +415,13 @@ export async function getChecks(repo: string, n: number): Promise<Check[]> {
     .sort((a: Check, b: Check) => CHECK_ORDER.indexOf(a.state) - CHECK_ORDER.indexOf(b.state) || a.name.localeCompare(b.name));
 }
 
+// Running failed GitHub Actions jobs again: one job (and the jobs that wait on it), or every failed job of a run.
+export const rerunJob = async (repo: string, jobId: number) => void (await ok(await gh(`/repos/${repo}/actions/jobs/${jobId}/rerun`, { method: 'POST' })));
+export const rerunFailedJobs = async (repo: string, runId: string) =>
+  void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, { method: 'POST' })));
+// A job's run, from its link (…/actions/runs/<run>/job/<job>).
+export const runOf = (c: Check) => c.url?.match(/\/actions\/runs\/(\d+)/)?.[1];
+
 // Files I've marked "Viewed" on GitHub (GitHub's own per-user state, so it carries over to github.com).
 export async function getViewed(repo: string, n: number): Promise<Set<string>> {
   const [owner, name] = repo.split('/');

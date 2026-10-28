@@ -705,3 +705,4 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .pill-pop > :is(a, button):hover { background: var(--soft); }
 .pill-pop small { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: calc(11px * var(--ts)); }
 .pill-pop b { font-weight: 600; }
+.ix-rerun { padding: 0 6px; font-size: calc(11px * var(--ts)); font-weight: 400; }

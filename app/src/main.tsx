@@ -108,7 +108,7 @@ function App() {
   };
   useEffect(() => {
     // Other parts of the page show a message here too (the review page, after a review a Claude session sent).
-    const t = (e: Event) => say((e as CustomEvent).detail, 20000);
+    const t = (e: Event) => say((e as CustomEvent).detail, (e as CustomEvent).detail.ms ?? 20000);
     addEventListener('lgtm:toast', t);
     return () => removeEventListener('lgtm:toast', t);
   }, []);
