@@ -1064,7 +1064,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   const [collapseDeleted] = useStoredFlag('collapseDeleted', true);
   const [rich, setRich] = useState(canRich && richFirst);
   // Android drawables preview as images by default; one that isn't a <vector> (a selector, a shape) falls back to source.
-  const [canPreview, setCanPreview] = useState(DRAWABLE.test(file.filename) || BITMAP.test(file.filename));
+  const [canPreview, setCanPreview] = useState(DRAWABLE.test(file.filename) || BITMAP.test(file.filename) || SVG.test(file.filename));
   const [preview, setPreview] = useState(canPreview && previewFirst);
   // A deleted file's old contents are mostly noise: one row until asked for, unless a line comment is already on it.
   const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
@@ -1178,10 +1178,21 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   );
 }
 
-// Before / after images (base branch vs PR head): bitmaps as they are, Android vector drawables converted to SVG.
+// Before / after images (base branch vs PR head): bitmaps as they are, SVG files as images (an <img> runs none of
+// their scripts; nor are they linked to open on their own, where it would), Android vector drawables converted to SVG.
 const BITMAP = /\.(png|webp|jpe?g|gif)$/i;
+const SVG = /\.svg$/i;
+// An SVG's size from its own attributes (width × height, else its viewBox), for the caption.
+const svgSize = (text: string) => {
+  const tag = text.match(/<svg\b[^>]*>/i)?.[0] ?? '';
+  const attr = (n: string) => tag.match(new RegExp(`\\s${n}\\s*=\\s*["']([^"']+)`, 'i'))?.[1];
+  const [w, h] = [attr('width'), attr('height')];
+  if (w && h) return `${w.replace(/px$/, '')}×${h.replace(/px$/, '')}`;
+  const vb = attr('viewBox')?.trim().split(/[\s,]+/);
+  return vb?.length === 4 ? `${vb[2]}×${vb[3]} (viewBox)` : undefined;
+};
 const DRAWABLE = /\/res\/drawable[^/]*\/[^/]+\.xml$/;
-type Shot = { src: string; size?: string; note?: string };
+type Shot = { src: string; size?: string; note?: string; noLink?: boolean };
 function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () => void }) {
   const [shots, setShots] = useState<{ before: Shot | null; after: Shot | null } | null>(null);
   const [dims, setDims] = useState<Record<string, string>>({});
@@ -1192,6 +1203,7 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
         return src ? { src } : null;
       }
       const text = await getRaw(repo, path, ref);
+      if (SVG.test(file.filename)) return text ? { src: 'data:image/svg+xml,' + encodeURIComponent(text), size: svgSize(text), noLink: true } : null;
       const v = text ? vectorToSvg(text) : null;
       return v && { src: 'data:image/svg+xml,' + encodeURIComponent(v.svg), size: `${v.width}×${v.height}dp`, note: v.approx ? 'Colours from resources (@color/…, ?attr/…) are drawn grey.' : undefined };
     };
@@ -1204,7 +1216,7 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
   const fig = (label: string, s: Shot | null) =>
     s && (
       <figure>
-        <a href={s.src} target="_blank" rel="noopener" title="Open full size">
+        <a href={s.noLink ? undefined : s.src} target="_blank" rel="noopener" title={s.noLink ? undefined : 'Open full size'}>
         <img
           src={s.src}
           alt={`${label}: ${file.filename}`}
