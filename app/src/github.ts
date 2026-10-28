@@ -79,6 +79,7 @@ export type QueueItem = {
   thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
+  noReviewers: boolean; // nobody asked (people or teams) and no person has reviewed: bots don't count
   lastCommitAt: string; // the head commit's time
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
@@ -163,7 +164,7 @@ fragment F on PullRequest{id number title updatedAt isDraft reviewDecision merge
   headRefName baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
-  latestReviews(first:100){nodes{state author{login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
+  latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
   const d = await graphql(QUEUE, {});
@@ -213,6 +214,7 @@ const toItem = (p: any): QueueItem => ({
       autoMerge: !!p.autoMergeRequest,
       waitingSince: [p.createdAt, p.timelineItems?.nodes[0]?.createdAt].filter(Boolean).sort().at(-1),
       pendingReviewers: (p.reviewRequests?.nodes ?? []).map((r: any) => r.requestedReviewer?.login).filter(Boolean),
+      noReviewers: !p.reviewRequests?.nodes.length && !p.latestReviews.nodes.some((r: any) => r.author?.__typename === 'User' && r.author.login !== p.author?.login),
       requested: false,
       myState: null,
       reviewedBefore: false,
