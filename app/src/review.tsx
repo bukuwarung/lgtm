@@ -17,7 +17,7 @@ import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, comment
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
-import { reviewOrder, untested } from './files.ts';
+import { gradleModules, reviewOrder, untested } from './files.ts';
 import { own, useStoredValue, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
@@ -148,6 +148,17 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
 // A path's file name, and its folder ('' at the root).
 const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const dir = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf('/')));
+
+// How many Gradle modules the PR touches, named in full on hover.
+function ModulesPill({ modules }: { modules?: Map<string, string> }) {
+  const names = [...new Set(modules?.values() ?? [])].filter(Boolean).map((m) => (m === '.' ? 'root project' : m)).sort();
+  if (!names.length) return null;
+  return (
+    <span class="pill" title={`Touches ${names.length === 1 ? 'one module' : `${names.length} modules`}:\n${names.join('\n')}`}>
+      ◫ {names.length === 1 ? names[0] : `${names.length} modules`}
+    </span>
+  );
+}
 
 // What you'd seen of each PR you opened (for "changed since your last visit") piles up in localStorage, one record
 // a PR, some of them large; keep the 100 most recent.
@@ -487,6 +498,9 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const mainLang = majorityLanguage(data.files.filter((f) => !f.generated).map((f) => f.filename));
   const [flagUntested] = useStoredFlag('flagUntested', true);
   const noTests = useMemo(() => new Set(flagUntested ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested]);
+  // Gradle modules (Settings → Reviewing): the index groups files by them, a pill says how many the PR touches.
+  const [byModule] = useStoredFlag('gradleModules', true);
+  const modules = useMemo(() => gradleModules(data.files.map((f) => f.filename)), [data.files]);
   const ctx: Ctx = {
     untested: noTests,
     sinceComment,
@@ -644,6 +658,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               files={shown}
               viewed={viewed}
               me={me}
+              modules={byModule ? modules : undefined}
               ask={
                 !!me && pr.user.login === me && !pr.draft && (
                   <AskReviewer
@@ -710,6 +725,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
                 {noTests.size} file{noTests.size > 1 ? 's' : ''} without test changes
               </span>
             )}
+            <ModulesPill modules={byModule ? modules : undefined} />
             {pr.additions != null && (
               <span class="pill p-size">
                 <b class="a">+{pr.additions}</b> <b class="d">−{pr.deletions}</b> · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}

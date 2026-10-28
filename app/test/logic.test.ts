@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { estimate, estimateLabel, reviewOrder, untested } from '../src/files.ts';
+import { estimate, estimateLabel, gradleModules, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -402,4 +402,26 @@ test('reviewDonePrompt: the review, as a message back to the Claude session', as
   assert.match(p, /^I reviewed https:\/\/github\.com\/o\/r\/pull\/7 \(#7 Retry payments\) in lgtm and requested changes\./);
   assert.match(p, /- `Pay\.kt:12`: Stop retrying on declines\./);
   assert.match(p, /Please address them/);
+});
+
+test('gradleModules: the folder before src/, build files, the rest by folder', () => {
+  const m = gradleModules([
+    'core/network/src/main/kotlin/Api.kt',
+    'core/network/proguard-rules.pro',
+    'app/build.gradle.kts',
+    'app/lint.xml',
+    'src/main/java/Root.java',
+    'build.gradle',
+    'docs/readme.md',
+    'feature/pay/src/test/PayTest.kt',
+  ]);
+  assert.equal(m.get('core/network/src/main/kotlin/Api.kt'), 'core/network');
+  assert.equal(m.get('core/network/proguard-rules.pro'), 'core/network');
+  assert.equal(m.get('app/build.gradle.kts'), 'app');
+  assert.equal(m.get('app/lint.xml'), 'app');
+  assert.equal(m.get('src/main/java/Root.java'), '.');
+  assert.equal(m.get('build.gradle'), '.');
+  assert.equal(m.get('docs/readme.md'), '');
+  assert.equal(m.get('feature/pay/src/test/PayTest.kt'), 'feature/pay');
+  assert.equal(gradleModules(['web/src/index.ts', 'web/package.json']).size, 0); // not a Gradle PR
 });

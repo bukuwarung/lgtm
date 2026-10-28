@@ -221,6 +221,7 @@ export function Settings() {
         <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)} />
         <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation" />
+        <Flag k="gradleModules" initial={true} label="Group files by Gradle module" hint="In Gradle projects: the PR index lists files by module (the folder before src/), and a pill says how many modules the PR touches." />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review." />
         <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
       </section>

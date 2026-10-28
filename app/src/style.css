@@ -645,3 +645,6 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .ix-meta.v-CHANGES_REQUESTED { color: var(--pill-bad); }
 .ix-meta.v-WAITING { color: var(--pill-warn); }
 .ix-meta.v-COMMENTED { color: var(--pill-info); }
+.mod-group > summary { font-weight: 600; }
+.mod-icon { color: var(--accent); font-weight: 400; }
+.mod-group > summary .count { margin-left: 4px; color: var(--muted); font-weight: 400; }

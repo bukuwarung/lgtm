@@ -106,10 +106,11 @@ type IndexProps = {
   counts: Counts;
   me: string;
   ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
+  modules?: Map<string, string>; // each file's Gradle module (files.ts gradleModules), when grouping by them
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -248,19 +249,50 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
       </Section>
 
       <Section title="Files" count={files.length} extra={<span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>
-        <FileTree files={files} counts={counts} viewed={viewed} />
+        {modules?.size ? <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} /> : <FileTree files={files} counts={counts} viewed={viewed} />}
       </Section>
     </div>
   );
 }
 
+// The files by Gradle module: a group per module (its folder; the root project; then files in none), each with its own
+// tree below the module's folder.
+function ModuleTrees({ files, modules, counts, viewed }: { files: File[]; modules: Map<string, string>; counts: Counts; viewed: Set<string> }) {
+  const groups = useMemo(() => {
+    const g = new Map<string, File[]>();
+    for (const f of files) {
+      const m = modules.get(f.filename) ?? '';
+      g.set(m, [...(g.get(m) ?? []), f]);
+    }
+    return [...g].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : byName(a, b)));
+  }, [files, modules]);
+  return (
+    <>
+      {groups.map(([m, fs]) => (
+        <details open class="tree-dir mod-group" key={m}>
+          <summary title={m === '.' ? 'The root project' : m ? `Module ${m}` : 'Not in a module'}>
+            {m === '' ? 'Other files' : <><span class="mod-icon">◫</span> {m === '.' ? 'root project' : m}</>} <span class="count">{fs.length}</span>
+            {fs.every((f) => viewed.has(f.filename)) && <span class="ck ck-success" title="All viewed">✓</span>}
+          </summary>
+          <FileTree files={fs} counts={counts} viewed={viewed} base={m === '' ? undefined : m === '.' ? '' : m} />
+        </details>
+      ))}
+    </>
+  );
+}
+
 type TreeNode = { name: string; dirs: Map<string, TreeNode>; files: File[] };
 
-function buildTree(files: File[]): TreeNode {
+// `base`: a module's folder, left out of the tree along with its src/ (so its source sets, main, test…, come first).
+const below = (path: string, base: string) => {
+  const rel = base ? path.slice(base.length + 1) : path;
+  return rel.startsWith('src/') ? rel.slice(4) : rel;
+};
+function buildTree(files: File[], base?: string): TreeNode {
   const root: TreeNode = { name: '', dirs: new Map(), files: [] };
   for (const f of files) {
     let node = root;
-    for (const part of f.filename.split('/').slice(0, -1)) {
+    for (const part of (base == null ? f.filename : below(f.filename, base)).split('/').slice(0, -1)) {
       if (!node.dirs.has(part)) node.dirs.set(part, { name: part, dirs: new Map(), files: [] });
       node = node.dirs.get(part)!;
     }
@@ -273,8 +305,8 @@ const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric
 
 type Counts = (path: string) => number;
 
-export function FileTree({ files, counts, viewed }: { files: File[]; counts: Counts; viewed: Set<string> }) {
-  const root = useMemo(() => buildTree(files), [files]);
+export function FileTree({ files, counts, viewed, base }: { files: File[]; counts: Counts; viewed: Set<string>; base?: string }) {
+  const root = useMemo(() => buildTree(files, base), [files, base]);
   return <TreeChildren node={root} depth={0} counts={counts} viewed={viewed} />;
 }
 

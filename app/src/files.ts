@@ -50,3 +50,17 @@ export function estimateLabel(minutes: number): string {
   const q = Math.round(minutes / 15) * 15;
   return `~${Math.floor(q / 60)} h${q % 60 ? ` ${q % 60}` : ''}`;
 }
+
+// The Gradle module of each changed file, from paths alone (no request): what comes before "/src/" (Gradle keeps a
+// module's sources in <module>/src/<source set>/; "src/" at the top is the root project, "."), and the folder of a
+// changed build file. Other files join the module whose folder holds them; the rest get ''. Only in a PR with
+// Gradle-built code (Kotlin, Java, Groovy, Scala or a build script): elsewhere "src" means something else.
+export function gradleModules(paths: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!paths.some((p) => /\.(kt|kts|java|gradle|groovy|scala)$/.test(p))) return out;
+  const direct = (p: string) =>
+    p.startsWith('src/') || /^build\.gradle(\.kts)?$/.test(p) ? '.' : (p.match(/^(.*?)\/src\//) ?? p.match(/^(.*)\/build\.gradle(\.kts)?$/))?.[1];
+  const mods = [...new Set(paths.map(direct).filter((m): m is string => !!m && m !== '.'))].sort((a, b) => b.length - a.length);
+  for (const p of paths) out.set(p, direct(p) ?? mods.find((m) => p.startsWith(m + '/')) ?? '');
+  return out;
+}
