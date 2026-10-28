@@ -539,7 +539,7 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .set-sources li { margin: 2px 0; }
 .set-pace input[type=range] { width: 220px; }
 .idle.old { color: light-dark(#9a6700, #cc7832); }
-.set-head { display: flex; align-items: center; gap: 12px; max-width: 720px; margin-bottom: 16px; }
+.set-head { display: flex; align-items: center; gap: 12px; max-width: 720px; margin: 20px 0 16px; }
 .set-head h2 { margin: 0; flex: 1; }
 .set-search { width: 240px; padding: 4px 10px; }
 .settings [hidden] { display: none !important; }
@@ -636,7 +636,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 /* Settings: a side panel of its sections, beside them (gone when the window is narrow). */
 .settings { display: grid; grid-template-columns: 160px minmax(0, 960px); column-gap: 28px; max-width: calc(960px + 188px); }
 .settings > :not(.set-toc) { grid-column: 2; }
-.set-toc { grid-column: 1; grid-row: 1 / span 100; align-self: start; position: sticky; top: calc(var(--nav) + 16px); display: grid; gap: 1px; padding-top: 4px; }
+.set-toc { grid-column: 1; grid-row: 1 / span 100; align-self: start; position: sticky; top: calc(var(--nav) + 16px); display: grid; gap: 1px; padding-top: 24px; }
 .set-toc button { padding: 5px 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: calc(13px * var(--ts)); text-align: left; }
 .set-toc button:hover { color: var(--fg); background: var(--soft); }
 .set-toc button.on { color: var(--fg); background: var(--soft); font-weight: 600; }
