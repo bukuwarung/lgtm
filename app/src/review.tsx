@@ -201,7 +201,9 @@ function PillMenu({ cls = '', label, head, children }: { cls?: string; label: Co
 function HunkHeader({ header, where }: { header: string; where: string }) {
   return (
     <td colSpan={3}>
-      <span class="hunk-range">{header.match(/^@@[^@]*@@/)?.[0] ?? header}</span> {where && <span class="hunk-ctx">{where}</span>}
+      <div class="hunk-line" title={where || undefined}>
+        <span class="hunk-range">{header.match(/^@@[^@]*@@/)?.[0] ?? header}</span> {where && <span class="hunk-ctx">{where}</span>}
+      </div>
     </td>
   );
 }
@@ -812,6 +814,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
         <ScrollMarks files={shown} />
+        <HoldPlace />
         <main>
           <div class="pills pr-status">
             {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}>updating…</span>}
@@ -1051,9 +1054,13 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   const folder = mod ? dir(below(path, mod === '.' ? '' : mod)) : dir(path);
   const t = ctx.target;
   const body: BodyProps = { file, hunks, ctx, threads: threads.filter((x) => !isFileLevel(x)), drafts: drafts.filter((d) => d.line) };
+  // Until it's first drawn, a file stands in at about its height (style.css content-visibility): its rows at a code
+  // line each, plus the header; so drawing it barely moves the page (WebKit, the app's, doesn't hold your place).
+  const rows = collapsed || hideDeleted ? 1 : hunks.reduce((n, h) => n + h.lines.length + 1, 0);
+  const placeholder = `auto calc(${rows} * 20px * var(--cs) + 48px)`;
 
   return (
-    <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref}>
+    <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref} style={{ containIntrinsicSize: placeholder }}>
       <header class="file-h">
         <span class={`st s-${file.status}`}>{file.status}</span>
         {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
@@ -1696,6 +1703,36 @@ const stripWeight = (f: File) => {
   if (w == null) stripWeights.set(f, (w = 44 + LINE_PX * Math.max(3, (f.patch ?? '').split('\n').length)));
   return w;
 };
+// WebKit (the app's) doesn't hold your place when something above the screen changes height, as a file does when
+// it's first drawn (it stood in at an estimate till then): what you're reading jumps. Where the browser doesn't
+// (or it's turned off: overflow-anchor), hold it by hand: a file wholly above the screen that grows or shrinks
+// scrolls the page by as much.
+function HoldPlace() {
+  useEffect(() => {
+    if (CSS.supports('overflow-anchor', 'auto') && getComputedStyle(document.documentElement).overflowAnchor !== 'none') return;
+    const main = document.querySelector('main');
+    if (!main) return;
+    const sizes = new WeakMap<Element, number>();
+    const ro = new ResizeObserver((entries) => {
+      const top = barsHeight();
+      let shift = 0;
+      for (const e of entries) {
+        const h = e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height;
+        const before = sizes.get(e.target);
+        sizes.set(e.target, h);
+        if (before != null && e.target.getBoundingClientRect().bottom <= top) shift += h - before;
+      }
+      if (shift) scrollBy(0, shift);
+    });
+    const watch = () => main.querySelectorAll(':scope > section.file').forEach((f) => ro.observe(f));
+    watch();
+    const mo = new MutationObserver(watch); // files shown later (generated ones, opened)
+    mo.observe(main, { childList: true });
+    return () => (ro.disconnect(), mo.disconnect());
+  }, []);
+  return null;
+}
+
 // The strip's layout now: a page position (document y) to a place on it (0–1), and back.
 function stripLayout(files: File[]) {
   const shown = files.map((f) => [f, document.getElementById('f-' + f.filename)] as const).filter((x): x is [File, HTMLElement] => !!x[1]);

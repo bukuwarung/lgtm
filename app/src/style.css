@@ -201,6 +201,8 @@ main { padding: 16px; }
 .diff tr.d .code::before { content: "-"; }
 .diff tr.hunk td { position: sticky; top: calc(var(--nav) + var(--bar) + var(--file-h, 38px)); z-index: 1; padding: 4px 8px; background: var(--soft); color: var(--muted); }
 .hunk-range { opacity: .7; }
+/* One line, cut with … when long (the whole of it on hover); width 0 so it never widens the table. */
+.hunk-line { width: 0; min-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .hunk-ctx { color: var(--fg); font-weight: 600; }
 .diff tr.gap td { padding: 0; background: color-mix(in srgb, var(--soft) 50%, transparent); }
 /* Unchanged lines to expand: there when wanted, quiet otherwise (the accent on hover). */
