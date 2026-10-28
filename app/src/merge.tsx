@@ -22,8 +22,9 @@ export function blockers(s: MergeState, checks: Check[] | null): string[] {
 
 const canMerge = (s: MergeState) => !s.isDraft && ['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus);
 
-// Merge status and controls, shown on my own PRs: ready for review, update branch, merge (or auto-merge), with the
-// commit message editable before confirming, like GitHub's merge box.
+// Merge status and controls, on my own PRs: a button in the PR's bar (named for the merge, green when it can go) opening
+// GitHub's merge box: ready for review, update branch, merge (or auto-merge), the commit message editable before
+// confirming. Once merged, the branch and the Jira ticket.
 export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[] }) {
   const [s, setS] = useState<MergeState | null>(null);
   const [err, setErr] = useState('');
@@ -33,6 +34,14 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   const [msg, setMsg] = useState({ title: '', body: '' });
   const [bypass, setBypass] = useState(false);
   const [dropBranch, toggleDropBranch] = useStoredFlag('deleteBranch', true);
+  const [shown, setShown] = useState(false);
+  // The bar's button and its panel.
+  const bar = (label: string, cls: string, title: string, body: preact.ComponentChildren, onOpen?: () => void) => (
+    <div class="submit merge-bar">
+      <button class={cls} title={title} onClick={() => (!shown && onOpen?.(), setShown(!shown))}>{label} ▾</button>
+      {shown && body}
+    </div>
+  );
 
   const load = (tries = 0) =>
     getMergeState(repo, n).then((x) => {
@@ -42,10 +51,13 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
     }, (e) => setErr(e.message));
   useEffect(() => void load(), [repo, n, checks]); // checks reloaded: the merge state may have moved too
 
-  if (!s) return err ? <p class="warn">Couldn't load the merge status: {err}</p> : null;
+  if (!s) return err ? bar('Merge', '', `Couldn't load the merge status: ${err}`, <div class="panel merge m-bad"><p class="error">Couldn't load the merge status: {err}</p></div>) : null;
   if (s.state !== 'OPEN')
-    return (
-      <div class={`merge m-${s.state.toLowerCase()}`}>
+    return bar(
+      s.state === 'MERGED' ? '✓ Merged' : 'Closed',
+      `merge-state m-${s.state.toLowerCase()}`,
+      s.state === 'MERGED' ? 'Merged: the branch and the Jira ticket' : 'Closed without merging',
+      <div class={`panel merge m-${s.state.toLowerCase()}`}>
         <b>{s.state === 'MERGED' ? `Merged${s.mergedBy ? ` by ${s.mergedBy.login}` : ''}` : 'Closed'}</b>
         {s.state === 'MERGED' && s.headRef && s.viewerCanDeleteHeadRef && !s.isCrossRepository && (
           <button disabled={!!busy} onClick={() => (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
@@ -54,7 +66,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
         )}
         {s.state === 'MERGED' && tickets.map((k) => <TicketMove key={k} id={k} />)}
         {err && <p class="error">{err}</p>}
-      </div>
+      </div>,
     );
 
   const m = method && s.methods.includes(method) ? method : s.methods[0];
@@ -90,8 +102,11 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
     setConfirm(kind);
   };
 
-  return (
-    <div class={`merge m-${tone}`}>
+  return bar(
+    s.isDraft ? 'Draft' : s.autoMergeRequest ? 'Auto-merge on' : 'Merge',
+    ready ? 'primary' : `merge-state m-${tone}`,
+    [headline, ...(ready ? [] : why)].join(' · '),
+    <div class={`panel merge m-${tone}`}>
       <div class="merge-head">
         <b>{headline}</b>
         {!ready && why.length > 0 && <span class="merge-why">{why.join(' · ')}</span>}
@@ -154,7 +169,8 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
         </div>
       )}
       {err && <p class="error">{err}</p>}
-    </div>
+    </div>,
+    () => ready && !s.autoMergeRequest && open('merge'), // ready: straight to the commit message
   );
 }
 

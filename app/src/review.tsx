@@ -888,6 +888,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
             </span>
           )}
+          {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
           {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
           <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
         </div>
@@ -967,7 +968,6 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
-          {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} />
           {visible.map(section)}
           {generated.length > 0 &&
