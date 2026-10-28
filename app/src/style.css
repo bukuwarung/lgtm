@@ -720,3 +720,8 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .slack-preview a { color: #1d9bd1; }
 .slack-tag { padding: 0 2px; border-radius: 3px; color: #1d9bd1; background: color-mix(in srgb, #1d9bd1 15%, transparent); }
 .slack-quote { padding-left: 8px; border-left: 3px solid color-mix(in srgb, var(--fg) 25%, transparent); }
+.emoji-ta { position: relative; display: grid; }
+.emoji-list { position: absolute; left: 0; top: 100%; z-index: 30; display: grid; min-width: 240px; max-height: 260px; overflow: auto; margin-top: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); }
+.emoji-list button { display: flex; align-items: center; gap: 8px; padding: 3px 8px; border: 0; border-radius: 5px; background: none; text-align: left; font: calc(12px * var(--ts)) var(--mono); color: var(--fg); }
+.emoji-list button.on, .emoji-list button:hover { background: var(--soft); }
+.emoji-list img { width: 18px; height: 18px; object-fit: contain; }

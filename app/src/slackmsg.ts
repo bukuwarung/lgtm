@@ -1,7 +1,7 @@
 import { slackEscape } from './platform.ts';
 
 // The messages lgtm sends on Slack, as templates you can change (Settings → Slack messages). {name} fills in a value;
-// {@them}, {@author} and {@any-github-login} tag that person on Slack (the sender turns <@gh:…> into a Slack mention,
+// {@recipient} (who gets it; {@them}, its first name, too), {@author} and {@any-github-login} tag that person on Slack (the sender turns <@gh:…> into a Slack mention,
 // through the Slack people mapping; someone it can't place stays @login).
 export type SlackKind = 'review' | 'nudge' | 'ask';
 export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string; fields: string }> = {
@@ -21,7 +21,7 @@ export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string;
     fields: '',
   },
 };
-export const COMMON_FIELDS = '{pr} the PR, linked · {title} · {url} · {repo} · {number} · {author} · {@them} tags who gets it · {@author} tags the author · {@login} tags anyone';
+export const COMMON_FIELDS = '{pr} the PR, linked · {title} · {url} · {repo} · {number} · {author} · {@recipient} tags who gets it · {@author} tags the author · {@login} tags anyone';
 
 export const slackTemplate = (k: SlackKind) => {
   try {
@@ -43,7 +43,7 @@ export const prValues = (p: { repo: string; number: number; title: string; url: 
 
 export function fillSlack(template: string, values: Record<string, string>): string {
   return template
-    .replace(/\{@([A-Za-z0-9-]{1,39})\}/g, (_, who: string) => `<@gh:${who === 'them' ? '*' : who === 'author' ? values.author : who}>`)
+    .replace(/\{@([A-Za-z0-9-]{1,39})\}/g, (_, who: string) => `<@gh:${who === 'recipient' || who === 'them' ? '*' : who === 'author' ? values.author : who}>`)
     .replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? values[k] : m))
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -64,7 +64,7 @@ export function slackParts(message: string, emoji: (name: string) => string | un
       const src = m[4] ? emoji(m[4]) : undefined;
       if (m[4] && !src) continue; // not an emoji Slack knows here: left as text
       if (m.index! > last) parts.push({ text: unescape(body.slice(last, m.index)) });
-      parts.push(m[1] ? { link: unescape(m[2]) } : m[3] ? { tag: m[3] === '*' ? 'them' : m[3] } : { emoji: m[4], src: src! });
+      parts.push(m[1] ? { link: unescape(m[2]) } : m[3] ? { tag: m[3] === '*' ? 'recipient' : m[3] } : { emoji: m[4], src: src! });
       last = m.index! + m[0].length;
     }
     if (last < body.length) parts.push({ text: unescape(body.slice(last)) });

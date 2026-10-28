@@ -480,5 +480,6 @@ test('fillSlack: values, tags, and no empty lines left behind', async () => {
   const v = { ...prValues({ repo: 'o/r', number: 7, title: 'Fix <a> & b', url: 'https://x/7', author: 'ann' }), note: '' };
   assert.equal(fillSlack('{pr}', v), '<https://x/7|o/r#7 Fix &lt;a&gt; &amp; b>');
   assert.equal(fillSlack('Hi {@them}, {@author} and {@bob-2}: {title}\n{note}', v), 'Hi <@gh:*>, <@gh:ann> and <@gh:bob-2>: Fix &lt;a&gt; &amp; b');
+  assert.equal(fillSlack('Hi {@recipient}', v), 'Hi <@gh:*>');
   assert.equal(fillSlack('{unknown} stays', v), '{unknown} stays');
 });
