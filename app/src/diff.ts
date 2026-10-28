@@ -331,3 +331,46 @@ export function rangeChange(patch: string, start: number, end: number): Line[] |
   }
   return null;
 }
+
+// Where a hunk's change sits: the declaration it adds or changes (past its doc comment and annotations), or whose doc
+// comment it changes (the next one below in the new file), else the nearest one enclosing it in the new file (`head`, its lines), found by indentation: from the first changed line,
+// walk up to lines indented less, through blocks (if, when, a lambda), to the first that declares a function, class,
+// object… Git's own hunk header can't do this for Kotlin or Java: it takes the nearest unindented line, so every change
+// inside a class reads as the class. Null when nothing encloses it.
+const DECL =
+  /^\s*(?:@\w+(?:\([^)]*\))?\s+|(?:public|private|protected|internal|override|open|abstract|final|static|suspend|inline|operator|infix|tailrec|external|data|sealed|enum|annotation|inner|companion|synchronized|native|default|const|actual|expect|value|fun\s+interface)\s+)*(?:fun|class|object|interface|constructor|init)\b|^\s*(?:(?:public|private|protected|static|final|abstract|synchronized|native|default)\s+)+[\w<>[\],.? ]+\s+\w+\s*\(/;
+const COMMENT = /^\s*(\/\*|\*|\/\/|@\w)/;
+const declName = (line: string) => line.trim().replace(/\s*[{=:]\s*$/, '');
+export function enclosing(head: string[], hunk: Hunk): string | null {
+  const { lines } = hunk;
+  let at = lines.findIndex((l) => l.kind !== ' ' && l.text.trim());
+  if (at < 0) {
+    // Only blank lines changed: place them by the next line with text.
+    const c = lines.findIndex((l) => l.kind !== ' ');
+    at = c < 0 ? -1 : lines.findIndex((l, i) => i >= c && l.text.trim());
+    if (at < 0) return null;
+  }
+  let d = at;
+  while (d < lines.length && lines[d].kind !== ' ' && (COMMENT.test(lines[d].text) || !lines[d].text.trim())) d++;
+  if (d < lines.length && lines[d].kind !== ' ' && DECL.test(lines[d].text)) return declName(lines[d].text);
+  const indent = (s: string) => s.match(/^\s*/)![0].replace(/\t/g, '    ').length;
+  // (A doc comment's " * " lines sit one space in from where the comment starts.)
+  let limit = indent(lines[at].text) - (/^\s*\*/.test(lines[at].text) ? 1 : 0);
+  // The changed line's place in the new file: its own number, or (a removal) the next line's there.
+  const next = lines.slice(at).find((l) => l.new != null)?.new ?? hunk.newStart;
+  if (COMMENT.test(lines[at].text)) {
+    // A doc comment changed: the declaration it documents, below it at its own depth.
+    for (let i = next - 1; i < head.length; i++) {
+      if (!head[i].trim() || COMMENT.test(head[i])) continue;
+      if (DECL.test(head[i]) && indent(head[i]) === limit) return declName(head[i]);
+      break;
+    }
+  }
+  for (let i = Math.min(next, head.length) - 2; i >= 0 && limit > 0; i--) {
+    const line = head[i];
+    if (!line.trim() || indent(line) >= limit) continue;
+    if (DECL.test(line)) return declName(line);
+    limit = indent(line);
+  }
+  return null;
+}

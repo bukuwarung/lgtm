@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { enclosing, addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { codeWithoutTests, estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
@@ -434,4 +434,43 @@ test('codeWithoutTests: code changed in a module, none of its tests', () => {
   assert.equal(codeWithoutTests([f('core/net/src/main/kotlin/Api.kt'), f('core/net/src/test/kotlin/ApiTest.kt')]), false);
   assert.equal(codeWithoutTests([f('core/net/build.gradle.kts'), f('core/net/src/main/res/values/strings.xml')]), false); // no code
   assert.equal(codeWithoutTests([f('core/net/src/main/kotlin/Api.kt', 0)]), false); // only deletions
+});
+
+test('enclosing: the declaration around a change, by indentation', () => {
+  const head = [
+    'class HomeSaldoFragment @Inject constructor() :',
+    '    BaseFragment() {',
+    '',
+    '    private fun bindSaldo(saldo: Long) {',
+    '        binding.button.setOnClickListener {',
+    '            if (saldo > 0) {',
+    '                show(saldo)',
+    '            }',
+    '        }',
+    '    }',
+    '',
+    '    override fun onResume() {',
+    '        super.onResume()',
+    '    }',
+    '}',
+  ];
+  const hunk = (newStart: number, lines: { kind: '+' | '-' | ' '; text: string; new?: number }[]) => ({ header: '', newStart, lines });
+  // a change deep in a lambda inside a function: the function
+  assert.equal(enclosing(head, hunk(6, [{ kind: ' ', text: '            if (saldo > 0) {', new: 6 }, { kind: '+', text: '                show(saldo)', new: 7 }])), 'private fun bindSaldo(saldo: Long)');
+  // a removal: located by the line after it
+  assert.equal(enclosing(head, hunk(13, [{ kind: '-', text: '        log()' }, { kind: ' ', text: '    }', new: 14 }])), 'override fun onResume()');
+  // a change at the class's own level: the class
+  assert.equal(enclosing(head, hunk(3, [{ kind: '+', text: '    private val x = 1', new: 3 }])), 'class HomeSaldoFragment @Inject constructor()');
+  // at the top level: nothing
+  assert.equal(enclosing(head, hunk(1, [{ kind: '+', text: 'import foo', new: 1 }])), null);
+  // a function added (doc comment first): that function
+  assert.equal(
+    enclosing(head, hunk(11, [{ kind: '+', text: '    /** Shows it. */', new: 11 }, { kind: '+', text: '    @VisibleForTesting', new: 12 }, { kind: '+', text: '    fun show(x: Long) {', new: 13 }])),
+    'fun show(x: Long)',
+  );
+  // a doc comment changed: the function it documents
+  const doc = ['class A {', '    /**', '     * Old words.', '     */', '    fun documented() {', '    }', '}'];
+  assert.equal(enclosing(doc, hunk(3, [{ kind: '-', text: '     * Old words.' }, { kind: '+', text: '     * New words.', new: 3 }, { kind: ' ', text: '     */', new: 4 }])), 'fun documented()');
+  // only a blank line added: placed by the next line with text
+  assert.equal(enclosing(head, hunk(8, [{ kind: '+', text: '', new: 8 }, { kind: ' ', text: '            }', new: 9 }])), 'private fun bindSaldo(saldo: Long)');
 });

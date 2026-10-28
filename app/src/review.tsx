@@ -1,6 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -196,13 +196,12 @@ function PillMenu({ cls = '', label, head, children }: { cls?: string; label: Co
   );
 }
 
-// A hunk's header: its line ranges, faint, then where it is (the function or class git names), in full. It stays
-// pinned under the file's header while you're in the hunk (style.css), so a long one keeps its place in view.
-function HunkHeader({ header }: { header: string }) {
-  const m = header.match(/^(@@[^@]*@@)\s*(.*)$/);
+// A hunk's header: its line ranges, faint, then where it is (DiffView `where`: its function or class), in full. It
+// stays pinned under the file's header while you're in the hunk (style.css), so a long one keeps its place in view.
+function HunkHeader({ header, where }: { header: string; where: string }) {
   return (
     <td colSpan={3}>
-      <span class="hunk-range">{m ? m[1] : header}</span> {m?.[2] && <span class="hunk-ctx">{m[2]}</span>}
+      <span class="hunk-range">{header.match(/^@@[^@]*@@/)?.[0] ?? header}</span> {where && <span class="hunk-ctx">{where}</span>}
     </td>
   );
 }
@@ -1211,6 +1210,14 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   // "Show more lines": unchanged stretches come from the head version of the file, fetched on first use.
   const gapList = useMemo(() => (file.status === 'added' || file.status === 'removed' ? [] : gaps(hunks)), [hunks]);
   const [head, setHead] = useState<string[] | null>(null);
+  // Kotlin and Java: the file at the head, as it comes into view, so each hunk can say which function it's in (git's
+  // header names the class for everything inside one). Also what "show unchanged lines" expands from.
+  useEffect(() => {
+    if (head || file.status === 'removed' || !/\.(kt|kts|java|scala|groovy)$/.test(path)) return;
+    getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((src) => src != null && setHead(src.replace(/\n$/, '').split('\n')), () => {});
+  }, []);
+  // Where each hunk is: that function or class, else git's guess. One that repeats the hunk before shows no label.
+  const where = useMemo(() => hunks.map((h) => (head && enclosing(head, h)) || h.header.replace(/^@@[^@]*@@\s*/, '')), [hunks, head]);
   const [openGaps, setOpenGaps] = useState<Set<number>>(new Set());
   const [gapErr, setGapErr] = useState('');
   const expand = async (g: Gap) => {
@@ -1334,7 +1341,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
             {gapBefore(hi) && gapRows(gapBefore(hi)!)}
             {file.status !== 'added' && ( // a new file's one hunk header (@@ -0,0 +1,n @@) says nothing
               <tr class="hunk">
-                <HunkHeader header={h.header} />
+                <HunkHeader header={h.header} where={where[hi] === where[hi - 1] ? '' : where[hi]} />
               </tr>
             )}
             {h.lines.map((l, li) => {
