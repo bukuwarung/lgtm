@@ -122,8 +122,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .file.viewed .file-h { opacity: .75; }
 .file-f { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--soft); border-radius: 0 0 6px 6px; }
 .file-f-name { margin-right: auto; font: calc(12px * var(--ts)) var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.collapsed-row { width: 100%; padding: 3px 10px; border: 0; border-radius: 0 0 6px 6px; background: none; text-align: left; font-size: calc(11px * var(--ts)); color: color-mix(in srgb, var(--muted) 65%, transparent); }
-.collapsed-row:hover { color: var(--fg); background: none; }
+.collapsed-row { width: 100%; padding: 6px 10px; border: 0; border-radius: 0 0 6px 6px; background: none; text-align: left; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .tree-file.dim { opacity: .55; }
 .stack-nav { display: flex; align-items: center; gap: 6px; font-size: calc(12px * var(--ts)); color: var(--muted); white-space: nowrap; }
 .stack-nav a, .stack-nav .off { padding: 0 6px; font-size: calc(16px * var(--ts)); }
