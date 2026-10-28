@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { enclosing, addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { applySuggestions, awaitsMe, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { codeWithoutTests, estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
+import { codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -523,4 +523,10 @@ test('withAnswered: a review just sent leaves "needs your review" until the sear
   assert.deepEqual([withAnswered([i], sent, at + 1000)[0].requested, withAnswered([i], sent, at + 1000)[0].myState], [false, 'APPROVED']);
   assert.equal(withAnswered([{ ...i, waitingSince: '2026-10-28T09:11:00Z' }], sent, at + 90_000)[0].requested, true); // asked again since
   assert.equal(withAnswered([i], sent, at + 10 * 60_000)[0].requested, true); // the search has caught up by then
+});
+
+test('inTests: test files and test folders', () => {
+  for (const p of ['app/src/test/java/a/FooTest.kt', 'app/src/androidTest/a/Foo.kt', 'app/src/test/resources/x.json', 'web/__tests__/a.ts', 'web/a.test.ts', 'tests/test_a.py', 'app/test/logic.test.ts', 'e2e/login.spec.ts'])
+    assert.ok(inTests(p), p);
+  for (const p of ['app/src/main/java/a/Foo.kt', 'src/contest/a.ts', 'docs/testing.md', 'src/latest.ts']) assert.ok(!inTests(p), p);
 });

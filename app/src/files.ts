@@ -8,6 +8,9 @@ const subject = (path: string) =>
     .replace(/(Tests?|Spec|IT)(\.\w+)$/, '$2')
     .replace(/[._-](test|spec)(\.\w+)$/, '$2');
 const isTest = (path: string) => subject(path) !== path;
+// A test file, or anything in a test folder (fixtures and resources too): what the diff and the index mark as test.
+export const inTests = (path: string) =>
+  isTest(path) || /(^|\/)(tests?|__tests__|spec|e2e|fixtures)\//.test(path) || /(^|\/)test_[^/]+$/.test(path);
 
 // Reading order: markdown (the intent) first, then each source file followed by its tests.
 export const reviewOrder = (paths: string[]) =>

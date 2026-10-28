@@ -783,3 +783,6 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .sug-actions { margin-top: 6px; }
 .pr-face { width: 14px; height: 14px; border-radius: 50%; vertical-align: -3px; }
 .g-face { width: 18px; height: 18px; border-radius: 50%; vertical-align: -4px; }
+/* Test files: a teal flask (and "test" in the diff's file header). */
+.test-mark { flex: none; display: inline-flex; align-items: center; gap: 3px; color: light-dark(#0a7c86, #4fc1c9); font-size: calc(11px * var(--ts)); font-weight: 400; white-space: nowrap; }
+.file-name .test-mark { padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 14%, transparent); }

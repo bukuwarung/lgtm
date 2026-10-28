@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
-import { codeWithoutTests, moduleName } from './files.ts';
+import { codeWithoutTests, inTests, moduleName } from './files.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -86,11 +86,20 @@ function Entry({ label, meta, sub, dim, onClick }: { label: string; meta?: strin
 const ICON_RERUN = 'M13 8a5 5 0 1 1-1.6-3.7M13.2 2.2v3h-3M6.8 5.8v4.4L10.2 8z'; // a circle arrow with ▶: run again
 const ICON_LOG = 'M3 4h10M3 8h10M3 12h6';
 const ICON_CHECK = 'M3.5 8.5l3 3 6-7';
+const ICON_TEST = 'M6 2h4M7 2v4l-3.5 6.5a1 1 0 0 0 .9 1.5h7.2a1 1 0 0 0 .9-1.5L9 6V2M5 10h6'; // a flask
 const ICON_NO_TEST = 'M6 2h4M7 2v4l-3.5 6.5a1 1 0 0 0 .9 1.5h7.2a1 1 0 0 0 .9-1.5L9 6V2M2 2l12 12'; // a struck-out flask
 const Icon = ({ d }: { d: string }) => (
   <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
     <path d={d} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
   </svg>
+);
+
+// A test file: a flask (with "test" in the diff's file header).
+export const TestMark = ({ label }: { label?: boolean }) => (
+  <span class="test-mark" role="img" title="A test (in a test folder, or named as one)" aria-label="Test">
+    <Icon d={ICON_TEST} />
+    {label && ' test'}
+  </span>
 );
 
 // Code changed without its tests: an amber struck-out flask, explained on hover.
@@ -502,6 +511,7 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
             >
               <span class={'fdot s-' + f.status} title={f.status} />
               <span class="tree-name">{f.filename.split('/').pop()}</span>
+              {inTests(f.filename) && <TestMark />}
               {c > 0 && <span class="badge">💬{c}</span>}
             </button>
             <ViewedMark paths={[f.filename]} viewed={viewed} onViewed={onViewed} what="this file" />

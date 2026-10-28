@@ -20,11 +20,11 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
-import { gradleModules, moduleName, reviewOrder, untested } from './files.ts';
+import { gradleModules, inTests, moduleName, reviewOrder, untested } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
-import { below, jumpTo, ModuleIcon, NoTestMark, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
+import { below, jumpTo, ModuleIcon, NoTestMark, TestMark, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -1165,6 +1165,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           rel="noopener"
           title={file.previous_filename ? `${file.previous_filename} → ${path}` : path}
         >
+          {inTests(path) && <TestMark label />}
           <b>
             {file.previous_filename && base(file.previous_filename) !== base(path) && <>{base(file.previous_filename)} → </>}
             {base(path)}
