@@ -233,7 +233,14 @@ fn dm_threads(pr: &str) -> Vec<(String, Value)> {
     let mut found: Vec<(String, Value)> = vec![];
     let matches = if r.ok { parse_json(&r.stdout).and_then(|v| v["matches"].as_array().cloned()).unwrap_or_default() } else { vec![] };
     for m in &matches {
-        let text = format!("{} {}", m["text"].as_str().unwrap_or(""), m["attachments"]);
+        // The message's own links: its text, and the URLs its previews unfurl (not their text: a stacked PR's preview
+        // lists the other layers).
+        let mut text = m["text"].as_str().unwrap_or("").to_string();
+        for a in m["attachments"].as_array().into_iter().flatten() {
+            for k in ["from_url", "original_url", "app_unfurl_url", "title_link"] {
+                text += &format!(" {}", a[k].as_str().unwrap_or(""));
+            }
+        }
         if m["channel"]["is_im"] != json!(true) || !link.is_match(&text) {
             continue;
         }

@@ -135,7 +135,10 @@ function dmThreads(pr) {
         const threads = await readThreads();
         const found = {};
         for (const m of (r.ok && parseJson(r.stdout)?.matches) || []) {
-          if (!m.channel?.is_im || !link.test(`${m.text ?? ''} ${JSON.stringify(m.attachments ?? [])}`)) continue;
+          // The message's own links: its text, and the URLs its previews unfurl (not their text: a stacked PR's preview
+          // lists the other layers).
+          const own = [m.text ?? '', ...(m.attachments ?? []).flatMap((a) => [a.from_url, a.original_url, a.app_unfurl_url, a.title_link])].join(' ');
+          if (!m.channel?.is_im || !link.test(own)) continue;
           const login = loginOf[m.channel.name]; // a DM's name is the other person's user ID
           const key = `${pr}:${login}`;
           if (!login || threads[key] || found[key]) continue;
