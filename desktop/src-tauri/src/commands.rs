@@ -269,16 +269,39 @@ static DM_SEARCH: OnceLock<Mutex<HashMap<String, Vec<(String, Value)>>>> = OnceL
 /// A PR's file opened in your editor at a line, from your checkout of the repo (Settings → Claude Code): JetBrains IDEs
 /// through their launcher (--line), VS Code and Cursor through their URLs.
 #[tauri::command]
-pub async fn open_in_editor(editor: String, folder: String, path: String, line: Option<u32>) -> Result<(), String> {
+pub async fn open_in_editor(
+    editor: String,
+    folder: String,
+    path: String,
+    line: Option<u32>,
+    content: Option<String>,
+    repo: Option<String>,
+    sha: Option<String>,
+) -> Result<(), String> {
     let home = std::env::var("HOME").unwrap_or_default();
-    let root = std::path::PathBuf::from(if folder == "~" || folder.starts_with("~/") { folder.replacen('~', &home, 1) } else { folder.clone() });
-    if !root.is_absolute() || path.split('/').any(|p| p == ".." || p.is_empty()) {
+    if !["studio", "idea", "vscode", "cursor"].contains(&editor.as_str()) || path.split('/').any(|p| p == ".." || p == "." || p.is_empty()) {
         return Err("Bad request".into());
     }
-    let file = root.join(&path);
-    if !file.is_file() {
-        return Err(format!("{path} isn't in {folder}"));
-    }
+    // Without a checkout: the PR's own version, saved under lgtm's cache by repo and commit.
+    let file = if let Some(content) = &content {
+        let (Some(repo), Some(sha)) = (&repo, &sha) else { return Err("Bad request".into()) };
+        if !re(r"^[\w.-]+/[\w.-]+$").is_match(repo) || !re(r"^[0-9a-f]{40}$").is_match(sha) || repo.split('/').any(|p| p == ".." || p == ".") || content.len() > 10_000_000 {
+            return Err("Bad request".into());
+        }
+        let file = std::path::Path::new(&home).join("Library/Caches/lgtm/files").join(repo).join(sha).join(&path);
+        std::fs::create_dir_all(file.parent().unwrap()).and_then(|_| std::fs::write(&file, content)).map_err(|e| e.to_string())?;
+        file
+    } else {
+        let root = std::path::PathBuf::from(if folder == "~" || folder.starts_with("~/") { folder.replacen('~', &home, 1) } else { folder.clone() });
+        if !root.is_absolute() {
+            return Err("Bad request".into());
+        }
+        let file = root.join(&path);
+        if !file.is_file() {
+            return Err(format!("{path} isn't in {folder}"));
+        }
+        file
+    };
     let file = file.to_string_lossy().to_string();
     let line = line.unwrap_or(1).max(1).to_string();
     let url;

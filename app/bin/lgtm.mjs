@@ -122,15 +122,22 @@ async function prThreads(pr) {
 // person for it, when Slack people knows who they are on GitHub, so lgtm's messages to them reply there. Searched
 // once a run per PR (slackcli search messages); saved with the threads lgtm starts itself.
 const dmSearch = new Map();
-// A PR's file opened in your editor at a line, from your checkout of the repo (Settings → Claude Code): JetBrains IDEs
-// through their launcher (--line), VS Code and Cursor through their URLs.
+// A PR's file opened in your editor at a line: from your checkout of the repo (Settings → Claude Code), or else the
+// PR's own version (`content`), saved under lgtm's cache by repo and commit. JetBrains IDEs through their launcher
+// (--line), VS Code and Cursor through their URLs.
 const JETBRAINS = { studio: 'Android Studio', idea: 'IntelliJ IDEA' };
 async function openInEditor(b) {
-  const root = normalize(String(b?.folder ?? '').replace(/^~(?=\/|$)/, homedir()));
+  if (!JETBRAINS[b?.editor] && !['vscode', 'cursor'].includes(b?.editor)) throw new Error('Bad request');
+  const copy = typeof b?.content === 'string';
+  const cache = join(homedir(), 'Library', 'Caches', 'lgtm', 'files');
+  if (copy && !(/^[\w.-]+\/[\w.-]+$/.test(b.repo) && !b.repo.split('/').some((p) => p === '.' || p === '..') && /^[0-9a-f]{40}$/.test(b.sha) && b.content.length < 10_000_000)) throw new Error('Bad request');
+  const root = copy ? join(cache, b.repo, b.sha) : normalize(String(b?.folder ?? '').replace(/^~(?=\/|$)/, homedir()));
+  if (copy && !root.startsWith(cache + sep)) throw new Error('Bad request');
   const file = normalize(join(root, String(b?.path ?? '')));
   const line = Math.max(1, Math.floor(Number(b?.line) || 1));
   if (!root.startsWith('/') || !file.startsWith(root + sep)) throw new Error('Bad request');
-  if (!(await stat(file).catch(() => null))) throw new Error(`${b.path} isn't in ${b.folder}`);
+  if (copy) await mkdir(dirname(file), { recursive: true }).then(() => writeFile(file, b.content));
+  else if (!(await stat(file).catch(() => null))) throw new Error(`${b.path} isn't in ${b.folder}`);
   const args = JETBRAINS[b.editor] ? ['-na', JETBRAINS[b.editor], '--args', '--line', String(line), file]
     : ['vscode', 'cursor'].includes(b.editor) ? [`${b.editor}://file${encodeURI(file)}:${line}`]
     : null;

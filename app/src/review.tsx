@@ -22,7 +22,7 @@ import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { gradleModules, inTests, moduleName, reviewOrder, untested } from './files.ts';
-import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, openInEditor, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, openInEditor, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { below, jumpTo, ModuleIcon, NoTestMark, TestMark, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -1120,18 +1120,28 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
   );
 }
 
-// A file opened in your editor, from your checkout of the repo (Settings → Claude Code), at its first change. Your
-// checkout's branch may not be the PR's.
-const EDITORS: Record<string, string> = { studio: 'Android Studio', idea: 'IntelliJ IDEA', vscode: 'VS Code', cursor: 'Cursor' };
-function OpenInEditor({ repo, path, line }: { repo: string; path: string; line?: number }) {
+// A file opened in your editor at its first change (Settings → Claude Code): from your checkout of the repo when one is
+// set (its branch may not be the PR's), else the PR's own version of the file; or on github.dev, the PR's commit in
+// VS Code for the web.
+const EDITORS: Record<string, string> = { studio: 'Android Studio', idea: 'IntelliJ IDEA', vscode: 'VS Code', cursor: 'Cursor', web: 'github.dev' };
+function OpenInEditor({ repo, headRepo, sha, path, line }: { repo: string; headRepo: string; sha: string; path: string; line?: number }) {
   const [editor] = useStoredValue('editor', 'studio');
   const [err, setErr] = useState('');
   const folder = claudeFolder(repo);
+  const where = editor === 'web' ? 'on github.dev, at the PR' : folder ? `from ${folder} (your checkout's branch)` : "(the PR's version of the file)";
+  const open = async () => {
+    setErr('');
+    if (editor === 'web') return openExternal(`https://github.dev/${headRepo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}${line ? `#L${line}` : ''}`);
+    if (folder) return openInEditor(editor, folder, path, line);
+    const content = await getRaw(headRepo, path, sha);
+    if (content == null) throw new Error(`${path} isn't in the PR's commit`);
+    return openInEditor(editor, '', path, line, { repo: headRepo, sha, content });
+  };
   return (
     <button
       class={err ? 'icon-btn failed' : 'icon-btn'}
-      title={err || (folder ? `Open in ${EDITORS[editor]}, from ${folder}${line ? ` at line ${line}` : ''} (your checkout's branch)` : `Set where ${repo} is checked out (Settings → Claude Code) to open files in your editor`)}
-      onClick={() => (folder ? (setErr(''), openInEditor(editor, folder, path, line).catch((e) => setErr(e.message))) : (location.hash = '/settings'))}
+      title={err || `Open in ${EDITORS[editor] ?? editor} ${where}${line ? `, at line ${line}` : ''}`}
+      onClick={() => open().catch((e) => setErr(e.message))}
     >
       <Octicon name="code" />
     </button>
@@ -1236,7 +1246,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
-        {file.status !== 'removed' && <OpenInEditor repo={ctx.repo} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
+        {file.status !== 'removed' && <OpenInEditor repo={ctx.repo} headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
         <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
         <label class="viewed-box" title={`Mark as viewed on GitHub${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').viewed)}`}>
           <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
