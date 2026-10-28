@@ -176,6 +176,10 @@ main { padding: 16px; }
 .diff .num { width: 1%; min-width: 48px; text-align: right; color: var(--muted); cursor: pointer; user-select: none; }
 .diff .num { position: relative; }
 .diff .num:hover { color: var(--accent); }
+/* One line-number column (Settings → Diff): the old one hidden; a removed line, which has no new number, shows its old
+   one there, faint. Spans of 3 still cover the row. */
+.diff.one-num td.num:first-child { display: none; }
+.diff.one-num td.num[data-old]::before { content: attr(data-old); opacity: .55; }
 /* GitHub-style "+" on hover; it sits on the new-line-number cell, whose click handler opens the comment form. */
 .diff tr:hover > .num + .num::after {
   content: "+"; position: absolute; right: -14px; top: 0; z-index: 1; width: calc(20px * var(--cs)); height: calc(20px * var(--cs));

@@ -236,6 +236,7 @@ export function Settings() {
         <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
+        <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)." />
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo />
         <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode." demo>
           <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source." />

@@ -1088,6 +1088,8 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
 }
 
 function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
+  // One line number, the new one (a removed line shows its old one, faint), unless Settings asks for both.
+  const [oldNums] = useStoredFlag('oldLineNumbers', false);
   const path = file.filename;
   const hl = useMemo(() => highlightHunks(hunks, path), [hunks]);
   // "Show more lines": unchanged stretches come from the head version of the file, fetched on first use.
@@ -1209,7 +1211,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const docOpenedAt = (hi: number, li: number) => docs.find((d) => d.hunk === hi && d.start === li && openDocs.has(`${hi}-${li}`));
 
   return (
-    <table class="diff" ref={table}>
+    <table class={oldNums ? 'diff' : 'diff one-num'} ref={table}>
       <tbody>
         {hunks.map((h, hi) => (
           <>
@@ -1251,7 +1253,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                     <td class="num" title={`Lines ${first.old}–${last.old}: comment (shift-click to extend)`} onClick={onNum}>
                       {run.find((x) => x.old != null)?.old ?? ''}
                     </td>
-                    <td class="num" title={`Lines ${at.new}–${last.new}: comment (shift-click to extend)`} onClick={onNum}>
+                    <td class="num" title={`Lines ${at.new}–${last.new}: comment (shift-click to extend)`} onClick={onNum} data-old={at.new == null ? first.old : undefined}>
                       {at.new ?? ''}
                     </td>
                     <td class="code">
@@ -1290,7 +1292,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                   )}
                   <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`}>
                     <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
-                    <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)}>{l.new ?? ''}</td>
+                    <td class="num" title="Comment (shift-click to extend)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />
                   </tr>
                   {notes(side, num)}
