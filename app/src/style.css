@@ -184,6 +184,9 @@ main { padding: 16px; }
 .st.s-added { --st: var(--addfg); }
 .st.s-removed { --st: var(--delfg); }
 .st.s-renamed, .st.s-copied { --st: var(--accent); }
+.st.s-test { --st: light-dark(#0a7c86, #4fc1c9); }
+.st.s-notest { --st: light-dark(#9a6700, #cc7832); }
+.st { flex: none; white-space: nowrap; }
 .counts { font: calc(12px * var(--ts)) var(--mono); }
 .counts .a { color: var(--addfg); }
 .counts .d { color: var(--delfg); }
@@ -785,7 +788,6 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .g-face { width: 18px; height: 18px; border-radius: 50%; vertical-align: -4px; }
 /* Test files: a teal flask (and "test" in the diff's file header). */
 .test-mark { flex: none; display: inline-flex; align-items: center; gap: 3px; color: light-dark(#0a7c86, #4fc1c9); font-size: calc(11px * var(--ts)); font-weight: 400; white-space: nowrap; }
-.file-name .test-mark { padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 14%, transparent); }
 /* Tags and pills as text, icons or both (Settings → Appearance; tags.tsx). */
 .ti { display: inline-flex; align-items: center; vertical-align: -2px; margin-right: .3em; }
 .ti:empty { display: none; }

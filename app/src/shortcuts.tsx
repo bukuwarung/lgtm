@@ -87,15 +87,16 @@ function Entry({ label, meta, sub, dim, onClick }: { label: ComponentChildren; m
 const Icon = Octicon; // the index's small buttons and marks
 
 // A test file: a flask (with "test" in the diff's file header).
+// In the diff's file header it's a tag like the file's status (style.css .st).
 export const TestMark = ({ label }: { label?: boolean }) => (
-  <span class="test-mark" role="img" title="A test (in a test folder, or named as one)" aria-label="Test">
+  <span class={label ? 'st s-test' : 'test-mark'} role="img" title="A test (in a test folder, or named as one)" aria-label="Test">
     {label ? <Tg i="test" t="test" /> : <Icon name="beaker" />}
   </span>
 );
 
 // Code changed without its tests: an amber struck-out flask, explained on hover.
 export const NoTestMark = ({ title, label }: { title: string; label?: string }) => (
-  <span class="badge no-test" role="img" title={title} aria-label="No test changes">
+  <span class={label ? 'st s-notest' : 'badge no-test'} role="img" title={title} aria-label="No test changes">
     {label ? <Tg i="notest" t={label} /> : <Icon name="beaker" slash />}
   </span>
 );
