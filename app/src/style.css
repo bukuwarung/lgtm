@@ -745,3 +745,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .scene-app-main > .scene-main { padding: 0; }
 .scene-app .vmark { visibility: visible; }
 .scene-avatar { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 600; font-size: 13px; }
+.scene-app-main .rich { padding-top: 4px; }
+.scene-app-main .rich .note-host { margin: 8px 0 4px; }
+.scene-app-main .rich .thread { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.scene-app-main .rich .thread .comment + .comment { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }

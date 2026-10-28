@@ -18,7 +18,7 @@ function Rows({ rows, extra }: { rows: Row[]; extra?: ComponentChildren }) {
           <tr class={`ln${k === '+' ? ' a' : k === '-' ? ' d' : ''}${cls ? ' ' + cls : ''}`}>
             <td class="num">{o}</td>
             <td class="num">{n}</td>
-            <td class="code" dangerouslySetInnerHTML={{ __html: code.startsWith('<') ? code : kt(code) }} />
+            <td class="code" dangerouslySetInnerHTML={{ __html: /^\s*</.test(code) || code.includes('<mark') ? code : kt(code) }} />
           </tr>
         ))}
         {extra}
@@ -27,13 +27,18 @@ function Rows({ rows, extra }: { rows: Row[]; extra?: ComponentChildren }) {
   );
 }
 
-function File({ path, st = 'modified', add, del, children }: { path: string; st?: string; add: number; del: number; children?: ComponentChildren }) {
+function File({ path, st = 'modified', add, del, mod, children }: { path: string; st?: string; add: number; del: number; mod?: string; children?: ComponentChildren }) {
   return (
     <section class="file">
       <header class="file-h">
         <span class={`st s-${st}`}>{st}</span>
         <a class="file-name" title={path}>
           <b>{path.slice(path.lastIndexOf('/') + 1)}</b>
+          {mod && (
+            <span class="file-mod">
+              <ModuleIcon /> {mod}
+            </span>
+          )}
           {path.includes('/') && <span class="file-dir"><bdi>{path.slice(0, path.lastIndexOf('/'))}</bdi></span>}
         </a>
         <span class="counts">
@@ -79,7 +84,11 @@ const WS_ON: Row[] = [
   [' ', 5, 5, '    items.sumOf { it.price }'],
 ];
 
-const mark = (code: string, word: string, cls: string) => kt(code).replace(word, `<mark class="${cls}">${word}</mark>`);
+// A line with its changed words marked: each part highlighted on its own, so the mark can't fall inside a token's span.
+const mark = (code: string, word: string, cls: string) => {
+  const i = code.indexOf(word);
+  return i < 0 ? kt(code) : `${kt(code.slice(0, i))}<mark class="${cls}">${kt(word)}</mark>${kt(code.slice(i + word.length))}`;
+};
 
 const MD_SRC = '## Rollout\n\n- Ship behind the `orders_v2` flag\n- **Remove** the old screen next sprint';
 
@@ -463,6 +472,93 @@ const ReviewScene = ({ thread }: { thread?: ComponentChildren }) => (
       </>
 );
 
+// The whole window's PR: what plain GitHub can't show you. A markdown file rendered (in lgtm's theme), its changed
+// blocks marked, with a review thread inside the document; a Kotlin file with its imports folded to one line, the hunk
+// named by its function, and the changed words picked out; pills that name the modules and the untested file.
+const MdThread = ({ who, when, text }: { who: string; when: string; text: string }) => (
+  <div class="comment">
+    <b>{who}</b> <time>{when}</time>
+    <div class="md">
+      <p>{text}</p>
+    </div>
+  </div>
+);
+const Showcase = () => (
+  <>
+    <Bar />
+    <div class="pills pr-status">
+      <span class="pill p-strong">↻ re-review</span>
+      <span class="pill p-ok">checks passing</span>
+      <span class="pill p-warn">1 file without test changes <span class="pill-caret">▾</span></span>
+      <span class="pill">
+        <ModuleIcon /> 2 modules <span class="pill-caret">▾</span>
+      </span>
+      {(([c, t]) => <span class={`pill ${c}`}>{t}</span>)(size(84, 12, 4))}
+    </div>
+    <File path="docs/payments/retries.md" add={6} del={2}>
+      <div class="rich mdt mdt-lgtm">
+        <div class="md chunk demo-chunk">
+          <h2 data-src="1-1">Retries</h2>
+          <p data-src="3-3">
+            A charge that fails on the network is tried again, up to <strong>3 times</strong>, waiting longer each time.
+          </p>
+          <p data-src="5-5" data-chg="">
+            A <strong>declined card</strong> is never retried: the customer sees the decline at once and can pick another card.
+            <div class="note-host">
+              <div class="notes">
+                <div class="thread">
+                  <MdThread who="you" when="12 minutes ago" text="Does this cover expired cards too? They come back as a different error." />
+                  <MdThread who="rina" when="just now" text="Good catch, adding them to the list :+1:" />
+                </div>
+              </div>
+            </div>
+          </p>
+          <table data-src="7-10" data-chg="">
+            <thead>
+              <tr>
+                <th>Error</th>
+                <th>Retried</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Network timeout</td>
+                <td>✓ up to 3×</td>
+              </tr>
+              <tr>
+                <td>Card declined</td>
+                <td>Never</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </File>
+    <File path="payments/src/main/kotlin/PaymentService.kt" add={3} del={1} mod=":payments">
+      <table class="diff">
+        <tbody>
+          <Fold text="⋯ +3 imports · new: kotlin.time" />
+          <tr class="hunk">
+            <td colSpan={3}>
+              <div class="hunk-line">
+                <span class="hunk-range">@@ -28,6 +28,8 @@</span> <span class="hunk-ctx">suspend fun charge(order: Order): Result&lt;Receipt&gt;</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <Rows
+        rows={[
+          [' ', 30, 30, '    val attempt = gateway.authorize(order)'],
+          ['-', 31, '', '    return retry(times = 3) {'],
+          ['+', '', 31, mark('    return retry(times = 3, retryIf = { it is IOException }) {', 'retryIf = { it is IOException }', 'wd-add')],
+          [' ', 32, 32, '        api.charge(order.id)'],
+        ]}
+      />
+    </File>
+  </>
+);
+
 export const SCENES: Record<string, { title: string; width: number; body: ComponentChildren }> = {
   queue: {
     title: 'Your queue',
@@ -579,20 +675,20 @@ SCENES.app = {
               </details>
               <details open class="ix-sec">
                 <summary>Review threads <span class="count">1</span></summary>
-                <button class="ix-item"><span class="ix-label">PaymentService.kt:31 <span class="ix-meta">you</span></span><span class="ix-sub">Can we stop retrying on a declined card?</span></button>
+                <button class="ix-item"><span class="ix-label">retries.md:5 <span class="ix-meta">you</span></span><span class="ix-sub">Does this cover expired cards too?</span></button>
               </details>
               <details open class="ix-sec">
                 <summary>Files <span class="count">4</span> <span class="ck-sum">1/4 viewed</span></summary>
-                {[[':payments', ['PaymentService.kt', 'RetryPolicy.kt', 'PaymentServiceTest.kt']], [':app', ['strings.xml']]].map(([m, files]) => (
+                {[[':payments', ['PaymentService.kt', 'RetryPolicy.kt']], [':app', ['strings.xml']], ['', ['retries.md']]].map(([m, files]) => (
                   <details open class="tree-dir mod-group">
-                    <summary><span class="tree-dir-name"><ModuleIcon /> {m} <span class="count">{files.length}</span></span></summary>
+                    <summary><span class="tree-dir-name">{m ? <><ModuleIcon /> {m}</> : 'Other files'} <span class="count">{files.length}</span></span></summary>
                     {(files as string[]).map((f, i) => (
-                      <div class={i === 2 ? 'tree-row dim' : 'tree-row'}>
+                      <div class={f === 'strings.xml' ? 'tree-row dim' : 'tree-row'}>
                         <button class="tree-file" style={{ paddingLeft: '22px' }}>
                           <span class={`fdot s-${i === 1 ? 'added' : 'modified'}`} />
                           <span class="tree-name">{f}</span>
                         </button>
-                        <span class={i === 2 ? 'vmark on' : 'vmark'}>{i === 2 ? '✓' : ''}</span>
+                        <span class={f === 'strings.xml' ? 'vmark on' : 'vmark'}>{f === 'strings.xml' ? '✓' : ''}</span>
                       </div>
                     ))}
                   </details>
@@ -601,7 +697,7 @@ SCENES.app = {
             </div>
           </aside>
           <div class="scene-app-main">
-            <ReviewScene thread={<Thread who="you" when="10 minutes ago" html={md.render('Can we stop retrying on a declined card? Only network errors are worth another try.')} />} />
+            <Showcase />
           </div>
         </div>
       </div>
