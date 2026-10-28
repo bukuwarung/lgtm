@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { estimate, estimateLabel, gradleModules, reviewOrder, untested } from '../src/files.ts';
+import { estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -424,4 +424,6 @@ test('gradleModules: the folder before src/, build files, the rest by folder', (
   assert.equal(m.get('docs/readme.md'), '');
   assert.equal(m.get('feature/pay/src/test/PayTest.kt'), 'feature/pay');
   assert.equal(gradleModules(['web/src/index.ts', 'web/package.json']).size, 0); // not a Gradle PR
+  assert.equal(moduleName('core/data/network'), ':core:data:network');
+  assert.equal(moduleName('.'), ':');
 });

@@ -64,3 +64,6 @@ export function gradleModules(paths: string[]): Map<string, string> {
   for (const p of paths) out.set(p, direct(p) ?? mods.find((m) => p.startsWith(m + '/')) ?? '');
   return out;
 }
+
+// A module as Gradle names it: its folder with ':' for '/' (core/network → :core:network); the root project, ':'.
+export const moduleName = (m: string) => (m === '.' ? ':' : ':' + m.replaceAll('/', ':'));

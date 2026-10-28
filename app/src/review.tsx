@@ -17,7 +17,7 @@ import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, comment
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
-import { gradleModules, reviewOrder, untested } from './files.ts';
+import { gradleModules, moduleName, reviewOrder, untested } from './files.ts';
 import { own, useStoredValue, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
@@ -152,7 +152,7 @@ const dir = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf('/')));
 
 // How many Gradle modules the PR touches, named in full on hover.
 function ModulesPill({ modules }: { modules?: Map<string, string> }) {
-  const names = [...new Set(modules?.values() ?? [])].filter(Boolean).map((m) => (m === '.' ? 'root project' : m)).sort();
+  const names = [...new Set(modules?.values() ?? [])].filter(Boolean).map((m) => (m === '.' ? ': (root)' : moduleName(m))).sort();
   if (!names.length) return null;
   return (
     <span class="pill" title={`Touches ${names.length === 1 ? 'one module' : `${names.length} modules`}:\n${names.join('\n')}`}>
@@ -955,8 +955,8 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
             {base(path)}
           </b>
           {mod && (
-            <span class="file-mod" title={mod === '.' ? 'The root project' : `Module ${mod}`}>
-              <ModuleIcon /> {mod === '.' ? 'root' : mod}
+            <span class="file-mod" title={mod === '.' ? 'The root project' : `Module ${moduleName(mod)}, in ${mod}/`}>
+              <ModuleIcon /> {mod === '.' ? ':' : moduleName(mod)}
             </span>
           )}
           {folder && (

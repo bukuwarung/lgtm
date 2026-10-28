@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots } from './platform.ts';
+import { moduleName } from './files.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -270,8 +271,8 @@ function ModuleTrees({ files, modules, counts, viewed }: { files: File[]; module
     <>
       {groups.map(([m, fs]) => (
         <details open class="tree-dir mod-group" key={m}>
-          <summary title={m === '.' ? 'The root project' : m ? `Module ${m}` : 'Not in a module'}>
-            {m === '' ? 'Other files' : <><ModuleIcon /> {m === '.' ? 'root project' : m}</>} <span class="count">{fs.length}</span>
+          <summary title={m === '.' ? 'The root project' : m ? `Module ${moduleName(m)}, in ${m}/` : 'Not in a module'}>
+            {m === '' ? 'Other files' : <><ModuleIcon /> {m === '.' ? ': (root)' : moduleName(m)}</>} <span class="count">{fs.length}</span>
             {fs.every((f) => viewed.has(f.filename)) && <span class="ck ck-success" title="All viewed">✓</span>}
           </summary>
           <FileTree files={fs} counts={counts} viewed={viewed} base={m === '' ? undefined : m === '.' ? '' : m} />
