@@ -4,7 +4,7 @@ import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, loadPR, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  awaitsMe, commitSuggestions, getHead, loadPR, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -300,6 +300,23 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [lastReviewed, setLastReviewed] = useState<string | null>(null);
   const [lastReviewAt, setLastReviewAt] = useState(''); // when I submitted it
   const [newCommits, setNewCommits] = useState<number | null>(null); // since that review
+  // Commits pushed while the PR is open: looked for each minute (not while lgtm is in the background, and at once on
+  // coming back), then offered as a reload.
+  const [pushed, setPushed] = useState<number | null>(null);
+  const shownHead = data?.pr.head.sha;
+  useEffect(() => {
+    setPushed(null);
+    if (!shownHead) return;
+    const look = () =>
+      !document.hidden &&
+      getHead(repo, n).then(
+        (head) => void (head !== shownHead && getCompare(repo, shownHead, head).then((c) => setPushed(c.commits || 1), () => setPushed(1))),
+        () => {},
+      );
+    const t = setInterval(look, 60_000);
+    addEventListener('visibilitychange', look);
+    return () => (clearInterval(t), removeEventListener('visibilitychange', look));
+  }, [repo, n, shownHead]);
   // My open threads, against the code now: unchanged, changed (the lines as they are), or unknown (history rewritten).
   const [sinceComment, setSinceComment] = useState<Map<string, SinceComment>>(new Map());
   const [since, setSince] = useState(false);
@@ -943,6 +960,12 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           {notice && (
             <p class={notice.ok ? 'notice' : 'warn'}>
               <NoticeText text={notice.text} />
+            </p>
+          )}
+          {pushed && (
+            <p class="look-again">
+              {pushed} new commit{pushed > 1 ? 's' : ''} pushed since you opened this.
+              <button class="primary" onClick={() => (setPushed(null), dispatchEvent(new Event('lgtm:refresh')))}>Reload</button>
             </p>
           )}
           {!!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} />}

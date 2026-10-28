@@ -342,6 +342,11 @@ export async function getStatus(repo: string, n: number): Promise<{ reviewDecisi
     .repository.pullRequest;
 }
 
+// The PR's head commit now, cheaply: to notice a push while it's open.
+export const getHead = async (repo: string, n: number): Promise<string> => {
+  const [owner, name] = repo.split('/');
+  return (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){headRefOid}}}`, { owner, name, n })).repository.pullRequest.headRefOid;
+};
 export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`, undefined, FULL);
 
 export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);
