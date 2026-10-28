@@ -122,29 +122,6 @@ async function prThreads(pr) {
 // person for it, when Slack people knows who they are on GitHub, so lgtm's messages to them reply there. Searched
 // once a run per PR (slackcli search messages); saved with the threads lgtm starts itself.
 const dmSearch = new Map();
-// A PR's file opened in your editor at a line: from your checkout of the repo (Settings → Claude Code), or else the
-// PR's own version (`content`), saved under lgtm's cache by repo and commit. JetBrains IDEs through their launcher
-// (--line), VS Code and Cursor through their URLs.
-const JETBRAINS = { studio: 'Android Studio', idea: 'IntelliJ IDEA' };
-async function openInEditor(b) {
-  if (!JETBRAINS[b?.editor] && !['vscode', 'cursor'].includes(b?.editor)) throw new Error('Bad request');
-  const copy = typeof b?.content === 'string';
-  const cache = join(homedir(), 'Library', 'Caches', 'lgtm', 'files');
-  if (copy && !(/^[\w.-]+\/[\w.-]+$/.test(b.repo) && !b.repo.split('/').some((p) => p === '.' || p === '..') && /^[0-9a-f]{40}$/.test(b.sha) && b.content.length < 10_000_000)) throw new Error('Bad request');
-  const root = copy ? join(cache, b.repo, b.sha) : normalize(String(b?.folder ?? '').replace(/^~(?=\/|$)/, homedir()));
-  if (copy && !root.startsWith(cache + sep)) throw new Error('Bad request');
-  const file = normalize(join(root, String(b?.path ?? '')));
-  const line = Math.max(1, Math.floor(Number(b?.line) || 1));
-  if (!root.startsWith('/') || !file.startsWith(root + sep)) throw new Error('Bad request');
-  if (copy) await mkdir(dirname(file), { recursive: true }).then(() => writeFile(file, b.content));
-  else if (!(await stat(file).catch(() => null))) throw new Error(`${b.path} isn't in ${b.folder}`);
-  const args = JETBRAINS[b.editor] ? ['-na', JETBRAINS[b.editor], '--args', '--line', String(line), file]
-    : ['vscode', 'cursor'].includes(b.editor) ? [`${b.editor}://file${encodeURI(file)}:${line}`]
-    : null;
-  if (!args) throw new Error('Bad request');
-  await new Promise((ok, no) => execFile('open', args, (e, _out, err) => (e ? no(new Error(String(err || e.message).trim())) : ok())));
-}
-
 function dmThreads(pr) {
   if (!dmSearch.has(pr))
     dmSearch.set(
@@ -569,7 +546,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/jira-move', '/open-editor'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/jira-move'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -607,8 +584,6 @@ const server = createServer(async (req, res) => {
     ]);
     return json(res, 200, { slack, jira });
   }
-  if (path === '/open-editor' && req.method === 'POST')
-    return readJson(req).then(openInEditor).then(() => json(res, 200, { ok: true }), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira-move' && req.method === 'POST')
     return readJson(req).then(jiraMove).then(() => json(res, 200, { ok: true }), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira') {

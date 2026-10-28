@@ -295,15 +295,6 @@ export async function fetchJira(key: string): Promise<JiraIssue> {
   return body;
 }
 
-// A PR's file opened in your editor (Settings → Claude Code) at a line: from your checkout of the repo (`folder`), or the
-// PR's own version (`copy`: its text at that commit), saved to lgtm's cache first.
-export async function openInEditor(editor: string, folder: string, path: string, line?: number, copy?: { repo: string; sha: string; content: string }): Promise<void> {
-  const args = { editor, folder, path, line, ...copy };
-  if (isDesktop) return command<void>('open_in_editor', args);
-  const res = await fetch('/open-editor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Couldn't open it");
-}
-
 // A ticket moved to another status (by its name, as Jira shows it), through acli.
 export async function moveJira(key: string, status: string): Promise<void> {
   if (isDesktop) return command<void>('jira_move', { key, status });
