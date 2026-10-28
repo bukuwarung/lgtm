@@ -227,7 +227,7 @@ export async function fetchIntegrations(): Promise<Integrations> {
 // Slack DMs go through the local server, which runs slackcli (it holds the Slack sign-in).
 // Whether slackcli is signed in, and if not, why (shown in the submit panel instead of the Slack option).
 // `pr` ("owner/repo#12") also returns links to that PR's Slack threads.
-export type SlackThread = { login: string; url: string };
+export type SlackThread = { login: string; url: string; name?: string; image?: string }; // name, image: their Slack profile
 export const slackStatus = (pr: string): Promise<{ configured: boolean; error?: string; threads: SlackThread[] }> =>
   isDesktop ? command<{ configured: boolean; error?: string; threads: SlackThread[] }>('slack_status', { pr }).then((d) => ({ ...d, error: d.error ?? undefined })) :
   fetch(`/slack?pr=${encodeURIComponent(pr)}`)

@@ -353,7 +353,8 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .import-fold button { border: none; background: none; padding: 0; color: var(--muted); opacity: .8; cursor: pointer; }
 .import-fold button:hover { color: var(--accent); opacity: 1; }
 .new-pkgs { font-family: var(--mono); }
-.bar-slack { flex: none; font-size: calc(12px * var(--ts)); white-space: nowrap; }
+.bar-slack { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: calc(12px * var(--ts)); white-space: nowrap; }
+.bar-slack img { width: 18px; height: 18px; border-radius: 5px; }
 /* Kotlin, IntelliJ-style: types plain, annotations yellow, properties/constants purple, named args blue */
 .hljs-kt-ann { color: var(--hl-ann); }
 .hljs-kt-prop { color: var(--hl-prop); }
@@ -676,3 +677,17 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .vmark:hover { border-color: var(--accent); }
 .vmark.on { background: var(--pill-ok); border-color: var(--pill-ok); }
 .vmark.some { background: color-mix(in srgb, var(--pill-ok) 45%, transparent); border-color: var(--pill-ok); }
+/* The PR page while it loads: grey blocks where things will be, a light sweeping across (still when motion is
+   reduced). */
+.skel .side { display: grid; gap: 10px; align-content: start; padding: 14px 12px; }
+.skel main { display: grid; gap: 12px; align-content: start; padding-top: 14px; }
+.sk { display: block; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--soft) 30%, color-mix(in srgb, var(--soft) 40%, var(--bg)) 50%, var(--soft) 70%) 0 0 / 300% 100%; animation: sk-sweep 1.4s linear infinite; }
+.sk-title { width: 55%; height: 20px; }
+.skel-pills { display: flex; gap: 6px; }
+.sk-pill { height: 18px; border-radius: 999px; }
+.skel-file { display: grid; gap: 9px; padding-bottom: 14px; border: 1px solid var(--border); border-radius: 6px; }
+.skel-file > .sk { margin-left: 52px; }
+.skel-fh { padding: 10px; border-bottom: 1px solid var(--border); background: var(--soft); border-radius: 6px 6px 0 0; }
+.skel-fh .sk { --soft: var(--bg); }
+@keyframes sk-sweep { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }

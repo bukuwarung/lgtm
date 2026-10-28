@@ -78,6 +78,26 @@ fn cached(cell: &'static OnceLock<Mutex<Option<String>>>, load: impl FnOnce() ->
     v.clone()
 }
 static SLACK_URL: OnceLock<Mutex<Option<String>>> = OnceLock::new(); // https://<workspace>.slack.com/
+static SLACK_PROFILES: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new(); // Slack user → { name, image }
+
+/// A Slack user's name and picture (a user ID, @handle or email), looked up once a run.
+fn slack_profile(user: &str) -> Option<Value> {
+    if !re(SLACK_TARGET).is_match(user) {
+        return None;
+    }
+    let cache = SLACK_PROFILES.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(v) = cache.lock().unwrap().get(user) {
+        return Some(v.clone());
+    }
+    let r = slackcli(&["users", "info", user, "--json"], None);
+    let u = if r.ok { parse_json(&r.stdout)? } else { return None };
+    let u = if u["user"].is_object() { &u["user"] } else { &u };
+    let p = &u["profile"];
+    let name = [&p["display_name"], &p["real_name"], &u["real_name"], &u["name"]].into_iter().find_map(|v| v.as_str().filter(|s| !s.is_empty()));
+    let v = json!({ "name": name, "image": p["image_72"].as_str().or(p["image_48"].as_str()) });
+    cache.lock().unwrap().insert(user.to_string(), v.clone());
+    Some(v)
+}
 static JIRA_SITE: OnceLock<Mutex<Option<String>>> = OnceLock::new(); // https://<site>.atlassian.net
 
 // --- integrations (Settings → Accounts) ---
@@ -197,10 +217,14 @@ fn pr_threads(pr: &str) -> Vec<Value> {
     }) else {
         return vec![];
     };
+    let users = config::read("config.json", true).map(|c| c["slackUsers"].clone()).unwrap_or(Value::Null);
     mine.into_iter()
         .filter_map(|(k, t)| {
             let (channel, ts) = (t["channel"].as_str()?, t["ts"].as_str()?);
-            Some(json!({ "login": &k[prefix.len()..], "url": format!("{base}archives/{channel}/p{}", ts.replace('.', "")) }))
+            let login = &k[prefix.len()..];
+            // Who it's with: as saved with the thread, else the Slack people mapping (threads from before it was saved).
+            let who = t["user"].as_str().or(users[login].as_str()).and_then(slack_profile).unwrap_or(Value::Null);
+            Some(json!({ "login": login, "url": format!("{base}archives/{channel}/p{}", ts.replace('.', "")), "name": who["name"], "image": who["image"] }))
         })
         .collect()
 }
@@ -265,7 +289,8 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
                         if out.ok {
                             if !dry {
                                 if let Some(sent) = parse_json(&out.stdout) {
-                                    threads.lock().unwrap()[&key] = json!({ "channel": sent["channel_id"], "ts": sent["ts"] });
+                                    // Who it's with too, for their name and picture on the PR (pr_threads).
+                                    threads.lock().unwrap()[&key] = json!({ "channel": sent["channel_id"], "ts": sent["ts"], "user": t });
                                 }
                             }
                             return json!({ "login": r.login, "ok": true, "threaded": false });

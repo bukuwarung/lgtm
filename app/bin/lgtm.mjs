@@ -106,7 +106,33 @@ async function prThreads(pr) {
   slackUrl ??= slackcli(['team', 'info', '--json']).then((r) => (r.ok ? JSON.parse(r.stdout).url : null));
   const base = await slackUrl;
   if (!base) return [];
-  return mine.map(([k, t]) => ({ login: k.slice(pr.length + 1), url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}` }));
+  const users = (await readConfig()).slackUsers ?? {};
+  return Promise.all(
+    mine.map(async ([k, t]) => {
+      const login = k.slice(pr.length + 1);
+      // Who it's with: as saved with the thread, else the Slack people mapping (threads from before it was saved).
+      const who = await slackProfile(t.user ?? users[login]);
+      return { login, url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}`, name: who?.name, image: who?.image };
+    }),
+  );
+}
+
+// A Slack user's name and picture (a user ID, @handle or email), looked up once a run.
+const profiles = new Map();
+function slackProfile(user) {
+  if (typeof user !== 'string' || !SLACK_TARGET.test(user)) return null;
+  if (!profiles.has(user))
+    profiles.set(
+      user,
+      slackcli(['users', 'info', user, '--json']).then((r) => {
+        const d = r.ok ? parseJson(r.stdout) : null;
+        const u = d?.user ?? d;
+        if (!u) return null;
+        const p = u.profile ?? {};
+        return { name: [p.display_name, p.real_name, u.real_name, u.name].find(Boolean), image: p.image_72 ?? p.image_48 };
+      }),
+    );
+  return profiles.get(user);
 }
 
 // --- GitHub ↔ Slack people (Settings) ---
@@ -193,7 +219,7 @@ async function notify({ recipients, text, thread }) {
         if (r.ok) {
           if (!DRY_RUN) {
             const sent = JSON.parse(r.stdout);
-            threads[key] = { channel: sent.channel_id, ts: sent.ts };
+            threads[key] = { channel: sent.channel_id, ts: sent.ts, user: target }; // who it's with, for their name and picture
           }
           return { login, ok: true, threaded: false, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
         }

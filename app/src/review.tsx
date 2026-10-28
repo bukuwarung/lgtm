@@ -172,6 +172,40 @@ function HunkHeader({ header }: { header: string }) {
   );
 }
 
+// While a PR loads (one never opened before; others show their saved copy at once): its shape, shimmering, where the
+// index, title, pills and files will be.
+const SKEL_LINES = [62, 48, 71, 35, 80, 54, 66, 28];
+function PRSkeleton() {
+  const [showIndex] = useStoredFlag('showIndex', true);
+  return (
+    <div class={showIndex ? 'review skel' : 'review no-index skel'} aria-busy="true" aria-label="Loading the pull request">
+      <aside class="side">
+        {[70, 50, 85, 40, 65, 55, 75].map((w) => (
+          <span class="sk" style={{ width: `${w}%` }} />
+        ))}
+      </aside>
+      <main>
+        <span class="sk sk-title" />
+        <div class="skel-pills">
+          {[70, 110, 60, 90].map((w) => (
+            <span class="sk sk-pill" style={{ width: `${w}px` }} />
+          ))}
+        </div>
+        {[8, 5, 7].map((n, k) => (
+          <div class="skel-file">
+            <div class="skel-fh">
+              <span class="sk" style={{ width: `${30 + k * 8}%` }} />
+            </div>
+            {SKEL_LINES.slice(0, n).map((w) => (
+              <span class="sk" style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        ))}
+      </main>
+    </div>
+  );
+}
+
 // What you'd seen of each PR you opened (for "changed since your last visit") piles up in localStorage, one record
 // a PR, some of them large; keep the 100 most recent.
 function pruneVisits() {
@@ -455,7 +489,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   });
 
   if (error) return <p class="error page">{error}</p>;
-  if (!data) return <p class="note page">Loading pull request…</p>;
+  if (!data) return <PRSkeleton />;
   const { pr, headRepo } = data;
   const files = since && sinceData ? sinceData.files : data.files;
   const { drafts } = saved;
@@ -723,8 +757,9 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
             </a>
           </h1>
           {slackThreads.map((t) => (
-            <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with @${t.login} about this PR`}>
-              💬 @{t.login}
+            <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this PR`}>
+              {t.image ? <img src={t.image} alt="" /> : '💬 '}
+              {t.name ?? '@' + t.login}
             </a>
           ))}
           <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
