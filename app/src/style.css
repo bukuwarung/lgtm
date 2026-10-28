@@ -371,7 +371,6 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .import-fold button:hover { color: var(--accent); opacity: 1; }
 .new-pkgs { font-family: var(--mono); }
 .bar-group { flex: none; display: flex; align-items: center; gap: 6px; }
-.bar-actions { padding-left: 12px; border-left: 1px solid var(--border); }
 .bar-index { padding: 3px 8px; }
 .bar-slack { flex: none; display: inline-flex; align-items: center; font-size: calc(12px * var(--ts)); }
 .bar-slack img { width: 22px; height: 22px; border-radius: 6px; }
