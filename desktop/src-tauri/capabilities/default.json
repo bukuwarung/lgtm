@@ -9,6 +9,7 @@
     "core:default",
     "allow-gh-token",
     "allow-gh-accounts",
+    "allow-slack-emoji",
     "allow-integrations",
     "allow-jira-issue",
     "allow-job-log",

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { ghAccount, getGhAccounts, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { getEmojis, getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
+import { ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
@@ -8,7 +8,7 @@ import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook } from './look.ts';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
-import { COMMON_FIELDS, SLACK_MESSAGES, type SlackKind } from './slackmsg.ts';
+import { COMMON_FIELDS, fillSlack, prValues, slackParts, SLACK_MESSAGES, type SlackKind } from './slackmsg.ts';
 
 // Shows every token the themes colour: keywords, annotations, types, strings, numbers, properties, named arguments,
 // `it`, constants, comments, and ligatures (->, !=, ===).
@@ -325,6 +325,17 @@ export function Settings() {
 
 // The messages lgtm sends on Slack, each yours to word (slackmsg.ts); {…} fills in, {@…} tags someone.
 function SlackMessages() {
+  // Emoji for the previews: the workspace's custom ones, then GitHub's standard set.
+  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [standard, setStandard] = useState<Record<string, string>>({});
+  useEffect(() => {
+    getSlackEmoji().then(setCustom);
+    getEmojis().then(setStandard, () => {});
+  }, []);
+  const emoji = (name: string, depth = 0): string | undefined => {
+    const v = custom[name] ?? standard[name];
+    return v?.startsWith(':') && depth < 3 ? emoji(v.slice(1, -1), depth + 1) : v;
+  };
   return (
     <section>
       <h3>Slack messages</h3>
@@ -332,13 +343,36 @@ function SlackMessages() {
         What lgtm says on Slack. Fill-ins: {COMMON_FIELDS}. A tag becomes a Slack mention for people in Slack people above (or, for who gets it, by their
         email); anyone else stays @login.
       </p>
+      <p class="note">Slack emoji work as on Slack, your workspace's own too: <code>:approved:</code>, <code>:tada:</code>.</p>
       {(Object.keys(SLACK_MESSAGES) as SlackKind[]).map((k) => (
-        <SlackMessage k={k} />
+        <SlackMessage k={k} emoji={emoji} />
       ))}
     </section>
   );
 }
-function SlackMessage({ k }: { k: SlackKind }) {
+// A made-up PR, to show a message the way Slack will.
+const SLACK_SAMPLE = {
+  ...prValues({ repo: 'acme/app', number: 1234, title: 'Retry payments on network errors', url: 'https://github.com/acme/app/pull/1234', author: 'ana' }),
+  verdict: ':approved: Approved',
+  comments: ' · 3 comments',
+  note: '>Looks good, two small nits.',
+  days: '2 days',
+};
+function SlackPreview({ text, emoji }: { text: string; emoji: (name: string) => string | undefined }) {
+  return (
+    <div class="slack-preview" aria-label="How it looks on Slack">
+      {slackParts(fillSlack(text, SLACK_SAMPLE), emoji).map((l) => (
+        <div class={l.quote ? 'slack-quote' : ''}>
+          {l.parts.map((p) =>
+            'link' in p ? <a>{p.link}</a> : 'tag' in p ? <span class="slack-tag">@{p.tag}</span> : 'emoji' in p ? <img src={p.src} alt={`:${p.emoji}:`} title={`:${p.emoji}:`} /> : p.text,
+          ) }
+          {!l.parts.length && '\u00a0'}
+        </div>
+      ))}
+    </div>
+  );
+}
+function SlackMessage({ k, emoji }: { k: SlackKind; emoji: (name: string) => string | undefined }) {
   const m = SLACK_MESSAGES[k];
   const [text, setText] = useStoredValue('slackMsg.' + k, m.initial);
   return (
@@ -352,6 +386,7 @@ function SlackMessage({ k }: { k: SlackKind }) {
         )}
       </span>
       <textarea rows={3} value={text} onInput={(e) => setText(e.currentTarget.value)} />
+      <SlackPreview text={text} emoji={emoji} />
       {m.fields && <small>Also: {m.fields}</small>}
     </label>
   );

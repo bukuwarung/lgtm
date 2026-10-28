@@ -114,6 +114,11 @@ export async function fetchToken(): Promise<string> {
   }
 }
 
+// The Slack workspace's custom emoji (name → image, or ":name:" for an alias), loaded once; {} without Slack.
+let slackEmojiList: Promise<Record<string, string>> | undefined;
+export const getSlackEmoji = () =>
+  (slackEmojiList ??= (isDesktop ? command<Record<string, string>>('slack_emoji') : fetch('/slack-emoji').then((r) => (r.ok ? r.json() : {}))).catch(() => ({})));
+
 export type GhAccount = { login: string; active: boolean };
 export async function getGhAccounts(): Promise<GhAccount[]> {
   if (isDesktop) return command<GhAccount[]>('gh_accounts');

@@ -80,6 +80,22 @@ fn cached(cell: &'static OnceLock<Mutex<Option<String>>>, load: impl FnOnce() ->
 static SLACK_URL: OnceLock<Mutex<Option<String>>> = OnceLock::new(); // https://<workspace>.slack.com/
 static SLACK_PROFILES: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new(); // Slack user → { name, image }
 
+/// The workspace's custom emoji, name → image (an alias → ":its-name:", for the page to look up); the server's slackEmoji().
+#[tauri::command]
+pub async fn slack_emoji() -> Value {
+    let r = slackcli(&["emoji", "list", "--json"], None);
+    let all = if r.ok { parse_json(&r.stdout).map(|v| v["emoji"].clone()).unwrap_or(Value::Null) } else { Value::Null };
+    let mut out = Map::new();
+    for e in all.as_array().into_iter().flatten() {
+        let (Some(name), alias) = (e["name"].as_str(), e["alias_for"].as_str()) else { continue };
+        let v = if e["is_alias"] == json!(true) { alias.map(|a| format!(":{a}:")) } else { e["url"].as_str().map(String::from) };
+        if let Some(v) = v {
+            out.insert(name.to_string(), json!(v));
+        }
+    }
+    Value::Object(out)
+}
+
 /// A Slack user's name and picture (a user ID, @handle or email), looked up once a run.
 fn slack_profile(user: &str) -> Option<Value> {
     if !re(SLACK_TARGET).is_match(user) {

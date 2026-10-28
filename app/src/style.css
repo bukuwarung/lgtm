@@ -714,3 +714,9 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .slack-msg { display: grid; gap: 4px; max-width: 720px; margin: 10px 0 14px; font-size: calc(13px * var(--ts)); }
 .slack-msg > span { display: flex; align-items: center; gap: 6px; }
 .slack-msg textarea { font: calc(13px * var(--ts))/1.45 var(--mono); resize: vertical; }
+/* Settings → Slack messages: each one as Slack will show it, with a sample PR. */
+.slack-preview { padding: 8px 10px; border-left: 3px solid color-mix(in srgb, var(--fg) 15%, transparent); background: color-mix(in srgb, var(--soft) 60%, transparent); border-radius: 0 6px 6px 0; font-size: calc(13px * var(--ts)); line-height: 1.5; }
+.slack-preview img { width: 1.35em; height: 1.35em; vertical-align: -.3em; object-fit: contain; }
+.slack-preview a { color: #1d9bd1; }
+.slack-tag { padding: 0 2px; border-radius: 3px; color: #1d9bd1; background: color-mix(in srgb, #1d9bd1 15%, transparent); }
+.slack-quote { padding-left: 8px; border-left: 3px solid color-mix(in srgb, var(--fg) 25%, transparent); }

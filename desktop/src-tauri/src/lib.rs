@@ -133,6 +133,7 @@ pub fn run() {
             commands::jira_issue,
             commands::job_log,
             commands::gh_accounts,
+            commands::slack_emoji,
             commands::slack_status,
             commands::slack_notify,
             commands::slack_people_get,

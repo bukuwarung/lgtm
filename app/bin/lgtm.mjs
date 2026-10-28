@@ -117,6 +117,14 @@ async function prThreads(pr) {
   );
 }
 
+// The workspace's custom emoji, name → image (an alias → ":its-name:", for the page to look up), once a run.
+let emojiList;
+const slackEmoji = () =>
+  (emojiList ??= slackcli(['emoji', 'list', '--json']).then((r) => {
+    const all = (r.ok && parseJson(r.stdout)?.emoji) || [];
+    return Object.fromEntries(all.map((e) => [e.name, e.is_alias ? `:${e.alias_for}:` : e.url]));
+  }));
+
 // A Slack user's name and picture (a user ID, @handle or email), looked up once a run.
 const profiles = new Map();
 function slackProfile(user) {
@@ -472,7 +480,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -539,6 +547,7 @@ const server = createServer(async (req, res) => {
     }
   }
   if (path === '/gh-accounts') return ghAccounts().then((r) => json(res, 200, r));
+  if (path === '/slack-emoji') return slackEmoji().then((r) => json(res, 200, r));
 
   const file = normalize(join(DIST, path === '/' ? 'index.html' : path));
   if (!file.startsWith(DIST.endsWith(sep) ? DIST : DIST + sep)) return res.writeHead(404).end();

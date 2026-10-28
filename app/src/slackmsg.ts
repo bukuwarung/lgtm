@@ -49,3 +49,25 @@ export function fillSlack(template: string, values: Record<string, string>): str
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+// What a filled message looks like on Slack, for the Settings preview: links as their text, tags as @login, :emoji:
+// as images (the workspace's own first, then the standard ones by GitHub's names, which mostly match), quoted lines.
+export type SlackPart = { text: string } | { link: string } | { tag: string } | { emoji: string; src: string };
+export function slackParts(message: string, emoji: (name: string) => string | undefined): { quote: boolean; parts: SlackPart[] }[] {
+  const unescape = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  return message.split('\n').map((line) => {
+    const quote = line.startsWith('>');
+    const parts: SlackPart[] = [];
+    let last = 0;
+    const body = quote ? line.slice(1) : line;
+    for (const m of body.matchAll(/<([^>|]+)\|([^>]+)>|<@gh:([^>]+)>|:([a-z0-9_+'-]+):/g)) {
+      const src = m[4] ? emoji(m[4]) : undefined;
+      if (m[4] && !src) continue; // not an emoji Slack knows here: left as text
+      if (m.index! > last) parts.push({ text: unescape(body.slice(last, m.index)) });
+      parts.push(m[1] ? { link: unescape(m[2]) } : m[3] ? { tag: m[3] === '*' ? 'them' : m[3] } : { emoji: m[4], src: src! });
+      last = m.index! + m[0].length;
+    }
+    if (last < body.length) parts.push({ text: unescape(body.slice(last)) });
+    return { quote, parts };
+  });
+}
