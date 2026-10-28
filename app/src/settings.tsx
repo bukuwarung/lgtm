@@ -224,6 +224,7 @@ export function Settings() {
         <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)} />
         <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation" />
+        <JiraAfterMerge />
         <Flag k="gradleModules" initial={true} label="Group files by Gradle module" hint="In Gradle projects: the PR index lists files by module (the folder before src/), and a pill says how many modules the PR touches." />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review." />
         <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
@@ -320,6 +321,20 @@ export function Settings() {
       <SavedReplies />
       <About />
     </div>
+  );
+}
+
+// The status a merged PR's Jira ticket moves to, as the merge box offers it (you can change it there each time).
+function JiraAfterMerge() {
+  const [status, setStatus] = useStoredValue('jiraAfterMerge', 'Ready for QA');
+  return (
+    <label class="set-row">
+      <span>
+        After merging, move the Jira ticket to
+        <small>Offered under the merge box once your PR is merged; Jira's own status name.</small>
+      </span>
+      <input value={status} onInput={(e) => setStatus(e.currentTarget.value)} style={{ maxWidth: '220px' }} />
+    </label>
   );
 }
 

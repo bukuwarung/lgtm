@@ -101,7 +101,8 @@ async function saveThreads(threads) {
 let slackUrl; // https://<workspace>.slack.com/
 async function prThreads(pr) {
   if (!/^[\w.-]+\/[\w.-]+#\d+$/.test(pr)) return [];
-  const mine = Object.entries(await readThreads()).filter(([k]) => k.startsWith(pr + ':'));
+  const found = await dmThreads(pr);
+  const mine = Object.entries({ ...found, ...(await readThreads()) }).filter(([k]) => k.startsWith(pr + ':'));
   if (!mine.length) return [];
   slackUrl ??= slackcli(['team', 'info', '--json']).then((r) => (r.ok ? parseJson(r.stdout)?.url ?? null : null));
   const base = await slackUrl;
@@ -115,6 +116,36 @@ async function prThreads(pr) {
       return { login, url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}`, name: who?.name, image: who?.image };
     }),
   );
+}
+
+// DMs you've already had about this PR (its link in a direct message, newest first): each becomes your thread with that
+// person for it, when Slack people knows who they are on GitHub, so lgtm's messages to them reply there. Searched
+// once a run per PR (slackcli search messages); saved with the threads lgtm starts itself.
+const dmSearch = new Map();
+function dmThreads(pr) {
+  if (!dmSearch.has(pr))
+    dmSearch.set(
+      pr,
+      (async () => {
+        const [repo, n] = pr.split('#');
+        const link = new RegExp(`github\\.com/${repo.replace(/\./g, '\\.')}/pull/${n}(?!\\d)`);
+        const r = await slackcli(['search', 'messages', `github.com/${repo}/pull/${n}`, '--json', '--limit', '40']);
+        const users = (await readConfig()).slackUsers ?? {};
+        const loginOf = Object.fromEntries(Object.entries(users).filter(([, v]) => /^U[A-Z0-9]+$/.test(v)).map(([l, v]) => [v, l]));
+        const threads = await readThreads();
+        const found = {};
+        for (const m of (r.ok && parseJson(r.stdout)?.matches) || []) {
+          if (!m.channel?.is_im || !link.test(`${m.text ?? ''} ${JSON.stringify(m.attachments ?? [])}`)) continue;
+          const login = loginOf[m.channel.name]; // a DM's name is the other person's user ID
+          const key = `${pr}:${login}`;
+          if (!login || threads[key] || found[key]) continue;
+          found[key] = { channel: m.channel.id, ts: m.permalink?.match(/thread_ts=([\d.]+)/)?.[1] ?? m.ts, user: m.channel.name };
+        }
+        if (Object.keys(found).length && !DRY_RUN) await saveThreads({ ...found, ...(await readThreads()) });
+        return found;
+      })().catch(() => ({})),
+    );
+  return dmSearch.get(pr);
 }
 
 // The workspace's custom emoji, name → image (an alias → ":its-name:", for the page to look up), once a run.
@@ -355,6 +386,13 @@ async function jiraIssue(key) {
   return { key, url: `${site}/browse/${key}`, summary: f.summary, status: f.status?.name, statusCategory: f.status?.statusCategory?.key, type: f.issuetype?.name, description: f.description ?? null };
 }
 
+// A ticket moved to another status (after its PR merges: the merge box), by the status's name as Jira shows it.
+async function jiraMove(b) {
+  const status = typeof b?.status === 'string' ? b.status.trim() : '';
+  if (!/^[A-Z][A-Z0-9]+-\d+$/.test(b?.key ?? '') || !status || status.length > 60 || /[\n\r]/.test(status) || status.startsWith('-')) throw new Error('Bad request');
+  await acli(['jira', 'workitem', 'transition', '--key', b.key, '--status', status, '--yes']);
+}
+
 // --- Claude Code sessions per PR (Settings → Claude Code) ---
 // Claude desktop keeps a record per Code session (its desktop id, title, transcript id) and Claude Code a transcript
 // whose first message is the prompt. A session belongs to the PRs whose links appear in that first prompt (lgtm's
@@ -505,7 +543,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/jira-move'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -543,6 +581,8 @@ const server = createServer(async (req, res) => {
     ]);
     return json(res, 200, { slack, jira });
   }
+  if (path === '/jira-move' && req.method === 'POST')
+    return readJson(req).then(jiraMove).then(() => json(res, 200, { ok: true }), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira') {
     return jiraIssue(new URL(req.url ?? '/', ORIGIN).searchParams.get('key') ?? '').then(
       (issue) => json(res, 200, issue),

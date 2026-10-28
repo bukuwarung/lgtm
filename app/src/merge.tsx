@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { fetchJira, moveJira, useStoredValue, type JiraIssue } from './platform.ts';
 import { disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -23,7 +24,7 @@ const canMerge = (s: MergeState) => !s.isDraft && ['CLEAN', 'HAS_HOOKS', 'UNSTAB
 
 // Merge status and controls, shown on my own PRs: ready for review, update branch, merge (or auto-merge), with the
 // commit message editable before confirming, like GitHub's merge box.
-export function MergeBox({ repo, n, url, checks, onChange }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void }) {
+export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[] }) {
   const [s, setS] = useState<MergeState | null>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState('');
@@ -42,7 +43,12 @@ export function MergeBox({ repo, n, url, checks, onChange }: { repo: string; n: 
 
   if (!s) return err ? <p class="warn">Couldn't load the merge status: {err}</p> : null;
   if (s.state !== 'OPEN')
-    return <div class={`merge m-${s.state.toLowerCase()}`}><b>{s.state === 'MERGED' ? `Merged${s.mergedBy ? ` by ${s.mergedBy.login}` : ''}` : 'Closed'}</b></div>;
+    return (
+      <div class={`merge m-${s.state.toLowerCase()}`}>
+        <b>{s.state === 'MERGED' ? `Merged${s.mergedBy ? ` by ${s.mergedBy.login}` : ''}` : 'Closed'}</b>
+        {s.state === 'MERGED' && tickets.map((k) => <TicketMove key={k} id={k} />)}
+      </div>
+    );
 
   const m = method && s.methods.includes(method) ? method : s.methods[0];
   const ready = canMerge(s);
@@ -128,5 +134,58 @@ export function MergeBox({ repo, n, url, checks, onChange }: { repo: string; n: 
       )}
       {err && <p class="error">{err}</p>}
     </div>
+  );
+}
+
+// Once merged: its Jira ticket moved on (unless it's done already), to the status you pick (Settings → Reviewing sets the usual one; ones used
+// before are suggested). Jira's own names; one it doesn't allow from where the ticket is comes back as its error.
+function TicketMove({ id }: { id: string }) {
+  const [issue, setIssue] = useState<JiraIssue | null>(null);
+  const [usual] = useStoredValue('jiraAfterMerge', 'Ready for QA');
+  const [status, setStatus] = useState(usual);
+  const [state, setState] = useState<'' | 'moving' | 'moved' | string>('');
+  useEffect(() => void fetchJira(id).then(setIssue, () => {}), [id]);
+  const used = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('jiraStatuses') ?? '[]') as string[];
+    } catch {
+      return [];
+    }
+  })();
+  const move = () => {
+    setState('moving');
+    moveJira(id, status).then(
+      () => {
+        setState('moved');
+        try {
+          localStorage.setItem('jiraStatuses', JSON.stringify([status, ...used.filter((u) => u !== status)].slice(0, 8)));
+        } catch {}
+        fetchJira(id).then(setIssue, () => {});
+      },
+      (e) => setState(e.message),
+    );
+  };
+  if (!issue) return null;
+  return (
+    <form class="ticket-move" onSubmit={(e) => (e.preventDefault(), move())}>
+      <span>
+        <a href={issue.url} target="_blank" rel="noopener">{id}</a> is <b>{issue.status ?? '?'}</b>
+      </span>
+      {state === 'moved' ? (
+        <span class="ok">✓ moved</span>
+      ) : issue.statusCategory === 'done' ? null : (
+        <>
+          <span>→</span>
+          <input list={`statuses-${id}`} value={status} onInput={(e) => setStatus(e.currentTarget.value)} aria-label="Move it to" />
+          <datalist id={`statuses-${id}`}>
+            {[...new Set([usual, ...used])].map((u) => (
+              <option value={u} />
+            ))}
+          </datalist>
+          <button disabled={state === 'moving' || !status.trim() || status.trim() === issue.status}>{state === 'moving' ? 'Moving…' : 'Move'}</button>
+          {state && state !== 'moving' && <span class="warn-text">{state}</span>}
+        </>
+      )}
+    </form>
   );
 }

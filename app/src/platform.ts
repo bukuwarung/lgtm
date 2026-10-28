@@ -295,6 +295,13 @@ export async function fetchJira(key: string): Promise<JiraIssue> {
   return body;
 }
 
+// A ticket moved to another status (by its name, as Jira shows it), through acli.
+export async function moveJira(key: string, status: string): Promise<void> {
+  if (isDesktop) return command<void>('jira_move', { key, status });
+  const res = await fetch('/jira-move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, status }) });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not move the ticket');
+}
+
 // --- Native side: the app uses macOS through Tauri plugins; the browser version falls back to web APIs ---
 
 // Notifications: macOS notifications in the app, the Web Notification API in the browser.

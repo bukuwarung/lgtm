@@ -732,3 +732,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .slack-pick > button small { color: var(--muted); }
 .slack-pick form { display: flex; gap: 6px; flex: 1; min-width: 260px; }
 .slack-pick input { flex: 1; padding: 2px 8px; font-size: calc(12px * var(--ts)); }
+.ticket-move { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: calc(13px * var(--ts)); }
+.ticket-move input { width: 180px; padding: 2px 8px; }
+.ticket-move .ok { color: var(--pill-ok); }
+.ticket-move .warn-text { color: var(--pill-bad); font-size: calc(12px * var(--ts)); }

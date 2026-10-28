@@ -216,12 +216,70 @@ pub async fn job_log(repo: String, job: u64, user: Option<String>) -> Result<Str
 
 // --- Slack: status, threads, messages ---
 
+/// DMs you've already had about this PR (its link in a direct message, newest first): each becomes your thread with that
+/// person for it, when Slack people knows who they are on GitHub, so lgtm's messages to them reply there. Searched once
+/// a run per PR; saved with the threads lgtm starts itself. The server's dmThreads().
+fn dm_threads(pr: &str) -> Vec<(String, Value)> {
+    let searched = DM_SEARCH.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(v) = searched.lock().unwrap().get(pr) {
+        return v.clone();
+    }
+    let (repo, n) = pr.split_once('#').unwrap_or((pr, ""));
+    let link = re(&format!(r"github\.com/{}/pull/{}(\D|$)", regex::escape(repo), n));
+    let r = slackcli(&["search", "messages", &format!("github.com/{repo}/pull/{n}"), "--json", "--limit", "40"], None);
+    let users = config::read("config.json", true).map(|c| c["slackUsers"].clone()).unwrap_or(Value::Null);
+    let login_of = |id: &str| users.as_object().and_then(|m| m.iter().find(|(_, v)| v.as_str() == Some(id)).map(|(l, _)| l.clone()));
+    let threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
+    let mut found: Vec<(String, Value)> = vec![];
+    let matches = if r.ok { parse_json(&r.stdout).and_then(|v| v["matches"].as_array().cloned()).unwrap_or_default() } else { vec![] };
+    for m in &matches {
+        let text = format!("{} {}", m["text"].as_str().unwrap_or(""), m["attachments"]);
+        if m["channel"]["is_im"] != json!(true) || !link.is_match(&text) {
+            continue;
+        }
+        let Some(other) = m["channel"]["name"].as_str() else { continue }; // a DM's name is the other person's user ID
+        let Some(login) = login_of(other) else { continue };
+        let key = format!("{pr}:{login}");
+        if !threads[&key].is_null() || found.iter().any(|(k, _)| *k == key) {
+            continue;
+        }
+        let root = m["permalink"].as_str().and_then(|p| re(r"thread_ts=([\d.]+)").captures(p).map(|c| c[1].to_string()));
+        let ts = root.or_else(|| m["ts"].as_str().map(String::from)).unwrap_or_default();
+        found.push((key, json!({ "channel": m["channel"]["id"], "ts": ts, "user": other })));
+    }
+    if !found.is_empty() && !dry_run() {
+        let mut all = threads.clone();
+        for (k, v) in &found {
+            all[k] = v.clone();
+        }
+        let _ = config::write("slack-threads.json", &all);
+    }
+    searched.lock().unwrap().insert(pr.to_string(), found.clone());
+    found
+}
+static DM_SEARCH: OnceLock<Mutex<HashMap<String, Vec<(String, Value)>>>> = OnceLock::new();
+
+/// A ticket moved to another status (after its PR merges: the merge box), by the status's name as Jira shows it.
+#[tauri::command]
+pub async fn jira_move(key: String, status: String) -> Result<(), String> {
+    let status = status.trim().to_string();
+    if !re(r"^[A-Z][A-Z0-9]+-\d+$").is_match(&key) || status.is_empty() || status.chars().count() > 60 || status.contains(['\n', '\r']) || status.starts_with('-') {
+        return Err("Bad request".into());
+    }
+    acli(&["jira", "workitem", "transition", "--key", &key, "--status", &status, "--yes"]).map(|_| ())
+}
+
 /// Links to this PR's Slack threads (one per person messaged), as permalinks on the workspace's own URL.
 fn pr_threads(pr: &str) -> Vec<Value> {
     if !re(PR_REF).is_match(pr) {
         return vec![];
     }
-    let threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
+    let mut threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
+    for (k, v) in dm_threads(pr) {
+        if threads[&k].is_null() {
+            threads[&k] = v;
+        }
+    }
     let prefix = format!("{pr}:");
     let mine: Vec<(String, Value)> = threads.as_object().map(|m| m.iter().filter(|(k, _)| k.starts_with(&prefix)).map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default();
     if mine.is_empty() {

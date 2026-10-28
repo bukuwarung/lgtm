@@ -10,6 +10,7 @@
     "allow-gh-token",
     "allow-gh-accounts",
     "allow-slack-emoji",
+    "allow-jira-move",
     "allow-integrations",
     "allow-jira-issue",
     "allow-job-log",

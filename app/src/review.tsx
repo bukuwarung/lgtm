@@ -958,7 +958,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
-          {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} />}
+          {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} tickets={jiraKeys(pr.title, pr.head.ref)} />}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} />
           {visible.map(section)}
           {generated.length > 0 &&

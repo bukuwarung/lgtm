@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-jira-move"
+description = "Enables the jira_move command without any pre-configured scope."
+commands.allow = ["jira_move"]
+
+[[permission]]
+identifier = "deny-jira-move"
+description = "Denies the jira_move command without any pre-configured scope."
+commands.deny = ["jira_move"]
