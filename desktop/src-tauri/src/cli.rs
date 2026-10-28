@@ -70,5 +70,7 @@ pub fn plain(s: &str) -> String {
 
 /// slackcli may print a spinner line before its JSON, and prints nothing at all for an empty search.
 pub fn parse_json(out: &str) -> Option<serde_json::Value> {
-    out.find('{').and_then(|i| serde_json::from_str(&out[i..]).ok())
+    // The first JSON object: CLIs print a spinner line before it, and some (slackcli) an update notice after.
+    let i = out.find('{')?;
+    serde_json::Deserializer::from_str(&out[i..]).into_iter::<serde_json::Value>().next()?.ok()
 }

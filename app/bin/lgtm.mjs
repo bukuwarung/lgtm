@@ -103,7 +103,7 @@ async function prThreads(pr) {
   if (!/^[\w.-]+\/[\w.-]+#\d+$/.test(pr)) return [];
   const mine = Object.entries(await readThreads()).filter(([k]) => k.startsWith(pr + ':'));
   if (!mine.length) return [];
-  slackUrl ??= slackcli(['team', 'info', '--json']).then((r) => (r.ok ? JSON.parse(r.stdout).url : null));
+  slackUrl ??= slackcli(['team', 'info', '--json']).then((r) => (r.ok ? parseJson(r.stdout)?.url ?? null : null));
   const base = await slackUrl;
   if (!base) return [];
   const users = (await readConfig()).slackUsers ?? {};
@@ -148,9 +148,10 @@ function slackProfile(user) {
 const LOGIN = /^[\w-]{1,39}$/;
 const SLACK_ID = /^U[A-Z0-9]{6,}$/;
 // slackcli may print a spinner line first, and prints nothing at all for an empty search.
+// The JSON object in a CLI's output: some print a spinner line before it, and some (slackcli) an update notice after.
 const parseJson = (out = '') => {
   try {
-    return JSON.parse(out.slice(out.indexOf('{')));
+    return JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
   } catch {
     return null;
   }
@@ -163,11 +164,24 @@ async function slackPeople() {
 
 // Best guesses for people without a mapping: an exact email match first (their verified company email on GitHub),
 // then their GitHub name, then their login's first word, each only when Slack finds exactly one live person.
+// The Slack user a link or ID points to: a profile (…/team/U…), a user ID (U…, <@U…>), or a DM (…/archives/D…), whose
+// other member it is (the one that isn't you).
+let slackMe;
+async function slackUserIn(q) {
+  const user = q.match(/(?:\/team\/|^<?@?)(U[A-Z0-9]{6,})>?$/)?.[1];
+  if (user) return user;
+  const dm = q.match(/(?:\/archives\/|^)(D[A-Z0-9]{6,})\b/)?.[1];
+  if (!dm) return null;
+  slackMe ??= slackcli(['auth', 'whoami', '--json']).then((r) => parseJson(r.stdout)?.user_id);
+  const [me, r] = await Promise.all([slackMe, slackcli(['conversations', 'members', 'list', dm, '--json'])]);
+  return (parseJson(r.stdout)?.members ?? []).find((m) => m !== me) ?? null;
+}
+
 async function findSlack(people) {
   if (!Array.isArray(people) || people.length > 50) throw new Error('Bad request');
   const one = (u, via) => ({ id: u.id, label: u.real_name || u.profile?.real_name || u.name, display: u.profile?.display_name || '', via });
   const out = [];
-  for (const p of people) {
+  for (let p of people) {
     if (!LOGIN.test(p?.login ?? '')) continue;
     let found = null;
     for (const email of (Array.isArray(p.emails) ? p.emails : []).slice(0, 5)) {
@@ -181,6 +195,14 @@ async function findSlack(people) {
     }
     // Who else it could be, when there's no single match, to pick from (and a search typed by hand, first).
     const candidates = [];
+    // A Slack link or ID typed in: that person, a DM's other member, or a profile.
+    const id = typeof p.query === 'string' ? await slackUserIn(p.query.trim()) : null;
+    if (id) {
+      const r = await slackcli(['users', 'info', id, '--json']);
+      const u = r.ok && parseJson(r.stdout);
+      if (u?.id && !u.deleted) candidates.push(one(u, 'search'));
+      p = { ...p, query: undefined };
+    }
     for (const [query, via] of [[p.query, 'search'], [p.name, 'name'], [p.login.split(/[-_]/)[0], 'username']]) {
       if (found || typeof query !== 'string' || query.trim().length < 2 || query.startsWith('-')) continue;
       const r = await slackcli(['search', 'people', query.slice(0, 100), '--json', '--limit', '5']);
@@ -245,8 +267,8 @@ async function notify({ recipients, text, thread }) {
         const r = await send([`--recipient-id=${target}`]);
         if (r.ok) {
           if (!DRY_RUN) {
-            const sent = JSON.parse(r.stdout);
-            threads[key] = { channel: sent.channel_id, ts: sent.ts, user: target }; // who it's with, for their name and picture
+            const sent = parseJson(r.stdout);
+            if (sent?.channel_id) threads[key] = { channel: sent.channel_id, ts: sent.ts, user: target }; // who it's with, for their name and picture
           }
           return { login, ok: true, threaded: false, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
         }

@@ -769,8 +769,8 @@ const VIA: Record<string, string> = { email: 'same email', name: 'same name', us
 
 // Who lgtm messages on Slack for each GitHub login. People come from the watched team and your review queue; for the
 // unmapped ones, "Find" asks Slack (email first, then name) and each match waits for your OK before it's saved.
-// Someone Slack had no single match for: who it might be (Save one), or a search of your own (a name, @handle or
-// email).
+// Someone Slack had no single match for: who it might be (Save one), or a search of your own (a name, @handle, email,
+// or a Slack link: their profile, or your DM with them).
 function SlackPick({ m, busy, onSave, onSearch }: { m: SlackMatch; busy: boolean; onSave: (id: string) => void; onSearch: (q: string) => void }) {
   const [q, setQ] = useState('');
   return (
@@ -786,7 +786,7 @@ function SlackPick({ m, busy, onSave, onSearch }: { m: SlackMatch; busy: boolean
         <small class="inline">No one found on Slack.</small>
       )}
       <form onSubmit={(e) => (e.preventDefault(), q.trim() && onSearch(q))}>
-        <input value={q} onInput={(e) => setQ(e.currentTarget.value)} placeholder="Search Slack: name, @handle, email" aria-label="Search Slack" />
+        <input value={q} onInput={(e) => setQ(e.currentTarget.value)} placeholder="Name, @handle, email, or a link to them or your DM" aria-label="Search Slack" />
         <button disabled={busy || !q.trim()}>Search</button>
       </form>
     </div>

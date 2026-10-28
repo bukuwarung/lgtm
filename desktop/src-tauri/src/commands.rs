@@ -366,6 +366,23 @@ pub struct Person {
 
 /// Best guesses for people without a mapping: an exact email match first, then their GitHub name, then their login's
 /// first word, each only when Slack finds exactly one live person.
+/// The Slack user a link or ID points to: a profile (…/team/U…), a user ID (U…, <@U…>), or a DM (…/archives/D…), whose
+/// other member it is (the one that isn't you); the server's slackUserIn().
+fn slack_user_in(q: &str) -> Option<String> {
+    if let Some(c) = re(r"(?:/team/|^<?@?)(U[A-Z0-9]{6,})>?$").captures(q) {
+        return Some(c[1].to_string());
+    }
+    let dm = re(r"(?:/archives/|^)(D[A-Z0-9]{6,})\b").captures(q)?[1].to_string();
+    let me = cached(&SLACK_ME, || {
+        let r = slackcli(&["auth", "whoami", "--json"], None);
+        parse_json(&r.stdout).and_then(|v| v["user_id"].as_str().map(String::from))
+    });
+    let r = slackcli(&["conversations", "members", "list", &dm, "--json"], None);
+    let members = parse_json(&r.stdout)?["members"].as_array()?.clone();
+    members.iter().filter_map(|m| m.as_str()).find(|m| Some(*m) != me.as_deref()).map(String::from)
+}
+static SLACK_ME: OnceLock<Mutex<Option<String>>> = OnceLock::new(); // your own Slack user ID
+
 #[tauri::command]
 pub async fn slack_people_find(people: Vec<Person>) -> Result<Vec<Value>, String> {
     if people.len() > 50 {
@@ -391,7 +408,19 @@ pub async fn slack_people_find(people: Vec<Person>) -> Result<Vec<Value>, String
         let stem = p.login.split(['-', '_']).next().unwrap_or("").to_string();
         // Who else it could be, when there's no single match, to pick from (and a search typed by hand, first).
         let mut candidates: Vec<Value> = vec![];
-        for (query, via) in [(p.query.clone().unwrap_or_default(), "search"), (p.name.clone().unwrap_or_default(), "name"), (stem, "username")] {
+        // A Slack link or ID typed in: that person, a DM's other member, or a profile.
+        let typed = p.query.clone().unwrap_or_default();
+        let linked = slack_user_in(typed.trim());
+        if let Some(id) = &linked {
+            let r = slackcli(&["users", "info", id, "--json"], None);
+            if let Some(u) = r.ok.then(|| parse_json(&r.stdout)).flatten() {
+                if u["id"].is_string() && u["deleted"] != json!(true) {
+                    candidates.push(one(&u, "search"));
+                }
+            }
+        }
+        let typed = if linked.is_some() { String::new() } else { typed };
+        for (query, via) in [(typed, "search"), (p.name.clone().unwrap_or_default(), "name"), (stem, "username")] {
             if found.is_some() || query.trim().chars().count() < 2 || query.starts_with('-') {
                 continue;
             }
