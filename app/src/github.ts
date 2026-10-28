@@ -163,14 +163,7 @@ fragment F on PullRequest{id number title updatedAt isDraft reviewDecision merge
   headRefName baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
-  latestReviews(first:100){nodes{state submittedAt author{login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
-
-// GitHub's search takes a while to drop a PR I've just reviewed from review-requested:@me: a review of mine in the
-// last few minutes, after the last request, answered it. (Only recent ones: older search results are current.)
-const justAnswered = (p: any, me: string) => {
-  const at = p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.submittedAt;
-  return !!at && Date.now() - Date.parse(at) < 5 * 60_000 && at > toItem(p).waitingSince;
-};
+  latestReviews(first:100){nodes{state author{login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
   const d = await graphql(QUEUE, {});
@@ -181,7 +174,7 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
   return [...all.values()]
     .map((p) => ({
       ...toItem(p),
-      requested: requested.has(p.id) && !justAnswered(p, me),
+      requested: requested.has(p.id),
       // A comment-only review (a reply, say) after an approval doesn't undo it on GitHub, so my approval or change
       // request wins over a later plain comment.
       myState:
@@ -749,6 +742,18 @@ export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { commen
 
 // Per PR in the list: how many review threads wait on my reply (see awaitsMe), and whether every thread I'm in is
 // resolved (then a PR I reviewed is ready for another look). One query for all of them.
+// Reviews I've just sent from lgtm, laid over the list until GitHub's search catches up (it keeps a reviewed PR under
+// review-requested:@me for a while): answered, unless asked again since; for a few minutes.
+export type Answered = Map<string, { event: ReviewEvent; at: number }>; // by "owner/repo#n"
+export function withAnswered(items: QueueItem[], answered: Answered, now = Date.now()): QueueItem[] {
+  return items.map((i) => {
+    const a = answered.get(`${i.repo}#${i.number}`);
+    if (!a || now - a.at > 5 * 60_000 || Date.parse(i.waitingSince) > a.at) return i;
+    const state = a.event === 'APPROVE' ? 'APPROVED' : a.event === 'REQUEST_CHANGES' ? 'CHANGES_REQUESTED' : (i.myState ?? 'COMMENTED');
+    return { ...i, requested: false, myState: state, reviewedBefore: true };
+  });
+}
+
 export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
 
 // What changed on a listed PR between two refreshes, worth a notification: new replies waiting on me; on my PR, a

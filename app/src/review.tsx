@@ -284,7 +284,7 @@ function pruneVisits() {
   for (const [k] of keys.map((k) => [k, when(k)] as const).sort((a, b) => a[1] - b[1]).slice(0, keys.length - 100)) localStorage.removeItem(k);
 }
 
-export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: string; n: number; onSubmitted: () => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null }) {
+export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: string; n: number; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
@@ -579,7 +579,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       );
     }
     saveDrafts([]);
-    onSubmitted();
+    onSubmitted(event);
     let result: Notice | null = null;
     if (notify && slackTo?.length) {
       // The review is in; a Slack failure is reported, not thrown.
@@ -967,7 +967,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
-          {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={onSubmitted} tickets={jiraKeys(pr.title, pr.head.ref)} />}
+          {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} />
           {visible.map(section)}
           {generated.length > 0 &&

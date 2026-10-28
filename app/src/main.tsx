@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
-import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -24,6 +24,7 @@ function App() {
   const [state, setState] = useState<'loading' | 'in' | { error: string }>('loading');
   const [route, setRoute] = useState(location.hash);
   const [queueVersion, setQueueVersion] = useState(0);
+  const [answeredTick, setAnsweredTick] = useState(0); // a review sent: lay it over the list
   const [refreshing, setRefreshing] = useState(false); // ↻: until the list's next load lands
   const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
   const look = useCodeLook(); // code colours and font, and text sizes, from Settings
@@ -40,7 +41,6 @@ function App() {
     const next = items.find((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft && !(i.repo === from.repo && i.number === from.n));
     const to = next ? `#/${next.repo}/pull/${next.number}` : '#/done';
     setFlash(notice && { route: to, ...notice });
-    setQueueVersion((v) => v + 1);
     location.hash = to.slice(1);
   };
 
@@ -193,13 +193,19 @@ function App() {
       )}
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
         {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
-        <PRList hidden={!showPRs} current={r} version={queueVersion} onItems={(items) => ((queue.current = items), setRefreshing(false))} />
+        <PRList hidden={!showPRs} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setRefreshing(false))} />
         {r ? (
           <Review
             key={route}
             repo={r.repo}
             n={r.n}
-            onSubmitted={() => setQueueVersion((v) => v + 1)}
+            onSubmitted={(event?: ReviewEvent) => {
+              if (!event) return setQueueVersion((v) => v + 1); // the merge box changed something: reload now
+              // A review: shown in the list at once, reloaded once GitHub's search has caught up with it.
+              answered.set(`${r.repo}#${r.n}`, { event, at: Date.now() });
+              setAnsweredTick((t) => t + 1);
+              setTimeout(() => setQueueVersion((v) => v + 1), 60_000);
+            }}
             onReviewed={(notice) => goNext(r, notice)}
             flash={flash?.route === route ? flash : null}
           />
@@ -534,8 +540,11 @@ function Waiting({ i }: { i: QueueItem }) {
   );
 }
 
-function PRList({ hidden, current, version, onItems }: { hidden: boolean; current: { repo: string; n: number } | null; version: number; onItems: (items: QueueItem[]) => void }) {
-  const [items, setItems] = useState<QueueItem[] | null>(null);
+const answered: Answered = new Map(); // reviews sent from here, until the list catches up
+
+function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: boolean; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
+  const [loaded, setItems] = useState<QueueItem[] | null>(null);
+  const items = useMemo(() => loaded && withAnswered(loaded, answered), [loaded, answeredTick]);
   const [err, setErr] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
   const [paceRaw] = useStoredValue('reviewPace', '100'); // Settings → Time to review: estimates ÷ your pace

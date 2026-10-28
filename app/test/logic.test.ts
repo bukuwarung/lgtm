@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { enclosing, addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
-import { applySuggestions, awaitsMe, queueNews, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
+import { applySuggestions, awaitsMe, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { codeWithoutTests, estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -514,4 +514,13 @@ test('queueNews: what changed between list refreshes', () => {
   assert.deepEqual(queueNews({ ...base, ci: 'FAILURE' }, { ...base, ci: 'SUCCESS' }, on), []); // a rerun that went green without being seen running
   assert.deepEqual(queueNews({ ...base, thread: undefined }, { ...base, thread: { awaiting: 2 } }, on), []); // thread status missing before
   assert.deepEqual(queueNews(base, { ...base, authored: false, reviewDecision: 'APPROVED' }, on), []);
+});
+
+test('withAnswered: a review just sent leaves "needs your review" until the search catches up', () => {
+  const i = { repo: 'o/r', number: 1, requested: true, myState: null, waitingSince: '2026-10-28T09:00:00Z' } as any;
+  const at = Date.parse('2026-10-28T09:10:00Z');
+  const sent = new Map([['o/r#1', { event: 'APPROVE' as const, at }]]);
+  assert.deepEqual([withAnswered([i], sent, at + 1000)[0].requested, withAnswered([i], sent, at + 1000)[0].myState], [false, 'APPROVED']);
+  assert.equal(withAnswered([{ ...i, waitingSince: '2026-10-28T09:11:00Z' }], sent, at + 90_000)[0].requested, true); // asked again since
+  assert.equal(withAnswered([i], sent, at + 10 * 60_000)[0].requested, true); // the search has caught up by then
 });
