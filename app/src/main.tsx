@@ -11,6 +11,7 @@ import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { DemoPage } from './demos.tsx';
 import { CODE_SIZE, TEXT_SIZE, useCodeLook } from './look.ts';
+import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
@@ -504,7 +505,7 @@ function Waiting({ i }: { i: QueueItem }) {
     try {
       const emails = await getEmails(i.repo.split('/')[0], to);
       const url = `https://github.com/${i.repo}/pull/${i.number}`;
-      const text = `👋 Could you take a look at <${url}|${slackEscape(`${i.repo}#${i.number} ${i.title}`)}>? It's been waiting for review for ${days} day${days > 1 ? 's' : ''}.`;
+      const text = fillSlack(slackTemplate('nudge'), { ...prValues({ repo: i.repo, number: i.number, title: i.title, url, author: i.author }), days: `${days} day${days > 1 ? 's' : ''}` });
       const results = await notifySlack(to.map((login) => ({ login, emails: emails[login] ?? [] })), text, `${i.repo}#${i.number}`);
       const failed = results.filter((r) => !r.ok);
       setStep(failed.length ? `Couldn't nudge ${failed.map((r) => '@' + r.login).join(', ')}` : `Nudged ${results.map((r) => '@' + r.login).join(', ')}`);

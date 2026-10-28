@@ -129,7 +129,7 @@ function slackProfile(user) {
         const u = d?.user ?? d;
         if (!u) return null;
         const p = u.profile ?? {};
-        return { name: [p.display_name, p.real_name, u.real_name, u.name].find(Boolean), image: p.image_72 ?? p.image_48 };
+        return { id: u.id, name: [p.display_name, p.real_name, u.real_name, u.name].find(Boolean), image: p.image_72 ?? p.image_48 };
       }),
     );
   return profiles.get(user);
@@ -195,6 +195,21 @@ async function saveSlackPeople(map) {
   return slackPeople();
 }
 
+// The message's GitHub mentions as Slack ones: <@gh:login> (and <@gh:*>, the one it's for) becomes <@U…> for whoever
+// that is on Slack (the Slack people mapping, or for the recipient their email), else stays @login.
+async function mentions(text, recipient, users) {
+  if (!text.includes('<@gh:')) return text;
+  const found = new Map();
+  for (const [, who] of text.matchAll(/<@gh:([A-Za-z0-9-]{1,39}|\*)>/g)) {
+    if (found.has(who)) continue;
+    const login = who === '*' ? recipient.login : who;
+    const target = users[login] ?? (login === recipient.login ? recipient.emails[0] : undefined);
+    const id = /^U[A-Z0-9]+$/.test(target ?? '') ? target : (await slackProfile(target))?.id;
+    found.set(who, id ? `<@${id}>` : `@${login}`);
+  }
+  return text.replace(/<@gh:([A-Za-z0-9-]{1,39}|\*)>/g, (_, who) => found.get(who));
+}
+
 async function notify({ recipients, text, thread }) {
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
     typeof thread === 'string' && /^[\w.-]+\/[\w.-]+#\d+$/.test(thread) &&
@@ -202,9 +217,10 @@ async function notify({ recipients, text, thread }) {
   if (!valid) throw new Error('Bad Slack request');
   const users = (await readConfig()).slackUsers ?? {};
   const threads = await readThreads();
-  const send = (args) => slackcli(['messages', 'send', ...args, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
   const results = await Promise.all(
     recipients.map(async ({ login, emails }) => {
+      const body = await mentions(text, { login, emails }, users);
+      const send = (args) => slackcli(['messages', 'send', ...args, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], body);
       const key = `${thread}:${login}`;
       const prev = threads[key];
       if (prev && /^[CDG][A-Z0-9]+$/.test(prev.channel) && /^\d+\.\d+$/.test(prev.ts)) {

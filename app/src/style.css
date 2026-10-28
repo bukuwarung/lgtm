@@ -711,3 +711,6 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .pill-pop small { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: calc(11px * var(--ts)); }
 .pill-pop b { font-weight: 600; }
 .ix-rerun { margin: 0 0 0 2px; color: var(--pill-bad); }
+.slack-msg { display: grid; gap: 4px; max-width: 720px; margin: 10px 0 14px; font-size: calc(13px * var(--ts)); }
+.slack-msg > span { display: flex; align-items: center; gap: 6px; }
+.slack-msg textarea { font: calc(13px * var(--ts))/1.45 var(--mono); resize: vertical; }

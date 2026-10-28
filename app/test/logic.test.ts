@@ -474,3 +474,11 @@ test('enclosing: the declaration around a change, by indentation', () => {
   // only a blank line added: placed by the next line with text
   assert.equal(enclosing(head, hunk(8, [{ kind: '+', text: '', new: 8 }, { kind: ' ', text: '            }', new: 9 }])), 'private fun bindSaldo(saldo: Long)');
 });
+
+test('fillSlack: values, tags, and no empty lines left behind', async () => {
+  const { fillSlack, prValues } = await import('../src/slackmsg.ts');
+  const v = { ...prValues({ repo: 'o/r', number: 7, title: 'Fix <a> & b', url: 'https://x/7', author: 'ann' }), note: '' };
+  assert.equal(fillSlack('{pr}', v), '<https://x/7|o/r#7 Fix &lt;a&gt; &amp; b>');
+  assert.equal(fillSlack('Hi {@them}, {@author} and {@bob-2}: {title}\n{note}', v), 'Hi <@gh:*>, <@gh:ann> and <@gh:bob-2>: Fix &lt;a&gt; &amp; b');
+  assert.equal(fillSlack('{unknown} stays', v), '{unknown} stays');
+});

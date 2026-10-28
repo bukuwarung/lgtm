@@ -8,6 +8,7 @@ import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook } from './look.ts';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
+import { COMMON_FIELDS, SLACK_MESSAGES, type SlackKind } from './slackmsg.ts';
 
 // Shows every token the themes colour: keywords, annotations, types, strings, numbers, properties, named arguments,
 // `it`, constants, comments, and ligatures (->, !=, ===).
@@ -185,6 +186,8 @@ export function Settings() {
 
       {ints?.slack.ok && <SlackPeopleSection team={team} />}
 
+      <SlackMessages />
+
       <section>
         <h3>Pull request list</h3>
         <Flag k="showDrafts" initial={false} label="Show other people's draft PRs" hint="Your own drafts always show." />
@@ -317,6 +320,40 @@ export function Settings() {
       <SavedReplies />
       <About />
     </div>
+  );
+}
+
+// The messages lgtm sends on Slack, each yours to word (slackmsg.ts); {…} fills in, {@…} tags someone.
+function SlackMessages() {
+  return (
+    <section>
+      <h3>Slack messages</h3>
+      <p class="note">
+        What lgtm says on Slack. Fill-ins: {COMMON_FIELDS}. A tag becomes a Slack mention for people in Slack people above (or, for who gets it, by their
+        email); anyone else stays @login.
+      </p>
+      {(Object.keys(SLACK_MESSAGES) as SlackKind[]).map((k) => (
+        <SlackMessage k={k} />
+      ))}
+    </section>
+  );
+}
+function SlackMessage({ k }: { k: SlackKind }) {
+  const m = SLACK_MESSAGES[k];
+  const [text, setText] = useStoredValue('slackMsg.' + k, m.initial);
+  return (
+    <label class="slack-msg">
+      <span>
+        {m.label}
+        {text !== m.initial && (
+          <button class="md-reset" title="Back to lgtm's wording" onClick={(e) => (e.preventDefault(), setText(m.initial))}>
+            ↺
+          </button>
+        )}
+      </span>
+      <textarea rows={3} value={text} onInput={(e) => setText(e.currentTarget.value)} />
+      {m.fields && <small>Also: {m.fields}</small>}
+    </label>
   );
 }
 

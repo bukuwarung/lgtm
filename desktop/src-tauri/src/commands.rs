@@ -94,7 +94,7 @@ fn slack_profile(user: &str) -> Option<Value> {
     let u = if u["user"].is_object() { &u["user"] } else { &u };
     let p = &u["profile"];
     let name = [&p["display_name"], &p["real_name"], &u["real_name"], &u["name"]].into_iter().find_map(|v| v.as_str().filter(|s| !s.is_empty()));
-    let v = json!({ "name": name, "image": p["image_72"].as_str().or(p["image_48"].as_str()) });
+    let v = json!({ "id": u["id"], "name": name, "image": p["image_72"].as_str().or(p["image_48"].as_str()) });
     cache.lock().unwrap().insert(user.to_string(), v.clone());
     Some(v)
 }
@@ -236,6 +236,22 @@ pub async fn slack_status(pr: Option<String>) -> Value {
     json!({ "configured": r.ok, "error": if r.ok { Value::Null } else { r.error.into() }, "threads": threads })
 }
 
+/// The message's GitHub mentions as Slack ones: <@gh:login> (and <@gh:*>, the one it's for) becomes <@U…> for whoever
+/// that is on Slack (the Slack people mapping, or for the recipient their email), else stays @login.
+fn mentions(text: &str, r: &Recipient, users: &Value) -> String {
+    if !text.contains("<@gh:") {
+        return text.to_string();
+    }
+    re(r"<@gh:([A-Za-z0-9-]{1,39}|\*)>")
+        .replace_all(text, |c: &regex::Captures| {
+            let login = if &c[1] == "*" { r.login.as_str() } else { &c[1] };
+            let who = users[login].as_str().map(String::from).or_else(|| if login == r.login { r.emails.first().cloned() } else { None });
+            let id = who.and_then(|w| if re(r"^U[A-Z0-9]+$").is_match(&w) { Some(w) } else { slack_profile(&w)?["id"].as_str().map(String::from) });
+            id.map_or(format!("@{login}"), |id| format!("<@{id}>"))
+        })
+        .into_owned()
+}
+
 #[derive(Deserialize)]
 pub struct Recipient {
     login: String,
@@ -253,15 +269,16 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
     let threads = Mutex::new(config::read("slack-threads.json", false).unwrap_or(json!({})));
     let dry = dry_run();
     let target = re(SLACK_TARGET);
-    let send = |args: Vec<String>| {
+    let send = |args: Vec<String>, text: &str| {
         let mut all: Vec<&str> = vec!["messages", "send"];
         all.extend(args.iter().map(String::as_str));
         all.extend(["--message-file", "-", "--json"]);
         if dry {
             all.push("--dry-run");
         }
-        slackcli(&all, Some(&text))
+        slackcli(&all, Some(text))
     };
+    let text = &text;
     let thread = &thread;
     let results: Vec<Value> = std::thread::scope(|s| {
         let handles: Vec<_> = recipients
@@ -269,11 +286,12 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
             .map(|r| {
                 let (send, threads, users, target) = (&send, &threads, &users, &target);
                 s.spawn(move || {
+                    let text = &mentions(text, r, users);
                     let key = format!("{thread}:{}", r.login);
                     let prev = threads.lock().unwrap()[&key].clone();
                     if let (Some(ch), Some(ts)) = (prev["channel"].as_str(), prev["ts"].as_str()) {
                         if re(r"^[CDG][A-Z0-9]+$").is_match(ch) && re(r"^\d+\.\d+$").is_match(ts) {
-                            let out = send(vec![format!("--recipient-id={ch}"), format!("--thread-ts={ts}")]);
+                            let out = send(vec![format!("--recipient-id={ch}"), format!("--thread-ts={ts}")], text);
                             if out.ok {
                                 return json!({ "login": r.login, "ok": true, "threaded": true });
                             }
@@ -285,7 +303,7 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
                     }
                     let mut error = String::new();
                     for t in targets {
-                        let out = send(vec![format!("--recipient-id={t}")]);
+                        let out = send(vec![format!("--recipient-id={t}")], text);
                         if out.ok {
                             if !dry {
                                 if let Some(sent) = parse_json(&out.stdout) {

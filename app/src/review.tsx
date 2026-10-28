@@ -16,6 +16,7 @@ import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action 
 import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
+import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { gradleModules, moduleName, reviewOrder, untested } from './files.ts';
 import { own, useStoredValue, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
@@ -57,12 +58,16 @@ type Saved = { sha: string; drafts: Draft[] };
 type Visit = { files: Record<string, string>; at: { path: string; y: number } | null; seenAt?: number };
 
 
-function slackText(pr: PR, ref: string, event: ReviewEvent, body: string, comments: number) {
+// The note to the author and assignees after a review (Settings → Slack messages).
+function slackText(pr: PR, repo: string, n: number, event: ReviewEvent, body: string, comments: number) {
   // :approved: and :request-changes: are the workspace's custom Slack emoji.
-  const verb = { APPROVE: ':approved: Approved', REQUEST_CHANGES: ':request-changes: Requested changes on', COMMENT: '💬 Reviewed' }[event];
-  const extra = comments ? ` · ${comments} comment${comments > 1 ? 's' : ''}` : '';
-  const quote = body.trim() ? '\n' + slackEscape(body.trim().slice(0, 1000)).replace(/^/gm, '>') : '';
-  return `${verb} <${pr.html_url}|${slackEscape(`${ref} ${pr.title}`)}>${extra}${quote}`;
+  const verdict = { APPROVE: ':approved: Approved', REQUEST_CHANGES: ':request-changes: Requested changes on', COMMENT: '💬 Reviewed' }[event];
+  return fillSlack(slackTemplate('review'), {
+    ...prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }),
+    verdict,
+    comments: comments ? ` · ${comments} comment${comments > 1 ? 's' : ''}` : '',
+    note: body.trim() ? slackEscape(body.trim().slice(0, 1000)).replace(/^/gm, '>') : '',
+  });
 }
 
 // Mark generated and content-free files, and put them in reading order (markdown first, tests after their source).
@@ -89,7 +94,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
   const [picks, setPicks] = useState<ReviewerPick[] | null>(null);
   const [err, setErr] = useState('');
   const [slack, setSlack] = useState(true);
-  const [text, setText] = useState('Hi! Could you review my PR when you have a moment? Thank you 🙏');
+  const [text, setText] = useState(() => slackTemplate('ask'));
   // Each person on their own: asking one doesn't hold up the others, and ones asked stay marked.
   const [state, setState] = useState<Record<string, 'asking' | 'asked'>>({});
   const mark = (login: string, s?: 'asking' | 'asked') => setState((m) => ({ ...m, [login]: s! }));
@@ -107,8 +112,8 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
     if (!(slack && slackOk)) return onAsked(`Asked @${login} for a review.`, true);
     try {
       const emails = await getEmails(repo.split('/')[0], [login]);
-      const link = `<${pr.html_url}|${slackEscape(`${repo}#${n} ${pr.title}`)}>`;
-      const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], `${text.trim()}\n${link}`, `${repo}#${n}`);
+      const message = fillSlack(text, prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
+      const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], message, `${repo}#${n}`);
       onAsked(r?.ok ? `Asked @${login} for a review, on GitHub and Slack.` : `Asked @${login} on GitHub; Slack didn't reach them (${r?.error ?? 'no reply'}).`, !!r?.ok);
     } catch (e: any) {
       onAsked(`Asked @${login} on GitHub; Slack failed (${e.message}).`, false);
@@ -561,7 +566,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         const emails = await getEmails(repo.split('/')[0], slackTo);
         const results = await notifySlack(
           slackTo.map((login) => ({ login, emails: emails[login] })),
-          slackText(pr, `${repo}#${n}`, event, body, drafts.length),
+          slackText(pr, repo, n, event, body, drafts.length),
           `${repo}#${n}`,
         );
         slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads)); // a first message starts a thread
