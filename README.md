@@ -37,14 +37,14 @@ If the org enforces SSO, authorize the gh token for it when GitHub asks. On firs
   <img alt="The PR list: Reviewing, Your PRs and Team tabs, PRs grouped by where they stand, with pills for what needs you" src="docs/features/scene-queue-light.png" width="380">
 </picture>
 
-**Reading.** Every changed file on one page, markdown first and tests right after their source. The Jira ticket and PR status on top, a jump index of comments, checks (with failed-job logs), threads and files, and navigation for stacked PRs. A PR you've opened before shows at once from its last copy while it refreshes. Re-reviews open with a summary of what happened since your last review (new commits, replies to your threads, code changed under them, threads resolved), and each of your open threads says whether the lines you commented on changed, with the change. It reopens where you left off, marks files changed since your last visit, and points out code changed without a matching test change. Syntax highlighting in your pick of code themes (IntelliJ, GitHub, VS Code, One, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night, Nord) and free fonts (JetBrains Mono, Fira Code, Cascadia Code, Geist Mono, Iosevka and more), with code ligatures (`->` as →, `>=` as ≥) in the fonts that have them.
+**Reading.** Every changed file on one page, markdown first and tests right after their source. The Jira ticket and PR status on top, a jump index of comments, checks (with failed-job logs), threads and files, and navigation for stacked PRs. A PR you've opened before shows at once from its last copy while it refreshes. Re-reviews open with a summary of what happened since your last review (new commits, replies to your threads, code changed under them, threads resolved), and each of your open threads says whether the lines you commented on changed, with the change. It reopens where you left off, marks files changed since your last visit, and points out code changed without a matching test change. File headers lead with the file's name (its folder small beside it), and in Gradle projects the index groups files by module, tags each file with its module (`:core:network`) and says how many modules the PR touches, each with the modules whose code changed but no test did. In Kotlin and Java, a hunk's header names the function it's in (git's names the class for everything inside one), pinned while you scroll through it. The status pills (checks failing, files without test changes, modules) open the list behind them. A strip down the right edge is the page's scrollbar, with marks for open threads, your drafts and changed parts of documents. One line-number column (the old one is a switch); ⌥-click a line number to copy a link to it. Images show: in descriptions and comments (from private repos too), in markdown files, and SVG files. ↻ reloads the PR you're on as well as the list. Syntax highlighting in your pick of code themes (IntelliJ, GitHub, VS Code, One, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night, Nord) and free fonts (JetBrains Mono, Fira Code, Cascadia Code, Geist Mono, Iosevka and more), with code ligatures (`->` as →, `>=` as ≥) in the fonts that have them.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-review-dark.png">
   <img alt="A PR: the bar with ✳ Claude and Finish review, the Jira ticket, status pills, changes since your last review, and a diff" src="docs/features/scene-review-light.png" width="760">
 </picture>
 
-**Commenting.** Line, range and file comments everywhere, rendered markdown included. An editor with preview, `:emoji:` and `@mention` completion, saved replies (`/` at the start of a line), and suggested changes. Drafts survive reloads and go out as one review, with the verdict pre-picked from your comments; then lgtm opens the next PR that needs you. Optional Slack DM to the author, one thread per PR.
+**Commenting.** Line, range and file comments everywhere, rendered markdown included. An editor with preview, `:emoji:` and `@mention` completion, saved replies (`/` at the start of a line), and suggested changes. Drafts survive reloads and go out as one review, with the verdict pre-picked from your comments; then lgtm opens the next PR that needs you. Optional Slack DM to the author, one thread per PR (a DM you already had about it counts). Every message lgtm sends on Slack is yours to word in Settings → Slack messages, with fill-ins (`{pr}`, `{title}`, …), tags (`{@recipient}`, `{@author}`, `{@any-login}` become Slack mentions) and Slack emoji, your workspace's own too, suggested as you type and shown in a preview.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-comment-dark.png">
@@ -60,14 +60,14 @@ And the other way: Settings → Claude Code → Install adds an `lgtm-review` sk
   <img alt="✳ Claude with a linked session (the green dot)" src="docs/features/scene-claude-light.png" width="760">
 </picture>
 
-**Your PRs.** A merge box with what's blocking and the controls: ready for review, update branch, merge, auto-merge. A PR waiting for review shows for how long, and after a day `🔔 nudge` reminds the requested reviewers on Slack (it asks before sending).
+**Your PRs.** The index lists who's reviewing and their verdict. With nobody asked yet, it suggests reviewers, least busy first (the repo's recent reviewers, else your team), and a click asks them on GitHub and, optionally, on Slack; anyone you haven't messaged gets a Slack button, and anyone who's reviewed gets "ask again" for after your fixes. Failed GitHub Actions jobs rerun from the index's checks. A merge box with what's blocking and the controls: ready for review, update branch, merge, auto-merge; once merged, it offers to move the Jira ticket on (to "Ready for QA", or your pick). A PR waiting for review shows for how long, and after a day `🔔 nudge` reminds the requested reviewers on Slack (it asks before sending).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-merge-dark.png">
   <img alt="The merge box: what is blocking, update branch, merge method, merge and auto-merge" src="docs/features/scene-merge-light.png" width="760">
 </picture>
 
-**On your Mac.** A Dock badge with the "needs your review" count, notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, ⌘F across every file, Back and Forward (⌘[ ⌘]), glass bars and pop-ups in the spirit of Liquid Glass (a switch in Settings), a remembered window, and "Launch at login" in Settings. Copy a PR link anywhere (Slack, say) and switch to lgtm: it offers to open it. When a new version is out, the top bar says so, and Settings → Update now upgrades through Homebrew and restarts. After an update, lgtm shows what's new once. Help → Copy Diagnostics puts what a bug report needs on the clipboard (no tokens or PR text).
+**On your Mac.** More than one GitHub account in gh: switch from your avatar at the top right (each account's drafts and the like kept apart). Text and code sizes in Settings, or ⌘+ ⌘− ⌘0. A Dock badge with the "needs your review" count, notifications, `lgtm://<owner>/<repo>/pull/<n>` links, links opening in your browser, ⌘F across every file, Back and Forward (⌘[ ⌘]), glass bars and pop-ups in the spirit of Liquid Glass (a switch in Settings), a remembered window, and "Launch at login" in Settings. Copy a PR link anywhere (Slack, say) and switch to lgtm: it offers to open it. When a new version is out, the top bar says so, and Settings → Update now upgrades through Homebrew and restarts. After an update, lgtm shows what's new once. Help → Copy Diagnostics puts what a bug report needs on the clipboard (no tokens or PR text).
 
 ## Less to read
 
@@ -137,7 +137,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 </picture>
 </details>
 
-<details open><summary><b>Rendered markdown</b>: markdown shows rendered, still commentable line by line. Pick its look in ⚙ Settings → Markdown files: lgtm's own, or one of the 20 themes from <a href="https://markdown.style/themes">markdown.style</a> (fonts bundled), and change any of its fonts, sizes, spacing or colours.</summary>
+<details open><summary><b>Rendered markdown</b>: markdown shows rendered, still commentable line by line. Pick its look in ⚙ Settings → Markdown files: lgtm's own, or one of the 20 themes from <a href="https://markdown.style/themes">markdown.style</a> (fonts bundled), and change any of its fonts, sizes, spacing or colours; one for dark mode too (each light theme has a night version). Pull request descriptions read the same way.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/richMarkdown-dark.png">
@@ -153,7 +153,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 </picture>
 </details>
 
-<details open><summary><b>Image previews</b>: PNG, WebP, JPEG, GIF (Git LFS too) and Android vector drawables show as pictures.</summary>
+<details open><summary><b>Image previews</b>: PNG, WebP, JPEG, GIF (Git LFS too), SVG and Android vector drawables show as pictures.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/previewImages-dark.png">
@@ -186,11 +186,13 @@ The defaults; change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 | `⌘↵` | Finish review |
 | `⌘K` | Go to a PR, file, thread or check, or open a pasted PR link (the box at the top) |
 | `⌘F` | Find, in every file |
+| `⌘+` / `⌘−` / `⌘0` | Bigger / smaller / default text |
+| `⌥`-click a line number | Copy a link to the line |
 | `?` | All shortcuts |
 
 ## Slack people
 
-lgtm messages people as you through slackcli, so it needs each GitHub account's Slack user. In ⚙ Settings → Slack people, "Find Slack accounts" looks them up (company email, then name, accepting only a single match) and you confirm each one. Mappings are saved in `~/.config/lgtm/config.json` (`{ "slackUsers": { "github-login": "U012ABC" } }`). Mark automation accounts as bots there so they're never messaged.
+lgtm messages people as you through slackcli, so it needs each GitHub account's Slack user. In ⚙ Settings → Slack people, "Find Slack accounts" looks them up (company email, then name, accepting only a single match) and you confirm each one; with several matches you pick, or search by name, @handle, email or a Slack link (their profile, or your DM with them). The list has your team and everyone on PRs you've opened, and a "no Slack user known" message takes you to the person. Mappings are saved in `~/.config/lgtm/config.json` (`{ "slackUsers": { "github-login": "U012ABC" } }`). Mark automation accounts as bots there so they're never messaged.
 
 ## Develop
 
@@ -218,7 +220,7 @@ cd desktop && npm install && npm run build         # → src-tauri/target/releas
 **Releasing.** On a Mac with Rust and both targets (`rustup target add aarch64-apple-darwin x86_64-apple-darwin`):
 
 ```bash
-scripts/release.sh 0.2.0
+scripts/release.sh 0.3.0
 ```
 
 It sets the version everywhere (Settings shows it), runs the tests, builds a universal, ad-hoc-signed `lgtm.app` and the browser version's tarball, and points [`Casks/lgtm.rb`](Casks/lgtm.rb) and [`Formula/lgtm-cli.rb`](Formula/lgtm-cli.rb) at them (version, SHA-256). Then it prints the two publishing commands: push the commit, and `gh release create` with both files. This repo is its own Homebrew tap, so `brew upgrade` picks the release up once both are out.
