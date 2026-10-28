@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { awaitsMe, markBots, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
+import { codeWithoutTests, estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -426,4 +426,12 @@ test('gradleModules: the folder before src/, build files, the rest by folder', (
   assert.equal(gradleModules(['web/src/index.ts', 'web/package.json']).size, 0); // not a Gradle PR
   assert.equal(moduleName('core/data/network'), ':core:data:network');
   assert.equal(moduleName('.'), ':');
+});
+
+test('codeWithoutTests: code changed in a module, none of its tests', () => {
+  const f = (filename: string, additions = 3, status = 'modified') => ({ filename, status, additions });
+  assert.equal(codeWithoutTests([f('core/net/src/main/kotlin/Api.kt')]), true);
+  assert.equal(codeWithoutTests([f('core/net/src/main/kotlin/Api.kt'), f('core/net/src/test/kotlin/ApiTest.kt')]), false);
+  assert.equal(codeWithoutTests([f('core/net/build.gradle.kts'), f('core/net/src/main/res/values/strings.xml')]), false); // no code
+  assert.equal(codeWithoutTests([f('core/net/src/main/kotlin/Api.kt', 0)]), false); // only deletions
 });

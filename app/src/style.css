@@ -123,7 +123,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .file-f { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--soft); border-radius: 0 0 6px 6px; }
 .file-f-name { margin-right: auto; font: calc(12px * var(--ts)) var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .collapsed-row { width: 100%; padding: 6px 10px; border: 0; border-radius: 0 0 6px 6px; background: none; text-align: left; font-size: calc(12px * var(--ts)); color: var(--muted); }
-.tree-file.dim { opacity: .55; }
+.tree-row.dim .tree-file { opacity: .55; }
 .stack-nav { display: flex; align-items: center; gap: 6px; font-size: calc(12px * var(--ts)); color: var(--muted); white-space: nowrap; }
 .stack-nav a, .stack-nav .off { padding: 0 6px; font-size: calc(16px * var(--ts)); }
 .stack-nav .off { opacity: .3; }
@@ -133,9 +133,17 @@ body.resizing { cursor: col-resize; user-select: none; }
 .help { position: sticky; top: calc(var(--nav) + var(--bar)); z-index: 4; margin: 8px 16px; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
 .help td { padding: 3px 12px 3px 0; }
 kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: var(--soft); border: 1px solid var(--border); border-radius: 4px; }
-.tree-dir > summary { padding: 2px 8px; cursor: pointer; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tree-file { display: flex; align-items: center; gap: 6px; width: 100%; padding: 2px 8px; border: 0; border-radius: 0; background: none; text-align: left; }
-.tree-file:hover, .tree-dir > summary:hover { background: var(--soft); }
+.tree-dir > summary { display: flex; align-items: center; padding: 2px 0 2px 8px; cursor: pointer; color: var(--muted); white-space: nowrap; }
+.tree-dir > summary { list-style: none; }
+.tree-dir > summary::-webkit-details-marker { display: none; }
+.tree-dir > summary::before { content: '▾'; flex: none; width: 1em; font-size: .85em; }
+.tree-dir:not([open]) > summary::before { content: '▸'; }
+.tree-dir-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tree-row { display: flex; align-items: center; }
+.tree-row:hover { background: var(--soft); }
+.tree-file { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 2px 8px; border: 0; border-radius: 0; background: none; text-align: left; }
+.tree-file:hover { background: none; }
+.tree-dir > summary:hover { background: var(--soft); }
 .tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fdot { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--modfg); }
 .fdot.s-added { background: var(--addfg); }
@@ -191,7 +199,9 @@ main { padding: 16px; }
 .diff tr.a .code::before { content: "+"; }
 .diff tr.d { background: var(--del); }
 .diff tr.d .code::before { content: "-"; }
-.diff tr.hunk td { padding: 4px 8px; background: var(--soft); color: var(--muted); }
+.diff tr.hunk td { position: sticky; top: calc(var(--nav) + var(--bar) + var(--file-h, 38px)); z-index: 1; padding: 4px 8px; background: var(--soft); color: var(--muted); }
+.hunk-range { opacity: .7; }
+.hunk-ctx { color: var(--fg); font-weight: 600; }
 .diff tr.gap td { padding: 0; background: color-mix(in srgb, var(--soft) 50%, transparent); }
 /* Unchanged lines to expand: there when wanted, quiet otherwise (the accent on hover). */
 .diff tr.gap button { width: 100%; padding: 1px 12px; border: 0; border-radius: 0; background: none; text-align: left; font: calc(11px * var(--cs)) var(--sans); color: color-mix(in srgb, var(--muted) 75%, transparent); }
@@ -659,3 +669,9 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .mod-icon { flex: none; color: var(--accent); vertical-align: -1px; }
 .mod-group > summary .count { margin-left: 4px; color: var(--muted); font-weight: 400; }
 .file-mod { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(11px * var(--ts)); white-space: nowrap; }
+/* Viewed marks in the index's file list: a small box, ✓ when viewed (– when some are); empty ones show on hover. */
+.vmark { flex: none; display: inline-grid; place-items: center; width: 14px; height: 14px; margin: 0 8px 0 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 10px; line-height: 1; color: #fff; cursor: pointer; visibility: hidden; }
+:is(.tree-row, .tree-dir > summary):hover > .vmark, .vmark:focus-visible, .vmark.on, .vmark.some { visibility: visible; }
+.vmark:hover { border-color: var(--accent); }
+.vmark.on { background: var(--pill-ok); border-color: var(--pill-ok); }
+.vmark.some { background: color-mix(in srgb, var(--pill-ok) 45%, transparent); border-color: var(--pill-ok); }

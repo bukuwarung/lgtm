@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'preact/hooks';
-import { fetchJobLog, useFoldBots } from './platform.ts';
-import { moduleName } from './files.ts';
+import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
+import { codeWithoutTests, moduleName } from './files.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -108,10 +108,11 @@ type IndexProps = {
   me: string;
   ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
   modules?: Map<string, string>; // each file's Gradle module (files.ts gradleModules), when grouping by them
+  onViewed: OnViewed;
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -250,7 +251,11 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
       </Section>
 
       <Section title="Files" count={files.length} extra={<span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>
-        {modules?.size ? <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} /> : <FileTree files={files} counts={counts} viewed={viewed} />}
+        {modules?.size ? (
+          <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} onViewed={onViewed} />
+        ) : (
+          <FileTree files={files} counts={counts} viewed={viewed} onViewed={onViewed} />
+        )}
       </Section>
     </div>
   );
@@ -258,7 +263,8 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
 
 // The files by Gradle module: a group per module (its folder; the root project; then files in none), each with its own
 // tree below the module's folder.
-function ModuleTrees({ files, modules, counts, viewed }: { files: File[]; modules: Map<string, string>; counts: Counts; viewed: Set<string> }) {
+function ModuleTrees({ files, modules, counts, viewed, onViewed }: { files: File[]; modules: Map<string, string>; counts: Counts; viewed: Set<string>; onViewed: OnViewed }) {
+  const [flagTests] = useStoredFlag('flagUntested', true); // as the files' own "no test change" (Settings → Diff)
   const groups = useMemo(() => {
     const g = new Map<string, File[]>();
     for (const f of files) {
@@ -273,9 +279,12 @@ function ModuleTrees({ files, modules, counts, viewed }: { files: File[]; module
         <details open class="tree-dir mod-group" key={m}>
           <summary title={m === '.' ? 'The root project' : m ? `Module ${moduleName(m)}, in ${m}/` : 'Not in a module'}>
             {m === '' ? 'Other files' : <><ModuleIcon /> {m === '.' ? ': (root)' : moduleName(m)}</>} <span class="count">{fs.length}</span>
-            {fs.every((f) => viewed.has(f.filename)) && <span class="ck ck-success" title="All viewed">✓</span>}
+            {flagTests && m !== '' && codeWithoutTests(fs) && (
+              <span class="badge no-test" title="This module's code changes, but none of its tests">no test changes</span>
+            )}
+            <ViewedMark paths={fs.map((f) => f.filename)} viewed={viewed} onViewed={onViewed} what={m === '' ? 'these files' : 'this module'} />
           </summary>
-          <FileTree files={fs} counts={counts} viewed={viewed} base={m === '' ? undefined : m === '.' ? '' : m} />
+          <FileTree files={fs} counts={counts} viewed={viewed} onViewed={onViewed} base={m === '' ? undefined : m === '.' ? '' : m} />
         </details>
       ))}
     </>
@@ -315,41 +324,69 @@ const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric
 
 type Counts = (path: string) => number;
 
-export function FileTree({ files, counts, viewed, base }: { files: File[]; counts: Counts; viewed: Set<string>; base?: string }) {
+export function FileTree({ files, counts, viewed, onViewed, base }: { files: File[]; counts: Counts; viewed: Set<string>; onViewed: OnViewed; base?: string }) {
   const root = useMemo(() => buildTree(files, base), [files, base]);
-  return <TreeChildren node={root} depth={0} counts={counts} viewed={viewed} />;
+  return <TreeChildren node={root} depth={0} counts={counts} viewed={viewed} onViewed={onViewed} />;
 }
 
-type TreeProps = { node: TreeNode; depth: number; counts: Counts; viewed: Set<string> };
+type OnViewed = (paths: string[], on: boolean) => void;
+type TreeProps = { node: TreeNode; depth: number; counts: Counts; viewed: Set<string>; onViewed: OnViewed };
 
-function TreeChildren({ node, depth, counts, viewed }: TreeProps) {
+// Viewed, as on GitHub, for a file or everything below a folder or module: ✓ all, – some; a click marks them all (or,
+// when all are, unmarks them).
+function ViewedMark({ paths, viewed, onViewed, what }: { paths: string[]; viewed: Set<string>; onViewed: OnViewed; what: string }) {
+  const n = paths.filter((p) => viewed.has(p)).length;
+  const all = n === paths.length;
+  const click = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation(); // not the row's own click (open the file, fold the folder)
+    onViewed(paths, !all);
+  };
+  return (
+    <span
+      class={`vmark${all ? ' on' : n ? ' some' : ''}`}
+      role="checkbox"
+      aria-checked={all ? true : n ? 'mixed' : false}
+      tabIndex={0}
+      title={all ? `Viewed: click to unmark ${what}` : `Mark ${what} as viewed${n ? ` (${n} of ${paths.length} are)` : ''}`}
+      onClick={click}
+      onKeyDown={(e) => (e.key === ' ' || e.key === 'Enter') && click(e)}
+    >
+      {all ? '✓' : n ? '–' : ''}
+    </span>
+  );
+}
+const allFiles = (n: TreeNode): string[] => [...n.files.map((f) => f.filename), ...[...n.dirs.values()].flatMap(allFiles)];
+
+function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
   return (
     <>
       {[...node.dirs.values()].sort((a, b) => byName(a.name, b.name)).map((d) => (
-        <TreeDir key={d.name} node={d} depth={depth} counts={counts} viewed={viewed} />
+        <TreeDir key={d.name} node={d} depth={depth} counts={counts} viewed={viewed} onViewed={onViewed} />
       ))}
       {[...node.files].sort((a, b) => byName(a.filename, b.filename)).map((f) => {
         const c = counts(f.filename);
         return (
-          <button
-            key={f.filename}
-            class={viewed.has(f.filename) ? 'tree-file dim' : 'tree-file'}
-            style={{ paddingLeft: `${8 + depth * 14}px` }}
-            title={f.filename}
-            onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}
-          >
-            <span class={'fdot s-' + f.status} title={f.status} />
-            <span class="tree-name">{f.filename.split('/').pop()}</span>
-            {viewed.has(f.filename) && <span class="ck ck-success" title="Viewed">✓</span>}
-            {c > 0 && <span class="badge">💬{c}</span>}
-          </button>
+          <div key={f.filename} class={viewed.has(f.filename) ? 'tree-row dim' : 'tree-row'}>
+            <button
+              class="tree-file"
+              style={{ paddingLeft: `${8 + depth * 14}px` }}
+              title={f.filename}
+              onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}
+            >
+              <span class={'fdot s-' + f.status} title={f.status} />
+              <span class="tree-name">{f.filename.split('/').pop()}</span>
+              {c > 0 && <span class="badge">💬{c}</span>}
+            </button>
+            <ViewedMark paths={[f.filename]} viewed={viewed} onViewed={onViewed} what="this file" />
+          </div>
         );
       })}
     </>
   );
 }
 
-function TreeDir({ node, depth, counts, viewed }: TreeProps) {
+function TreeDir({ node, depth, counts, viewed, onViewed }: TreeProps) {
   // Collapse single-child folder chains into one row ("src/core/utils"), as GitHub does.
   let n = node, name = node.name;
   while (!n.files.length && n.dirs.size === 1) {
@@ -358,8 +395,11 @@ function TreeDir({ node, depth, counts, viewed }: TreeProps) {
   }
   return (
     <details open class="tree-dir">
-      <summary style={{ paddingLeft: `${8 + depth * 14}px` }} title={name}>{name}</summary>
-      <TreeChildren node={n} depth={depth + 1} counts={counts} viewed={viewed} />
+      <summary style={{ paddingLeft: `${8 + depth * 14}px` }} title={name}>
+        <span class="tree-dir-name">{name}</span>
+        <ViewedMark paths={allFiles(n)} viewed={viewed} onViewed={onViewed} what="this folder" />
+      </summary>
+      <TreeChildren node={n} depth={depth + 1} counts={counts} viewed={viewed} onViewed={onViewed} />
     </details>
   );
 }

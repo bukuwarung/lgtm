@@ -432,13 +432,17 @@ export async function getViewed(repo: string, n: number): Promise<Set<string>> {
   }
 }
 
-export const setViewed = (prId: string, path: string, viewed: boolean) =>
-  graphql(
-    viewed
-      ? `mutation($pr:ID!,$path:String!){markFileAsViewed(input:{pullRequestId:$pr,path:$path}){clientMutationId}}`
-      : `mutation($pr:ID!,$path:String!){unmarkFileAsViewed(input:{pullRequestId:$pr,path:$path}){clientMutationId}}`,
-    { pr: prId, path },
-  );
+// Files marked (or unmarked) as viewed on GitHub: one request for up to 50 (a folder or module at once, from the index).
+export async function setViewed(prId: string, paths: string[], viewed: boolean) {
+  const op = viewed ? 'markFileAsViewed' : 'unmarkFileAsViewed';
+  for (let i = 0; i < paths.length; i += 50) {
+    const chunk = paths.slice(i, i + 50);
+    await graphql(
+      `mutation($pr:ID!,${chunk.map((_, k) => `$p${k}:String!`).join(',')}){${chunk.map((_, k) => `m${k}:${op}(input:{pullRequestId:$pr,path:$p${k}}){clientMutationId}`).join(' ')}}`,
+      { pr: prId, ...Object.fromEntries(chunk.map((p, k) => [`p${k}`, p])) },
+    );
+  }
+}
 
 export const resolveThread = (threadId: string, resolve: boolean) =>
   graphql(

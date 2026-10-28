@@ -161,6 +161,17 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
   );
 }
 
+// A hunk's header: its line ranges, faint, then where it is (the function or class git names), in full. It stays
+// pinned under the file's header while you're in the hunk (style.css), so a long one keeps its place in view.
+function HunkHeader({ header }: { header: string }) {
+  const m = header.match(/^(@@[^@]*@@)\s*(.*)$/);
+  return (
+    <td colSpan={3}>
+      <span class="hunk-range">{m ? m[1] : header}</span> {m?.[2] && <span class="hunk-ctx">{m[2]}</span>}
+    </td>
+  );
+}
+
 // What you'd seen of each PR you opened (for "changed since your last visit") piles up in localStorage, one record
 // a PR, some of them large; keep the 100 most recent.
 function pruneVisits() {
@@ -328,6 +339,15 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       }, () => {});
     })().catch((e) => setError(e.message));
   }, [reloads]);
+
+  // The file header's height, for the hunk header pinned under it (style.css); it changes with the text size.
+  useEffect(() => {
+    const h = document.querySelector<HTMLElement>('main .file-h');
+    if (!h) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--file-h', `${h.offsetHeight}px`));
+    ro.observe(h);
+    return () => ro.disconnect();
+  }, [data]);
 
   useEffect(() => {
     if (!since || !lastReviewed || !data || sinceData) return;
@@ -550,17 +570,29 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     },
   };
 
-  // Optimistic; GitHub's state is the source of truth, so a failure puts it back.
-  function toggleViewed(path: string) {
-    const on = !viewed.has(path);
-    const flip = (v: boolean) => setViewedPaths((s) => { const x = new Set(s); v ? x.add(path) : x.delete(path); return x; });
-    flip(on);
-    setExpanded((s) => { const x = new Set(s); x.delete(path); return x; });
-    setViewed(pr.node_id, path, on).catch((e) => {
-      flip(!on);
+  // Optimistic; GitHub's state is the source of truth, so a failure puts it back. Several at once from the index (a
+  // folder, a module).
+  function markViewed(paths: string[], on: boolean) {
+    const change = paths.filter((p) => viewed.has(p) !== on);
+    if (!change.length) return;
+    const apply = (v: boolean) =>
+      setViewedPaths((s) => {
+        const x = new Set(s);
+        for (const p of change) v ? x.add(p) : x.delete(p);
+        return x;
+      });
+    apply(on);
+    setExpanded((s) => {
+      const x = new Set(s);
+      for (const p of change) x.delete(p);
+      return x;
+    });
+    setViewed(pr.node_id, change, on).catch((e) => {
+      apply(!on);
       setNotice({ ok: false, text: `Couldn't update "Viewed" on GitHub: ${e.message}` });
     });
   }
+  const toggleViewed = (path: string) => markViewed([path], !viewed.has(path));
 
   const visible = files.filter((f) => !f.generated && !f.noDiff);
   const generated = files.filter((f) => f.generated);
@@ -659,6 +691,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               onRefreshChecks={loadChecks}
               files={shown}
               viewed={viewed}
+              onViewed={markViewed}
               me={me}
               modules={byModule ? modules : undefined}
               ask={
@@ -1218,7 +1251,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
             {gapBefore(hi) && gapRows(gapBefore(hi)!)}
             {file.status !== 'added' && ( // a new file's one hunk header (@@ -0,0 +1,n @@) says nothing
               <tr class="hunk">
-                <td colSpan={3}>{h.header}</td>
+                <HunkHeader header={h.header} />
               </tr>
             )}
             {h.lines.map((l, li) => {

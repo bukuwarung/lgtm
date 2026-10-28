@@ -67,3 +67,11 @@ export function gradleModules(paths: string[]): Map<string, string> {
 
 // A module as Gradle names it: its folder with ':' for '/' (core/network → :core:network); the root project, ':'.
 export const moduleName = (m: string) => (m === '.' ? ':' : ':' + m.replaceAll('/', ':'));
+
+// Whether a set of changed files (a module's) changes code but none of its tests: code changed and added to (not
+// build scripts or debug-only sources), and no test file among them.
+export function codeWithoutTests(files: { filename: string; status: string; additions: number }[]): boolean {
+  const test = (p: string) => isTest(p) || /(^|\/)test_[^/]+$/.test(p);
+  if (files.some((f) => test(f.filename))) return false;
+  return files.some((f) => CODE.test(f.filename) && !/\.kts$/.test(f.filename) && !f.filename.includes('/src/debug/') && f.status !== 'removed' && f.additions > 0);
+}
