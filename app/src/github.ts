@@ -163,7 +163,14 @@ fragment F on PullRequest{id number title updatedAt isDraft reviewDecision merge
   headRefName baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
-  latestReviews(first:100){nodes{state author{login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
+  latestReviews(first:100){nodes{state submittedAt author{login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
+
+// GitHub's search takes a while to drop a PR I've just reviewed from review-requested:@me: a review of mine in the
+// last few minutes, after the last request, answered it. (Only recent ones: older search results are current.)
+const justAnswered = (p: any, me: string) => {
+  const at = p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.submittedAt;
+  return !!at && Date.now() - Date.parse(at) < 5 * 60_000 && at > toItem(p).waitingSince;
+};
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
   const d = await graphql(QUEUE, {});
@@ -174,7 +181,7 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
   return [...all.values()]
     .map((p) => ({
       ...toItem(p),
-      requested: requested.has(p.id),
+      requested: requested.has(p.id) && !justAnswered(p, me),
       // A comment-only review (a reply, say) after an approval doesn't undo it on GitHub, so my approval or change
       // request wins over a later plain comment.
       myState:
