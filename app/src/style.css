@@ -669,8 +669,9 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .mod-icon { flex: none; color: var(--accent); vertical-align: -1px; }
 .mod-group > summary .count { margin-left: 4px; color: var(--muted); font-weight: 400; }
 .file-mod { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(11px * var(--ts)); white-space: nowrap; }
-/* Viewed marks in the index's file list: a small box, ✓ when viewed (– when some are); empty ones show on hover. */
-.vmark { flex: none; display: inline-grid; place-items: center; width: 14px; height: 14px; margin: 0 8px 0 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 10px; line-height: 1; color: #fff; cursor: pointer; visibility: hidden; }
+/* Viewed marks in the index's file list: a small box, ✓ when viewed (– when some are); empty ones show on hover. Clear of
+   the index's scrollbar. */
+.vmark { flex: none; display: inline-grid; place-items: center; width: 14px; height: 14px; margin: 0 16px 0 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 10px; line-height: 1; color: #fff; cursor: pointer; visibility: hidden; }
 :is(.tree-row, .tree-dir > summary):hover > .vmark, .vmark:focus-visible, .vmark.on, .vmark.some { visibility: visible; }
 .vmark:hover { border-color: var(--accent); }
 .vmark.on { background: var(--pill-ok); border-color: var(--pill-ok); }
