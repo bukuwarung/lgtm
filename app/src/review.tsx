@@ -410,11 +410,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         setSlackThreads(slack.threads);
         const people = [...new Set([pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login))];
         setSlackTo(slack.configured ? people : null);
-        setSlackNote(
-          !slack.configured ? `Slack unavailable: ${slack.error ?? 'slackcli is not signed in'}`
-          : !people.length ? 'No Slack message: nobody besides you is the author or an assignee'
-          : '',
-        );
+        setSlackNote(slack.configured ? '' : `Slack unavailable: ${slack.error ?? 'slackcli is not signed in'}`);
       }, (e) => setSlackNote(`Slack unavailable: ${e.message}`));
       getViewer().then((me) => {
         setMe(me);
@@ -1040,7 +1036,7 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
   return (
     <div class="submit">
       <button class="primary" onClick={() => setOpen(!open)}>
-        Finish review{count ? ` (${count})` : ''}
+        {authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''}
       </button>
       {open && (
         <div class="panel">
@@ -1069,7 +1065,7 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
           </label>
           {slackNote && <p class="note">{slackNote}</p>}
           <button class="primary" disabled={busy} onClick={go}>
-            {busy ? 'Submitting…' : 'Submit review'}
+            {busy ? 'Submitting…' : authored ? 'Comment' : 'Submit review'}
           </button>
           {err && <p class="error">{err}</p>}
         </div>
