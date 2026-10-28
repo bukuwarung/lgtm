@@ -861,22 +861,11 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         </aside>
       )}
       <div>
+        {/* Where you are (index, stack), what it is, who it's with, then what you can do. */}
         <div class="bar">
-          <button title={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
-            {showIndex ? '⇤' : '⇥'} Index
+          <button class="bar-index" title={showIndex ? 'Hide the PR index' : 'Show the PR index'} aria-label={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
+            {showIndex ? '⇤' : '⇥'}
           </button>
-          <h1>
-            <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on GitHub`}>
-              <span class="pr-num">#{n}</span> {pr.title}
-            </a>
-          </h1>
-          {slackThreads.map((t) => (
-            <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this PR`}>
-              {t.image ? <img src={t.image} alt="" /> : '💬 '}
-              {t.name ?? '@' + t.login}
-            </a>
-          ))}
-          <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
           {layer >= 0 && (
             <span class="stack-nav" title="This PR's stack ([ and ] to move)">
               {stackAt(-1) ? <a href={`#/${repo}/pull/${stackAt(-1)!.number}`} title={`#${stackAt(-1)!.number} ${stackAt(-1)!.title}`}>‹</a> : <span class="off">‹</span>}
@@ -888,9 +877,24 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
             </span>
           )}
-          {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
-          {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
-          <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
+          <h1>
+            <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on GitHub`}>
+              <span class="pr-num">#{n}</span> {pr.title}
+            </a>
+          </h1>
+          <div class="bar-group">
+            {slackThreads.map((t) => (
+              <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this PR`}>
+                {t.image ? <img src={t.image} alt={t.name ?? t.login} /> : '💬'}
+              </a>
+            ))}
+            <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
+          </div>
+          <div class="bar-group bar-actions">
+            {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
+            {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
+            <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
+          </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
         <ScrollMarks files={shown} />

@@ -431,18 +431,22 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
 
 const Bar = ({ linked }: { linked?: boolean }) => (
   <div class="bar">
-    <button>⇤ Index</button>
+    <button class="bar-index">⇤</button>
     <h1>
       <a><span class="pr-num">#412</span> Retry failed payments with backoff</a>
     </h1>
-    <a class="bar-slack">💬 @rina</a>
-    <span class="claude-menu">
-      <button class={linked ? 'claude-btn linked' : 'claude-btn'}>
-        ✳ Claude{linked && <span class="claude-dot" />}
-      </button>
-    </span>
-    <div class="submit">
-      <button class="primary">Finish review</button>
+    <div class="bar-group">
+      <a class="bar-slack">💬</a>
+      <span class="claude-menu">
+        <button class={linked ? 'claude-btn linked' : 'claude-btn'}>
+          ✳ Claude{linked && <span class="claude-dot" />}
+        </button>
+      </span>
+    </div>
+    <div class="bar-group bar-actions">
+      <div class="submit">
+        <button class="primary">Finish review</button>
+      </div>
     </div>
   </div>
 );

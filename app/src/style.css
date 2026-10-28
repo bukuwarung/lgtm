@@ -370,8 +370,11 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .import-fold button { border: none; background: none; padding: 0; color: var(--muted); opacity: .8; cursor: pointer; }
 .import-fold button:hover { color: var(--accent); opacity: 1; }
 .new-pkgs { font-family: var(--mono); }
-.bar-slack { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: calc(12px * var(--ts)); white-space: nowrap; }
-.bar-slack img { width: 18px; height: 18px; border-radius: 5px; }
+.bar-group { flex: none; display: flex; align-items: center; gap: 6px; }
+.bar-actions { padding-left: 12px; border-left: 1px solid var(--border); }
+.bar-index { padding: 3px 8px; }
+.bar-slack { flex: none; display: inline-flex; align-items: center; font-size: calc(12px * var(--ts)); }
+.bar-slack img { width: 22px; height: 22px; border-radius: 6px; }
 /* Kotlin, IntelliJ-style: types plain, annotations yellow, properties/constants purple, named args blue */
 .hljs-kt-ann { color: var(--hl-ann); }
 .hljs-kt-prop { color: var(--hl-prop); }
