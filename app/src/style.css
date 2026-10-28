@@ -189,9 +189,10 @@ main { padding: 16px; }
 .diff tr.d { background: var(--del); }
 .diff tr.d .code::before { content: "-"; }
 .diff tr.hunk td { padding: 4px 8px; background: var(--soft); color: var(--muted); }
-.diff tr.gap td { padding: 0; background: var(--soft); }
-.diff tr.gap button { width: 100%; padding: 2px 12px; border: 0; border-radius: 0; background: none; text-align: left; font: calc(12px * var(--cs)) var(--sans); color: var(--accent); }
-.diff tr.gap button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.diff tr.gap td { padding: 0; background: color-mix(in srgb, var(--soft) 50%, transparent); }
+/* Unchanged lines to expand: there when wanted, quiet otherwise (the accent on hover). */
+.diff tr.gap button { width: 100%; padding: 1px 12px; border: 0; border-radius: 0; background: none; text-align: left; font: calc(11px * var(--cs)) var(--sans); color: color-mix(in srgb, var(--muted) 75%, transparent); }
+.diff tr.gap button:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 /* Expanded lines aren't part of the PR diff, so GitHub won't take comments on them. */
 .diff tr.x .num { cursor: default; }
 .diff tr.x:hover > .num + .num::after { content: none; }
