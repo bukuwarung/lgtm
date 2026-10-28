@@ -564,6 +564,54 @@ export const resolveThread = (threadId: string, resolve: boolean) =>
 
 export type StackLayer = { number: number; title: string };
 
+// Each layer of a stack at a glance: its checks, who's reviewing (with their verdict) and where it stands. One query.
+export type LayerStatus = {
+  number: number;
+  state: 'OPEN' | 'CLOSED' | 'MERGED';
+  isDraft: boolean;
+  reviewDecision: QueueItem['reviewDecision'];
+  mergeStateStatus: MergeState['mergeStateStatus'];
+  ci: QueueItem['ci'];
+  reviewers: { login: string; verdict: ReviewState | 'WAITING' }[];
+};
+export async function getStackStatus(repo: string, numbers: number[]): Promise<Map<number, LayerStatus>> {
+  const [owner, name] = repo.split('/');
+  const d = await graphql(
+    `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){${numbers
+      .map(
+        (n) => `p${n}:pullRequest(number:${n}){number state isDraft reviewDecision mergeStateStatus author{login}
+          commits(last:1){nodes{commit{statusCheckRollup{state}}}}
+          reviewRequests(first:20){nodes{requestedReviewer{... on User{login} ... on Team{slug}}}}
+          latestReviews(first:50){nodes{state author{__typename login}}}}`,
+      )
+      .join(' ')}}}`,
+    { owner, name },
+  );
+  return new Map(
+    numbers.map((n) => {
+      const p = d.repository[`p${n}`];
+      const reviewers = new Map<string, ReviewState | 'WAITING'>();
+      for (const r of p.latestReviews.nodes) if (r.author?.__typename === 'User' && r.author.login !== p.author?.login) reviewers.set(r.author.login, r.state);
+      for (const r of p.reviewRequests.nodes) {
+        const who = r.requestedReviewer?.login ?? (r.requestedReviewer?.slug && `team ${r.requestedReviewer.slug}`);
+        if (who) reviewers.set(who, 'WAITING');
+      }
+      return [
+        n,
+        {
+          number: n,
+          state: p.state,
+          isDraft: p.isDraft,
+          reviewDecision: p.reviewDecision,
+          mergeStateStatus: p.mergeStateStatus,
+          ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+          reviewers: [...reviewers].map(([login, verdict]) => ({ login, verdict })),
+        },
+      ];
+    }),
+  );
+}
+
 // The whole stack around a PR, bottom → top: follow base branches down to PRs whose head is our base, and
 // head branches up to the single PR based on our head. Stops at forks, branching stacks, or 10 layers.
 export async function getStack(repo: string, pr: PR): Promise<StackLayer[]> {

@@ -12,6 +12,7 @@ import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
+import { StackNav } from './stacknav.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -871,17 +872,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           <button class="bar-index" title={showIndex ? 'Hide the PR index' : 'Show the PR index'} aria-label={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
             {showIndex ? '⇤' : '⇥'}
           </button>
-          {layer >= 0 && (
-            <span class="stack-nav" title="This PR's stack ([ and ] to move)">
-              {stackAt(-1) ? <a href={`#/${repo}/pull/${stackAt(-1)!.number}`} title={`#${stackAt(-1)!.number} ${stackAt(-1)!.title}`}>‹</a> : <span class="off">‹</span>}
-              <select value={n} onChange={(e) => (location.hash = `/${repo}/pull/${e.currentTarget.value}`)} aria-label="Jump to a stack layer">
-                {stack.map((l, k) => (
-                  <option value={l.number}>{k + 1}/{stack.length} · #{l.number} {l.title}</option>
-                ))}
-              </select>
-              {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
-            </span>
-          )}
+          {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
           <h1>
             <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on GitHub`}>
               <span class="pr-num">#{n}</span> {pr.title}

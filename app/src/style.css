@@ -386,7 +386,21 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .bar h1 a:hover { color: var(--accent); }
 .bar h1 .pr-num { color: var(--muted); font-weight: 400; }
 .pr-status { margin-bottom: 10px; }
-.stack-nav select { max-width: 7.5em; padding: 0 2px; font-size: calc(12px * var(--ts)); background: none; color: inherit; border: 1px solid var(--border); border-radius: 4px; }
+.stack-k { padding: 0 6px; font-size: calc(12px * var(--ts)); background: none; color: inherit; }
+.panel.stack-panel { left: 0; right: auto; width: min(640px, calc(100vw - 32px)); gap: 2px; padding: 6px; white-space: normal; }
+.stack-row { display: grid; grid-template-columns: 1.4em minmax(0, 1fr) 1.2em auto auto; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; color: var(--fg); font-size: calc(13px * var(--ts)); }
+.stack-row:hover { background: var(--soft); text-decoration: none; }
+.stack-row.cur { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.stack-i { color: var(--muted); text-align: right; }
+.stack-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stack-title b { color: var(--muted); font-weight: 400; }
+.stack-who { display: flex; gap: 3px; }
+.stack-who img { width: 20px; height: 20px; border-radius: 50%; box-sizing: border-box; border: 2px solid var(--border); }
+.stack-who img.v-APPROVED { border-color: var(--addfg); }
+.stack-who img.v-CHANGES_REQUESTED { border-color: var(--delfg); }
+.stack-who img.v-WAITING { border-style: dashed; }
+.stack-team { font-size: calc(11px * var(--ts)); color: var(--muted); }
+.stack-row .pill { margin: 0; justify-self: end; }
 .done { display: grid; justify-items: center; align-content: start; gap: 4px; padding-top: 15vh; text-align: center; }
 .done h2 { margin: 12px 0 0; }
 .done p { color: var(--muted); }
