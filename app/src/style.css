@@ -646,5 +646,6 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .ix-meta.v-WAITING { color: var(--pill-warn); }
 .ix-meta.v-COMMENTED { color: var(--pill-info); }
 .mod-group > summary { font-weight: 600; }
-.mod-icon { color: var(--accent); font-weight: 400; }
+.mod-icon { flex: none; color: var(--accent); vertical-align: -1px; }
 .mod-group > summary .count { margin-left: 4px; color: var(--muted); font-weight: 400; }
+.file-mod { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(11px * var(--ts)); white-space: nowrap; }

@@ -21,7 +21,7 @@ import { gradleModules, reviewOrder, untested } from './files.ts';
 import { own, useStoredValue, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
-import { jumpTo, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
+import { below, jumpTo, ModuleIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -48,6 +48,7 @@ type Ctx = {
   mainLang?: string; // the PR's main code language
   moved: Map<string, Moved>; // code moved without changes, per file
   untested: Set<string>; // code files whose tests the PR doesn't touch (Settings switch)
+  modules?: Map<string, string>; // each file's Gradle module, when shown (Settings → Reviewing)
   sinceComment: Map<string, SinceComment>; // my open threads, against the code now
 };
 type SinceComment = { kind: 'same' | 'gone' | 'unknown' } | { kind: 'changed'; lines: Line[] };
@@ -155,7 +156,7 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
   if (!names.length) return null;
   return (
     <span class="pill" title={`Touches ${names.length === 1 ? 'one module' : `${names.length} modules`}:\n${names.join('\n')}`}>
-      ◫ {names.length === 1 ? names[0] : `${names.length} modules`}
+      <ModuleIcon /> {names.length === 1 ? names[0] : `${names.length} modules`}
     </span>
   );
 }
@@ -503,6 +504,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const modules = useMemo(() => gradleModules(data.files.map((f) => f.filename)), [data.files]);
   const ctx: Ctx = {
     untested: noTests,
+    modules: byModule ? modules : undefined,
     sinceComment,
     pr,
     headRepo,
@@ -930,6 +932,8 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   const [ref, near] = useNear<HTMLElement>();
   const hunks = useMemo(() => (ctx.ignoreWs ? ignoreWhitespace : (h: Hunk[]) => h)(parsePatch(file.patch ?? '')), [file.patch, ctx.ignoreWs]);
   const path = file.filename;
+  const mod = ctx.modules?.get(path) ?? '';
+  const folder = mod ? dir(below(path, mod === '.' ? '' : mod)) : dir(path);
   const t = ctx.target;
   const body: BodyProps = { file, hunks, ctx, threads: threads.filter((x) => !isFileLevel(x)), drafts: drafts.filter((d) => d.line) };
 
@@ -937,8 +941,8 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref}>
       <header class="file-h">
         <span class="st">{file.status}</span>
-        {/* The file's name, prominent; its folder small beside it, cut from the left (the nearest folders stay), in full
-            on hover. */}
+        {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
+            src/), cut from the left (the nearest folders stay); the full path on hover. */}
         <a
           class="file-name"
           href={file.blob_url}
@@ -950,11 +954,16 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
             {file.previous_filename && base(file.previous_filename) !== base(path) && <>{base(file.previous_filename)} → </>}
             {base(path)}
           </b>
-          {dir(path) && (
+          {mod && (
+            <span class="file-mod" title={mod === '.' ? 'The root project' : `Module ${mod}`}>
+              <ModuleIcon /> {mod === '.' ? 'root' : mod}
+            </span>
+          )}
+          {folder && (
             <span class="file-dir">
               <bdi>
                 {file.previous_filename && dir(file.previous_filename) !== dir(path) && `${dir(file.previous_filename)} → `}
-                {dir(path)}
+                {folder}
               </bdi>
             </span>
           )}

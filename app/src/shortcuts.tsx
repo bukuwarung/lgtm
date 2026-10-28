@@ -271,7 +271,7 @@ function ModuleTrees({ files, modules, counts, viewed }: { files: File[]; module
       {groups.map(([m, fs]) => (
         <details open class="tree-dir mod-group" key={m}>
           <summary title={m === '.' ? 'The root project' : m ? `Module ${m}` : 'Not in a module'}>
-            {m === '' ? 'Other files' : <><span class="mod-icon">◫</span> {m === '.' ? 'root project' : m}</>} <span class="count">{fs.length}</span>
+            {m === '' ? 'Other files' : <><ModuleIcon /> {m === '.' ? 'root project' : m}</>} <span class="count">{fs.length}</span>
             {fs.every((f) => viewed.has(f.filename)) && <span class="ck ck-success" title="All viewed">✓</span>}
           </summary>
           <FileTree files={fs} counts={counts} viewed={viewed} base={m === '' ? undefined : m === '.' ? '' : m} />
@@ -281,10 +281,19 @@ function ModuleTrees({ files, modules, counts, viewed }: { files: File[]; module
   );
 }
 
+// A Gradle module's mark: GitHub's "package" icon (Octicons, MIT), in the text's colour.
+export function ModuleIcon() {
+  return (
+    <svg class="mod-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <path fill="currentColor" d="M8.878.392a1.75 1.75 0 0 0-1.756 0l-5.25 3.045A1.75 1.75 0 0 0 1 4.951v6.098c0 .624 .332 1.2 .872 1.514l5.25 3.045a1.75 1.75 0 0 0 1.756 0l5.25-3.045c.54-.313 .872-.89 .872-1.514V4.951c0-.624-.332-1.2-.872-1.514L8.878.392ZM7.875 1.69a.25.25 0 0 1 .25 0l4.63 2.685L8 7.133 3.245 4.375l4.63-2.685ZM2.5 5.677v5.372c0 .09 .047 .171 .125 .216l4.625 2.683V8.432Zm6.25 8.271 4.625-2.683a.25.25 0 0 0 .125-.216V5.677L8.75 8.432Z" />
+    </svg>
+  );
+}
+
 type TreeNode = { name: string; dirs: Map<string, TreeNode>; files: File[] };
 
 // `base`: a module's folder, left out of the tree along with its src/ (so its source sets, main, test…, come first).
-const below = (path: string, base: string) => {
+export const below = (path: string, base: string) => {
   const rel = base ? path.slice(base.length + 1) : path;
   return rel.startsWith('src/') ? rel.slice(4) : rel;
 };
