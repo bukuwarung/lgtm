@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { highlightCode, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
+import { ModuleIcon } from './shortcuts.tsx';
 import { parseDoc } from './docs.ts';
 
 // Small, made-up examples of each diff helper, drawn with the app's own styles: shown beside the switches in
@@ -437,6 +438,31 @@ const Bar = ({ linked }: { linked?: boolean }) => (
   </div>
 );
 
+// A PR being read (the README's "Reading"), with a thread under its diff when given (the whole-window scene).
+const ReviewScene = ({ thread }: { thread?: ComponentChildren }) => (
+      <>
+        <Bar />
+        <div class="scene-main">
+          <details class="ticket">
+            <summary>
+              <a>SHOP-231</a> <span class="jira-st js-indeterminate">In progress</span> <span class="badge">Story</span> <b>Payments survive a flaky gateway</b>
+            </summary>
+          </details>
+          <div class="pills pr-status">
+            <span class="pill p-strong">↻ re-review</span>
+            <span class="pill p-ok">checks passing</span>
+            {(([c, t]) => <span class={`pill ${c}`}>{t}</span>)(size(84, 12, 4))}
+          </div>
+          <div class="since on">
+            Showing 2 commits since your last review. <button>Show all changes</button>
+          </div>
+          <File path="payments/PaymentService.kt" add={3} del={1}>
+            <Rows rows={SNIPPET} extra={thread} />
+          </File>
+        </div>
+      </>
+);
+
 export const SCENES: Record<string, { title: string; width: number; body: ComponentChildren }> = {
   queue: {
     title: 'Your queue',
@@ -470,33 +496,7 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
       </aside>
     ),
   },
-  review: {
-    title: 'Reading',
-    width: 860,
-    body: (
-      <>
-        <Bar />
-        <div class="scene-main">
-          <details class="ticket">
-            <summary>
-              <a>SHOP-231</a> <span class="jira-st js-indeterminate">In progress</span> <span class="badge">Story</span> <b>Payments survive a flaky gateway</b>
-            </summary>
-          </details>
-          <div class="pills pr-status">
-            <span class="pill p-strong">↻ re-review</span>
-            <span class="pill p-ok">checks passing</span>
-            {(([c, t]) => <span class={`pill ${c}`}>{t}</span>)(size(84, 12, 4))}
-          </div>
-          <div class="since on">
-            Showing 2 commits since your last review. <button>Show all changes</button>
-          </div>
-          <File path="payments/PaymentService.kt" add={3} del={1}>
-            <Rows rows={SNIPPET} />
-          </File>
-        </div>
-      </>
-    ),
-  },
+  review: { title: 'Reading', width: 860, body: <ReviewScene /> },
   comment: {
     title: 'Commenting',
     width: 860,
@@ -531,6 +531,82 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
     ),
   },
 };
+
+// The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which
+// it's made of.
+SCENES.app = {
+    title: 'lgtm',
+    width: 1400,
+    body: (
+      <div class="scene-app">
+        <nav class="top">
+          <button>☰</button>
+          <a class="nav-btn">⚙ Settings</a>
+          <div class="top-actions">
+            <button><span>↻</span></button>
+            <button>🔔</button>
+          </div>
+          <span class="spacer" />
+          <div class="cmd">
+            <svg class="cmd-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
+              <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+            <kbd class="cmd-kbd">⌘K</kbd>
+            <input placeholder="Go to a PR, file or thread, or paste a PR link" />
+          </div>
+          <span class="spacer" />
+          <button>◐ Auto</button>
+          <span class="scene-avatar">Y</span>
+        </nav>
+        <div class="scene-app-body">
+          {SCENES.queue.body}
+          <aside class="side">
+            <div class="index">
+              <details open class="ix-sec">
+                <summary>Conversation <span class="count">3</span></summary>
+                <button class="ix-item"><span class="ix-label">Description <span class="ix-meta">rina</span></span></button>
+                <button class="ix-item"><span class="ix-label">budi <span class="ix-meta">✓ approved</span></span><span class="ix-sub">Nice, much safer.</span></button>
+              </details>
+              <details open class="ix-sec">
+                <summary>Reviewers <span class="count">2</span></summary>
+                <button class="ix-item ix-person"><span class="ix-label">@budi <span class="ix-meta v-APPROVED">✓ approved</span></span></button>
+                <button class="ix-item ix-person"><span class="ix-label">@you <span class="ix-meta v-WAITING">waiting</span></span></button>
+              </details>
+              <details open class="ix-sec">
+                <summary>Checks <span class="count">6</span></summary>
+                <details class="ix-ckgroup"><summary><span class="ck ck-success">✓</span> 6 passed</summary></details>
+              </details>
+              <details open class="ix-sec">
+                <summary>Review threads <span class="count">1</span></summary>
+                <button class="ix-item"><span class="ix-label">PaymentService.kt:31 <span class="ix-meta">you</span></span><span class="ix-sub">Can we stop retrying on a declined card?</span></button>
+              </details>
+              <details open class="ix-sec">
+                <summary>Files <span class="count">4</span> <span class="ck-sum">1/4 viewed</span></summary>
+                {[[':payments', ['PaymentService.kt', 'RetryPolicy.kt', 'PaymentServiceTest.kt']], [':app', ['strings.xml']]].map(([m, files]) => (
+                  <details open class="tree-dir mod-group">
+                    <summary><span class="tree-dir-name"><ModuleIcon /> {m} <span class="count">{files.length}</span></span></summary>
+                    {(files as string[]).map((f, i) => (
+                      <div class={i === 2 ? 'tree-row dim' : 'tree-row'}>
+                        <button class="tree-file" style={{ paddingLeft: '22px' }}>
+                          <span class={`fdot s-${i === 1 ? 'added' : 'modified'}`} />
+                          <span class="tree-name">{f}</span>
+                        </button>
+                        <span class={i === 2 ? 'vmark on' : 'vmark'}>{i === 2 ? '✓' : ''}</span>
+                      </div>
+                    ))}
+                  </details>
+                ))}
+              </details>
+            </div>
+          </aside>
+          <div class="scene-app-main">
+            <ReviewScene thread={<Thread who="you" when="10 minutes ago" html={md.render('Can we stop retrying on a declined card? Only network errors are worth another try.')} />} />
+          </div>
+        </div>
+      </div>
+    ),
+  };
 
 // #/demo/<key>[/light|/dark]: one example on its own, for the README pictures.
 export function DemoPage({ k: route }: { k: string }) {

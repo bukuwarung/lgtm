@@ -9,14 +9,14 @@ import { fileURLToPath } from 'node:url';
 
 const ORIGIN = `http://127.0.0.1:${process.env.LGTM_PORT ?? 4517}`;
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const KEYS = ['sinceFirst', 'foldImports', 'hideGenerated', 'hideNoDiff', 'collapseDeleted', 'dimMoved', 'wordDiff', 'ignoreWs', 'richMarkdown', 'renderDocs', 'previewImages', 'foldBots', 'scene-queue', 'scene-review', 'scene-comment', 'scene-claude', 'scene-merge'];
+const KEYS = ['sinceFirst', 'foldImports', 'hideGenerated', 'hideNoDiff', 'collapseDeleted', 'dimMoved', 'wordDiff', 'ignoreWs', 'richMarkdown', 'renderDocs', 'previewImages', 'foldBots', 'scene-queue', 'scene-review', 'scene-comment', 'scene-claude', 'scene-merge', 'scene-app'];
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'features');
 mkdirSync(OUT, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const profile = mkdtempSync(join(tmpdir(), 'lgtm-demos-'));
 const PORT = 9333;
-const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, '--hide-scrollbars', '--window-size=1012,900', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, '--hide-scrollbars', '--window-size=1460,900', 'about:blank'], { stdio: 'ignore' });
 try {
   let target;
   for (let i = 0; i < 50 && !target; i++) {

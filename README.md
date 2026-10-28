@@ -2,6 +2,11 @@
 
 Fast GitHub PR review as a Mac app: every file on one page, less noise. It runs on your machine and signs in with your GitHub CLI login.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-app-dark.png">
+  <img alt="lgtm: the PR list, a PR's index (conversation, reviewers, checks, threads, files by module) and the PR, with a review thread" src="docs/features/scene-app-light.png" width="900">
+</picture>
+
 ## Install
 
 macOS 13 or later, with Homebrew:
