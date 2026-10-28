@@ -983,7 +983,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
       </header>
       {collapsed ? (
         <button class="collapsed-row" onClick={onExpand}>
-          Viewed. Show {file.additions + file.deletions} changed line{file.additions + file.deletions === 1 ? '' : 's'}
+          Viewed · show {file.additions + file.deletions} changed line{file.additions + file.deletions === 1 ? '' : 's'}
         </button>
       ) : (
         <>
