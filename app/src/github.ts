@@ -62,6 +62,7 @@ export type QueueItem = {
   head: string; // branch names, for stack detection
   base: string;
   author: string;
+  face: string; // whose picture the list shows: the author, or for a bot's PR its assignee
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   mergeState: MergeState['mergeStateStatus'];
   ci: 'SUCCESS' | 'FAILURE' | 'ERROR' | 'PENDING' | 'EXPECTED' | null; // all checks on the head commit, rolled up
@@ -159,7 +160,7 @@ const QUEUE = `query{viewer{login}
   reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}}
-fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{login}
+fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{__typename login} assignees(first:1){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
@@ -204,6 +205,7 @@ const toItem = (p: any): QueueItem => ({
       head: p.headRefName,
       base: p.baseRefName,
       author: p.author?.login ?? 'ghost',
+      face: (p.author?.__typename === 'Bot' && p.assignees?.nodes[0]?.login) || (p.author?.login ?? 'ghost'),
       reviewDecision: p.reviewDecision,
       mergeState: p.mergeStateStatus,
       ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,

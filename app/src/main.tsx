@@ -461,7 +461,8 @@ const groupOf = (i: QueueItem): Group =>
   : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
 
 // A sidebar section: its groups in priority order, which group a PR falls in, and (if not the group's) its colour.
-type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string; note?: (g: string) => string };
+// people: groups are people (the Team tab), shown with their picture and starting folded.
+type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string; note?: (g: string) => string; people?: boolean };
 const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 // My own PRs (and ones assigned to me), by where they stand.
 const MINE: Kind = {
@@ -483,7 +484,9 @@ const teamKind = (members: string[], load: Record<string, number>): Kind => ({
   groupOf: (i) => i.author,
   colorOf: MINE.groupOf,
   note: (m) => (load[m] ? `${load[m]} review${load[m] > 1 ? 's' : ''} requested` : ''),
+  people: true,
 });
+const avatar = (login: string) => `https://github.com/${encodeURIComponent(login)}.png?size=40`;
 type Tab = 'reviewing' | 'mine' | 'team';
 
 // On my PRs: where merging stands (BLOCKED is already told by the group: waiting for review / changes requested).
@@ -682,8 +685,9 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
+        <img class="pr-face" src={avatar(i.face)} alt="" title={i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`} /> {i.face} ·{' '}
         {layer && <b class="layer">{layer} </b>}
-        {i.repo}#{i.number} · {i.author} ·{' '}
+        {i.repo}#{i.number} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>
           active {ago(i.updatedAt)}
         </span>
@@ -743,9 +747,9 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
           const stackOf = new Map(findStacks(inGroup).flatMap((st) => st.map((i) => [i.id, st] as const)));
           const entries = inGroup.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
           return (
-            <details key={g} open={!g.endsWith('approved') || inGroup.length < 10} class={'pr-group g-' + g}>
+            <details key={g} open={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
-                <span class="gdot" /> {label} <span class="count">{inGroup.length}</span>
+                {kind.people ? <img class="g-face" src={avatar(g)} alt="" /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
                 {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review">{kind.note(g)}</span>}
               </summary>
               {entries.map((e) =>

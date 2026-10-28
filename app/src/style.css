@@ -777,3 +777,5 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .scene-app-main .rich .thread { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .scene-app-main .rich .thread .comment + .comment { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .sug-actions { margin-top: 6px; }
+.pr-face { width: 14px; height: 14px; border-radius: 50%; vertical-align: -3px; }
+.g-face { width: 18px; height: 18px; border-radius: 50%; vertical-align: -4px; }
