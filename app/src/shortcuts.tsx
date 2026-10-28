@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
 import { codeWithoutTests, inTests, moduleName } from './files.ts';
-import { Tg } from './tags.tsx';
+import { Octicon, Tg } from './tags.tsx';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -72,9 +72,9 @@ function Section({ id, title, count, extra, children }: { id?: string; title: st
   );
 }
 
-function Entry({ label, meta, sub, dim, onClick }: { label: string; meta?: string; sub?: string; dim?: boolean; onClick: () => void }) {
+function Entry({ label, meta, sub, dim, onClick }: { label: ComponentChildren; meta?: string; sub?: string; dim?: boolean; onClick: () => void }) {
   return (
-    <button class={dim ? 'ix-item dim' : 'ix-item'} onClick={onClick} title={sub || label}>
+    <button class={dim ? 'ix-item dim' : 'ix-item'} onClick={onClick} title={sub || (typeof label === 'string' ? label : undefined)}>
       <span class="ix-label">
         {label} {meta && <span class="ix-meta">{meta}</span>}
       </span>
@@ -84,34 +84,24 @@ function Entry({ label, meta, sub, dim, onClick }: { label: string; meta?: strin
 }
 
 // Small line icons for the checks' buttons, drawn in the text's colour.
-const ICON_RERUN = 'M13 8a5 5 0 1 1-1.6-3.7M13.2 2.2v3h-3M6.8 5.8v4.4L10.2 8z'; // a circle arrow with ▶: run again
-const ICON_LOG = 'M3 4h10M3 8h10M3 12h6';
-const ICON_CHECK = 'M3.5 8.5l3 3 6-7';
-const ICON_TEST = 'M6 2h4M7 2v4l-3.5 6.5a1 1 0 0 0 .9 1.5h7.2a1 1 0 0 0 .9-1.5L9 6V2M5 10h6'; // a flask
-const ICON_NO_TEST = 'M6 2h4M7 2v4l-3.5 6.5a1 1 0 0 0 .9 1.5h7.2a1 1 0 0 0 .9-1.5L9 6V2M2 2l12 12'; // a struck-out flask
-const Icon = ({ d }: { d: string }) => (
-  <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
-    <path d={d} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-  </svg>
-);
+const Icon = Octicon; // the index's small buttons and marks
 
 // A test file: a flask (with "test" in the diff's file header).
 export const TestMark = ({ label }: { label?: boolean }) => (
   <span class="test-mark" role="img" title="A test (in a test folder, or named as one)" aria-label="Test">
-    {label ? <Tg i="test" t="test" /> : <Icon d={ICON_TEST} />}
+    {label ? <Tg i="test" t="test" /> : <Icon name="beaker" />}
   </span>
 );
 
 // Code changed without its tests: an amber struck-out flask, explained on hover.
 export const NoTestMark = ({ title, label }: { title: string; label?: string }) => (
   <span class="badge no-test" role="img" title={title} aria-label="No test changes">
-    {label ? <Tg i="notest" t={label} /> : <Icon d={ICON_NO_TEST} />}
+    {label ? <Tg i="notest" t={label} /> : <Icon name="beaker" slash />}
   </span>
 );
 
 // Ask a reviewer on Slack (your "Asking someone to review" message, Settings → Slack messages): a speech bubble
 // beside them, ✓ once sent, red if it wasn't.
-const ICON_SLACK = 'M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z';
 function SlackAsk({ login, ask }: { login: string; ask: (login: string) => Promise<boolean> }) {
   const [state, setState] = useState<'' | 'asking' | 'sent' | 'failed'>('');
   return (
@@ -122,14 +112,13 @@ function SlackAsk({ login, ask }: { login: string; ask: (login: string) => Promi
       disabled={state === 'asking' || state === 'sent'}
       onClick={() => (setState('asking'), ask(login).then((ok) => setState(ok ? 'sent' : 'failed')))}
     >
-      <Icon d={state === 'sent' ? ICON_CHECK : ICON_SLACK} />
+      <Icon name={state === 'sent' ? 'check' : 'comment'} />
     </button>
   );
 }
 
 // Ask a reviewer who's reviewed to look again (after you've pushed fixes): a re-request on GitHub, and on Slack your
 // "look again" message in your thread with them. ✓ once asked.
-const ICON_AGAIN = 'M13 8a5 5 0 1 1-1.6-3.7M13.2 2.2v3h-3';
 function ReRequest({ login, again }: { login: string; again: (login: string) => Promise<boolean> }) {
   const [state, setState] = useState<'' | 'asking' | 'done' | 'failed'>('');
   return (
@@ -140,7 +129,7 @@ function ReRequest({ login, again }: { login: string; again: (login: string) => 
       disabled={state === 'asking' || state === 'done'}
       onClick={() => (setState('asking'), again(login).then((ok) => setState(ok ? 'done' : 'failed')))}
     >
-      <Icon d={state === 'done' ? ICON_CHECK : ICON_AGAIN} />
+      <Icon name={state === 'done' ? 'check' : 'sync'} />
     </button>
   );
 }
@@ -166,7 +155,7 @@ function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[
       aria-label="Run the failed jobs again"
       onClick={go}
     >
-      {state === 'queued' ? <Icon d={ICON_CHECK} /> : <Icon d={ICON_RERUN} />}
+      <Icon name={state === 'queued' ? 'check' : 'sync'} />
     </button>
   );
 }
@@ -205,10 +194,10 @@ function CheckEntry({ c, repo, onRefresh }: { c: Check; repo: string; onRefresh:
               disabled={rerun === 'asking' || rerun === 'queued'}
               onClick={again}
             >
-              {rerun === 'queued' ? <Icon d={ICON_CHECK} /> : <Icon d={ICON_RERUN} />}
+              <Icon name={rerun === 'queued' ? 'check' : 'sync'} />
             </button>
             <button class={open ? 'ix-icon-btn on' : 'ix-icon-btn'} title={open ? 'Hide the job log' : 'Show the end of the job log'} aria-label="Job log" aria-pressed={open} onClick={toggle}>
-              <Icon d={ICON_LOG} />
+              <Icon name="list-unordered" />
             </button>
           </>
         )}
@@ -258,7 +247,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
     return (
       <Entry
         key={t.id}
-        label={`${waiting ? '💬 ' : ''}${base(t.path)}${t.line ? ':' + t.line : ''}`}
+        label={<>{waiting && <Octicon name="comment" />} {`${base(t.path)}${t.line ? ':' + t.line : ''}`}</>}
         meta={[first?.author?.login, waiting && 'awaiting your reply', t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
         sub={oneLine(first?.bodyText ?? '')}
         dim={t.isResolved || t.isOutdated}
@@ -282,7 +271,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         {conversation.map((c, i) => !c.bot && convEntry(c, i))}
         {bots.length > 0 && (
           <details class="ix-ckgroup" open={!foldBots}>
-            <summary>🤖 {bots.length} from bots</summary>
+            <summary><Octicon name="dependabot" /> {bots.length} from bots</summary>
             {conversation.map((c, i) => c.bot && convEntry(c, i))}
           </details>
         )}
@@ -334,7 +323,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
                 onRefreshChecks();
               }}
             >
-              ↻
+              <Octicon name="sync" />
             </span>
           </>
         }
@@ -372,7 +361,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         {[...tiers.mine, ...tiers.human].map(threadEntry)}
         {tiers.bot.length > 0 && (
           <details class="ix-ckgroup" open>
-            <summary>🤖 {tiers.bot.length} from bots</summary>
+            <summary><Octicon name="dependabot" /> {tiers.bot.length} from bots</summary>
             {tiers.bot.map(threadEntry)}
           </details>
         )}
@@ -426,14 +415,8 @@ function ModuleTrees({ files, modules, counts, viewed, onViewed }: { files: File
   );
 }
 
-// A Gradle module's mark: GitHub's "package" icon (Octicons, MIT), in the text's colour.
-export function ModuleIcon() {
-  return (
-    <svg class="mod-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-      <path fill="currentColor" d="M8.878.392a1.75 1.75 0 0 0-1.756 0l-5.25 3.045A1.75 1.75 0 0 0 1 4.951v6.098c0 .624 .332 1.2 .872 1.514l5.25 3.045a1.75 1.75 0 0 0 1.756 0l5.25-3.045c.54-.313 .872-.89 .872-1.514V4.951c0-.624-.332-1.2-.872-1.514L8.878.392ZM7.875 1.69a.25.25 0 0 1 .25 0l4.63 2.685L8 7.133 3.245 4.375l4.63-2.685ZM2.5 5.677v5.372c0 .09 .047 .171 .125 .216l4.625 2.683V8.432Zm6.25 8.271 4.625-2.683a.25.25 0 0 0 .125-.216V5.677L8.75 8.432Z" />
-    </svg>
-  );
-}
+// A Gradle module's mark: GitHub's "package" Octicon.
+export const ModuleIcon = () => <Octicon name="package" class="mod-icon" />;
 
 type TreeNode = { name: string; dirs: Map<string, TreeNode>; files: File[] };
 
@@ -512,7 +495,7 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
               <span class={'fdot s-' + f.status} title={f.status} />
               <span class="tree-name">{f.filename.split('/').pop()}</span>
               {inTests(f.filename) && <TestMark />}
-              {c > 0 && <span class="badge">💬{c}</span>}
+              {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
             </button>
             <ViewedMark paths={[f.filename]} viewed={viewed} onViewed={onViewed} what="this file" />
           </div>

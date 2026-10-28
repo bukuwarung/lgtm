@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
-import { DECISION, Tg } from './tags.tsx';
+import { DECISION, Octicon, Tg } from './tags.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
 import { ago, since, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
@@ -156,8 +156,8 @@ function App() {
     <>
       {/* In the app the window has no title bar: this bar holds the traffic lights (left) and drags the window. */}
       <nav class="top" data-tauri-drag-region>
-        <button title="Toggle pull request list" onClick={togglePRs}>☰</button>
-        <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings">⚙ Settings</a>
+        <button title="Toggle pull request list" onClick={togglePRs}><Octicon name="three-bars" /></button>
+        <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings"><Octicon name="gear" /> Settings</a>
         <TopActions
           refreshing={refreshing}
           onRefresh={() => {
@@ -280,7 +280,7 @@ function SetupCheck() {
           <button onClick={check}>Check again</button>
           <button class="primary" onClick={done}>Done</button>
         </div>
-        <p class="note">lgtm borrows the sign-ins of these tools and stores no tokens. Only GitHub is required; the rest you can set up now or later in ⚙ Settings.</p>
+        <p class="note">lgtm borrows the sign-ins of these tools and stores no tokens. Only GitHub is required; the rest you can set up now or later in Settings.</p>
         {row(true, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', null)}
         {row(ints ? ints.slack.ok : null, 'Slack', '(optional) DM the author when you finish a review.', <pre>brew install shaharia-lab/tap/slackcli && slackcli auth login-auto</pre>)}
         {row(ints ? ints.jira.ok : null, 'Jira', "(optional) The PR's ticket above its files.", <pre>brew install atlassian/homebrew-acli/acli && acli jira auth login --web</pre>)}
@@ -354,7 +354,7 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
       <button class="primary" disabled={busy} onClick={() => (setBusy(true), retry().finally(() => setBusy(false)))}>
         {busy ? 'Checking…' : 'Check again'}
       </button>
-      <p class="note">Slack messages and Jira tickets are optional: set them up later in ⚙ Settings.</p>
+      <p class="note">Slack messages and Jira tickets are optional: set them up later in Settings.</p>
     </div>
   );
 }
@@ -366,7 +366,7 @@ function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshi
   return (
     <div class="top-actions">
       <button type="button" class={refreshing ? 'refreshing' : ''} title="Refresh the PR list and the open PR (the list also every 3 minutes)" onClick={onRefresh}>
-        <span>↻</span>
+        <span><Octicon name="sync" /></span>
       </button>
       <button
         type="button"
@@ -378,7 +378,7 @@ function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshi
           toggleNotify();
         }}
       >
-        {notify ? '🔔' : '🔕'}
+        <Octicon name={notify ? 'bell' : 'bell-slash'} />
       </button>
       {err && <span class="top-err">{err}</span>}
     </div>
@@ -778,7 +778,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
               {entries.map((e) =>
                 Array.isArray(e) ? (
                   <div class="stack" key={e[0].id}>
-                    <div class="stack-h">⧉ Stack · bottom first</div>
+                    <div class="stack-h"><Octicon name="stack" /> Stack · bottom first</div>
                     {e.map((i) => item(kind, i, layerOf.get(i.id)))}
                   </div>
                 ) : (

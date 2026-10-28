@@ -13,7 +13,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { DECISION, Tg } from './tags.tsx';
+import { DECISION, Octicon, Tg } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -878,7 +878,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         {/* Where you are (index, stack), what it is, who it's with, then what you can do. */}
         <div class="bar">
           <button class="bar-index" title={showIndex ? 'Hide the PR index' : 'Show the PR index'} aria-label={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
-            {showIndex ? '⇤' : '⇥'}
+            <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
           </button>
           {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
           <h1>
@@ -889,7 +889,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           <div class="bar-group">
             {slackThreads.map((t) => (
               <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this PR`}>
-                {t.image ? <img src={t.image} alt={t.name ?? t.login} /> : '💬'}
+                {t.image ? <img src={t.image} alt={t.name ?? t.login} /> : <Octicon name="comment" />}
               </a>
             ))}
             <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
@@ -1188,7 +1188,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         <span class="counts">
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
         </span>
-        {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
+        {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}
         {ctx.untested.has(file.filename) && <NoTestMark title="No test change: the PR changes this code but no test with its name" label="no test change" />}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
@@ -2472,7 +2472,7 @@ function Help({ onClose, ignoreWs, toggleWs }: { onClose: () => void; ignoreWs: 
           ))}
         </tbody>
       </table>
-      <p class="note">Change them in ⚙ Settings → Keyboard shortcuts.</p>
+      <p class="note">Change them in Settings → Keyboard shortcuts.</p>
     </div>
   );
 }

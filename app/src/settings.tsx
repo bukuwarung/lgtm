@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis, getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { Tg } from './tags.tsx';
+import { Octicon, Tg } from './tags.tsx';
 import { ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -623,7 +623,7 @@ function About() {
   );
 }
 
-// The ⏱ estimate in the PR list: where its paces come from, and your own pace on top (50%–200%).
+// The stopwatch estimate in the PR list: where its paces come from, and your own pace on top (50%–200%).
 function TimeToReview() {
   const [raw, setPace] = useStoredValue('reviewPace', '100');
   const pace = Number(raw) || 100;
@@ -632,7 +632,7 @@ function TimeToReview() {
     <section>
       <h3>Time to review</h3>
       <p class="note">
-        Each PR in the list gets a rough time to review (⏱): reading its description, then its changed lines. The paces:
+        Each PR in the list gets a rough time to review (<Octicon name="stopwatch" />): reading its description, then its changed lines. The paces:
       </p>
       <ul class="note set-sources">
         <li>

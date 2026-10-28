@@ -793,3 +793,4 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 html.tags-text .ti { display: none; }
 html.tags-icons .tt { display: none; }
 html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
+.octicon { flex: none; vertical-align: -2px; }
