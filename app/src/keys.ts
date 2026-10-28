@@ -14,6 +14,8 @@ export const ACTIONS = [
   ['stackPrev', 'Previous PR in the stack', '['],
   ['stackNext', 'Next PR in the stack', ']'],
   ['index', 'Show / hide the index', 'i'],
+  ['merge', 'Open / close the merge box (your PRs)', 'm'],
+  ['stack', "Open / close the stack's overview", 's'],
   ['help', 'Keyboard shortcuts', '?'],
 ] as const;
 export type Action = (typeof ACTIONS)[number][0];

@@ -1003,6 +1003,7 @@ function ClaudeFolders() {
     }
   })();
   const [repos, setRepos] = useState<string[] | null>(null);
+  const [editor, setEditor] = useStoredValue('editor', 'studio');
   useEffect(() => {
     getReviewQueue().then((q) => setRepos([...new Set([...q.map((i) => i.repo), ...Object.keys(folders)])].sort()), () => setRepos(Object.keys(folders)));
   }, []);
@@ -1017,8 +1018,17 @@ function ClaudeFolders() {
       <h3>Claude Code</h3>
       <p class="note">
         ✳ Claude (on a PR or a comment) opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt. Set where each repo is checked
-        out so the session starts there.
+        out so the session starts there, and so a file's <Octicon name="code" /> button opens it in your editor.
       </p>
+      <div class="set-row">
+        <span>Open files in</span>
+        <select value={editor} onChange={(e) => setEditor(e.currentTarget.value)} aria-label="Editor">
+          <option value="studio">Android Studio</option>
+          <option value="idea">IntelliJ IDEA</option>
+          <option value="vscode">VS Code</option>
+          <option value="cursor">Cursor</option>
+        </select>
+      </div>
       <ClaudeSkill />
       {!repos ? (
         <p class="note">Loading…</p>

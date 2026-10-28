@@ -37,6 +37,11 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   const [bypass, setBypass] = useState(false);
   const [dropBranch, toggleDropBranch] = useStoredFlag('deleteBranch', true);
   const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const toggle = () => setShown((x) => !x);
+    addEventListener('lgtm:merge', toggle); // the m shortcut
+    return () => removeEventListener('lgtm:merge', toggle);
+  }, []);
   // The bar's button and its panel.
   const bar = (label: preact.ComponentChildren, cls: string, title: string, body: preact.ComponentChildren, onOpen?: () => void) => (
     <div class="submit merge-bar">

@@ -794,3 +794,8 @@ html.tags-text .ti { display: none; }
 html.tags-icons .tt { display: none; }
 html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
 .octicon { flex: none; vertical-align: -2px; }
+.icon-btn { display: inline-grid; place-items: center; padding: 3px 7px; color: var(--muted); }
+.icon-btn:hover { color: var(--fg); }
+.icon-btn.failed { color: var(--delfg); }
+.edit-desc { display: grid; gap: 8px; margin-top: 8px; }
+.edit-desc > input { width: 100%; font: inherit; font-weight: 600; }

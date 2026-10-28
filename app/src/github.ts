@@ -347,6 +347,9 @@ export const getHead = async (repo: string, n: number): Promise<string> => {
   const [owner, name] = repo.split('/');
   return (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){headRefOid}}}`, { owner, name, n })).repository.pullRequest.headRefOid;
 };
+// My PR's title and description, rewritten.
+export const updatePR = (repo: string, n: number, f: { title: string; body: string }) =>
+  json(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify(f) });
 export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`, undefined, FULL);
 
 export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);

@@ -29,6 +29,11 @@ const VERDICT: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTE
 export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: StackLayer[] }) {
   const k = stack.findIndex((l) => l.number === n);
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const toggle = () => setOpen((x) => !x);
+    addEventListener('lgtm:stack', toggle); // the s shortcut
+    return () => removeEventListener('lgtm:stack', toggle);
+  }, []);
   const [status, setStatus] = useState<Map<number, LayerStatus> | null>(null);
   const [err, setErr] = useState('');
   const [merging, setMerging] = useState<'' | 'confirm' | 'busy'>('');

@@ -11,6 +11,7 @@
     "allow-gh-accounts",
     "allow-slack-emoji",
     "allow-jira-move",
+    "allow-open-in-editor",
     "allow-integrations",
     "allow-jira-issue",
     "allow-job-log",

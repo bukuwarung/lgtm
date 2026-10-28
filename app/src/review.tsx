@@ -4,7 +4,7 @@ import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, getHead, loadPR, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  awaitsMe, commitSuggestions, getHead, loadPR, updatePR, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -22,7 +22,7 @@ import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { gradleModules, inTests, moduleName, reviewOrder, untested } from './files.ts';
-import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, openInEditor, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { below, jumpTo, ModuleIcon, NoTestMark, TestMark, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -837,6 +837,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       stackPrev: () => stackAt(-1) && (location.hash = `/${repo}/pull/${stackAt(-1)!.number}`),
       stackNext: () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
       help: () => setHelp(!help),
+      merge: () => dispatchEvent(new Event('lgtm:merge')),
+      stack: () => dispatchEvent(new Event('lgtm:stack')),
     };
     function go(i: number) {
       threadCursor.current = i;
@@ -999,7 +1001,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
-          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} />
+          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} />
           {visible.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
@@ -1118,6 +1120,24 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
   );
 }
 
+// A file opened in your editor, from your checkout of the repo (Settings → Claude Code), at its first change. Your
+// checkout's branch may not be the PR's.
+const EDITORS: Record<string, string> = { studio: 'Android Studio', idea: 'IntelliJ IDEA', vscode: 'VS Code', cursor: 'Cursor' };
+function OpenInEditor({ repo, path, line }: { repo: string; path: string; line?: number }) {
+  const [editor] = useStoredValue('editor', 'studio');
+  const [err, setErr] = useState('');
+  const folder = claudeFolder(repo);
+  return (
+    <button
+      class={err ? 'icon-btn failed' : 'icon-btn'}
+      title={err || (folder ? `Open in ${EDITORS[editor]}, from ${folder}${line ? ` at line ${line}` : ''} (your checkout's branch)` : `Set where ${repo} is checked out (Settings → Claude Code) to open files in your editor`)}
+      onClick={() => (folder ? (setErr(''), openInEditor(editor, folder, path, line).catch((e) => setErr(e.message))) : (location.hash = '/settings'))}
+    >
+      <Octicon name="code" />
+    </button>
+  );
+}
+
 // Render a file's body only once it scrolls near the viewport.
 function useNear<T extends Element>() {
   const ref = useRef<T>(null);
@@ -1216,6 +1236,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
+        {file.status !== 'removed' && <OpenInEditor repo={ctx.repo} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
         <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
         <label class="viewed-box" title={`Mark as viewed on GitHub${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').viewed)}`}>
           <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
@@ -2422,12 +2443,41 @@ function CopyLink({ url }: { url: string }) {
   );
 }
 
+// My PR's title and description, edited here with the comment editor (preview, emoji, mentions); saved to GitHub.
+function EditDescription({ pr, repo, mentions, onDone }: { pr: PR; repo: string; mentions: string[]; onDone: () => void }) {
+  const [title, setTitle] = useState(pr.title);
+  const [body, setBody] = useState(pr.body ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const save = () => {
+    if (!title.trim() || busy) return;
+    setBusy(true);
+    setErr('');
+    updatePR(repo, pr.number, { title: title.trim(), body }).then(
+      () => (onDone(), dispatchEvent(new Event('lgtm:refresh'))),
+      (e) => (setErr(e.message), setBusy(false)),
+    );
+  };
+  return (
+    <div class="edit-desc">
+      <input value={title} onInput={(e) => setTitle(e.currentTarget.value)} aria-label="Title" />
+      <Editor value={body} onInput={setBody} onSubmit={save} onCancel={onDone} repo={repo} mentions={mentions} rows={14} autoFocus placeholder="Describe the change · ⌘↵ to save" />
+      <div class="row">
+        <button class="primary" disabled={busy || !title.trim()} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+        <button disabled={busy} onClick={onDone}>Cancel</button>
+        {err && <span class="error">{err}</span>}
+      </div>
+    </div>
+  );
+}
+
 const STATE_ICON: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTED: 'changes', COMMENTED: 'reply' };
 const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', COMMENTED: 'reviewed', DISMISSED: 'review dismissed' };
 
 const botExcerpt = (html: string, max = 100) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
-function Conversation({ pr, items, lang, repo, me }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string }) {
+function Conversation({ pr, items, lang, repo, me, mentions }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[] }) {
+  const [editing, setEditing] = useState(false);
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle); // the description reads like a markdown file (Settings → Markdown files)
@@ -2440,7 +2490,14 @@ function Conversation({ pr, items, lang, repo, me }: { pr: PR; items: Conversati
       </summary>
       <div class="comment" id="pr-description">
         <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
-        {pr.body_html ? (
+        {me === pr.user.login && !editing && (
+          <button class="icon-btn" title="Edit the title and description" onClick={() => setEditing(true)}>
+            <Octicon name="pencil" />
+          </button>
+        )}
+        {editing ? (
+          <EditDescription pr={pr} repo={repo} mentions={mentions} onDone={() => setEditing(false)} />
+        ) : pr.body_html ? (
           <div class={`rich pr-desc ${look.class}`} style={look.style} ref={desc} onClick={(e) => onDocClick(e, desc.current)}>
             <div class="md chunk" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: pr.body_html }} />
           </div>
