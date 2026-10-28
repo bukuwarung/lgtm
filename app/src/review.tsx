@@ -17,6 +17,7 @@ import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, comment
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
+import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { gradleModules, moduleName, reviewOrder, untested } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
@@ -90,6 +91,7 @@ type Notice = { text: string; ok: boolean };
 // On my own PR, in the index's Reviewers: who to ask (this repo's recent reviewers, else the PR list's team), least
 // busy first. A click asks them on GitHub and, unless unticked, on Slack too.
 function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void }) {
+  const emoji = useSlackEmoji(); // suggested as you type the message
   const [team] = useStoredValue('team', '');
   const [picks, setPicks] = useState<ReviewerPick[] | null>(null);
   const [err, setErr] = useState('');
@@ -142,7 +144,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
           <span>
             <input type="checkbox" checked={slack} onChange={(e) => setSlack(e.currentTarget.checked)} /> Also message them on Slack
           </span>
-          {slack && <textarea rows={2} value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label="Slack message" />}
+          {slack && <EmojiTextarea rows={2} value={text} onInput={setText} names={emoji.names} emoji={emoji.emoji} label="Slack message" />}
         </label>
       ) : (
         <p class="note ix-pad">Slack isn't set up, so this only asks on GitHub.</p>
