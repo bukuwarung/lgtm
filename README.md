@@ -175,9 +175,10 @@ Markdown themes: lgtm's own or 20 from [markdown.style](https://markdown.style/t
 
 - Reviewers in the index, with their verdict.
 - Nobody asked yet: reviewers suggested, least busy first; a click asks them on GitHub and Slack.
-- Ask a reviewer on Slack, or ask one who's reviewed to look again.
+- Ask a reviewer on Slack, or ask one who's reviewed to look again; after you push, lgtm offers it.
+- Commit reviewers' suggested changes, one at a time or batched into one commit.
 - Mark files, folders or modules viewed from the index; rerun failed GitHub Actions jobs.
-- A merge box with what's blocking: ready for review, update branch, merge, auto-merge.
+- A merge box with what's blocking: ready for review, update branch, merge, auto-merge, and deleting the branch.
 - Once merged, move the Jira ticket on.
 - Waiting a day for review: `🔔 nudge` reminds the reviewers on Slack.
 

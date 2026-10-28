@@ -4,7 +4,7 @@ import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, markBots, renderGfm, reply, resolveThread, setViewed, submitReview,
+  awaitsMe, commitSuggestions, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -52,6 +52,9 @@ type Ctx = {
   untested: Set<string>; // code files whose tests the PR doesn't touch (Settings switch)
   modules?: Map<string, string>; // each file's Gradle module, when shown (Settings → Reviewing)
   sinceComment: Map<string, SinceComment>; // my open threads, against the code now
+  batch: Suggestion[]; // suggestions picked to commit together
+  toggleBatch?: (s: Suggestion) => void; // unset where I can't commit suggestions (not my PR)
+  applySuggestions: (list: Suggestion[]) => Promise<void>;
 };
 type SinceComment = { kind: 'same' | 'gone' | 'unknown' } | { kind: 'changed'; lines: Line[] };
 type Saved = { sha: string; drafts: Draft[] };
@@ -325,6 +328,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const resumeAt = useRef<Visit['at']>(null);
   const visitKey = `visit:${repo}#${n}`;
   const [mine, setMine] = useState(false); // I opened it or it's assigned to me: show the merge box
+  const [batch, setBatch] = useState<Suggestion[]>([]);
+  useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
   const [stale, setStale] = useState<number | null>(null); // showing the copy loaded at this time, while refreshing
   const threadCursor = useRef(-1);
@@ -638,6 +643,16 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       await resolveThread(t.id, resolve);
       setThreads(await getThreads(repo, n));
     },
+    batch,
+    toggleBatch: me && pr.user.login === me ? (x) => setBatch((b) => (b.some((y) => y.id === x.id) ? b.filter((y) => y.id !== x.id) : [...b, x])) : undefined,
+    // Committed to the branch, their threads resolved (as GitHub does), then the PR reloads with the new commit.
+    applySuggestions: async (list) => {
+      await commitSuggestions(headRepo, pr.head.ref, pr.head.sha, list, me);
+      await Promise.all([...new Set(list.map((x) => x.thread))].map((id) => resolveThread(id, true).catch(() => {})));
+      setBatch((b) => b.filter((y) => !list.some((x) => x.id === y.id)));
+      setNotice({ ok: true, text: `Committed ${list.length > 1 ? `${list.length} suggestions` : 'the suggestion'} to ${pr.head.ref}.` });
+      dispatchEvent(new Event('lgtm:refresh'));
+    },
     renderAll,
     since: since && !!sinceData,
     me,
@@ -879,6 +894,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               {stackAt(1) ? <a href={`#/${repo}/pull/${stackAt(1)!.number}`} title={`#${stackAt(1)!.number} ${stackAt(1)!.title}`}>›</a> : <span class="off">›</span>}
             </span>
           )}
+          {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
           <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -926,6 +942,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               <NoticeText text={notice.text} />
             </p>
           )}
+          {!!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} />}
           {lastReviewed && (
             <div class={since ? 'since on' : 'since'}>
               <SinceSummary
@@ -1023,7 +1040,7 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
     setBusy(true);
     setErr('');
     try {
-      if (await onSubmit(event, body, notify, next)) {
+      if (await onSubmit(event, body, notify, next && !authored)) {
         setOpen(false);
         setBody('');
       }
@@ -1060,9 +1077,11 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
               <input type="checkbox" checked={notify} onChange={toggleNotify} /> Message {slackTo.map((l) => '@' + l).join(', ')} on Slack
             </label>
           )}
-          <label>
-            <input type="checkbox" checked={next} onChange={toggleNext} /> Then open the next PR that needs my review
-          </label>
+          {!authored && (
+            <label>
+              <input type="checkbox" checked={next} onChange={toggleNext} /> Then open the next PR that needs my review
+            </label>
+          )}
           {slackNote && <p class="note">{slackNote}</p>}
           <button class="primary" disabled={busy} onClick={go}>
             {busy ? 'Submitting…' : authored ? 'Comment' : 'Submit review'}
@@ -2037,6 +2056,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
           <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
           <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
           <div class="md" data-lang={ctx.langFor(t.path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+          <SuggestionActions t={t} c={c} ctx={ctx} />
         </div>
       ))}
       <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && !busy && send()} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder="Reply… (⌘↵ to send)" />
@@ -2054,6 +2074,37 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       </div>
       {err && <p class="error">{err}</p>}
     </details>
+  );
+}
+
+// On my own PR, under a current suggested change: commit it now, or pick it to commit with others (the top bar's
+// "Commit N suggestions").
+function SuggestionActions({ t, c, ctx }: { t: Thread; c: Thread['comments']['nodes'][number]; ctx: Ctx }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const s = ctx.toggleBatch && !t.isOutdated && !t.isResolved ? suggestionOf(t, c) : null;
+  if (!s) return null;
+  const picked = ctx.batch.some((x) => x.id === s.id);
+  const commit = () => (setBusy(true), setErr(''), ctx.applySuggestions([s]).catch((e) => setErr(e.message)).finally(() => setBusy(false)));
+  return (
+    <div class="row sug-actions">
+      <button class="primary" disabled={busy} onClick={commit}>{busy ? 'Committing…' : 'Commit suggestion'}</button>
+      <button disabled={busy} onClick={() => ctx.toggleBatch!(s)}>{picked ? 'Remove from batch' : 'Add to batch'}</button>
+      {err && <span class="error">{err}</span>}
+    </div>
+  );
+}
+
+function CommitBatch({ batch, apply, onError }: { batch: Suggestion[]; apply: (l: Suggestion[]) => Promise<void>; onError: (text: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      disabled={busy}
+      title="Commit the suggestions you added to the batch, as one commit"
+      onClick={() => (setBusy(true), apply(batch).catch((e) => onError(`Couldn't commit the suggestions: ${e.message}`)).finally(() => setBusy(false)))}
+    >
+      {busy ? 'Committing…' : `Commit ${batch.length} suggestion${batch.length > 1 ? 's' : ''}`}
+    </button>
   );
 }
 
@@ -2081,6 +2132,28 @@ function ThenNow({ s }: { s?: SinceComment }) {
       </table>
       {s.lines.length > shown.length && <span class="note">…and {s.lines.length - shown.length} more lines</span>}
     </div>
+  );
+}
+
+// On my own PR, after I've pushed since someone asked for changes (their latest verdict was of an older commit, and
+// they aren't asked again yet): one click asks them all to look again, on GitHub and Slack.
+function LookAgain({ conv, pr, again }: { conv: ConversationItem[]; pr: PR; again: (login: string) => Promise<boolean> }) {
+  const [hidden, setHidden] = useState('');
+  const [busy, setBusy] = useState(false);
+  const latest = new Map<string, ConversationItem>();
+  for (const c of conv) if (!c.bot && (c.state === 'APPROVED' || c.state === 'CHANGES_REQUESTED')) latest.set(c.author, c);
+  const asked = new Set((pr.requested_reviewers ?? []).map((r) => r.login));
+  const who = [...latest.values()].filter((c) => c.state === 'CHANGES_REQUESTED' && c.commit && c.commit !== pr.head.sha && !asked.has(c.author)).map((c) => c.author);
+  if (!who.length || hidden === pr.head.sha) return null;
+  const names = who.map((l) => '@' + l).join(', ').replace(/, ([^,]*)$/, ' and $1');
+  return (
+    <p class="look-again">
+      You've pushed since {names} asked for changes.
+      <button class="primary" disabled={busy} onClick={() => (setBusy(true), Promise.all(who.map(again)).finally(() => setBusy(false)))}>
+        {busy ? 'Asking…' : 'Ask them to look again'}
+      </button>
+      <button class="link" onClick={() => setHidden(pr.head.sha)} title="Not yet: hide this until the next push">Not yet</button>
+    </p>
   );
 }
 

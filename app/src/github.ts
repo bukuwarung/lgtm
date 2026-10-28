@@ -31,7 +31,7 @@ export type PRFile = {
   blob_url: string;
 };
 // bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
-export type Comment = { databaseId: number; url: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string } | null; originalCommit?: { oid: string } | null };
+export type Comment = { databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number } | null; originalCommit?: { oid: string } | null };
 export type Thread = {
   id: string;
   path: string;
@@ -81,7 +81,7 @@ export type QueueItem = {
   lastCommitAt: string; // the head commit's time
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
-export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean };
+export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
 
 // --- auth ---
 
@@ -268,7 +268,7 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
     ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' })),
     ...reviews
       .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
-      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot' })),
+      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot', commit: r.commit_id })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 }
 
@@ -347,6 +347,54 @@ export async function getRaw(repo: string, path: string, ref: string): Promise<s
   return (await ok(res)).text();
 }
 
+// A reviewer's suggested change: the ```suggestion block in a comment, to replace lines start..end of the head file.
+export type Suggestion = { id: number; thread: string; path: string; start: number; end: number; text: string; author: Comment['author'] };
+export function suggestionOf(t: Thread, c: Comment): Suggestion | null {
+  const m = (c.body ?? '').replace(/\r\n/g, '\n').match(/^```suggestion[^\n]*\n([\s\S]*?)^ *```/m);
+  if (!m || !t.line || t.diffSide !== 'RIGHT') return null;
+  return { id: c.databaseId, thread: t.id, path: t.path, start: t.startLine ?? t.line, end: t.line, text: m[1], author: c.author };
+}
+
+// A file with suggestions applied, bottom up so earlier line numbers hold; its line endings kept. An empty block
+// deletes the lines.
+export function applySuggestions(src: string, list: Pick<Suggestion, 'path' | 'start' | 'end' | 'text'>[]): string {
+  const eol = src.includes('\r\n') ? '\r\n' : '\n';
+  const lines = src.split(/\r?\n/);
+  const sorted = [...list].sort((a, b) => b.start - a.start);
+  sorted.forEach((x, k) => {
+    if (k && x.end >= sorted[k - 1].start) throw new Error(`Two suggestions on ${x.path} overlap; commit them one at a time`);
+    lines.splice(x.start - 1, x.end - x.start + 1, ...(x.text ? x.text.replace(/\n$/, '').split('\n') : []));
+  });
+  return lines.join(eol);
+}
+
+// Suggestions committed to the PR's branch as one commit, like GitHub's "Commit suggestions": each file read at the
+// head, its suggestions applied bottom up, the authors credited. Refused if the branch moved (expectedHeadOid).
+export async function commitSuggestions(headRepo: string, branch: string, head: string, list: Suggestion[], me: string) {
+  const additions = [];
+  for (const path of new Set(list.map((x) => x.path))) {
+    const src = await getRaw(headRepo, path, head);
+    if (src == null) throw new Error(`${path} isn't on the branch`);
+    const bytes = new TextEncoder().encode(applySuggestions(src, list.filter((x) => x.path === path)));
+    additions.push({ path, contents: btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join('')) });
+  }
+  const credit = new Map(list.filter((x) => x.author && x.author.login !== me && x.author.databaseId).map((x) => [x.author!.login, x.author!.databaseId]));
+  await graphql(
+    `mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}`,
+    {
+      input: {
+        branch: { repositoryNameWithOwner: headRepo, branchName: branch },
+        expectedHeadOid: head,
+        fileChanges: { additions },
+        message: {
+          headline: list.length > 1 ? 'Apply suggestions from code review' : 'Apply suggestion from code review',
+          body: [...credit].map(([login, id]) => `Co-authored-by: ${login} <${id}+${login}@users.noreply.github.com>`).join('\n'),
+        },
+      },
+    },
+  );
+}
+
 // A short-lived, signed link to a file at a commit, for <img>: unlike the raw bytes it resolves Git LFS files to the
 // stored image rather than the LFS pointer. Null if the file isn't there.
 export async function getDownloadUrl(repo: string, path: string, ref: string): Promise<string | null> {
@@ -399,7 +447,7 @@ export function signRelativeImages(root: ParentNode | null, repo: string, ref: s
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
     nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve
-      comments(first:100){nodes{databaseId url bodyHTML bodyText createdAt author{__typename login} originalCommit{oid}}}}}}}}`;
+      comments(first:100){nodes{databaseId url body bodyHTML bodyText createdAt author{__typename login ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');
@@ -608,13 +656,19 @@ export type MergeState = {
   viewerCanEnableAutoMerge: boolean;
   viewerCanDisableAutoMerge: boolean;
   viewerCanUpdateBranch: boolean;
+  viewerCanDeleteHeadRef: boolean; // only once merged or closed
+  isCrossRepository: boolean; // from a fork: its branch isn't ours to delete
+  headRefName: string;
+  headRef: { id: string } | null; // null once the branch is gone
+  deleteBranchOnMerge: boolean; // the repo deletes merged branches itself
   methods: MergeMethod[]; // allowed in this repo, the viewer's usual one first
   message: Record<MergeMethod, { title: string; body: string }>; // GitHub's default commit message per method
 };
 
 const MERGE_STATE = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){
-  mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod
+  mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod deleteBranchOnMerge
   pullRequest(number:$n){id state isDraft mergeable mergeStateStatus reviewDecision headRefOid mergedBy{login}
+    isCrossRepository viewerCanDeleteHeadRef headRefName headRef{id}
     autoMergeRequest{mergeMethod enabledBy{login}}
     viewerCanMergeAsAdmin viewerCanEnableAutoMerge viewerCanDisableAutoMerge viewerCanUpdateBranch
     mt:viewerMergeHeadlineText(mergeType:MERGE) mb:viewerMergeBodyText(mergeType:MERGE)
@@ -627,6 +681,7 @@ export async function getMergeState(repo: string, n: number): Promise<MergeState
   const allowed = (['MERGE', 'SQUASH', 'REBASE'] as const).filter((m) => r[`${m.toLowerCase()}${m === 'MERGE' ? 'Commit' : 'Merge'}Allowed`]);
   return {
     ...pr,
+    deleteBranchOnMerge: r.deleteBranchOnMerge,
     methods: allowed.sort((a, b) => +(b === r.viewerDefaultMergeMethod) - +(a === r.viewerDefaultMergeMethod)),
     message: { MERGE: { title: mt, body: mb }, SQUASH: { title: st, body: sb }, REBASE: { title: '', body: '' } },
   };
@@ -640,6 +695,13 @@ export const mergePR = (s: MergeState, method: MergeMethod, title: string, body:
       : `mutation($id:ID!,$m:PullRequestMergeMethod,$t:String,$b:String,$oid:GitObjectID){mergePullRequest(input:{pullRequestId:$id,mergeMethod:$m,commitHeadline:$t,commitBody:$b,expectedHeadOid:$oid}){clientMutationId}}`,
     { id: s.id, m: method, t: method === 'REBASE' ? null : title, b: method === 'REBASE' ? null : body, oid: s.headRefOid },
   );
+// A merged PR's branch, unless another open PR builds on it (deleting it would close that one).
+export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' | 'headRefName'>) {
+  if (!s.headRef) return;
+  const [above] = (await json(`/repos/${repo}/pulls?state=open&per_page=1&base=${encodeURIComponent(s.headRefName)}`)) as PR[];
+  if (above) throw new Error(`kept ${s.headRefName}: #${above.number} builds on it`);
+  await graphql(`mutation($id:ID!){deleteRef(input:{refId:$id}){clientMutationId}}`, { id: s.headRef.id });
+}
 export const disableAutoMerge = (id: string) =>
   graphql(`mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 export const updateBranch = (s: MergeState) =>

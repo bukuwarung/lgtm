@@ -134,6 +134,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 .stack-nav { display: flex; align-items: center; gap: 6px; font-size: calc(12px * var(--ts)); color: var(--muted); white-space: nowrap; }
 .stack-nav a, .stack-nav .off { padding: 0 6px; font-size: calc(16px * var(--ts)); }
 .stack-nav .off { opacity: .3; }
+.look-again { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; font-size: calc(13px * var(--ts)); }
+.look-again .primary { margin-left: auto; }
 .since { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: calc(13px * var(--ts)); }
 .since.on { background: var(--warn); }
 .since button { margin-left: auto; }
@@ -752,3 +754,4 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .scene-app-main .rich .note-host { margin: 8px 0 4px; }
 .scene-app-main .rich .thread { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .scene-app-main .rich .thread .comment + .comment { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.sug-actions { margin-top: 6px; }

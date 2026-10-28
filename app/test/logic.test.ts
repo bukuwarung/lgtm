@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { enclosing, addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
-import { awaitsMe, markBots, repoPath, threadTiers } from '../src/github.ts';
+import { applySuggestions, awaitsMe, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { codeWithoutTests, estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -493,4 +493,15 @@ test('repoPath: a markdown image link as a path in the repo', () => {
   assert.equal(repoPath('flow.png', ''), 'flow.png');
   assert.equal(repoPath('https://x/y.png', 'docs'), null);
   assert.equal(repoPath('data:image/png;base64,AA', 'docs'), null);
+});
+
+test('suggestions: parsed from a comment, applied bottom up, line endings kept', () => {
+  const t = { id: 'T', path: 'a.kt', line: 3, startLine: 2, diffSide: 'RIGHT' } as any;
+  const s = suggestionOf(t, { databaseId: 1, body: 'Try this:\r\n```suggestion\r\nB2\r\n```', author: null } as any)!;
+  assert.deepEqual([s.start, s.end, s.text], [2, 3, 'B2\n']);
+  assert.equal(suggestionOf(t, { databaseId: 2, body: 'no block' } as any), null);
+  const src = 'a\r\nb\r\nc\r\nd\r\n';
+  assert.equal(applySuggestions(src, [s, { path: 'a.kt', start: 4, end: 4, text: '' }]), 'a\r\nB2\r\n');
+  assert.equal(applySuggestions(src, [{ path: 'a.kt', start: 1, end: 1, text: '\n' }]), '\r\nb\r\nc\r\nd\r\n');
+  assert.throws(() => applySuggestions(src, [s, { path: 'a.kt', start: 3, end: 4, text: 'x\n' }]));
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
-import { fetchJira, moveJira, useStoredValue, type JiraIssue } from './platform.ts';
-import { disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { fetchJira, moveJira, useStoredFlag, useStoredValue, type JiraIssue } from './platform.ts';
+import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -32,6 +32,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   const [confirm, setConfirm] = useState<'merge' | 'auto' | null>(null);
   const [msg, setMsg] = useState({ title: '', body: '' });
   const [bypass, setBypass] = useState(false);
+  const [dropBranch, toggleDropBranch] = useStoredFlag('deleteBranch', true);
 
   const load = (tries = 0) =>
     getMergeState(repo, n).then((x) => {
@@ -46,7 +47,13 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
     return (
       <div class={`merge m-${s.state.toLowerCase()}`}>
         <b>{s.state === 'MERGED' ? `Merged${s.mergedBy ? ` by ${s.mergedBy.login}` : ''}` : 'Closed'}</b>
+        {s.state === 'MERGED' && s.headRef && s.viewerCanDeleteHeadRef && !s.isCrossRepository && (
+          <button disabled={!!busy} onClick={() => (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
+            {busy === 'delete' ? 'Deleting…' : `Delete ${s.headRefName}`}
+          </button>
+        )}
         {s.state === 'MERGED' && tickets.map((k) => <TicketMove key={k} id={k} />)}
+        {err && <p class="error">{err}</p>}
       </div>
     );
 
@@ -74,6 +81,10 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
     setBusy('');
     load();
   }
+  // Deleting the branch with the merge: when GitHub won't (the repo doesn't, or the branch is a fork's), and not for
+  // auto-merge, which merges later.
+  const offerDelete = confirm === 'merge' && !s.deleteBranchOnMerge && !s.isCrossRepository && !!s.headRef;
+  const deleting = offerDelete && dropBranch;
   const open = (kind: 'merge' | 'auto') => {
     setMsg(s.message[m]);
     setConfirm(kind);
@@ -124,11 +135,21 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
             <button
               class="primary"
               disabled={!!busy}
-              onClick={() => run('merge', () => mergePR(s, m, msg.title, msg.body, confirm === 'auto'))}
+              onClick={() =>
+                run('merge', async () => {
+                  await mergePR(s, m, msg.title, msg.body, confirm === 'auto');
+                  if (deleting) await deleteBranch(repo, s).catch((e) => setErr(`Merged, but ${e.message}`));
+                })
+              }
             >
               {busy === 'merge' ? 'Working…' : confirm === 'auto' ? `Enable auto-merge (${VERB[m].toLowerCase()})` : `Confirm ${VERB[m].toLowerCase()}`}
             </button>
             <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
+            {offerDelete && (
+              <label title="GitHub doesn't delete this repo's merged branches by itself">
+                <input type="checkbox" checked={dropBranch} onChange={toggleDropBranch} /> Delete {s.headRefName}
+              </label>
+            )}
           </div>
         </div>
       )}
