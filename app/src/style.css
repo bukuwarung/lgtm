@@ -24,6 +24,8 @@
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
+/* Nothing scrolls the window sideways; wide content scrolls in its own box. */
+html, body { overflow-x: clip; }
 body { margin: 0; font: calc(14px * var(--ts))/1.5 var(--sans); background: var(--bg); color: var(--fg); }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -60,7 +62,7 @@ code, pre { font-family: var(--mono); }
 .empty { margin-top: 48px; }
 /* Sidebars: sticky full-height columns; content scrolls inside, the resize handle stays on the edge. */
 .side { position: sticky; top: var(--nav); height: calc(100vh - var(--nav)); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-.side-scroll { flex: 1; min-height: 0; overflow: auto; }
+.side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
 .prs .side-scroll { padding: 8px; }
 .drafts-toggle { width: 100%; margin-bottom: 6px; padding: 2px 8px; border-style: dashed; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .resizer { position: absolute; top: 0; right: 0; width: 6px; height: 100%; z-index: 5; cursor: col-resize; }
@@ -501,7 +503,7 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .demo-chunk .thread { padding-left: 12px; }
 .demo-chunk .comment { border-top: 0; padding-top: 0; }
 .demo-side .diff .num { min-width: 28px; padding: 0 4px; }
-.badge.no-test { color: light-dark(#9a6700, #cc7832); }
+.badge.no-test { display: inline-flex; vertical-align: -2px; color: light-dark(#9a6700, #cc7832); }
 .ed-reply { margin-left: 8px; color: var(--muted); font-size: calc(12px * var(--ts)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
 .set-replies { width: 100%; max-width: 720px; border-collapse: collapse; margin-bottom: 8px; }
 .set-replies td { padding: 3px 4px; vertical-align: top; }
@@ -675,7 +677,8 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .ix-meta.v-COMMENTED { color: var(--pill-info); }
 .mod-group > summary { font-weight: 600; }
 .mod-icon { flex: none; color: var(--accent); vertical-align: -1px; }
-.mod-group > summary .count { margin-left: 4px; color: var(--muted); font-weight: 400; }
+.mod-group > summary .tree-dir-name { flex: 0 1 auto; }
+.mod-group > summary .count { margin: 0 auto 0 4px; color: var(--muted); font-weight: 400; }
 .file-mod { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(11px * var(--ts)); white-space: nowrap; }
 /* Viewed marks in the index's file list: a small box, ✓ when viewed (– when some are); empty ones show on hover. Clear of
    the index's scrollbar. */

@@ -71,6 +71,7 @@ function Entry({ label, meta, sub, dim, onClick }: { label: string; meta?: strin
 const ICON_RERUN = 'M13 8a5 5 0 1 1-1.6-3.7M13.2 2.2v3h-3M6.8 5.8v4.4L10.2 8z'; // a circle arrow with ▶: run again
 const ICON_LOG = 'M3 4h10M3 8h10M3 12h6';
 const ICON_CHECK = 'M3.5 8.5l3 3 6-7';
+const ICON_NO_TEST = 'M6 2h4M7 2v4l-3.5 6.5a1 1 0 0 0 .9 1.5h7.2a1 1 0 0 0 .9-1.5L9 6V2M2 2l12 12'; // a struck-out flask
 const Icon = ({ d }: { d: string }) => (
   <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
     <path d={d} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -380,9 +381,11 @@ function ModuleTrees({ files, modules, counts, viewed, onViewed }: { files: File
       {groups.map(([m, fs]) => (
         <details open class="tree-dir mod-group" key={m}>
           <summary title={m === '.' ? 'The root project' : m ? `Module ${moduleName(m)}, in ${m}/` : 'Not in a module'}>
-            {m === '' ? 'Other files' : <><ModuleIcon /> {m === '.' ? ': (root)' : moduleName(m)}</>} <span class="count">{fs.length}</span>
+            <span class="tree-dir-name">{m === '' ? 'Other files' : <><ModuleIcon /> {m === '.' ? ': (root)' : moduleName(m)}</>}</span> <span class="count">{fs.length}</span>
             {flagTests && m !== '' && codeWithoutTests(fs) && (
-              <span class="badge no-test" title="This module's code changes, but none of its tests">no test changes</span>
+              <span class="badge no-test" role="img" title="No test changes: this module's code changes, but none of its tests" aria-label="No test changes">
+                <Icon d={ICON_NO_TEST} />
+              </span>
             )}
             <ViewedMark paths={fs.map((f) => f.filename)} viewed={viewed} onViewed={onViewed} what={m === '' ? 'these files' : 'this module'} />
           </summary>
