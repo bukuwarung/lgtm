@@ -13,7 +13,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { DECISION, Octicon, Tg } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -147,7 +147,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
         >
           <span class="ix-label">
             <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />@{p.login}{' '}
-            <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? '✓ asked' : p.load ? `${p.load} waiting` : 'free'}</span>
+            <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? <><Octicon name="check" /> asked</> : p.load ? `${p.load} waiting` : 'free'}</span>
           </span>
         </button>
       ))}
@@ -916,7 +916,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               <PillMenu cls="p-bad" label={<Tg i="ci" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
                 {checks!.filter((c) => c.state === 'failure').map((c) => (
                   <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary}>
-                    <span class="ck ck-failure">✕</span> {c.name}
+                    <CheckMark state="failure" /> {c.name}
                     {c.summary && <small>{c.summary}</small>}
                   </a>
                 ))}
@@ -2117,7 +2117,7 @@ function ThenNow({ s }: { s?: SinceComment }) {
   if (s.kind !== 'changed')
     return (
       <p class="then-now">
-        {{ same: "✓ The commented lines haven't changed since.", gone: 'The file was removed since.', unknown: "The branch was rewritten since (force-push), so lgtm can't tell whether these lines changed." }[s.kind]}
+        {{ same: <><Octicon name="check" /> The commented lines haven't changed since.</>, gone: 'The file was removed since.', unknown: "The branch was rewritten since (force-push), so lgtm can't tell whether these lines changed." }[s.kind]}
       </p>
     );
   const shown = s.lines.slice(0, 12);
@@ -2353,7 +2353,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
           <div class="row">
             <b>Ask Claude about {panel.path.split('/').pop()}</b>
             <span class="spacer" />
-            <button title="Close" onClick={() => setPanel(null)}>✕</button>
+            <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
           </div>
           <pre class="ask-sel">{panel.text}</pre>
           <textarea
@@ -2399,6 +2399,7 @@ function CopyLink({ url }: { url: string }) {
   );
 }
 
+const STATE_ICON: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTED: 'changes', COMMENTED: 'reply' };
 const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', COMMENTED: 'reviewed', DISMISSED: 'review dismissed' };
 
 const botExcerpt = (html: string, max = 100) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -2427,7 +2428,7 @@ function Conversation({ pr, items, lang, repo, me }: { pr: PR; items: Conversati
       {items.map((c) => {
         const head = (
           <>
-            <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}>{STATE_LABEL[c.state] ?? c.state}</span>}{' '}
+            <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
             {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
           </>

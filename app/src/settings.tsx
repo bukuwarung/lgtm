@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis, getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
-import { Octicon, Tg } from './tags.tsx';
+import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -79,7 +79,7 @@ function Flag({ k, initial, label, hint, demo, children }: { k: string; initial:
 function Status({ ok, children }: { ok: boolean | null; children: preact.ComponentChildren }) {
   return (
     <div class="set-int">
-      <span class={ok == null ? 'ck ck-pending' : ok ? 'ck ck-success' : 'ck ck-failure'}>{ok == null ? '●' : ok ? '✓' : '✕'}</span>
+      <CheckMark state={ok == null ? 'pending' : ok ? 'success' : 'failure'} />
       <div>{children}</div>
     </div>
   );
@@ -673,7 +673,7 @@ function SavedReplies() {
                 <textarea rows={2} value={r.body} aria-label="Reply" onChange={(e) => change(i, { body: e.currentTarget.value })} />
               </td>
               <td>
-                <button title="Remove" onClick={() => save(list.filter((_, k) => k !== i))}>✕</button>
+                <button title="Remove" onClick={() => save(list.filter((_, k) => k !== i))}><Octicon name="x" /></button>
               </td>
             </tr>
           ))}
@@ -986,7 +986,7 @@ function ClaudeSkill() {
         </small>
         {err && <small class="error">{err}</small>}
       </span>
-      {s && (s.current ? <span class="ck ck-success" title="Installed and up to date">✓</span> : <button onClick={install}>{s.installed ? 'Update' : 'Install'}</button>)}
+      {s && (s.current ? <CheckMark state="success" title="Installed and up to date" /> : <button onClick={install}>{s.installed ? 'Update' : 'Install'}</button>)}
     </div>
   );
 }

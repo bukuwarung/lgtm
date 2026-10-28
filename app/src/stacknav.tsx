@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getStackStatus, mergeLayer, type LayerStatus, type StackLayer } from './github.ts';
 import { canMerge } from './merge.tsx';
-import { Tg } from './tags.tsx';
+import { CheckMark, Tg } from './tags.tsx';
 
 // Where a layer stands, most pressing first.
 function standing(s: LayerStatus): [string, string, string] {
@@ -15,12 +15,12 @@ function standing(s: LayerStatus): [string, string, string] {
   if (!s.reviewers.length) return ['no reviewers', 'p-warn', 'nobody'];
   return ['awaiting review', '', 'waiting'];
 }
-const CI: Record<string, [string, string, string]> = {
-  SUCCESS: ['✓', 'ck-success', 'Checks passed'],
-  FAILURE: ['✕', 'ck-failure', 'Checks failing'],
-  ERROR: ['✕', 'ck-failure', 'Checks failing'],
-  PENDING: ['●', 'ck-pending', 'Checks running'],
-  EXPECTED: ['●', 'ck-pending', 'Checks waiting to run'],
+const CI: Record<string, ['success' | 'failure' | 'pending', string]> = {
+  SUCCESS: ['success', 'Checks passed'],
+  FAILURE: ['failure', 'Checks failing'],
+  ERROR: ['failure', 'Checks failing'],
+  PENDING: ['pending', 'Checks running'],
+  EXPECTED: ['pending', 'Checks waiting to run'],
 };
 const VERDICT: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', COMMENTED: 'commented', DISMISSED: 'dismissed', WAITING: 'asked' };
 
@@ -75,7 +75,7 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
                 <span class="stack-title" title={l.title}>
                   <b>#{l.number}</b> {l.title}
                 </span>
-                <span class={`ck ${ci?.[1] ?? 'ck-neutral'}`} title={ci?.[2] ?? 'No checks'}>{ci?.[0] ?? '–'}</span>
+                <CheckMark state={ci?.[0] ?? 'neutral'} title={ci?.[1] ?? 'No checks'} />
                 <span class="stack-who">
                   {s?.reviewers.map((r) =>
                     r.login.startsWith('team ') ? (

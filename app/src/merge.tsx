@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
+import { Octicon } from './tags.tsx';
 import { fetchJira, moveJira, useStoredFlag, useStoredValue, type JiraIssue } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
@@ -37,7 +38,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   const [dropBranch, toggleDropBranch] = useStoredFlag('deleteBranch', true);
   const [shown, setShown] = useState(false);
   // The bar's button and its panel.
-  const bar = (label: string, cls: string, title: string, body: preact.ComponentChildren, onOpen?: () => void) => (
+  const bar = (label: preact.ComponentChildren, cls: string, title: string, body: preact.ComponentChildren, onOpen?: () => void) => (
     <div class="submit merge-bar">
       <button class={cls} title={title} onClick={() => (!shown && onOpen?.(), setShown(!shown))}>{label} ▾</button>
       {shown && body}
@@ -55,7 +56,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   if (!s) return err ? bar('Merge', '', `Couldn't load the merge status: ${err}`, <div class="panel merge m-bad"><p class="error">Couldn't load the merge status: {err}</p></div>) : null;
   if (s.state !== 'OPEN')
     return bar(
-      s.state === 'MERGED' ? '✓ Merged' : 'Closed',
+      s.state === 'MERGED' ? <><Octicon name="git-merge" /> Merged</> : <><Octicon name="git-pull-request-closed" /> Closed</>,
       `merge-state m-${s.state.toLowerCase()}`,
       s.state === 'MERGED' ? 'Merged: the branch and the Jira ticket' : 'Closed without merging',
       <div class={`panel merge m-${s.state.toLowerCase()}`}>
@@ -210,7 +211,7 @@ function TicketMove({ id }: { id: string }) {
         <a href={issue.url} target="_blank" rel="noopener">{id}</a> is <b>{issue.status ?? '?'}</b>
       </span>
       {state === 'moved' ? (
-        <span class="ok">✓ moved</span>
+        <span class="ok"><Octicon name="check" /> moved</span>
       ) : issue.statusCategory === 'done' ? null : (
         <>
           <span>→</span>

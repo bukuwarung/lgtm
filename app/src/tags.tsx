@@ -15,6 +15,14 @@ export function Octicon({ name, size = 12, slash, class: cls }: { name: string; 
   );
 }
 
+// A check's state as GitHub shows it: ✓ passed, ✕ failed, • running, skipped.
+const CHECK: Record<string, string> = { success: 'check', failure: 'x', pending: 'dot-fill', neutral: 'skip' };
+export const CheckMark = ({ state, title }: { state: 'success' | 'failure' | 'pending' | 'neutral'; title?: string }) => (
+  <span class={`ck ck-${state}`} title={title}>
+    <Octicon name={CHECK[state]} />
+  </span>
+);
+
 // Each tag's or pill's Octicon (a "/" suffix strikes it through). A name that isn't here is shown as it is (✳).
 const ICONS: Record<string, string> = {
   added: 'diff-added',

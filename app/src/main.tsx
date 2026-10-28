@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
-import { DECISION, Octicon, Tg } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
 import { ago, since, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
@@ -195,7 +195,7 @@ function App() {
               {toast.action[0]}
             </button>
           )}
-          <button title="Dismiss" onClick={() => setToast(null)}>✕</button>
+          <button title="Dismiss" onClick={() => setToast(null)}><Octicon name="x" /></button>
         </div>
       )}
       <div class={showPRs ? 'shell' : 'shell no-prs'}>
@@ -264,7 +264,7 @@ function SetupCheck() {
   };
   const row = (ok: boolean | null, name: string, what: string, fix: preact.ComponentChildren) => (
     <div class="set-int">
-      <span class={ok == null ? 'ck ck-pending' : ok ? 'ck ck-success' : 'ck ck-neutral'}>{ok == null ? '●' : ok ? '✓' : '–'}</span>
+      <CheckMark state={ok == null ? 'pending' : ok ? 'success' : 'neutral'} />
       <div>
         <b>{name}</b> <span class="note">{what}</span>
         {ok === false && <div class="setup-fix">{fix}</div>}
@@ -426,7 +426,7 @@ function AccountMenu() {
                 <img src={avatarOf(a.login)} alt="" />
                 <span>{a.login}</span>
                 {a.active && <small>gh's active</small>}
-                {a.login === me && <span class="account-check">✓</span>}
+                {a.login === me && <span class="account-check"><Octicon name="check" /></span>}
               </button>
             ))
           )}

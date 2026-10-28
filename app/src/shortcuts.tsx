@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
 import { codeWithoutTests, inTests, moduleName } from './files.ts';
-import { Octicon, Tg } from './tags.tsx';
+import { CheckMark, Octicon, Tg } from './tags.tsx';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -57,8 +57,8 @@ const textOf = (html: string) => new DOMParser().parseFromString(html, 'text/htm
 const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, 90);
 const base = (path: string) => path.split('/').pop()!;
 
-const VERDICT: Record<string, string> = { APPROVED: '✓ approved', CHANGES_REQUESTED: '✕ changes requested', COMMENTED: 'reviewed', DISMISSED: 'dismissed' };
-const CHECK_ICON: Record<Check['state'], string> = { failure: '✕', pending: '●', success: '✓', neutral: '–' };
+// A review's verdict: its tag icon (tags.tsx) and words.
+const VERDICT: Record<string, [string, string]> = { APPROVED: ['approved', 'approved'], CHANGES_REQUESTED: ['changes', 'changes requested'], COMMENTED: ['reply', 'reviewed'], DISMISSED: ['', 'dismissed'] };
 
 function Section({ id, title, count, extra, children }: { id?: string; title: string; count: number; extra?: ComponentChildren; children: ComponentChildren }) {
   return (
@@ -72,7 +72,7 @@ function Section({ id, title, count, extra, children }: { id?: string; title: st
   );
 }
 
-function Entry({ label, meta, sub, dim, onClick }: { label: ComponentChildren; meta?: string; sub?: string; dim?: boolean; onClick: () => void }) {
+function Entry({ label, meta, sub, dim, onClick }: { label: ComponentChildren; meta?: ComponentChildren; sub?: string; dim?: boolean; onClick: () => void }) {
   return (
     <button class={dim ? 'ix-item dim' : 'ix-item'} onClick={onClick} title={sub || (typeof label === 'string' ? label : undefined)}>
       <span class="ix-label">
@@ -181,7 +181,7 @@ function CheckEntry({ c, repo, onRefresh }: { c: Check; repo: string; onRefresh:
       <div class="ix-check">
         <a class="ix-item" href={c.url ?? undefined} target="_blank" rel="noopener" title={`${c.name}: ${c.summary}`}>
           <span class="ix-label">
-            <span class={'ck ck-' + c.state}>{CHECK_ICON[c.state]}</span> {c.name}
+            <CheckMark state={c.state} /> {c.name}
           </span>
           {c.summary && <span class="ix-sub">{c.summary}</span>}
         </a>
@@ -238,7 +238,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
   const rerunnable = checks?.filter((c) => c.state === 'failure' && c.jobId && runOf(c)) ?? [];
   const bots = conversation.filter((c) => c.bot);
   const convEntry = (c: ConversationItem, i: number) => (
-    <Entry key={c.id} label={c.author} meta={c.state ? VERDICT[c.state] : 'commented'} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+    <Entry key={c.id} label={c.author} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : 'commented'} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
   );
   const tiers = threadTiers(sortedThreads, me);
   const threadEntry = (t: Thread) => {
@@ -258,11 +258,11 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
   useEffect(() => void reviewersShown(), []);
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
   // Who's reviewing: each person's latest verdict, "waiting" for ones asked who haven't answered (again).
-  const reviewers = new Map<string, { meta: string; tone: string; id?: string }>();
-  for (const c of conversation) if (c.state && !c.bot && c.author !== pr.user.login) reviewers.set(c.author, { meta: VERDICT[c.state], tone: c.state, id: c.id });
+  const reviewers = new Map<string, { meta: string; icon: string; tone: string; id?: string }>();
+  for (const c of conversation) if (c.state && !c.bot && c.author !== pr.user.login) reviewers.set(c.author, { meta: VERDICT[c.state][1], icon: VERDICT[c.state][0], tone: c.state, id: c.id });
   for (const r of pr.requested_reviewers ?? [])
-    if (r.type !== 'Bot') reviewers.set(r.login, { meta: reviewers.has(r.login) ? 'asked again' : 'waiting', tone: 'WAITING', id: reviewers.get(r.login)?.id });
-  for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting', tone: 'WAITING' });
+    if (r.type !== 'Bot') reviewers.set(r.login, { meta: reviewers.has(r.login) ? 'asked again' : 'waiting', icon: 'waiting', tone: 'WAITING', id: reviewers.get(r.login)?.id });
+  for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting', icon: 'waiting', tone: 'WAITING' });
 
   return (
     <div class="index">
@@ -283,7 +283,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
               <span class="ix-label">
                 {!who.startsWith('team ') && <img src={`https://github.com/${encodeURIComponent(who)}.png?size=40`} alt="" />}
-                {who.startsWith('team ') ? who : '@' + who} <span class={`ix-meta v-${r.tone}`}>{r.meta}</span>
+                {who.startsWith('team ') ? who : '@' + who} <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
               </span>
             </button>
             {reRequest && r.id && r.tone !== 'WAITING' && <ReRequest login={who} again={reRequest} />}
@@ -339,7 +339,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
               const group = checks.filter((c) => c.state === state);
               return group.length > 0 && (
                 <details class="ix-ckgroup">
-                  <summary><span class={'ck ck-' + state}>{CHECK_ICON[state]}</span> {group.length} {label}</summary>
+                  <summary><CheckMark state={state} /> {group.length} {label}</summary>
                   {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} />)}
                 </details>
               );
@@ -367,7 +367,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         )}
         {tiers.resolved.length > 0 && (
           <details class="ix-ckgroup">
-            <summary>✓ {tiers.resolved.length} resolved</summary>
+            <summary><Octicon name="check" /> {tiers.resolved.length} resolved</summary>
             {tiers.resolved.map(threadEntry)}
           </details>
         )}
@@ -470,7 +470,7 @@ function ViewedMark({ paths, viewed, onViewed, what }: { paths: string[]; viewed
       onClick={click}
       onKeyDown={(e) => (e.key === ' ' || e.key === 'Enter') && click(e)}
     >
-      {all ? '✓' : n ? '–' : ''}
+      {all ? <Octicon name="check" size={10} /> : n ? <Octicon name="dash" size={10} /> : ''}
     </span>
   );
 }
