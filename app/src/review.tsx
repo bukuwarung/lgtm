@@ -4,7 +4,7 @@ import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, loadPR, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  awaitsMe, commitSuggestions, loadPR, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -94,7 +94,9 @@ type Notice = { text: string; ok: boolean };
 // onReviewed: the review is in and the user chose to move on (with the Slack result, if any, to show next).
 // On my own PR, in the index's Reviewers: who to ask (this repo's recent reviewers, else the PR list's team), least
 // busy first. A click asks them on GitHub and, unless unticked, on Slack too.
+// On a draft, asking someone first marks it ready for review (GitHub doesn't tell reviewers about drafts).
 function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void }) {
+  const draft = useRef(pr.draft);
   const emoji = useSlackEmoji(); // suggested as you type the message
   const [team] = useStoredValue('team', '');
   const [picks, setPicks] = useState<ReviewerPick[] | null>(null);
@@ -109,6 +111,11 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
     mark(login, 'asking');
     setErr('');
     try {
+      if (draft.current) {
+        await markReady(pr.node_id);
+        draft.current = false;
+        dispatchEvent(new Event('lgtm:refresh'));
+      }
       await requestReview(repo, n, login);
     } catch (e: any) {
       mark(login);
@@ -849,7 +856,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               me={me}
               modules={byModule ? modules : undefined}
               ask={
-                !!me && pr.user.login === me && !pr.draft && (
+                !!me && pr.user.login === me && (
                   <AskReviewer
                     pr={pr}
                     repo={repo}

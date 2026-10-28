@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { jumpTo } from './shortcuts.tsx';
 import { fetchJira, moveJira, useStoredFlag, useStoredValue, type JiraIssue } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
@@ -20,7 +21,7 @@ export function blockers(s: MergeState, checks: Check[] | null): string[] {
   return s.mergeStateStatus === 'BLOCKED' && !out.length ? ['Blocked by branch rules'] : out;
 }
 
-const canMerge = (s: MergeState) => !s.isDraft && ['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus);
+export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) => !s.isDraft && ['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus);
 
 // Merge status and controls, on my own PRs: a button in the PR's bar (named for the merge, green when it can go) opening
 // GitHub's merge box: ready for review, update branch, merge (or auto-merge), the commit message editable before
@@ -119,7 +120,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
         </div>
       )}
       <div class="merge-row">
-        {s.isDraft && <button disabled={!!busy} onClick={() => run('ready', () => markReady(s.id))}>{busy === 'ready' ? 'Marking…' : 'Ready for review'}</button>}
+        {s.isDraft && <button disabled={!!busy} onClick={() => run('ready', () => markReady(s.id).then(() => (setShown(false), jumpTo('ix-reviewers'))))}>{busy === 'ready' ? 'Marking…' : 'Ready for review'}</button>}
         {s.mergeStateStatus === 'BEHIND' && s.viewerCanUpdateBranch && (
           <button disabled={!!busy} onClick={() => run('update', () => updateBranch(s))}>{busy === 'update' ? 'Updating…' : 'Update branch'}</button>
         )}

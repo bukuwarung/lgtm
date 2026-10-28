@@ -478,14 +478,26 @@ const MINE: Kind = {
 };
 // A team's open PRs, one group per member, coloured by where each PR stands (as in "Your PRs").
 // Each member's label also says how many reviews they're asked for, to help pick a reviewer who isn't swamped.
-const teamKind = (members: string[], load: Record<string, number>): Kind => ({
-  name: 'Team',
-  groups: members.map((m) => [m, m]),
-  groupOf: (i) => i.author,
-  colorOf: MINE.groupOf,
-  note: (m) => (load[m] ? `${load[m]} review${load[m] > 1 ? 's' : ''} requested` : ''),
-  people: true,
-});
+// Ordered by whose PR has waited longest for review (ready, not yet approved), by who's least busy, or by name.
+type TeamSort = 'waiting' | 'free' | 'name';
+const teamKind = (members: string[], load: Record<string, number>, items: QueueItem[], sort: TeamSort): Kind => {
+  const waiting: Record<string, string> = {};
+  for (const i of items) if (!i.isDraft && i.reviewDecision !== 'APPROVED' && (!waiting[i.author] || i.waitingSince < waiting[i.author])) waiting[i.author] = i.waitingSince;
+  const order = [...members].sort(
+    sort === 'waiting' ? (a, b) => (waiting[a] ?? '~').localeCompare(waiting[b] ?? '~') || a.localeCompare(b)
+    : sort === 'free' ? (a, b) => (load[a] ?? 0) - (load[b] ?? 0) || a.localeCompare(b)
+    : (a, b) => a.localeCompare(b),
+  );
+  return {
+    name: 'Team',
+    groups: order.map((m) => [m, m]),
+    groupOf: (i) => i.author,
+    colorOf: MINE.groupOf,
+    note: (m) =>
+      [load[m] && `${load[m]} review${load[m] > 1 ? 's' : ''} requested`, waiting[m] && `a PR waiting ${ago(waiting[m]).replace(/ ago$/, '')}`].filter(Boolean).join(' · '),
+    people: true,
+  };
+};
 const avatar = (login: string) => `https://github.com/${encodeURIComponent(login)}.png?size=40`;
 type Tab = 'reviewing' | 'mine' | 'team';
 
@@ -558,6 +570,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   // Team tab: a GitHub team ("org/slug") and its members' open PRs. Settings can change it too.
   const [team, setTeam] = useStoredValue('team', '');
   const [teams, setTeams] = useState<string[] | null>(null);
+  const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
   const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
   const [teamErr, setTeamErr] = useState('');
   const teamRef = useRef(team); // the 3-minute refresh closes over the first render; read the current team here
@@ -750,7 +763,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
             <details key={g} open={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
                 {kind.people ? <img class="g-face" src={avatar(g)} alt="" /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
-                {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review">{kind.note(g)}</span>}
+                {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review; how long their oldest PR has waited for one">{kind.note(g)}</span>}
               </summary>
               {entries.map((e) =>
                 Array.isArray(e) ? (
@@ -795,13 +808,20 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
           {tab === 'reviewing' && section(REVIEWING, shown.filter((i) => i.reviewing))}
           {tab === 'team' && (
             <>
-              <select class="team-pick" value={team} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="GitHub team">
-                <option value="">Pick a GitHub team…</option>
-                {[...new Set([...(team ? [team] : []), ...(teams ?? [])])].map((t) => <option value={t}>{t}</option>)}
-              </select>
+              <div class="team-head">
+                <select class="team-pick" value={team} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="GitHub team">
+                  <option value="">Pick a GitHub team…</option>
+                  {[...new Set([...(team ? [team] : []), ...(teams ?? [])])].map((t) => <option value={t}>{t}</option>)}
+                </select>
+                <select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
+                  <option value="waiting">Waiting longest</option>
+                  <option value="free">Least busy</option>
+                  <option value="name">Name</option>
+                </select>
+              </div>
               {teamErr && <p class="error">{teamErr}</p>}
               {team && !teamData && !teamErr && <p class="note">Loading…</p>}
-              {teamData?.team === team && section(teamKind(teamData.members, teamData.load), teamData.items)}
+              {teamData?.team === team && section(teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamData.items)}
             </>
           )}
         </>

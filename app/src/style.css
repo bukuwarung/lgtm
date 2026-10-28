@@ -381,7 +381,8 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .hljs-kt-arg { color: var(--hl-arg); }
 .hljs-kt-it { color: var(--hl-it); font-weight: 600; }
 .pill.p-strong { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
-.team-pick { width: 100%; margin-bottom: 8px; }
+.team-head { display: flex; gap: 6px; margin-bottom: 8px; }
+.team-pick { flex: 1; min-width: 0; }
 .bar h1 a { color: inherit; }
 .bar h1 a:hover { color: var(--accent); }
 .bar h1 .pr-num { color: var(--muted); font-weight: 400; }
@@ -401,6 +402,9 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .stack-who img.v-WAITING { border-style: dashed; }
 .stack-team { font-size: calc(11px * var(--ts)); color: var(--muted); }
 .stack-row .pill { margin: 0; justify-self: end; }
+.stack-row:has(.stack-merge) { grid-template-columns: 1.4em minmax(0, 1fr) 1.2em auto auto auto; }
+.stack-merge { padding: 1px 10px; font-size: calc(12px * var(--ts)); }
+.stack-note { margin: 4px 8px; }
 .done { display: grid; justify-items: center; align-content: start; gap: 4px; padding-top: 15vh; text-align: center; }
 .done h2 { margin: 12px 0 0; }
 .done p { color: var(--muted); }

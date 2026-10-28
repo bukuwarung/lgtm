@@ -725,6 +725,7 @@ export type MergeState = {
   viewerCanDeleteHeadRef: boolean; // only once merged or closed
   isCrossRepository: boolean; // from a fork: its branch isn't ours to delete
   headRefName: string;
+  baseRefName: string;
   headRef: { id: string } | null; // null once the branch is gone
   deleteBranchOnMerge: boolean; // the repo deletes merged branches itself
   methods: MergeMethod[]; // allowed in this repo, the viewer's usual one first
@@ -734,7 +735,7 @@ export type MergeState = {
 const MERGE_STATE = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){
   mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod deleteBranchOnMerge
   pullRequest(number:$n){id state isDraft mergeable mergeStateStatus reviewDecision headRefOid mergedBy{login}
-    isCrossRepository viewerCanDeleteHeadRef headRefName headRef{id}
+    isCrossRepository viewerCanDeleteHeadRef headRefName baseRefName headRef{id}
     autoMergeRequest{mergeMethod enabledBy{login}}
     viewerCanMergeAsAdmin viewerCanEnableAutoMerge viewerCanDisableAutoMerge viewerCanUpdateBranch
     mt:viewerMergeHeadlineText(mergeType:MERGE) mb:viewerMergeBodyText(mergeType:MERGE)
@@ -761,6 +762,16 @@ export const mergePR = (s: MergeState, method: MergeMethod, title: string, body:
       : `mutation($id:ID!,$m:PullRequestMergeMethod,$t:String,$b:String,$oid:GitObjectID){mergePullRequest(input:{pullRequestId:$id,mergeMethod:$m,commitHeadline:$t,commitBody:$b,expectedHeadOid:$oid}){clientMutationId}}`,
     { id: s.id, m: method, t: method === 'REBASE' ? null : title, b: method === 'REBASE' ? null : body, oid: s.headRefOid },
   );
+// The bottom layer of a stack merged from the stack overview: GitHub's usual method and message, then the next layer
+// pointed at what it merged into, then its branch deleted (unless the repo does that, or another PR builds on it).
+export async function mergeLayer(repo: string, n: number, next?: number) {
+  const s = await getMergeState(repo, n);
+  const m = s.methods[0];
+  await mergePR(s, m, s.message[m].title, s.message[m].body, false);
+  if (next) await json(`/repos/${repo}/pulls/${next}`, { method: 'PATCH', body: JSON.stringify({ base: s.baseRefName }) });
+  if (!s.deleteBranchOnMerge && !s.isCrossRepository) await deleteBranch(repo, s);
+}
+
 // A merged PR's branch, unless another open PR builds on it (deleting it would close that one).
 export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' | 'headRefName'>) {
   if (!s.headRef) return;

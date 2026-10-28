@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
-import { getStackStatus, type LayerStatus, type StackLayer } from './github.ts';
+import { getStackStatus, mergeLayer, type LayerStatus, type StackLayer } from './github.ts';
+import { canMerge } from './merge.tsx';
 
 // Where a layer stands, most pressing first.
 function standing(s: LayerStatus): [string, string] {
@@ -29,7 +30,20 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<Map<number, LayerStatus> | null>(null);
   const [err, setErr] = useState('');
-  useEffect(() => void (open && getStackStatus(repo, stack.map((l) => l.number)).then(setStatus, (e) => setErr(e.message))), [open, repo, stack.map((l) => l.number).join()]);
+  const [merging, setMerging] = useState<'' | 'confirm' | 'busy'>('');
+  const load = () => getStackStatus(repo, stack.map((l) => l.number)).then(setStatus, (e) => setErr(e.message));
+  useEffect(() => void (open && load()), [open, repo, stack.map((l) => l.number).join()]);
+  // Only the lowest open layer can merge (the ones above build on it).
+  const bottom = status && stack.find((l) => status.get(l.number)?.state === 'OPEN');
+  const above = bottom && stack[stack.indexOf(bottom) + 1];
+  const mergeable = !!bottom && canMerge(status!.get(bottom.number)!);
+  const merge = () => {
+    setMerging('busy');
+    setErr('');
+    mergeLayer(repo, bottom!.number, above?.number)
+      .catch((e) => setErr(`Couldn't merge #${bottom!.number}: ${e.message}`))
+      .finally(() => (setMerging(''), load(), dispatchEvent(new Event('lgtm:refresh'))));
+  };
   useEffect(() => setOpen(false), [n]);
   const at = (d: number) => stack[k + d];
   const step = (d: number) =>
@@ -44,6 +58,12 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
       {open && (
         <div class="panel stack-panel">
           {err && <p class="error">{err}</p>}
+          {merging === 'confirm' && bottom && (
+            <p class="note stack-note">
+              Merges #{bottom.number} the repo's usual way{above ? `, points #${above.number} at its base instead,` : ''} and deletes its branch.{' '}
+              <button class="link" onClick={() => setMerging('')}>Cancel</button>
+            </p>
+          )}
           {stack.map((l, i) => {
             const s = status?.get(l.number);
             const [label, tone] = s ? standing(s) : ['…', ''];
@@ -65,6 +85,11 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
                   )}
                 </span>
                 <span class={`pill ${tone}`}>{label}</span>
+                {mergeable && l === bottom && (
+                  <button class="primary stack-merge" disabled={merging === 'busy'} onClick={(e) => (e.preventDefault(), merging ? merging === 'confirm' && merge() : setMerging('confirm'))}>
+                    {merging === 'busy' ? 'Merging…' : merging === 'confirm' ? 'Confirm' : 'Merge'}
+                  </button>
+                )}
               </a>
             );
           })}

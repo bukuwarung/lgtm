@@ -300,7 +300,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             </details>
           ) : (
             <>
-              <p class="note ix-pad">Nobody's been asked yet. Least busy first:</p>
+              <p class="note ix-pad">Nobody's been asked yet{pr.draft ? ' (asking someone marks it ready for review)' : ''}. Least busy first:</p>
               {ask}
             </>
           ))}
