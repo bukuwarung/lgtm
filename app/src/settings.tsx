@@ -203,9 +203,14 @@ export function Settings() {
           />
           <span>
             Desktop notifications
-            <small>For new review requests, and PRs coming back to you for re-review.</small>
+            <small>For new review requests, PRs coming back to you for re-review, and what you pick below.</small>
           </span>
         </label>
+        <fieldset class="set-sub" disabled={!notify}>
+          <Flag k="notifyReplies" initial={true} label="New replies waiting for you" />
+          <Flag k="notifyVerdicts" initial={true} label="Your PR approved, or changes requested" />
+          <Flag k="notifyCI" initial={true} label="Your PR's checks passed or failed" />
+        </fieldset>
         <label class="set-row">
           <span>
             Team to watch

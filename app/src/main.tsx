@@ -1,11 +1,11 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadToken, type QueueItem } from './github.ts';
+import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -603,7 +603,11 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
     return () => clearInterval(t);
   }, []);
   const [notify] = useStoredFlag('notifyRequests', false);
+  const [notifyReplies] = useStoredFlag('notifyReplies', true);
+  const [notifyVerdicts] = useStoredFlag('notifyVerdicts', true);
+  const [notifyCI] = useStoredFlag('notifyCI', true);
   const seen = useRef<Set<string> | null>(null);
+  const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
   // The Claude Code sessions linked to listed PRs, and what each is doing, every 15 seconds.
   const [claude, setClaude] = useState<Map<string, 'working' | 'waiting' | 'idle'>>(new Map());
   const linkedIds = [...new Set((items ?? []).map((i) => linkedClaude(i.repo, i.number)?.id).filter((x): x is string => !!x))].sort().join(' ');
@@ -628,17 +632,41 @@ function PRList({ hidden, current, version, onItems }: { hidden: boolean; curren
     document.title = count ? `(${count}) lgtm` : 'lgtm';
     void setBadge(count); // the app's Dock icon
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
-    if (seen.current && notify)
-      for (const i of waiting.filter((i) => !seen.current!.has(i.id)))
-        void notifyNative(`${i.requested ? 'Review requested' : 'Your comments were resolved'}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, () => {
+    // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
+    if (seen.current && notify) {
+      const tell = (what: string, i: QueueItem) =>
+        void notifyNative(`${what}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, () => {
           location.hash = `/${i.repo}/pull/${i.number}`;
         });
+      for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i);
+      for (const i of items) {
+        const was = before.current.get(i.id);
+        if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI })) tell(n, i);
+      }
+    }
     seen.current = new Set(waiting.map((i) => i.id));
+    before.current = new Map(items.map((i) => [i.id, i]));
   }, [items, settled, claude]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
   const shown = items?.filter((i) => i.mine || showDrafts || !i.isDraft || isCurrent(i));
+  // The top PRs waiting on me load ahead, a few at a time, so opening one is instant; only ones that changed since
+  // their cached copy, and not while lgtm is in the background.
+  useEffect(() => {
+    if (!items || !settled || document.hidden) return;
+    const next = items.filter((i) => !isCurrent(i) && ((i.reviewing && groupOf(i) === 'needs' && !i.isDraft) || (i.authored && (i.thread?.awaiting ?? 0) > 0))).slice(0, 5);
+    let stop = false;
+    (async () => {
+      for (const i of next) {
+        if (stop) return;
+        const key = `${i.repo}#${i.number}`;
+        if ((await prCache.get<LoadedPR>(key))?.v.pr.updated_at === i.updatedAt) continue;
+        await loadPR(i.repo, i.number).then((d) => prCache.set(key, d), () => {});
+      }
+    })();
+    return () => void (stop = true);
+  }, [items, settled]);
 
   const item = (kind: Kind, i: QueueItem, layer?: string) => (
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>

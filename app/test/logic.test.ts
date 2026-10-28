@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { enclosing, addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
-import { applySuggestions, awaitsMe, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
+import { applySuggestions, awaitsMe, queueNews, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { codeWithoutTests, estimate, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -504,4 +504,14 @@ test('suggestions: parsed from a comment, applied bottom up, line endings kept',
   assert.equal(applySuggestions(src, [s, { path: 'a.kt', start: 4, end: 4, text: '' }]), 'a\r\nB2\r\n');
   assert.equal(applySuggestions(src, [{ path: 'a.kt', start: 1, end: 1, text: '\n' }]), '\r\nb\r\nc\r\nd\r\n');
   assert.throws(() => applySuggestions(src, [s, { path: 'a.kt', start: 3, end: 4, text: 'x\n' }]));
+});
+
+test('queueNews: what changed between list refreshes', () => {
+  const on = { replies: true, verdicts: true, ci: true };
+  const base = { authored: true, reviewDecision: 'REVIEW_REQUIRED', ci: 'PENDING', thread: { awaiting: 0, allMineResolved: false } } as any;
+  assert.deepEqual(queueNews(base, { ...base, reviewDecision: 'APPROVED', ci: 'FAILURE', thread: { awaiting: 1 } }, on), ['New reply for you', 'Approved', 'Checks failed']);
+  assert.deepEqual(queueNews(base, { ...base, ci: 'SUCCESS' }, { ...on, ci: false }), []);
+  assert.deepEqual(queueNews({ ...base, ci: 'FAILURE' }, { ...base, ci: 'SUCCESS' }, on), []); // a rerun that went green without being seen running
+  assert.deepEqual(queueNews({ ...base, thread: undefined }, { ...base, thread: { awaiting: 2 } }, on), []); // thread status missing before
+  assert.deepEqual(queueNews(base, { ...base, authored: false, reviewDecision: 'APPROVED' }, on), []);
 });

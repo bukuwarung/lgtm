@@ -5,6 +5,7 @@ import { estimate, type Estimate } from './files.ts';
 export type PR = {
   number: number;
   title: string;
+  updated_at?: string;
   body: string | null;
   body_html?: string; // GitHub-rendered and sanitized (full+json media type)
   html_url: string;
@@ -340,6 +341,19 @@ export async function getStatus(repo: string, n: number): Promise<{ reviewDecisi
 export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`, undefined, FULL);
 
 export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);
+
+// Everything a PR page shows first, as one bundle (also cached, and loaded ahead for the list's top PRs).
+export type LoadedPR = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null };
+export async function loadPR(repo: string, n: number): Promise<LoadedPR> {
+  const pr = await getPR(repo, n);
+  const [files, threads, conversation, attrs] = await Promise.all([
+    getFiles(repo, n),
+    getThreads(repo, n),
+    getConversation(repo, n),
+    getRaw(pr.head.repo?.full_name ?? repo, '.gitattributes', pr.head.sha),
+  ]);
+  return { pr, files, threads, conversation, attrs };
+}
 
 export async function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
   const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, {}, 'application/vnd.github.raw');
@@ -729,6 +743,17 @@ export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { commen
 // Per PR in the list: how many review threads wait on my reply (see awaitsMe), and whether every thread I'm in is
 // resolved (then a PR I reviewed is ready for another look). One query for all of them.
 export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
+
+// What changed on a listed PR between two refreshes, worth a notification: new replies waiting on me; on my PR, a
+// verdict or its checks finishing.
+export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean }): string[] {
+  const running = (ci: QueueItem['ci']) => ci === 'PENDING' || ci === 'EXPECTED';
+  return [
+    on.replies && was.thread && now.thread && now.thread.awaiting > was.thread.awaiting && 'New reply for you',
+    on.verdicts && now.authored && now.reviewDecision !== was.reviewDecision && ({ APPROVED: 'Approved', CHANGES_REQUESTED: 'Changes requested' } as Record<string, string>)[now.reviewDecision ?? ''],
+    on.ci && now.authored && running(was.ci) && now.ci && !running(now.ci) && (now.ci === 'SUCCESS' ? 'Checks passed' : 'Checks failed'),
+  ].filter((x): x is string => !!x);
+}
 // Each PR's rough time to review, asked after the list shows (its description and per-file line counts would slow the
 // list down).
 export async function getEstimates(ids: string[]): Promise<Map<string, Estimate>> {

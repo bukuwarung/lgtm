@@ -3,8 +3,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  awaitsMe, commitSuggestions, loadPR, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -368,7 +368,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       const [stored, visit] = await Promise.all([storage.get<Saved>(key), storage.get<Visit>(visitKey).catch(() => undefined)]);
       if (visit && first) resumeAt.current = visit.at;
       // Show a PR's last-loaded copy at once (marked as updating), then the fresh one.
-      type Loaded = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null };
+      type Loaded = LoadedPR;
       let fresh = false;
       let shownHead = '';
       const show = (d: Loaded) => {
@@ -392,15 +392,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       let pr: PR;
       let loaded: Loaded;
       try {
-        pr = await getPR(repo, n);
-        const headRepo = pr.head.repo?.full_name ?? repo;
-        const [files, threads, conversation, attrs] = await Promise.all([
-          getFiles(repo, n),
-          getThreads(repo, n),
-          getConversation(repo, n),
-          getRaw(headRepo, '.gitattributes', pr.head.sha),
-        ]);
-        loaded = { pr, files, threads, conversation, attrs };
+        loaded = await loadPR(repo, n);
+        pr = loaded.pr;
       } catch (e: any) {
         if (first && !shownHead) throw e;
         setStale(null);
