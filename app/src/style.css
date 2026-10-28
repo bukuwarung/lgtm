@@ -157,7 +157,10 @@ main { padding: 16px; }
 
 .file { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 6px; content-visibility: auto; contain-intrinsic-size: auto 400px; }
 .file-h { position: sticky; top: calc(var(--nav) + var(--bar)); z-index: 2; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--soft); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; }
-.file-h a { flex: 1; font: calc(12px * var(--ts)) var(--mono); color: var(--fg); overflow-wrap: anywhere; }
+.file-h a.file-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; color: var(--fg); text-decoration: none; }
+.file-h a.file-name:hover b { text-decoration: underline; }
+.file-name b { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 calc(13px * var(--ts)) var(--mono); }
+.file-dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: calc(11px * var(--ts)) var(--mono); color: var(--muted); }
 .st { font-size: calc(11px * var(--ts)); padding: 0 6px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); }
 .counts { font: calc(12px * var(--ts)) var(--mono); }
 .counts .a { color: var(--addfg); }

@@ -145,6 +145,10 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
   );
 }
 
+// A path's file name, and its folder ('' at the root).
+const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+const dir = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf('/')));
+
 // What you'd seen of each PR you opened (for "changed since your last visit") piles up in localStorage, one record
 // a PR, some of them large; keep the 100 most recent.
 function pruneVisits() {
@@ -917,9 +921,27 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref}>
       <header class="file-h">
         <span class="st">{file.status}</span>
-        <a href={file.blob_url} target="_blank" rel="noopener">
-          {file.previous_filename ? `${file.previous_filename} → ` : ''}
-          {path}
+        {/* The file's name, prominent; its folder small beside it, cut from the left (the nearest folders stay), in full
+            on hover. */}
+        <a
+          class="file-name"
+          href={file.blob_url}
+          target="_blank"
+          rel="noopener"
+          title={file.previous_filename ? `${file.previous_filename} → ${path}` : path}
+        >
+          <b>
+            {file.previous_filename && base(file.previous_filename) !== base(path) && <>{base(file.previous_filename)} → </>}
+            {base(path)}
+          </b>
+          {dir(path) && (
+            <span class="file-dir">
+              <bdi>
+                {file.previous_filename && dir(file.previous_filename) !== dir(path) && `${dir(file.previous_filename)} → `}
+                {dir(path)}
+              </bdi>
+            </span>
+          )}
         </a>
         <span class="counts">
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>

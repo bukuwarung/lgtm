@@ -31,7 +31,10 @@ function File({ path, st = 'modified', add, del, children }: { path: string; st?
     <section class="file">
       <header class="file-h">
         <span class="st">{st}</span>
-        <a>{path}</a>
+        <a class="file-name" title={path}>
+          <b>{path.slice(path.lastIndexOf('/') + 1)}</b>
+          {path.includes('/') && <span class="file-dir"><bdi>{path.slice(0, path.lastIndexOf('/'))}</bdi></span>}
+        </a>
         <span class="counts">
           <b class="a">+{add}</b> <b class="d">−{del}</b>
         </span>
