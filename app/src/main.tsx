@@ -719,7 +719,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {kind === REVIEWING && reReview(i) && (
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
         )}
-        {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad"><Tg i="fail" t="CI failing" /></span>}
+        {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad"><Tg i="ci" t="CI failing" /></span>}
         {!i.isDraft && i.noReviewers && (
           <button
             class="pill p-warn"

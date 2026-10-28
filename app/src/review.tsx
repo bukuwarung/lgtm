@@ -913,7 +913,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               </span>
             )}
             {failingChecks > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="fail" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
+              <PillMenu cls="p-bad" label={<Tg i="ci" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
                 {checks!.filter((c) => c.state === 'failure').map((c) => (
                   <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary}>
                     <span class="ck ck-failure">✕</span> {c.name}

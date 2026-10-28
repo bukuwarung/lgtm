@@ -42,7 +42,7 @@ function TagStyle() {
     <div class="set-row">
       <span>
         Tags and pills
-        <small>Like a file's <span class="st s-added"><Tg i="added" t="added" /></span> or a PR's <span class="pill p-bad"><Tg i="fail" t="CI failing" /></span></small>
+        <small>Like a file's <span class="st s-added"><Tg i="added" t="added" /></span> or a PR's <span class="pill p-bad"><Tg i="ci" t="CI failing" /></span></small>
       </span>
       <span class="set-seg" role="radiogroup" aria-label="Tags and pills">
         {([['both', 'Icons and text'], ['icons', 'Icons'], ['text', 'Text']] as const).map(([v, name]) => (

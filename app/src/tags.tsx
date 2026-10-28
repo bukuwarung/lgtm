@@ -11,6 +11,7 @@ const ICONS: Record<string, string> = {
   test: 'M6 2h4M7 2v4l-3.5 6.5a1 1 0 0 0 .9 1.5h7.2a1 1 0 0 0 .9-1.5L9 6V2M5 10h6',
   notest: 'M6 2h4M7 2v4l-3.5 6.5a1 1 0 0 0 .9 1.5h7.2a1 1 0 0 0 .9-1.5L9 6V2M2 2l12 12',
   fail: 'M4.5 4.5l7 7M11.5 4.5l-7 7',
+  ci: 'M6 2h4v2H6zM4.5 3H3.5v11h9V3h-1M6.25 7.25l3.5 3.5M9.75 7.25l-3.5 3.5', // a clipboard with ✕: checks failed
   approved: 'M3.5 8.5l3 3 6-7',
   changes: 'M8 3v6M8 12.5v.5',
   waiting: 'M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 9.75a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5z',
