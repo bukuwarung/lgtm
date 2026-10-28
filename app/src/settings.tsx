@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis, getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
+import { Tg } from './tags.tsx';
 import { ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -33,6 +34,27 @@ export function useTheme() {
 
 // A switch; with an example (demos.tsx) it also shows what it does, the side you have now outlined. Children are
 // sub-switches: indented under it, and greyed out while it's off.
+// Tags and pills (a file's added / modified, a PR's "CI failing"…) as words, icons or both. Icons alone say their words
+// on hover; numbers always show.
+function TagStyle() {
+  const [style, setStyle] = useStoredValue('tagStyle', 'both');
+  return (
+    <div class="set-row">
+      <span>
+        Tags and pills
+        <small>Like a file's <span class="st s-added"><Tg i="added" t="added" /></span> or a PR's <span class="pill p-bad"><Tg i="fail" t="CI failing" /></span></small>
+      </span>
+      <span class="set-seg" role="radiogroup" aria-label="Tags and pills">
+        {([['both', 'Icons and text'], ['icons', 'Icons'], ['text', 'Text']] as const).map(([v, name]) => (
+          <button role="radio" aria-checked={style === v} class={style === v ? 'on' : ''} onClick={() => setStyle(v)}>
+            {name}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 function Flag({ k, initial, label, hint, demo, children }: { k: string; initial: boolean; label: string; hint?: string; demo?: boolean; children?: preact.ComponentChildren }) {
   const [on, toggle] = useStoredFlag(k, initial);
   return (
@@ -264,6 +286,7 @@ export function Settings() {
       <section>
         <h3>Appearance</h3>
         <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency." />
+        <TagStyle />
         <div class="set-row">
           <span>Theme</span>
           <span class="set-seg" role="radiogroup" aria-label="Theme">

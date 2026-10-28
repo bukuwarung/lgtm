@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
+import { DECISION, Tg } from './tags.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
 import { ago, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
@@ -32,6 +33,11 @@ function App() {
   // Glass (Settings → Appearance), unless macOS asks for less transparency.
   const [glass] = useStoredFlag('glass', true);
   useEffect(() => void document.documentElement.classList.toggle('glass', glass && !matchMedia('(prefers-reduced-transparency: reduce)').matches), [glass]);
+  const [tagStyle] = useStoredValue('tagStyle', 'both'); // Settings → Appearance: tags as text, icons or both
+  useEffect(() => {
+    document.documentElement.classList.toggle('tags-text', tagStyle === 'text');
+    document.documentElement.classList.toggle('tags-icons', tagStyle === 'icons');
+  }, [tagStyle]);
   useEffect(() => void initDesktop((r) => (location.hash = r)), []); // the app: links to the browser, lgtm:// links
   // The PR list's latest items (to pick the next PR to review), and a message to show on the page we move to.
   const queue = useRef<QueueItem[]>([]);
@@ -502,12 +508,12 @@ const avatar = (login: string) => `https://github.com/${encodeURIComponent(login
 type Tab = 'reviewing' | 'mine' | 'team';
 
 // On my PRs: where merging stands (BLOCKED is already told by the group: waiting for review / changes requested).
-const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string]>> = {
-  CLEAN: ['ready to merge', 'p-ok'],
-  HAS_HOOKS: ['ready to merge', 'p-ok'],
-  UNSTABLE: ['mergeable', 'p-ok'], // with the "CI failing" pill beside it
-  BEHIND: ['behind base', ''],
-  DIRTY: ['conflicts', 'p-bad'],
+const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string, string]>> = {
+  CLEAN: ['ready to merge', 'p-ok', 'merge'],
+  HAS_HOOKS: ['ready to merge', 'p-ok', 'merge'],
+  UNSTABLE: ['mergeable', 'p-ok', 'merge'], // with the "CI failing" pill beside it
+  BEHIND: ['behind base', '', 'behind'],
+  DIRTY: ['conflicts', 'p-bad', 'conflict'],
 };
 
 const DAY = 24 * 3600 * 1000;
@@ -546,7 +552,9 @@ function Waiting({ i }: { i: QueueItem }) {
       </span>
       {to.length > 0 &&
         (step === 'idle' ? (
-          <button class="pill pill-btn" title="Remind the requested reviewers on Slack" onClick={(e) => (stop(e), setStep('confirm'))}>🔔 nudge</button>
+          <button class="pill pill-btn" title="Remind the requested reviewers on Slack" onClick={(e) => (stop(e), setStep('confirm'))}>
+            <Tg i="🔔" t="nudge" />
+          </button>
         ) : step === 'confirm' ? (
           <button class="pill pill-btn p-strong" onClick={(e) => (stop(e), void send())}>Send to {to.map((r) => '@' + r).join(', ')}?</button>
         ) : (
@@ -706,41 +714,41 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         </span>
       </span>
       <span class="pills">
-        {unsent(i) > 0 && <span class="pill p-warn">{unsent(i)} unsent comment{unsent(i) > 1 ? 's' : ''}</span>}
-        {(i.thread?.awaiting ?? 0) > 0 && <span class="pill p-reply">💬 {i.thread!.awaiting} awaiting your reply</span>}
+        {unsent(i) > 0 && <span class="pill p-warn"><Tg i="unsent" n={unsent(i)} t={`unsent comment${unsent(i) > 1 ? 's' : ''}`} /></span>}
+        {(i.thread?.awaiting ?? 0) > 0 && <span class="pill p-reply"><Tg i="reply" n={i.thread!.awaiting} t="awaiting your reply" /></span>}
         {kind === REVIEWING && reReview(i) && (
-          <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}>↻ re-review</span>
+          <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
         )}
-        {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad">CI failing</span>}
+        {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad"><Tg i="fail" t="CI failing" /></span>}
         {!i.isDraft && i.noReviewers && (
           <button
             class="pill p-warn"
             title={i.authored ? 'Nobody has been asked to review it yet: pick reviewers' : 'Nobody has been asked to review it yet'}
             onClick={(e) => (e.preventDefault(), e.stopPropagation(), showReviewers(`/${i.repo}/pull/${i.number}`))}
           >
-            no reviewers
+            <Tg i="nobody" t="no reviewers" />
           </button>
         )}
-        {kind !== MINE && i.mergeState === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
-        {i.isDraft && kind !== MINE && <span class="pill">draft</span>}
+        {kind !== MINE && i.mergeState === 'DIRTY' && <span class="pill p-bad"><Tg i="conflict" t="conflicts" /></span>}
+        {i.isDraft && kind !== MINE && <span class="pill"><Tg i="draft" t="draft" /></span>}
         {kind.colorOf && !i.isDraft && (
           <span class={'pill ' + { APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad', REVIEW_REQUIRED: '' }[i.reviewDecision ?? 'REVIEW_REQUIRED']}>
-            {{ APPROVED: 'approved', CHANGES_REQUESTED: 'changes requested', REVIEW_REQUIRED: 'awaiting review' }[i.reviewDecision ?? 'REVIEW_REQUIRED']}
+            <Tg i={DECISION[i.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[i.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
           </span>
         )}
-        {i.assigned && !i.authored && <span class="pill">assigned to you</span>}
-        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok">PR approved</span>}
-        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad">PR changes requested</span>}
-        {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}>{MERGE_PILL[i.mergeState]![0]}</span>}
-        {kind === MINE && i.autoMerge && <span class="pill">auto-merge on</span>}
-        {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer">✳ waiting for you</span>}
-        {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here">✳ updated</span>}
+        {i.assigned && !i.authored && <span class="pill"><Tg i="assigned" t="assigned to you" /></span>}
+        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t="PR approved" /></span>}
+        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t="PR changes requested" /></span>}
+        {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}><Tg i={MERGE_PILL[i.mergeState]![2]} t={MERGE_PILL[i.mergeState]![0]} /></span>}
+        {kind === MINE && i.autoMerge && <span class="pill"><Tg i="auto" t="auto-merge on" /></span>}
+        {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
+        {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>}
         {kind === MINE && MINE.groupOf(i) === 'm-waiting' && <Waiting i={i} />}
         {i.estimate && <span
           class="pill p-time"
           title={`Rough time to review: the description (${i.estimate.words} words), then ${Math.round(i.estimate.code)} lines of code, ${Math.round(i.estimate.tests)} of tests and ${Math.round(i.estimate.docs)} of docs (deleted lines count a third; generated files and lockfiles are skipped)${pace !== 1 ? `, at your ${Math.round(pace * 100)}% pace` : ''}${i.files > 100 ? '. Only the first 100 files are counted' : ''}. See Settings → Time to review`}
         >
-          ⏱ {estimateLabel(i.estimate.minutes / pace)}
+          <Tg i="⏱" n={estimateLabel(i.estimate.minutes / pace)} />
         </span>}
         <span class="pill p-size" title={`${i.files} changed files`}>
           <b class="a">+{i.additions}</b> <b class="d">−{i.deletions}</b> · {i.files} file{i.files === 1 ? '' : 's'}

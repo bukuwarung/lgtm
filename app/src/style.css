@@ -786,3 +786,10 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 /* Test files: a teal flask (and "test" in the diff's file header). */
 .test-mark { flex: none; display: inline-flex; align-items: center; gap: 3px; color: light-dark(#0a7c86, #4fc1c9); font-size: calc(11px * var(--ts)); font-weight: 400; white-space: nowrap; }
 .file-name .test-mark { padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 14%, transparent); }
+/* Tags and pills as text, icons or both (Settings → Appearance; tags.tsx). */
+.ti { display: inline-flex; align-items: center; vertical-align: -2px; margin-right: .3em; }
+.ti:empty { display: none; }
+.tn + .tt { margin-left: .3em; }
+html.tags-text .ti { display: none; }
+html.tags-icons .tt { display: none; }
+html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }

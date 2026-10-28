@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
 import { codeWithoutTests, inTests, moduleName } from './files.ts';
+import { Tg } from './tags.tsx';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -97,15 +98,14 @@ const Icon = ({ d }: { d: string }) => (
 // A test file: a flask (with "test" in the diff's file header).
 export const TestMark = ({ label }: { label?: boolean }) => (
   <span class="test-mark" role="img" title="A test (in a test folder, or named as one)" aria-label="Test">
-    <Icon d={ICON_TEST} />
-    {label && ' test'}
+    {label ? <Tg i="test" t="test" /> : <Icon d={ICON_TEST} />}
   </span>
 );
 
 // Code changed without its tests: an amber struck-out flask, explained on hover.
-export const NoTestMark = ({ title }: { title: string }) => (
+export const NoTestMark = ({ title, label }: { title: string; label?: string }) => (
   <span class="badge no-test" role="img" title={title} aria-label="No test changes">
-    <Icon d={ICON_NO_TEST} />
+    {label ? <Tg i="notest" t={label} /> : <Icon d={ICON_NO_TEST} />}
   </span>
 );
 

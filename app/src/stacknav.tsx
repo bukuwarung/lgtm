@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getStackStatus, mergeLayer, type LayerStatus, type StackLayer } from './github.ts';
 import { canMerge } from './merge.tsx';
+import { Tg } from './tags.tsx';
 
 // Where a layer stands, most pressing first.
-function standing(s: LayerStatus): [string, string] {
-  if (s.state === 'MERGED') return ['merged', 'p-ok'];
-  if (s.state === 'CLOSED') return ['closed', ''];
-  if (s.isDraft) return ['draft', ''];
-  if (s.mergeStateStatus === 'DIRTY') return ['conflicts', 'p-bad'];
-  if (s.reviewDecision === 'CHANGES_REQUESTED') return ['changes requested', 'p-bad'];
-  if (['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus)) return ['can merge', 'p-ok'];
-  if (s.reviewDecision === 'APPROVED') return ['approved', 'p-ok'];
-  if (!s.reviewers.length) return ['no reviewers', 'p-warn'];
-  return ['awaiting review', ''];
+function standing(s: LayerStatus): [string, string, string] {
+  if (s.state === 'MERGED') return ['merged', 'p-ok', 'merge'];
+  if (s.state === 'CLOSED') return ['closed', '', 'fail'];
+  if (s.isDraft) return ['draft', '', 'draft'];
+  if (s.mergeStateStatus === 'DIRTY') return ['conflicts', 'p-bad', 'conflict'];
+  if (s.reviewDecision === 'CHANGES_REQUESTED') return ['changes requested', 'p-bad', 'changes'];
+  if (['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus)) return ['can merge', 'p-ok', 'merge'];
+  if (s.reviewDecision === 'APPROVED') return ['approved', 'p-ok', 'approved'];
+  if (!s.reviewers.length) return ['no reviewers', 'p-warn', 'nobody'];
+  return ['awaiting review', '', 'waiting'];
 }
 const CI: Record<string, [string, string, string]> = {
   SUCCESS: ['✓', 'ck-success', 'Checks passed'],
@@ -66,7 +67,7 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
           )}
           {stack.map((l, i) => {
             const s = status?.get(l.number);
-            const [label, tone] = s ? standing(s) : ['…', ''];
+            const [label, tone, icon] = s ? standing(s) : ['…', '', ''];
             const ci = s?.ci ? CI[s.ci] : null;
             return (
               <a class={l.number === n ? 'stack-row cur' : 'stack-row'} href={`#/${repo}/pull/${l.number}`}>
@@ -84,7 +85,7 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
                     ),
                   )}
                 </span>
-                <span class={`pill ${tone}`}>{label}</span>
+                <span class={`pill ${tone}`}><Tg i={icon} t={label} /></span>
                 {mergeable && l === bottom && (
                   <button class="primary stack-merge" disabled={merging === 'busy'} onClick={(e) => (e.preventDefault(), merging ? merging === 'confirm' && merge() : setMerging('confirm'))}>
                     {merging === 'busy' ? 'Merging…' : merging === 'confirm' ? 'Confirm' : 'Merge'}

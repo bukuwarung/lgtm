@@ -13,6 +13,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
+import { DECISION, Tg } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -176,7 +177,7 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
   const label = (m: string) => (m === '.' ? ': (root)' : moduleName(m));
   const list = [...by].sort(([a], [b]) => label(a).localeCompare(label(b)));
   return (
-    <PillMenu label={<><ModuleIcon /> {by.size === 1 ? label(list[0][0]) : `${by.size} modules`}</>} head="Gradle modules this PR changes:">
+    <PillMenu label={by.size === 1 ? <Tg i={<ModuleIcon />} n={label(list[0][0])} /> : <Tg i={<ModuleIcon />} n={by.size} t="modules" />} head="Gradle modules this PR changes:">
       {list.map(([m, paths]) => (
         <button onClick={() => jumpTo('f-' + paths[0])} title={m === '.' ? 'The root project' : `In ${m}/`}>
           <b>{label(m)}</b> <small>{paths.length} file{paths.length > 1 ? 's' : ''}</small>
@@ -904,15 +905,15 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
         <HoldPlace />
         <main>
           <div class="pills pr-status">
-            {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}>updating…</span>}
-            {pr.draft && <span class="pill">draft</span>}
+            {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}><Tg i="again" t="updating…" /></span>}
+            {pr.draft && <span class="pill"><Tg i="draft" t="draft" /></span>}
             {status && !pr.draft && (
               <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] }>
-                {{ APPROVED: 'approved', CHANGES_REQUESTED: 'changes requested', REVIEW_REQUIRED: 'awaiting review' }[status.reviewDecision ?? 'REVIEW_REQUIRED']}
+                <Tg i={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
               </span>
             )}
             {failingChecks > 0 && (
-              <PillMenu cls="p-bad" label={`${failingChecks} check${failingChecks > 1 ? 's' : ''} failing`} head="CI checks that failed on the latest commit:">
+              <PillMenu cls="p-bad" label={<Tg i="fail" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
                 {checks!.filter((c) => c.state === 'failure').map((c) => (
                   <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary}>
                     <span class="ck ck-failure">✕</span> {c.name}
@@ -921,10 +922,10 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
                 ))}
               </PillMenu>
             )}
-            {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
-            {waitingOnMe > 0 && <span class="pill p-reply">💬 {waitingOnMe} awaiting your reply</span>}
+            {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad"><Tg i="conflict" t="conflicts" /></span>}
+            {waitingOnMe > 0 && <span class="pill p-reply"><Tg i="reply" n={waitingOnMe} t="awaiting your reply" /></span>}
             {noTests.size > 0 && (
-              <PillMenu cls="p-warn" label={`${noTests.size} file${noTests.size > 1 ? 's' : ''} without test changes`} head="Code changed, but no test for it changed in this PR:">
+              <PillMenu cls="p-warn" label={<Tg i="notest" n={noTests.size} t={`file${noTests.size > 1 ? 's' : ''} without test changes`} />} head="Code changed, but no test for it changed in this PR:">
                 {[...noTests].map((p) => (
                   <button onClick={() => jumpTo('f-' + p)} title={p}>
                     <b>{base(p)}</b> <small>{dir(p)}</small>
@@ -1155,7 +1156,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   return (
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref} style={{ containIntrinsicSize: placeholder }}>
       <header class="file-h">
-        <span class={`st s-${file.status}`}>{file.status}</span>
+        <span class={`st s-${file.status}`}><Tg i={file.status} t={file.status} /></span>
         {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
             src/), cut from the left (the nearest folders stay); the full path on hover. */}
         <a
@@ -1188,7 +1189,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
         </span>
         {threads.length > 0 && <span class="badge" title="Review threads">💬 {threads.length}</span>}
-        {ctx.untested.has(file.filename) && <NoTestMark title="No test change: the PR changes this code but no test with its name" />}
+        {ctx.untested.has(file.filename) && <NoTestMark title="No test change: the PR changes this code but no test with its name" label="no test change" />}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
