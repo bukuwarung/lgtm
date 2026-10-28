@@ -4,7 +4,7 @@ import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, getHead, loadPR, updatePR, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  awaitsMe, commitSuggestions, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -293,7 +293,7 @@ function pruneVisits() {
   for (const [k] of keys.map((k) => [k, when(k)] as const).sort((a, b) => a[1] - b[1]).slice(0, keys.length - 100)) localStorage.removeItem(k);
 }
 
-export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: string; n: number; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null }) {
+export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { repo: string; n: number; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
@@ -320,6 +320,8 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   // My open threads, against the code now: unchanged, changed (the lines as they are), or unknown (history rewritten).
   const [sinceComment, setSinceComment] = useState<Map<string, SinceComment>>(new Map());
   const [since, setSince] = useState(false);
+  const [fromSha, setFromSha] = useState<string | null>(null); // a point picked in "Changes since…" (else my last review)
+  const [points, setPoints] = useState<PushPoint[] | null>(null);
   const [sinceData, setSinceData] = useState<{ status: string; files: File[] } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [conversation, setConversation] = useState<ConversationItem[]>([]);
@@ -358,6 +360,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const resumeAt = useRef<Visit['at']>(null);
   const visitKey = `visit:${repo}#${n}`;
   const [mine, setMine] = useState(false); // I opened it or it's assigned to me: show the merge box
+  useEffect(onOpened, [repo, n]);
   const [batch, setBatch] = useState<Suggestion[]>([]);
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
@@ -475,9 +478,11 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
     return () => ro.disconnect();
   }, [data]);
 
+  const sinceBase = fromSha ?? lastReviewed;
+  useEffect(() => void getPushPoints(repo, n).then(setPoints, () => setPoints([])), [repo, n, data?.pr.head.sha]);
   useEffect(() => {
-    if (!since || !lastReviewed || !data || sinceData) return;
-    getCompare(repo, lastReviewed, data.pr.head.sha).then(
+    if (!since || !sinceBase || !data || sinceData) return;
+    getCompare(repo, sinceBase, data.pr.head.sha).then(
       // After a rebase the comparison also carries the base branch's changes; keep only files this PR touches.
       (d) => {
         // GitHub lists at most 300 files per comparison. After a rebase onto lots of base-branch work those can all be
@@ -493,10 +498,12 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
       },
       (e) => {
         setSince(false);
-        setNotice({ ok: false, text: `Couldn't load changes since your last review: ${e.message}` });
+        setNotice({ ok: false, text: `Couldn't load changes since ${fromSha ? 'then' : 'your last review'}: ${e.message}` });
       },
     );
-  }, [since, lastReviewed, data]);
+  }, [since, sinceBase, data]);
+  // Changes since a picked point: the diff narrows to them, as after a review.
+  const showSince = (sha: string | null) => (setFromSha(sha), setSinceData(null), setSince(true));
 
   // My open threads against the code now: a compare from the commit each thread was written on to the head (one per
   // commit, kept), then whether the commented lines changed. Rewritten history (force-push) can't be mapped.
@@ -953,6 +960,20 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
               </PillMenu>
             )}
             <ModulesPill modules={byModule ? modules : undefined} />
+            {points && points.length > 1 && (
+              <PillMenu label={<Tg i="history" t="changes since…" />} head="Show only what changed after:">
+                {lastReviewed && (
+                  <button onClick={() => showSince(null)}>
+                    <b>Your last review</b> <small>{ago(lastReviewAt)}</small>
+                  </button>
+                )}
+                {points.filter((p) => p.sha !== pr.head.sha).map((p) => (
+                  <button onClick={() => showSince(p.sha)} title={p.sha}>
+                    <Octicon name={p.force ? 'repo-push' : 'git-commit'} /> <b>{p.label}</b> <small>{ago(p.at)}</small>
+                  </button>
+                ))}
+              </PillMenu>
+            )}
             {pr.additions != null && (
               <span class="pill p-size">
                 <b class="a">+{pr.additions}</b> <b class="d">−{pr.deletions}</b> · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
@@ -971,25 +992,26 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
             </p>
           )}
           {!!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} />}
-          {lastReviewed && (
+          {(lastReviewed || fromSha) && (
             <div class={since ? 'since on' : 'since'}>
-              <SinceSummary
+              {lastReviewed && !fromSha && <SinceSummary
                 me={me}
                 threads={threads}
                 lastReviewAt={lastReviewAt}
                 newCommits={newCommits}
                 sinceComment={sinceComment}
                 onCommits={() => setSince(true)}
-              />
+              />}
               {since ? (
                 <>
                   <span class="since-state">
-                    Showing only those changes (<code>{lastReviewed.slice(0, 7)}</code> → <code>{pr.head.sha.slice(0, 7)}</code>)
+                    {fromSha ? `Showing only the changes after ${points?.find((p) => p.sha === fromSha)?.label ?? 'that point'} ` : 'Showing only those changes '}
+                    (<code>{sinceBase!.slice(0, 7)}</code> → <code>{pr.head.sha.slice(0, 7)}</code>)
                     {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
                     {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
                     {sinceData && !sinceData.files.length && <b> · none of this PR's files changed (only a rebase)</b>}
                   </span>
-                  <button onClick={() => setSince(false)}>Show all changes</button>
+                  <button onClick={() => (setSince(false), setFromSha(null), setSinceData(null))}>Show all changes</button>
                 </>
               ) : (
                 <button onClick={() => setSince(true)}>Show only those changes</button>

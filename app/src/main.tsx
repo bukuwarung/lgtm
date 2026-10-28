@@ -206,6 +206,7 @@ function App() {
             key={route}
             repo={r.repo}
             n={r.n}
+            onOpened={() => noteOpened(r.repo, r.n)}
             onSubmitted={(event?: ReviewEvent) => {
               if (!event) return setQueueVersion((v) => v + 1); // the merge box changed something: reload now
               // A review: shown in the list at once, reloaded once GitHub's search has caught up with it.
@@ -450,9 +451,10 @@ function ThemeToggle() {
   );
 }
 
-type Group = 'needs' | 'changes' | 'commented' | 'approved';
+type Group = 'needs' | 'mentioned' | 'changes' | 'commented' | 'approved';
 const GROUPS: [Group, string][] = [
   ['needs', 'Needs your review'],
+  ['mentioned', 'Mentioned you'],
   ['changes', 'You requested changes'],
   ['commented', 'You commented'],
   ['approved', 'You approved'],
@@ -463,8 +465,19 @@ const backToMe = (i: QueueItem) => !i.requested && !!i.myState && i.myState !== 
 // verdict is hidden then, since it's usually my own earlier one.
 const reReview = (i: QueueItem) => (i.requested && (!!i.myState || i.reviewedBefore)) || backToMe(i);
 const groupOf = (i: QueueItem): Group =>
-  i.requested || backToMe(i) ? 'needs'
+  !i.reviewing && i.mentioned ? 'mentioned'
+  : i.requested || backToMe(i) ? 'needs'
   : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
+
+// PRs that only @-mention me show until I open them after their latest activity (opening one records when).
+const openedKey = (repo: string, n: number) => own(`opened:${repo}#${n}`);
+export const noteOpened = (repo: string, n: number) => {
+  try {
+    localStorage.setItem(openedKey(repo, n), String(Date.now()));
+  } catch {}
+};
+const mentionNew = (i: QueueItem) => !i.reviewing && !i.authored && !!i.mentioned && Number(localStorage.getItem(openedKey(i.repo, i.number)) ?? 0) < Date.parse(i.updatedAt);
+const inReviewing = (i: QueueItem) => i.reviewing || mentionNew(i);
 
 // A sidebar section: its groups in priority order, which group a PR falls in, and (if not the group's) its colour.
 // people: groups are people (the Team tab), shown with their picture and starting folded.
@@ -642,6 +655,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   const [notifyReplies] = useStoredFlag('notifyReplies', true);
   const [notifyVerdicts] = useStoredFlag('notifyVerdicts', true);
   const [notifyCI] = useStoredFlag('notifyCI', true);
+  const [notifyMentions] = useStoredFlag('notifyMentions', true);
   const seen = useRef<Set<string> | null>(null);
   const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
   // The Claude Code sessions linked to listed PRs, and what each is doing, every 15 seconds.
@@ -678,6 +692,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       for (const i of items) {
         const was = before.current.get(i.id);
         if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI })) tell(n, i);
+        else if (notifyMentions && mentionNew(i)) tell('Mentioned you', i);
       }
     }
     seen.current = new Set(waiting.map((i) => i.id));
@@ -687,6 +702,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
   const shown = items?.filter((i) => i.mine || showDrafts || !i.isDraft || isCurrent(i));
+  const listed = (i: QueueItem) => inReviewing(i) || (!!i.mentioned && !i.reviewing && !i.authored && isCurrent(i)); // the one you're on stays
   // The top PRs waiting on me load ahead, a few at a time, so opening one is instant; only ones that changed since
   // their cached copy, and not while lgtm is in the background.
   useEffect(() => {
@@ -721,6 +737,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {kind === REVIEWING && reReview(i) && (
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
         )}
+        {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad"><Tg i="ci" t="CI failing" /></span>}
         {!i.isDraft && i.noReviewers && (
           <button
@@ -798,7 +815,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       {err && <p class="error">{err}</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', shown.filter((i) => i.reviewing).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData?.items.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', shown.filter(listed).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData?.items.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
               {name} {n != null && <span class="count">{n}</span>}
             </button>
@@ -815,7 +832,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       ) : (
         <>
           {tab === 'mine' && section(MINE, shown.filter((i) => i.mine))}
-          {tab === 'reviewing' && section(REVIEWING, shown.filter((i) => i.reviewing))}
+          {tab === 'reviewing' && section(REVIEWING, shown.filter(listed))}
           {tab === 'team' && (
             <>
               <div class="team-head">

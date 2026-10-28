@@ -80,7 +80,8 @@ export type QueueItem = {
   thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
-  noReviewers: boolean; // nobody asked (people or teams) and no person has reviewed: bots don't count
+  noReviewers: boolean;
+  mentioned?: boolean; // someone @-mentions me in it (shown, when that's all, until I open it after its latest activity) // nobody asked (people or teams) and no person has reviewed: bots don't count
   lastCommitAt: string; // the head commit's time
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
@@ -159,7 +160,8 @@ const QUEUE = `query{viewer{login}
   requested:search(query:"is:open is:pr archived:false review-requested:@me",type:ISSUE,first:100){nodes{...F}}
   reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
-  assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}}
+  assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}
+  mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...F}}}
 fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{__typename login} assignees(first:1){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner} createdAt
@@ -171,8 +173,8 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
   const d = await graphql(QUEUE, {});
   const me = d.viewer.login;
   const ids = (k: string) => new Set<string>(d[k].nodes.map((p: any) => p.id));
-  const [requested, reviewed, authored, assigned] = ['requested', 'reviewed', 'authored', 'assigned'].map(ids);
-  const all = new Map<string, any>(['authored', 'assigned', 'reviewed', 'requested'].flatMap((k) => d[k].nodes.map((p: any) => [p.id, p])));
+  const [requested, reviewed, authored, assigned, mentioned] = ['requested', 'reviewed', 'authored', 'assigned', 'mentioned'].map(ids);
+  const all = new Map<string, any>(['mentioned', 'authored', 'assigned', 'reviewed', 'requested'].flatMap((k) => d[k].nodes.map((p: any) => [p.id, p])));
   return [...all.values()]
     .map((p) => ({
       ...toItem(p),
@@ -189,6 +191,7 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       mine: authored.has(p.id) || (assigned.has(p.id) && !requested.has(p.id) && !reviewed.has(p.id)),
       assigned: assigned.has(p.id),
       authored: authored.has(p.id),
+      mentioned: mentioned.has(p.id),
     }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
@@ -340,6 +343,28 @@ export async function getStatus(repo: string, n: number): Promise<{ reviewDecisi
   const [owner, name] = repo.split('/');
   return (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviewDecision mergeStateStatus}}}`, { owner, name, n }))
     .repository.pullRequest;
+}
+
+// Points in a PR's history to show changes after: each of its commits, and each force-push (from what was there
+// before it), newest first.
+export type PushPoint = { sha: string; label: string; at: string; force?: boolean };
+export async function getPushPoints(repo: string, n: number): Promise<PushPoint[]> {
+  const [owner, name] = repo.split('/');
+  const d = await graphql(
+    `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
+      timelineItems(last:100,itemTypes:[PULL_REQUEST_COMMIT,HEAD_REF_FORCE_PUSHED_EVENT]){nodes{__typename
+        ... on PullRequestCommit{commit{oid messageHeadline committedDate}}
+        ... on HeadRefForcePushedEvent{createdAt beforeCommit{oid}}}}}}}`,
+    { owner, name, n },
+  );
+  return d.repository.pullRequest.timelineItems.nodes
+    .map((x: any): PushPoint | null =>
+      x.commit ? { sha: x.commit.oid, label: x.commit.messageHeadline, at: x.commit.committedDate }
+      : x.beforeCommit ? { sha: x.beforeCommit.oid, label: 'Before the force-push', at: x.createdAt, force: true }
+      : null,
+    )
+    .filter((x: PushPoint | null): x is PushPoint => !!x)
+    .reverse();
 }
 
 // The PR's head commit now, cheaply: to notice a push while it's open.

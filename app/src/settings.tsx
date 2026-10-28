@@ -232,6 +232,7 @@ export function Settings() {
           <Flag k="notifyReplies" initial={true} label="New replies waiting for you" />
           <Flag k="notifyVerdicts" initial={true} label="Your PR approved, or changes requested" />
           <Flag k="notifyCI" initial={true} label="Your PR's checks passed or failed" />
+          <Flag k="notifyMentions" initial={true} label="Someone mentions you in a PR" />
         </fieldset>
         <label class="set-row">
           <span>
