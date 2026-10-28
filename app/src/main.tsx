@@ -7,7 +7,7 @@ import { showReviewers } from './shortcuts.tsx';
 import { DECISION, Tg } from './tags.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, since, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -500,7 +500,7 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     groupOf: (i) => i.author,
     colorOf: MINE.groupOf,
     note: (m) =>
-      [load[m] && `${load[m]} review${load[m] > 1 ? 's' : ''} requested`, waiting[m] && `a PR waiting ${ago(waiting[m]).replace(/ ago$/, '')}`].filter(Boolean).join(' · '),
+      [load[m] && `${load[m]} review${load[m] > 1 ? 's' : ''} requested`, waiting[m] && `a PR waiting ${since(waiting[m])}`].filter(Boolean).join(' · '),
     people: true,
   };
 };
@@ -525,10 +525,12 @@ const clauded = (i: QueueItem) => {
 const idleDays = (i: QueueItem) => (Date.now() - Date.parse(i.updatedAt)) / DAY;
 // On my PRs waiting for review: how long, and (after a day) a Slack nudge to the requested reviewers. Two clicks:
 // the first says who gets it, the second sends.
-function Waiting({ i }: { i: QueueItem }) {
+// How long a ready PR has waited for review (asked for, opened or marked ready), amber after 2 days and red after 2
+// weeks; on my own, a nudge to its reviewers.
+function Waiting({ i, nudge }: { i: QueueItem; nudge: boolean }) {
   const [step, setStep] = useState<'idle' | 'confirm' | 'sending' | string>('idle');
   const days = Math.floor((Date.now() - Date.parse(i.waitingSince)) / DAY);
-  if (!(days >= 1)) return null;
+  if (!(days >= 1) || i.isDraft || i.reviewDecision === 'APPROVED') return null;
   const bots = readBots();
   const to = i.pendingReviewers.filter((r) => !bots.has(r));
   const stop = (e: Event) => (e.preventDefault(), e.stopPropagation());
@@ -547,10 +549,10 @@ function Waiting({ i }: { i: QueueItem }) {
   };
   return (
     <>
-      <span class={days >= 2 ? 'pill p-warn' : 'pill'} title={`Waiting for review since ${new Date(i.waitingSince).toLocaleString()}`}>
-        waiting {days} day{days > 1 ? 's' : ''}
+      <span class={days >= 14 ? 'pill p-bad' : days >= 2 ? 'pill p-warn' : 'pill'} title={`Waiting for review since ${new Date(i.waitingSince).toLocaleString()}`}>
+        <Tg i="aging" t={`waiting ${since(i.waitingSince)}`} />
       </span>
-      {to.length > 0 &&
+      {nudge && to.length > 0 &&
         (step === 'idle' ? (
           <button class="pill pill-btn" title="Remind the requested reviewers on Slack" onClick={(e) => (stop(e), setStep('confirm'))}>
             <Tg i="🔔" t="nudge" />
@@ -743,7 +745,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {kind === MINE && i.autoMerge && <span class="pill"><Tg i="auto" t="auto-merge on" /></span>}
         {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>}
-        {kind === MINE && MINE.groupOf(i) === 'm-waiting' && <Waiting i={i} />}
+        {(kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} /> : null}
         {i.estimate && <span
           class="pill p-time"
           title={`Rough time to review: the description (${i.estimate.words} words), then ${Math.round(i.estimate.code)} lines of code, ${Math.round(i.estimate.tests)} of tests and ${Math.round(i.estimate.docs)} of docs (deleted lines count a third; generated files and lockfiles are skipped)${pace !== 1 ? `, at your ${Math.round(pace * 100)}% pace` : ''}${i.files > 100 ? '. Only the first 100 files are counted' : ''}. See Settings → Time to review`}

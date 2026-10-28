@@ -606,6 +606,13 @@ export async function getClaudeSessions(): Promise<ClaudeSession[]> {
 
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 const UNITS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]] as const;
+// How long since, as a duration: "3 days", "2 years".
+export function since(when: string | number) {
+  const s = (Date.now() - new Date(when).getTime()) / 1000;
+  const [unit, size] = UNITS.find(([, n]) => s >= n) ?? ['minute', 60];
+  const n = Math.max(1, Math.floor(s / size));
+  return `${n} ${unit}${n > 1 ? 's' : ''}`;
+}
 export function ago(when: string | number) {
   const s = (new Date(when).getTime() - Date.now()) / 1000;
   const u = UNITS.find(([, n]) => Math.abs(s) >= n);
