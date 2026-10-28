@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
 import { codeWithoutTests, moduleName } from './files.ts';
 import type { ComponentChildren } from 'preact';
@@ -9,6 +9,21 @@ export type File = PRFile & { generated: boolean; noDiff: boolean };
 
 // Scroll to an element by id, opening any collapsed <details> around it and flashing it. `near` is scrolled to
 // first when the target isn't in the DOM yet (file bodies render lazily), then we wait for it to appear.
+// The PR list's "no reviewers" pill: open the PR at its index's Reviewers (once the index is there).
+let wantReviewers = false;
+export function showReviewers(route: string) {
+  wantReviewers = true;
+  if (location.hash === '#' + route && document.getElementById('ix-reviewers')) return reviewersShown();
+  location.hash = route;
+}
+export function reviewersShown() {
+  if (!wantReviewers) return false;
+  wantReviewers = false;
+  dispatchEvent(new Event('lgtm:show-index')); // if it's hidden
+  jumpTo('ix-reviewers');
+  return true;
+}
+
 export function jumpTo(id: string, near?: string) {
   if (near && !document.getElementById(id)) document.getElementById(near)?.scrollIntoView();
   let tries = 0;
@@ -44,9 +59,9 @@ const base = (path: string) => path.split('/').pop()!;
 const VERDICT: Record<string, string> = { APPROVED: '✓ approved', CHANGES_REQUESTED: '✕ changes requested', COMMENTED: 'reviewed', DISMISSED: 'dismissed' };
 const CHECK_ICON: Record<Check['state'], string> = { failure: '✕', pending: '●', success: '✓', neutral: '–' };
 
-function Section({ title, count, extra, children }: { title: string; count: number; extra?: ComponentChildren; children: ComponentChildren }) {
+function Section({ id, title, count, extra, children }: { id?: string; title: string; count: number; extra?: ComponentChildren; children: ComponentChildren }) {
   return (
-    <details open class="ix-sec">
+    <details open class="ix-sec" id={id}>
       <summary>
         {title} <span class="count">{count}</span>
         {extra}
@@ -242,6 +257,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
       />
     );
   };
+  useEffect(() => void reviewersShown(), []);
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
   // Who's reviewing: each person's latest verdict, "waiting" for ones asked who haven't answered (again).
   const reviewers = new Map<string, { meta: string; tone: string; id?: string }>();
@@ -263,7 +279,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         )}
       </Section>
 
-      <Section title="Reviewers" count={reviewers.size}>
+      <Section id="ix-reviewers" title="Reviewers" count={reviewers.size}>
         {[...reviewers].map(([who, r]) => (
           <div class="ix-check">
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>

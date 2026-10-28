@@ -309,6 +309,11 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   const [resumeOn] = useStoredFlag('resumePosition', true);
   const [dimMoved] = useStoredFlag('dimMoved', true);
   const [showIndex, toggleIndex] = useStoredFlag('showIndex', true);
+  useEffect(() => {
+    const show = () => !showIndex && toggleIndex();
+    addEventListener('lgtm:show-index', show);
+    return () => removeEventListener('lgtm:show-index', show);
+  }, [showIndex]);
   const [checks, setChecks] = useState<Check[] | null>(null);
   const [error, setError] = useState('');
   // Who gets a Slack DM after submitting (author + assignees, minus me and bots); null = Slack not set up.

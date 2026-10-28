@@ -3,6 +3,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
+import { showReviewers } from './shortcuts.tsx';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
 import { ago, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
@@ -694,7 +695,15 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}>↻ re-review</span>
         )}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad">CI failing</span>}
-        {!i.isDraft && i.noReviewers && <span class="pill p-warn" title="Nobody has been asked to review it yet">no reviewers</span>}
+        {!i.isDraft && i.noReviewers && (
+          <button
+            class="pill p-warn"
+            title={i.authored ? 'Nobody has been asked to review it yet: pick reviewers' : 'Nobody has been asked to review it yet'}
+            onClick={(e) => (e.preventDefault(), e.stopPropagation(), showReviewers(`/${i.repo}/pull/${i.number}`))}
+          >
+            no reviewers
+          </button>
+        )}
         {kind !== MINE && i.mergeState === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
         {i.isDraft && kind !== MINE && <span class="pill">draft</span>}
         {kind.colorOf && !i.isDraft && (
