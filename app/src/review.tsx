@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, requestReview, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, requestReview, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, markBots, renderGfm, reply, resolveThread, setViewed, submitReview,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -548,6 +548,7 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
   useEffect(() => {
     const main = document.querySelector('main');
     void renderMermaid(main); // conversation, threads, drafts
+    signRepoImages(main); // their images from a (private) repo
     // Code blocks in comments, in the language of the file they're on (data-lang); see highlightBlocks.
     main?.querySelectorAll<HTMLElement>('.md[data-lang]').forEach((el) => highlightBlocks(el, el.dataset.lang || undefined));
   });

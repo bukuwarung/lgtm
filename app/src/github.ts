@@ -356,6 +356,22 @@ export async function getDownloadUrl(repo: string, path: string, ref: string): P
   return (await (await ok(res)).json()).download_url ?? null;
 }
 
+// Images a description or comment shows from a repo (github.com/<repo>/blob/<ref>/<path>?raw=true, or …/raw/…): from a
+// private repo they only load signed in to github.com in the same browser, which lgtm isn't (it has the gh token), so
+// each is swapped for the API's signed link to that file. Once per image a session.
+const signedImages = new Map<string, Promise<string | null>>();
+const REPO_IMAGE = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:blob|raw)\/([^/]+)\/([^?#]+)/;
+export function signRepoImages(root: ParentNode | null) {
+  for (const img of root?.querySelectorAll<HTMLImageElement>('img[src^="https://github.com/"]:not([data-signed])') ?? []) {
+    const m = img.src.match(REPO_IMAGE);
+    if (!m) continue;
+    img.dataset.signed = '';
+    let url = signedImages.get(img.src);
+    if (!url) signedImages.set(img.src, (url = getDownloadUrl(m[1], decodeURIComponent(m[3]), m[2]).catch(() => null)));
+    void url.then((u) => u && (img.src = u));
+  }
+}
+
 
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
