@@ -111,7 +111,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ck-sum { font-size: calc(11px * var(--ts)); font-weight: 400; }
 .ix-check { display: flex; align-items: center; }
 .ix-check .ix-item { flex: 1; min-width: 0; }
-.ix-log-btn { flex: none; margin-right: 8px; padding: 0 6px; font-size: calc(11px * var(--ts)); }
+.ix-icon-btn { flex: none; display: inline-grid; place-items: center; width: 22px; height: 20px; margin-right: 4px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); }
+.ix-check .ix-icon-btn:last-child { margin-right: 10px; }
+.ix-icon-btn:hover:not(:disabled), .ix-icon-btn.on { color: var(--fg); background: var(--soft); }
+.ix-icon-btn.busy svg { animation: spin .8s linear infinite; }
+.ix-icon-btn.done { color: var(--pill-ok); }
+.ix-icon-btn.failed { color: var(--pill-bad); }
 .ix-log { margin: 2px 8px 8px 14px; padding: 6px 8px; max-height: 320px; overflow: auto; background: var(--soft); border-radius: 4px; font: calc(11px * var(--ts))/1.4 var(--mono); white-space: pre; }
 /* Jump targets land below the sticky bars, and flash briefly. */
 .file { scroll-margin-top: calc(var(--nav) + var(--bar)); }
@@ -705,4 +710,4 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .pill-pop > :is(a, button):hover { background: var(--soft); }
 .pill-pop small { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: calc(11px * var(--ts)); }
 .pill-pop b { font-weight: 600; }
-.ix-rerun { padding: 0 6px; font-size: calc(11px * var(--ts)); font-weight: 400; }
+.ix-rerun { margin: 0 0 0 2px; color: var(--pill-bad); }

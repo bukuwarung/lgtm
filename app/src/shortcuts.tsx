@@ -67,6 +67,16 @@ function Entry({ label, meta, sub, dim, onClick }: { label: string; meta?: strin
   );
 }
 
+// Small line icons for the checks' buttons, drawn in the text's colour.
+const ICON_RERUN = 'M13 8a5 5 0 1 1-1.6-3.7M13.2 2.2v3h-3M6.8 5.8v4.4L10.2 8z'; // a circle arrow with ▶: run again
+const ICON_LOG = 'M3 4h10M3 8h10M3 12h6';
+const ICON_CHECK = 'M3.5 8.5l3 3 6-7';
+const Icon = ({ d }: { d: string }) => (
+  <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+    <path d={d} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+  </svg>
+);
+
 // Every failed GitHub Actions job run again, a run at a time (Jenkins and other CI aren't GitHub's to rerun).
 function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[]; onRefresh: () => void }) {
   const [state, setState] = useState<'' | 'asking' | 'queued' | string>('');
@@ -82,12 +92,13 @@ function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[
   };
   return (
     <button
-      class="ix-rerun"
+      class={`ix-icon-btn ix-rerun${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`}
       disabled={state === 'asking' || state === 'queued'}
-      title={state.startsWith('couldn') ? state : `Run the ${checks.length} failed GitHub Actions job${checks.length > 1 ? 's' : ''} again`}
+      title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run the ${checks.length} failed GitHub Actions job${checks.length > 1 ? 's' : ''} again`}
+      aria-label="Run the failed jobs again"
       onClick={go}
     >
-      {state === 'asking' ? '…' : state === 'queued' ? 'queued ✓' : 'rerun failed'}
+      {state === 'queued' ? <Icon d={ICON_CHECK} /> : <Icon d={ICON_RERUN} />}
     </button>
   );
 }
@@ -119,11 +130,17 @@ function CheckEntry({ c, repo, onRefresh }: { c: Check; repo: string; onRefresh:
         </a>
         {c.state === 'failure' && c.jobId && (
           <>
-            <button class="ix-log-btn" title={rerun.startsWith('couldn') ? rerun : 'Run this job again (and the jobs that wait on it)'} disabled={rerun === 'asking' || rerun === 'queued'} onClick={again}>
-              {rerun === 'asking' ? '…' : rerun === 'queued' ? 'queued ✓' : rerun ? 'retry' : 'rerun'}
+            <button
+              class={`ix-icon-btn${rerun === 'asking' ? ' busy' : rerun === 'queued' ? ' done' : rerun ? ' failed' : ''}`}
+              title={rerun === 'queued' ? 'Queued to run again' : rerun.startsWith('couldn') ? `${rerun}; click to try again` : 'Run this job again (and the jobs that wait on it)'}
+              aria-label="Run this job again"
+              disabled={rerun === 'asking' || rerun === 'queued'}
+              onClick={again}
+            >
+              {rerun === 'queued' ? <Icon d={ICON_CHECK} /> : <Icon d={ICON_RERUN} />}
             </button>
-            <button class="ix-log-btn" title="Show the end of the job log" onClick={toggle}>
-              {open ? 'hide log' : 'log'}
+            <button class={open ? 'ix-icon-btn on' : 'ix-icon-btn'} title={open ? 'Hide the job log' : 'Show the end of the job log'} aria-label="Job log" aria-pressed={open} onClick={toggle}>
+              <Icon d={ICON_LOG} />
             </button>
           </>
         )}
