@@ -1,4 +1,4 @@
-import { render, type VNode } from 'preact';
+import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { addedLines, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
@@ -150,14 +150,49 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
 const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const dir = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf('/')));
 
-// How many Gradle modules the PR touches, named in full on hover.
+// How many Gradle modules the PR touches; a click lists them, each with its files, and goes to its first.
 function ModulesPill({ modules }: { modules?: Map<string, string> }) {
-  const names = [...new Set(modules?.values() ?? [])].filter(Boolean).map((m) => (m === '.' ? ': (root)' : moduleName(m))).sort();
-  if (!names.length) return null;
+  const by = new Map<string, string[]>();
+  for (const [p, m] of modules ?? []) if (m) by.set(m, [...(by.get(m) ?? []), p]);
+  if (!by.size) return null;
+  const label = (m: string) => (m === '.' ? ': (root)' : moduleName(m));
+  const list = [...by].sort(([a], [b]) => label(a).localeCompare(label(b)));
   return (
-    <span class="pill" title={`Touches ${names.length === 1 ? 'one module' : `${names.length} modules`}:\n${names.join('\n')}`}>
-      <ModuleIcon /> {names.length === 1 ? names[0] : `${names.length} modules`}
-    </span>
+    <PillMenu label={<><ModuleIcon /> {by.size === 1 ? label(list[0][0]) : `${by.size} modules`}</>} head="Gradle modules this PR changes:">
+      {list.map(([m, paths]) => (
+        <button onClick={() => jumpTo('f-' + paths[0])} title={m === '.' ? 'The root project' : `In ${m}/`}>
+          <b>{label(m)}</b> <small>{paths.length} file{paths.length > 1 ? 's' : ''}</small>
+        </button>
+      ))}
+    </PillMenu>
+  );
+}
+
+// A pill that says what it counts: a click opens the list behind it (what each item is, in a line on top), each one a
+// link or a jump; a click elsewhere, or Esc, closes it.
+function PillMenu({ cls = '', label, head, children }: { cls?: string; label: ComponentChildren; head: string; children: ComponentChildren }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const away = (e: Event) => ref.current?.open && !ref.current.contains(e.target as Node) && (ref.current.open = false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && ref.current?.open && (ref.current.open = false);
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', esc);
+    return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
+  }, []);
+  return (
+    <details
+      class="pill-menu"
+      ref={ref}
+      onToggle={() => ref.current?.open && document.querySelectorAll<HTMLDetailsElement>('.pill-menu[open]').forEach((d) => d !== ref.current && (d.open = false))}
+    >
+      <summary class={`pill ${cls}`}>
+        {label} <span class="pill-caret">▾</span>
+      </summary>
+      <div class="pill-pop" onClick={(e) => (e.target as Element).closest('a, button') && ref.current && (ref.current.open = false)}>
+        <p class="pill-head">{head}</p>
+        {children}
+      </div>
+    </details>
   );
 }
 
@@ -787,13 +822,26 @@ export function Review({ repo, n, onSubmitted, onReviewed, flash }: { repo: stri
                 {{ APPROVED: 'approved', CHANGES_REQUESTED: 'changes requested', REVIEW_REQUIRED: 'awaiting review' }[status.reviewDecision ?? 'REVIEW_REQUIRED']}
               </span>
             )}
-            {failingChecks > 0 && <span class="pill p-bad">{failingChecks} check{failingChecks > 1 ? 's' : ''} failing</span>}
+            {failingChecks > 0 && (
+              <PillMenu cls="p-bad" label={`${failingChecks} check${failingChecks > 1 ? 's' : ''} failing`} head="CI checks that failed on the latest commit:">
+                {checks!.filter((c) => c.state === 'failure').map((c) => (
+                  <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary}>
+                    <span class="ck ck-failure">✕</span> {c.name}
+                    {c.summary && <small>{c.summary}</small>}
+                  </a>
+                ))}
+              </PillMenu>
+            )}
             {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad">conflicts</span>}
             {waitingOnMe > 0 && <span class="pill p-reply">💬 {waitingOnMe} awaiting your reply</span>}
             {noTests.size > 0 && (
-              <span class="pill p-warn" title={`Changed without a matching test change:\n${[...noTests].join('\n')}`}>
-                {noTests.size} file{noTests.size > 1 ? 's' : ''} without test changes
-              </span>
+              <PillMenu cls="p-warn" label={`${noTests.size} file${noTests.size > 1 ? 's' : ''} without test changes`} head="Code changed, but no test for it changed in this PR:">
+                {[...noTests].map((p) => (
+                  <button onClick={() => jumpTo('f-' + p)} title={p}>
+                    <b>{base(p)}</b> <small>{dir(p)}</small>
+                  </button>
+                ))}
+              </PillMenu>
             )}
             <ModulesPill modules={byModule ? modules : undefined} />
             {pr.additions != null && (

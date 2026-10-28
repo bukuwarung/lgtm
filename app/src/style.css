@@ -691,3 +691,15 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .skel-fh .sk { --soft: var(--bg); }
 @keyframes sk-sweep { from { background-position: 100% 0; } to { background-position: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+/* A status pill that opens the list behind it (PillMenu). */
+.pill-menu { position: relative; display: inline-block; }
+.pill-menu > summary { list-style: none; cursor: pointer; }
+.pill-menu > summary::-webkit-details-marker { display: none; }
+.pill-menu > summary:hover, .pill-menu[open] > summary { filter: brightness(1.15); border-color: currentColor; }
+.pill-caret { font-size: .85em; opacity: .7; }
+.pill-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; display: grid; min-width: 340px; max-width: min(520px, 90vw); max-height: 360px; overflow: auto; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
+.pill-head { margin: 2px 8px 6px; font-size: calc(12px * var(--ts)); color: var(--muted); }
+.pill-pop > :is(a, button) { display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; text-decoration: none; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill-pop > :is(a, button):hover { background: var(--soft); }
+.pill-pop small { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: calc(11px * var(--ts)); }
+.pill-pop b { font-weight: 600; }
