@@ -538,7 +538,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   useLayoutEffect(() => void scrollTo(0, 0), [repo, n]);
 
   // Remember this visit when leaving the PR (or the page): file versions seen, and the reading position.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!data) return;
     const where = (): Visit['at'] => {
       const top = 46 + 44 + 4; // below the top bar (--nav) and the review bar (--bar)
@@ -553,15 +553,12 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     };
     addEventListener('scroll', onScroll, { passive: true });
     addEventListener('pagehide', save);
-    // Pick up where I left off. Files above render lazily and shift things, so settle once more.
+    // Pick up where I left off, before the page first paints (so it doesn't show its top first). Files above that
+    // render later and shift things are HoldPlace's to absorb.
     const resume = resumeOn && resumeAt.current && document.getElementById('f-' + resumeAt.current.path);
     if (resume) {
-      const go = () => {
-        resume.scrollIntoView();
-        scrollBy(0, resumeAt.current!.y);
-      };
-      go();
-      setTimeout(go, 400);
+      resume.scrollIntoView();
+      scrollBy(0, resumeAt.current!.y);
       resumeAt.current = null; // once: the fresh copy replacing a cached one mustn't move you back
     }
     return () => {
@@ -1931,8 +1928,10 @@ function HoldPlace() {
     const main = document.querySelector('main');
     if (!main) return;
     let refs: { el: Element; top: number }[] = [];
+    let notedY = scrollY; // where the page was when refs were taken
     const note = () => {
       refs = [];
+      notedY = scrollY;
       const x = main.getBoundingClientRect().left + 80;
       const top = barsHeight();
       for (let y = top + 8; y < innerHeight - 20; y += 12) {
@@ -1947,6 +1946,9 @@ function HoldPlace() {
       if (next) refs.push({ el: next, top: next.getBoundingClientRect().top });
     };
     const ro = new ResizeObserver(() => {
+      // Scrolled since the last look (a jump to a thread, resuming where I left off) before its scroll event came:
+      // the refs are stale, so take new ones rather than "correct" against the old place.
+      if (Math.abs(scrollY - notedY) > 1) return note();
       const ref = refs.find((r) => r.el.isConnected);
       if (ref) {
         const moved = ref.el.getBoundingClientRect().top - ref.top;
