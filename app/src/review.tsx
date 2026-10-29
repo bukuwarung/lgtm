@@ -1225,7 +1225,15 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
   const hideDeleted = collapseDeleted && file.status === 'removed' && !showDeleted;
   const [ref, near] = useNear<HTMLElement>();
-  const hunks = useMemo(() => (ctx.ignoreWs ? ignoreWhitespace : (h: Hunk[]) => h)(parsePatch(file.patch ?? '')), [file.patch, ctx.ignoreWs]);
+  // With whitespace ignored, a hunk left with no change at all (nor a comment on it) folds into the unchanged lines
+  // around it. ponytail: those lines' old numbers (shown only with "old line numbers") can be off by the blank lines
+  // the folded hunk added; split the gap there if that matters.
+  const hunks = useMemo(() => {
+    const all = parsePatch(file.patch ?? '');
+    if (!ctx.ignoreWs) return all;
+    const noted = new Set([...threads.map((x) => x.line), ...drafts.map((d) => d.line)].filter((n): n is number => n != null));
+    return ignoreWhitespace(all).filter((h) => h.lines.some((l) => l.kind !== ' ' || (l.new != null && noted.has(l.new))));
+  }, [file.patch, ctx.ignoreWs, threads.length, drafts.length]);
   const path = file.filename;
   const mod = ctx.modules?.get(path) ?? '';
   const folder = mod ? dir(below(path, mod === '.' ? '' : mod)) : dir(path);
