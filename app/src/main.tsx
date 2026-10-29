@@ -536,6 +536,15 @@ const avatar = (login: string) => `https://github.com/${encodeURIComponent(login
 type Tab = 'reviewing' | 'mine' | 'team';
 
 // On my PRs: where merging stands (BLOCKED is already told by the group: waiting for review / changes requested).
+// Where a PR stands in its repo's merge queue (GitHub's merge train), in words for the pill's tooltip.
+const QUEUE_STATE: Record<NonNullable<QueueItem['queue']>['state'], string> = {
+  QUEUED: 'In the merge queue, waiting its turn',
+  AWAITING_CHECKS: 'In the merge queue: its checks are running',
+  MERGEABLE: 'In the merge queue: checks passed, merging soon',
+  UNMERGEABLE: "In the merge queue, but it can't merge (failed checks or conflicts); it will be removed",
+  LOCKED: 'In the merge queue: being merged',
+};
+
 const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string, string]>> = {
   CLEAN: ['ready to merge', 'p-ok', 'merge'],
   HAS_HOOKS: ['ready to merge', 'p-ok', 'merge'],
@@ -774,7 +783,13 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t="PR approved" /></span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t="PR changes requested" /></span>}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}><Tg i={MERGE_PILL[i.mergeState]![2]} t={MERGE_PILL[i.mergeState]![0]} /></span>}
-        {kind === MINE && i.autoMerge && <span class="pill"><Tg i="auto" t="auto-merge on" /></span>}
+        {i.queue ? (
+          <span class={i.queue.state === 'UNMERGEABLE' ? 'pill p-bad' : 'pill p-ok'} title={QUEUE_STATE[i.queue.state]}>
+            {i.queue.state === 'UNMERGEABLE' ? <Tg i="queue" t="queue: can't merge" /> : <Tg i="queue" n={`#${i.queue.position}`} t="in merge queue" />}
+          </span>
+        ) : (
+          i.autoMerge && <span class="pill" title="It merges by itself once its checks and reviews pass"><Tg i="auto" t="auto-merge on" /></span>
+        )}
         {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>}
         {(kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} /> : null}

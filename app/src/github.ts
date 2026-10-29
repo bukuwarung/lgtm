@@ -70,6 +70,7 @@ export type QueueItem = {
   deletions: number;
   files: number;
   autoMerge: boolean;
+  queue: { position: number; state: 'QUEUED' | 'AWAITING_CHECKS' | 'MERGEABLE' | 'UNMERGEABLE' | 'LOCKED' } | null; // its place in the repo's merge queue
   requested: boolean; // my review is currently requested (including re-requests)
   myState: ReviewState | null; // my latest submitted review
   reviewedBefore: boolean; // I've reviewed it (a re-request drops my review from latestReviews, but not from this)
@@ -162,7 +163,7 @@ const QUEUE = `query{viewer{login}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}
   mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...F}}}
-fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} author{__typename login} assignees(first:1){nodes{login}}
+fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} mergeQueueEntry{position state} author{__typename login} assignees(first:1){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
@@ -217,6 +218,7 @@ const toItem = (p: any): QueueItem => ({
       deletions: p.deletions,
       files: p.changedFiles,
       autoMerge: !!p.autoMergeRequest,
+      queue: p.mergeQueueEntry ?? null,
       waitingSince: [p.createdAt, p.timelineItems?.nodes[0]?.createdAt].filter(Boolean).sort().at(-1),
       pendingReviewers: (p.reviewRequests?.nodes ?? []).map((r: any) => r.requestedReviewer?.login).filter(Boolean),
       noReviewers: !p.reviewRequests?.nodes.length && !p.latestReviews.nodes.some((r: any) => r.author?.__typename === 'User' && r.author.login !== p.author?.login),
