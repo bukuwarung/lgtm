@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getChecks, getEmails, getMergeState, markReady, mergePR, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
@@ -837,6 +837,9 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t="PR approved" /></span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t="PR changes requested" /></span>}
         {kind === MINE && !i.isDraft && i.mergeState === 'BEHIND' && <UpdateBase i={i} />}
+        {kind === MINE && !i.isDraft && i.reviewDecision === 'CHANGES_REQUESTED' && i.changesBy.length > 0 && (
+          <QuickPill icon="changes" tone="p-bad" idle="changes requested" action={`Ask ${i.changesBy.map((l) => '@' + l).join(', ')} again`} busy="asking…" done="asked again" title="Once you've made the changes: ask whoever requested them to review again" run={() => Promise.all(i.changesBy.map((l) => requestReview(i.repo, i.number, l)))} />
+        )}
         {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && i.mergeState === 'BLOCKED' && i.canAutoMerge && !i.autoMerge && !i.queue && (
           <QuickPill icon="auto" tone="" idle={i.ci === 'PENDING' || i.ci === 'EXPECTED' ? 'checks running' : 'blocked'} action="Enable auto-merge" busy="enabling…" done="auto-merge on" title="Approved, but can't merge yet: Enable auto-merge merges it once it can (the repo's usual method)" run={() => autoMerge(i)} />
         )}
@@ -846,7 +849,12 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
             {i.queue.state === 'UNMERGEABLE' ? <Tg i="queue" t="queue: can't merge" /> : <Tg i="queue" n={`#${i.queue.position}`} t="in merge queue" />}
           </span>
         ) : (
-          i.autoMerge && <span class="pill p-ok" title="It merges by itself once its checks and reviews pass"><Tg i="auto" t="auto-merge on" /></span>
+          i.autoMerge &&
+          (kind === MINE ? (
+            <QuickPill icon="auto" tone="p-ok" idle="auto-merge on" action="Disable auto-merge" busy="disabling…" done="auto-merge off" title="It merges by itself once its checks and reviews pass" run={() => disableAutoMerge(i.id)} />
+          ) : (
+            <span class="pill p-ok" title="It merges by itself once its checks and reviews pass"><Tg i="auto" t="auto-merge on" /></span>
+          ))
         )}
         {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>}

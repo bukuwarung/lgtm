@@ -70,7 +70,8 @@ export type QueueItem = {
   deletions: number;
   files: number;
   autoMerge: boolean;
-  canAutoMerge: boolean; // the repo allows auto-merge and I may turn it on
+  canAutoMerge: boolean;
+  changesBy: string[]; // who asked for changes and hasn't been asked to look again // the repo allows auto-merge and I may turn it on
   queue: { position: number; state: 'QUEUED' | 'AWAITING_CHECKS' | 'MERGEABLE' | 'UNMERGEABLE' | 'LOCKED' } | null; // its place in the repo's merge queue
   requested: boolean; // my review is currently requested (including re-requests)
   myState: ReviewState | null; // my latest submitted review
@@ -223,6 +224,9 @@ const toItem = (p: any): QueueItem => ({
       queue: p.mergeQueueEntry ?? null,
       waitingSince: [p.createdAt, p.timelineItems?.nodes[0]?.createdAt].filter(Boolean).sort().at(-1),
       pendingReviewers: (p.reviewRequests?.nodes ?? []).map((r: any) => r.requestedReviewer?.login).filter(Boolean),
+      changesBy: (p.latestOpinionatedReviews?.nodes ?? [])
+        .filter((r: any) => r.state === 'CHANGES_REQUESTED' && r.author && !p.reviewRequests?.nodes.some((q: any) => q.requestedReviewer?.login === r.author.login))
+        .map((r: any) => r.author.login),
       noReviewers: !p.reviewRequests?.nodes.length && !p.latestReviews.nodes.some((r: any) => r.author?.__typename === 'User' && r.author.login !== p.author?.login),
       requested: false,
       myState: null,
