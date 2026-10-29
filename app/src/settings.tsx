@@ -320,7 +320,7 @@ export function Settings() {
         <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo>
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
         </Flag>
-        <Flag k="resumePosition" initial={true} label="Reopen a PR where you left off" />
+        <Flag k="resumePosition" initial={false} label="Reopen a PR where you left off" hint="Off: every PR opens at its top." />
         <Flag k="flagUntested" initial={true} label="Point out code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)." />
       </section>
 

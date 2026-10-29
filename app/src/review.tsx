@@ -336,7 +336,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
   const [foldNoDiff] = useStoredFlag('hideNoDiff', true);
   const [startSince] = useStoredFlag('sinceFirst', true);
-  const [resumeOn] = useStoredFlag('resumePosition', true);
+  const [resumeOn] = useStoredFlag('resumePosition', false);
   const [dimMoved] = useStoredFlag('dimMoved', true);
   const [showIndex, toggleIndex] = useStoredFlag('showIndex', true);
   useEffect(() => {
@@ -587,6 +587,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
   useEffect(() => {
     const main = document.querySelector('main');
+    reserveImages(main); // before their addresses are swapped for signed ones
     void renderMermaid(main); // conversation, threads, drafts
     signRepoImages(main); // their images from a (private) repo
     // Code blocks in comments, in the language of the file they're on (data-lang); see highlightBlocks.
@@ -1214,6 +1215,61 @@ const Avatar = ({ login, src }: { login: string; src?: string }) => (
   <img class="c-avatar" src={src ?? `https://github.com/${encodeURIComponent(login)}.png?size=40`} alt="" loading="lazy" />
 );
 
+// Images' sizes once loaded (by their address as the page first had it; the 400 most recent), set on them next time
+// before they load, so their space is kept and nothing below them jumps when they arrive.
+let imgSizes: Record<string, [number, number]> | null = null;
+let imgSave = 0;
+function reserveImages(root: ParentNode | null) {
+  try {
+    imgSizes ??= JSON.parse(localStorage.getItem('imageSizes') ?? '{}');
+  } catch {
+    imgSizes = {};
+  }
+  for (const img of root?.querySelectorAll<HTMLImageElement>('img:not([data-sized])') ?? []) {
+    img.dataset.sized = '';
+    const key = img.getAttribute('src');
+    if (!key || key.startsWith('data:')) continue;
+    const seen = imgSizes![key];
+    if (seen && !img.hasAttribute('width') && !img.hasAttribute('height')) [img.width, img.height] = seen;
+    const keep = () => {
+      if (!img.naturalWidth || seen?.[0] === img.naturalWidth) return;
+      imgSizes![key] = [img.naturalWidth, img.naturalHeight];
+      clearTimeout(imgSave);
+      imgSave = window.setTimeout(() => {
+        try {
+          localStorage.setItem('imageSizes', JSON.stringify(Object.fromEntries(Object.entries(imgSizes!).slice(-400))));
+        } catch {}
+      }, 1000);
+    };
+    if (img.complete) keep();
+    else img.addEventListener('load', keep, { once: true });
+  }
+}
+
+// Files' heights as last drawn, by version and how they were shown (the 600 most recent), to stand in for them before
+// they're drawn again.
+let heights: Record<string, number> | null = null;
+let heightsSave = 0;
+const drawnHeight = (k: string) => {
+  try {
+    heights ??= JSON.parse(localStorage.getItem('fileHeights') ?? '{}');
+  } catch {
+    heights = {};
+  }
+  return heights![k];
+};
+const keepHeight = (k: string, h: number) => {
+  if (drawnHeight(k) === h || h < 30) return;
+  delete heights![k];
+  heights![k] = h;
+  clearTimeout(heightsSave);
+  heightsSave = window.setTimeout(() => {
+    try {
+      localStorage.setItem('fileHeights', JSON.stringify(Object.fromEntries(Object.entries(heights!).slice(-600))));
+    } catch {}
+  }, 1000);
+};
+
 // Render a file's body only once it scrolls near the viewport.
 function useNear<T extends Element>() {
   const ref = useRef<T>(null);
@@ -1234,7 +1290,8 @@ function useNear<T extends Element>() {
   return [ref, near] as const;
 }
 
-type BodyProps = { file: File; hunks: Hunk[]; ctx: Ctx; threads: Thread[]; drafts: Draft[] };
+// stand: the file's expected height (CSS) for a view that draws only once it has loaded, to hold its place till then.
+type BodyProps = { file: File; hunks: Hunk[]; ctx: Ctx; threads: Thread[]; drafts: Draft[]; stand?: string };
 
 type SectionProps = {
   file: File;
@@ -1278,7 +1335,26 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   // Until it's first drawn, a file stands in at about its height (style.css content-visibility): its rows at a code
   // line each, plus the header; so drawing it barely moves the page (WebKit, the app's, doesn't hold your place).
   const rows = collapsed || hideDeleted ? 1 : hunks.reduce((n, h) => n + h.lines.length + 1, 0);
-  const placeholder = `auto calc(${rows} * 20px * var(--cs) + 48px)`;
+  // Better still, its height when last drawn (this version, shown this way), so reopening a PR barely moves at all.
+  const shape = `${path}@${file.sha}:${rich ? 'r' : 'd'}${ctx.ignoreWs ? 'w' : ''}${collapsed || hideDeleted ? 'c' : ''}`;
+  const seen = drawnHeight(shape);
+  const placeholder = seen ? `auto ${seen}px` : `auto calc(${rows} * 20px * var(--cs) + 48px)`;
+  body.stand = seen ? `${Math.max(0, seen - 48)}px` : `calc(${rows} * 20px * var(--cs))`;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !near) return;
+    const check = () => {
+      const r = el.getBoundingClientRect();
+      // Drawn (on screen, not stood in for) and complete (not waiting for its file).
+      if (r.bottom > 0 && r.top < innerHeight && !el.querySelector('p.note.pad[style]')) keepHeight(shape, Math.round(r.height));
+    };
+    // When it changes size, and when it comes on screen (it may have finished drawing while away).
+    const ro = new ResizeObserver(check);
+    const io = new IntersectionObserver((es) => es[0].isIntersecting && check());
+    ro.observe(el);
+    io.observe(el);
+    return () => (ro.disconnect(), io.disconnect());
+  }, [near, shape]);
 
   return (
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref} style={{ containIntrinsicSize: placeholder }}>
@@ -1772,7 +1848,8 @@ function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'j
   );
 }
 
-function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
+const rawSeen = new Map<string, string>();
+function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle); // Settings → Markdown files
   const path = file.filename;
@@ -1782,9 +1859,12 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     tidyDoc(root.current, linkTo);
     signRelativeImages(root.current, ctx.headRepo, ctx.pr.head.sha, dir(path)); // its images, by their path in the repo
   });
-  const [src, setSrc] = useState<string | null>();
+  // The whole file at the PR's head (kept for the session, so a second look draws at once). It's drawn only once it's
+  // here: drawing the diff's lines first and the rest later would make the page jump by thousands of pixels.
+  const rawKey = `${ctx.headRepo}@${ctx.pr.head.sha}:${path}`;
+  const [src, setSrc] = useState<string | null | undefined>(() => rawSeen.get(rawKey));
   useEffect(() => {
-    getRaw(ctx.headRepo, path, ctx.pr.head.sha).then(setSrc, () => setSrc(null));
+    if (src === undefined) getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((t) => (t != null && rawSeen.set(rawKey, t), setSrc(t)), () => setSrc(null));
   }, []);
   // Only diff lines take line comments, so sections outside the diff fold away (expandable, read-only).
   const inDiff = useMemo(() => new Set(hunks.flatMap((h) => h.lines.flatMap((l) => l.new ?? []))), [hunks]);
@@ -1792,7 +1872,7 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const [openRuns, setOpenRuns] = useState<Set<number>>(new Set());
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
-  if (src === undefined) return <p class="note pad">Loading…</p>;
+  if (src === undefined) return <p class="note pad" style={{ minHeight: stand }}>Loading…</p>;
   if (src === null) return <p class="note pad">Couldn't load this file. Switch to Source.</p>;
 
   const t = ctx.target?.path === path ? ctx.target : null;
@@ -1997,7 +2077,8 @@ const stripWeight = (f: File) => {
 // however far they moved, before it's drawn.
 function HoldPlace() {
   useEffect(() => {
-    if (CSS.supports('overflow-anchor', 'auto') && getComputedStyle(document.documentElement).overflowAnchor !== 'none') return;
+    const native = CSS.supports('overflow-anchor', 'auto') && getComputedStyle(document.documentElement).overflowAnchor !== 'none';
+    if (native) return;
     const main = document.querySelector('main');
     if (!main) return;
     // The reference's place on the page (not in the window), so scrolling between a look and a resize doesn't count
@@ -2014,11 +2095,15 @@ function HoldPlace() {
         // Pinned headers stay put, so they can't say where you are.
         if (el && main.contains(el) && !el.closest('.file-h, tr.hunk, .pill-pop')) {
           refs.push({ el, at: el.getBoundingClientRect().top + scrollY });
+          // If that gets re-drawn (gone), the file it's in stands for it: it stays, and only what's above in it can
+          // move it. (The next file down would also move by this one's change.)
+          const own = el.closest('main > section.file');
+          if (own) refs.push({ el: own, at: own.getBoundingClientRect().top + scrollY });
           break;
         }
       }
       const next = [...main.querySelectorAll(':scope > section.file')].find((f) => f.getBoundingClientRect().top >= top);
-      if (next) refs.push({ el: next, at: next.getBoundingClientRect().top + scrollY });
+      if (next && !refs.some((r) => r.el === next)) refs.push({ el: next, at: next.getBoundingClientRect().top + scrollY });
     };
     const ro = new ResizeObserver(() => {
       // Jumped more than a screen since the last look (to a thread, resuming where I left off) before its scroll event
@@ -2090,6 +2175,7 @@ function ScrollMarks({ files }: { files: File[] }) {
   filesRef.current = files;
   const rail = useRef<HTMLDivElement>(null);
   const grab = useRef<number | null>(null); // while dragging: where in the box it was taken, as a strip fraction
+  const [glide, setGlide] = useState(false); // the box moved by the page changing size (not a scroll): glide there
   useEffect(() => {
     let t = 0;
     let frame = 0;
@@ -2100,7 +2186,7 @@ function ScrollMarks({ files }: { files: File[] }) {
     };
     const onScroll = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(placeView);
+      frame = requestAnimationFrame(() => (setGlide(false), placeView()));
     };
     const measure = () => {
       placeView();
@@ -2114,7 +2200,8 @@ function ScrollMarks({ files }: { files: File[] }) {
       clearTimeout(t);
       t = window.setTimeout(measure, 300);
     };
-    const ro = new ResizeObserver(soon);
+    // The page changed size (files drawn, images in): the box moves now, gliding; the marks follow when it settles.
+    const ro = new ResizeObserver(() => (cancelAnimationFrame(frame), (frame = requestAnimationFrame(() => (setGlide(true), placeView()))), soon()));
     ro.observe(document.body);
     const mo = new MutationObserver(soon);
     mo.observe(document.querySelector('main') ?? document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['open', 'class'] });
@@ -2155,7 +2242,7 @@ function ScrollMarks({ files }: { files: File[] }) {
       onPointerUp={() => (grab.current = null)}
       onPointerCancel={() => (grab.current = null)}
     >
-      <div class="m-view" style={{ top: `${view[0] * 100}%`, height: `${Math.max(1, (view[1] - view[0]) * 100)}%` }} />
+      <div class={glide ? 'm-view glide' : 'm-view'} style={{ top: `${view[0] * 100}%`, height: `${Math.max(1, (view[1] - view[0]) * 100)}%` }} />
       {marks.map((m) => (
         <button class={m.cls} title={m.title} style={{ top: `${m.at * 100}%` }} tabIndex={-1} onClick={() => m.el.scrollIntoView({ block: 'center' })} />
       ))}
