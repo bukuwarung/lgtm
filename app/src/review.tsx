@@ -1541,15 +1541,16 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const [renderDocs] = useStoredFlag('renderDocs', true);
   const [renderEdited] = useStoredFlag('renderEditedDocs', true); // edited ones too, changed parts marked
   const [renderLine] = useStoredFlag('renderLineComments', true); // runs of // comments too
+  const [renderSingle] = useStoredFlag('renderSingleComments', false); // and lone comment lines
   const docs = useMemo(
     () =>
       !renderDocs
         ? []
         : [
             ...(docSyntax(path) ? [...docBlocks(hunks), ...(renderEdited ? editedDocBlocks(hunks) : [])] : []),
-            ...(renderLine && lineCommentSyntax(path) ? lineCommentBlocks(hunks, renderEdited, lineCommentSyntax(path)!) : []),
+            ...(renderLine && lineCommentSyntax(path) ? lineCommentBlocks(hunks, renderEdited, lineCommentSyntax(path)!, renderSingle ? 1 : 2) : []),
           ],
-    [hunks, renderDocs, renderEdited, renderLine],
+    [hunks, renderDocs, renderEdited, renderLine, renderSingle],
   );
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
@@ -1679,7 +1680,7 @@ function useWordMarks(hunks: Hunk[]) {
 function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'java' | 'jsdoc'; onSource: () => void }) {
   const { paras, tags } = useMemo(() => docParts(doc.lines ?? doc.text.split('\n').map((text) => ({ text, changed: false })), syntax, doc.style), [doc.text]);
   return (
-    <div class="doc-render" style={{ marginLeft: `${doc.indent}ch`, width: `calc(100% - ${doc.indent + 3}ch)` }}>
+    <div class={doc.style === 'line' && doc.start === doc.end ? 'doc-render doc-one' : 'doc-render'} style={{ marginLeft: `${doc.indent}ch`, width: `calc(100% - ${doc.indent + 3}ch)` }}>
       <button class="link doc-source" title="Show the comment's source lines" onClick={onSource}>&lt;/&gt; source</button>
       {paras.map((p) => (
         <div class={p.changed ? 'md doc-chg' : 'md'} dangerouslySetInnerHTML={{ __html: md.render(p.md) }} />

@@ -42,7 +42,8 @@ export const lineCommentSyntax = (path: string): LineMarker | null =>
 const LINES: Record<LineMarker, RegExp> = { '//': /^(\s*)\/\/(?!\/\/)/, '#': /^(\s*)#(?![#!])/ };
 const STRIP: Record<LineMarker, RegExp> = { '//': /^\s*\/\/\/? ?/, '#': /^\s*# ?/ };
 const CODEISH = /[;{}]\s*$|^\s*(val|var|fun|if|else|for|while|return|import|package|class|private|public|const|let|def)\b|^\s*[\w.]+\(.*\)\s*$|^\s*[\w.]+\s*=[^=]|^\s*[\w.-]+:\s+\S|^\s*-[a-z]+\b/;
-export function lineCommentBlocks(hunks: Hunk[], edited: boolean, marker: LineMarker = '//'): DocBlock[] {
+// `minLines`: 1 renders a lone comment line too (Settings: Single comment lines).
+export function lineCommentBlocks(hunks: Hunk[], edited: boolean, marker: LineMarker = '//', minLines = 2): DocBlock[] {
   const LINE = LINES[marker];
   const out: DocBlock[] = [];
   hunks.forEach((h, hi) => {
@@ -56,7 +57,7 @@ export function lineCommentBlocks(hunks: Hunk[], edited: boolean, marker: LineMa
       const shown = same ? run : run.filter((l) => l.kind !== '-');
       const body = shown.map((l) => l.text.replace(STRIP[marker], ''));
       const code = body.filter((t) => t.trim() && CODEISH.test(t)).length;
-      if (shown.length >= 2 && (same || edited) && code * 2 < body.filter((t) => t.trim()).length) {
+      if (shown.length >= minLines && (same || edited) && code * 2 < body.filter((t) => t.trim()).length) {
         let removed = false;
         const lines: DocLine[] = [];
         for (const l of run) {

@@ -865,3 +865,6 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .ficon img { width: 14px; height: 14px; }
 .ficon .fdot { position: absolute; right: -2px; bottom: -1px; width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--bg); }
 .file-name .file-icon { flex: none; align-self: center; width: 16px; height: 16px; }
+/* A lone comment line rendered (Settings: Single comment lines): lighter than a doc block, no box. */
+.doc-render.doc-one { margin: 0; padding: 0 8px; background: none; border-left-width: 2px; color: var(--muted); }
+.doc-render.doc-one .doc-source { margin-bottom: 0; }

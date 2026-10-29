@@ -309,7 +309,9 @@ export function Settings() {
         </Flag>
         <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode." demo>
           <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source." />
-          <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines (or # lines, in Python, shell, YAML, ProGuard and the like) read as prose. Commented-out code stays source." />
+          <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines (or # lines, in Python, shell, YAML, ProGuard and the like) read as prose. Commented-out code stays source.">
+            <Flag k="renderSingleComments" initial={false} label="Single comment lines too" hint="A lone comment line, lighter. Comments after code on the same line stay as they are." />
+          </Flag>
         </Flag>
         <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Source is a click away per file. Their look: Markdown files, below." demo>
           <Flag k="strikeRemoved" initial={false} label="Strike through removed text" hint="Removed passages show in a red box, as their source." />

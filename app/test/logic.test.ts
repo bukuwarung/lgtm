@@ -393,6 +393,8 @@ test('lineCommentBlocks: // runs as prose, not single lines or commented-out cod
   ].join('\n'));
   const blocks = lineCommentBlocks(h, true);
   assert.deepEqual(blocks.map((b) => [b.start, b.end, b.kind, b.indent]), [[2, 4, '+', 4]]);
+  // With single lines on: the lone comment too, still not the commented-out code.
+  assert.deepEqual(lineCommentBlocks(h, true, '//', 1).map((b) => [b.start, b.end]), [[0, 0], [2, 4]]);
   assert.deepEqual(docParts(blocks[0].lines!, 'kdoc', 'line').paras.map((p) => p.md), ['Retries the charge with backoff.', 'Network errors only: a declined card\nis final.']);
 });
 
