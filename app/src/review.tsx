@@ -1381,7 +1381,8 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   // One line number, the new one (a removed line shows its old one, faint), unless Settings asks for both.
   const [oldNums] = useStoredFlag('oldLineNumbers', false);
   const path = file.filename;
-  const hl = useMemo(() => highlightHunks(hunks, path), [hunks]);
+  const [rainbowOn] = useStoredFlag('rainbowBrackets', false); // highlightCode reads it (main.tsx sets it)
+  const hl = useMemo(() => highlightHunks(hunks, path), [hunks, rainbowOn]);
   // "Show more lines": unchanged stretches come from the head version of the file, fetched on first use.
   const gapList = useMemo(() => (file.status === 'added' || file.status === 'removed' ? [] : gaps(hunks)), [hunks]);
   const [head, setHead] = useState<string[] | null>(null);

@@ -801,3 +801,11 @@ html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
 .icon-btn.failed { color: var(--delfg); }
 .edit-desc { display: grid; gap: 8px; margin-top: 8px; }
 .edit-desc > input { width: 100%; font: inherit; font-weight: 600; }
+/* Rainbow brackets (Settings → Diff): three colours by nesting depth, as in IntelliJ. */
+.rb0 { color: light-dark(#b08800, #e5c07b); }
+.rb1 { color: light-dark(#a626a4, #c678dd); }
+.rb2 { color: light-dark(#0184bc, #61afef); }
+/* A narrow file header: the name area clips instead of running over the counts and buttons, the module chip giving
+   way first. */
+.file-name { overflow: hidden; }
+.file-name .file-mod { flex-shrink: 1; min-width: 0; overflow: hidden; }

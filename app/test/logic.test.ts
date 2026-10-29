@@ -5,7 +5,7 @@ import { applySuggestions, awaitsMe, queueNews, withAnswered, markBots, repoPath
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
-import { highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
+import { highlightCode, highlightHunks, rainbow, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
 import { isMarkdown, md, renderChunks } from '../src/markdown.ts';
 import { findStacks } from '../src/stacks.ts';
@@ -529,4 +529,10 @@ test('inTests: test files and test folders', () => {
   for (const p of ['app/src/test/java/a/FooTest.kt', 'app/src/androidTest/a/Foo.kt', 'app/src/test/resources/x.json', 'web/__tests__/a.ts', 'web/a.test.ts', 'tests/test_a.py', 'app/test/logic.test.ts', 'e2e/login.spec.ts'])
     assert.ok(inTests(p), p);
   for (const p of ['app/src/main/java/a/Foo.kt', 'src/contest/a.ts', 'docs/testing.md', 'src/latest.ts']) assert.ok(!inTests(p), p);
+});
+
+test('rainbow: brackets coloured by depth, not inside strings or comments', () => {
+  assert.equal(rainbow('f(a[b])'), 'f<span class="rb0">(</span>a<span class="rb1">[</span>b<span class="rb1">]</span><span class="rb0">)</span>');
+  assert.equal(rainbow('x(<span class="hljs-string">"(a"</span>)'), 'x<span class="rb0">(</span><span class="hljs-string">"(a"</span><span class="rb0">)</span>');
+  assert.equal(rainbow(') &lt;('), '<span class="rb2">)</span> &lt;<span class="rb2">(</span>'); // a hunk can start inside brackets
 });

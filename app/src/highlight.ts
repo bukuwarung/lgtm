@@ -42,7 +42,27 @@ export function languageFor(path: string): string | undefined {
   return [base.split('.').pop()!, base].find((n) => hljs.getLanguage(n));
 }
 
-export const highlightCode = (code: string, language: string) => hljs.highlight(code, { language, ignoreIllegals: true }).value;
+// Rainbow brackets (Settings → Code): ( [ { and their partners coloured by how deep they nest, three colours round,
+// leaving strings and comments alone. A diff hunk starts at depth 0, as its start is all lgtm sees.
+let rainbowOn = false;
+export const setRainbow = (on: boolean) => void (rainbowOn = on);
+const QUOTED = /hljs-(string|comment|regexp|char|quote)/;
+export function rainbow(html: string): string {
+  let depth = 0;
+  const quoted: boolean[] = [];
+  const color = (d: number) => `rb${((d % 3) + 3) % 3}`;
+  return html.replace(/<span class="([^"]*)">|<\/span>|<[^>]*>|&[^;]*;|[^<&]+/g, (m, cls) => {
+    if (cls != null) return quoted.push(QUOTED.test(cls) || quoted.at(-1) === true), m;
+    if (m === '</span>') return quoted.pop(), m;
+    if (m[0] === '<' || m[0] === '&' || quoted.at(-1)) return m;
+    return m.replace(/[([{}\])]/g, (b) => ('([{'.includes(b) ? `<span class="${color(depth++)}">${b}</span>` : `<span class="${color(--depth)}">${b}</span>`));
+  });
+}
+
+export const highlightCode = (code: string, language: string) => {
+  const html = hljs.highlight(code, { language, ignoreIllegals: true }).value;
+  return rainbowOn ? rainbow(html) : html;
+};
 
 // The PR's main code language: the most common among its files, markdown and plain text aside. Unmarked code blocks
 // in markdown files and in comments not on a code file are read as this.

@@ -5,6 +5,7 @@ import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeam
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
+import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
 import { ago, since, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
@@ -33,6 +34,8 @@ function App() {
   // Glass (Settings → Appearance), unless macOS asks for less transparency.
   const [glass] = useStoredFlag('glass', true);
   useEffect(() => void document.documentElement.classList.toggle('glass', glass && !matchMedia('(prefers-reduced-transparency: reduce)').matches), [glass]);
+  const [rainbowOn] = useStoredFlag('rainbowBrackets', false); // Settings → Diff
+  setRainbow(rainbowOn); // before the page below highlights anything
   const [tagStyle] = useStoredValue('tagStyle', 'both'); // Settings → Appearance: tags as text, icons or both
   useEffect(() => {
     document.documentElement.classList.toggle('tags-text', tagStyle === 'text');
