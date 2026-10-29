@@ -558,3 +558,11 @@ test('markText: a range split by tags is tagged first, middle and last', () => {
     '<i><mark class="m wd-s">a</mark></i><mark class="m wd-m"> </mark><b><mark class="m wd-m">b</mark></b><mark class="m wd-e"></mark>',
   );
 });
+
+test('ignoreWhitespace: blank lines added or removed on their own count as whitespace', () => {
+  const [h] = parsePatch(['@@ -1,3 +1,4 @@', ' a', '+', ' b', '-', ' c'].join('\n'));
+  const lines = ignoreWhitespace([h])[0].lines;
+  assert.ok(lines.every((l) => l.kind === ' '), JSON.stringify(lines));
+  assert.deepEqual(lines.map((l) => [l.old ?? null, l.new ?? null]), [[1, 1], [null, 2], [2, 3], [3, null], [4, 4]]);
+  assert.deepEqual(gaps(ignoreWhitespace([h])).at(-1), gaps([h]).at(-1)); // the file's rest lines up as before
+});

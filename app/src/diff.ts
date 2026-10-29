@@ -74,7 +74,7 @@ export function gaps(hunks: Hunk[]): Gap[] {
     const first = news.length ? news[0] : h.newStart + 1;
     if (first - 1 >= next) out.push({ before: i, from: next, to: first - 1, offset });
     next = (news.length ? news[news.length - 1] : h.newStart) + 1;
-    offset += h.lines.filter((l) => l.kind !== '+').length - news.length;
+    offset += h.lines.filter((l) => l.old != null).length - news.length;
   });
   out.push({ before: hunks.length, from: next, to: null, offset });
   return out;
@@ -83,8 +83,9 @@ export function gaps(hunks: Hunk[]): Gap[] {
 const squash = (s: string) => s.replace(/\s+/g, '');
 
 // "Ignore whitespace": inside each run of removed+added lines, lines equal but for whitespace become one unchanged
-// line (an LCS over the whitespace-free text, so a re-indented block inside a new `if` still lines up). Line numbers
-// are kept, so comments still anchor.
+// line (an LCS over the whitespace-free text, so a re-indented block inside a new `if` still lines up). Blank lines
+// left over count as whitespace too and show unchanged (an added one with its new number, a removed one its old).
+// Line numbers are kept, so comments still anchor.
 export function ignoreWhitespace(hunks: Hunk[]): Hunk[] {
   return hunks.map((h) => {
     const out: Line[] = [];
@@ -96,7 +97,11 @@ export function ignoreWhitespace(hunks: Hunk[]): Hunk[] {
       for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
       let i = 0, j = 0;
       const pendD: Line[] = [], pendA: Line[] = [];
-      const emit = () => out.push(...pendD.splice(0), ...pendA.splice(0));
+      const emit = () =>
+        out.push(
+          ...pendD.splice(0).map((l): Line => (squash(l.text) === '' ? { kind: ' ', text: l.text, old: l.old } : l)),
+          ...pendA.splice(0).map((l): Line => (squash(l.text) === '' ? { kind: ' ', text: l.text, new: l.new } : l)),
+        );
       while (i < a.length || j < b.length) {
         if (i < a.length && j < b.length && a[i] === b[j]) {
           emit();
