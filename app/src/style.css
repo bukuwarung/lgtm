@@ -846,3 +846,13 @@ html.ln-bar .diff tr.d .code::before { color: var(--delfg); }
 .ln-sample.ln-bar i { background: none; } .ln-sample.ln-bar i.a { box-shadow: inset 3px 0 var(--addfg); } .ln-sample.ln-bar i.d { box-shadow: inset 3px 0 var(--delfg); }
 /* Bar style: where removed lines meet the added ones replacing them, a line between (no colours to tell them apart). */
 html.ln-bar .diff :is(tr.d + tr.a, tr.a + tr.d) > td { border-top: 1px dashed color-mix(in srgb, var(--muted) 85%, transparent); }
+/* The same for rendered markdown and doc comments: changed blocks and removed ones. Bar's bar sits in the block's
+   left gutter (margin and padding give back its width, so text stays put). */
+html.ln-subtle .chunk [data-chg]:not(:has([data-chg])) { background: color-mix(in srgb, var(--add) 45%, transparent); box-shadow: -6px 0 0 color-mix(in srgb, var(--add) 45%, transparent), 6px 0 0 color-mix(in srgb, var(--add) 45%, transparent); }
+html.ln-subtle :is(.removed) { background: color-mix(in srgb, var(--del) 45%, transparent); }
+html.ln-subtle .doc-chg { background: color-mix(in srgb, var(--add) 45%, transparent); box-shadow: -6px 0 0 color-mix(in srgb, var(--add) 45%, transparent), 6px 0 0 color-mix(in srgb, var(--add) 45%, transparent); }
+html.ln-bar .chunk [data-chg]:not(:has([data-chg])):not(tr) { background: none; box-shadow: none; border-left: 3px solid var(--addfg); margin-left: -9px; padding-left: 6px; }
+html.ln-bar .chunk tr[data-chg]:not(:has([data-chg])) { background: none; box-shadow: none; }
+html.ln-bar .chunk tr[data-chg]:not(:has([data-chg])) > :first-child { box-shadow: inset 3px 0 var(--addfg); }
+html.ln-bar .removed { background: none; }
+html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: underline 2px var(--addfg); text-underline-offset: 3px; }
