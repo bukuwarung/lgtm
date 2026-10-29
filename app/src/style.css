@@ -288,7 +288,8 @@ html.strike-removed .removed pre { text-decoration: line-through; }
 .thread[open] > summary::before { content: "▾"; }
 .thread[open] > summary { position: absolute; left: 0; top: 0; width: 28px; height: 28px; font-size: 0; } /* just the toggle */
 .thread[open] > summary + .comment { padding-top: 0; border-top: none; }
-.comment { padding-top: 6px; border-top: 1px solid var(--border); }
+.comment { padding: 6px 0 10px; border-top: 1px solid var(--border); }
+.c-avatar { width: 18px; height: 18px; border-radius: 50%; vertical-align: -4px; }
 .comment .md > :last-child { margin-bottom: 0; }
 time { color: var(--muted); font-size: calc(12px * var(--ts)); }
 

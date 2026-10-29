@@ -10,7 +10,7 @@ export type PR = {
   body_html?: string; // GitHub-rendered and sanitized (full+json media type)
   html_url: string;
   node_id: string;
-  user: { login: string; type: string };
+  user: { login: string; type: string; avatar_url?: string };
   assignees: { login: string; type: string }[];
   requested_reviewers?: { login: string; type?: string }[];
   requested_teams?: { slug: string }[];
@@ -32,7 +32,7 @@ export type PRFile = {
   blob_url: string;
 };
 // bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
-export type Comment = { databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number } | null; originalCommit?: { oid: string } | null };
+export type Comment = { databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number; avatarUrl?: string } | null; originalCommit?: { oid: string } | null };
 export type Thread = {
   id: string;
   path: string;
@@ -85,7 +85,7 @@ export type QueueItem = {
   lastCommitAt: string; // the head commit's time
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
-export type ConversationItem = { id: string; author: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
+export type ConversationItem = { id: string; author: string; avatar?: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
 
 // --- auth ---
 
@@ -273,10 +273,10 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
     paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`, FULL),
   ]);
   return [
-    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' })),
+    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', avatar: c.user?.avatar_url, html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' })),
     ...reviews
       .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
-      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot', commit: r.commit_id })),
+      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', avatar: r.user?.avatar_url, html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot', commit: r.commit_id })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 }
 
@@ -498,7 +498,7 @@ export function signRelativeImages(root: ParentNode | null, repo: string, ref: s
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
     nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve
-      comments(first:100){nodes{databaseId url body bodyHTML bodyText createdAt author{__typename login ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
+      comments(first:100){nodes{databaseId url body bodyHTML bodyText createdAt author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');

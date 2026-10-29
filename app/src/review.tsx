@@ -1176,6 +1176,11 @@ function whitespaceOnly(f: File): boolean {
   return wsOnlySeen.get(f)!;
 }
 
+// A comment author's picture beside their name (GitHub's own URL for it when the data has one; bots' differ).
+const Avatar = ({ login, src }: { login: string; src?: string }) => (
+  <img class="c-avatar" src={src ?? `https://github.com/${encodeURIComponent(login)}.png?size=40`} alt="" loading="lazy" />
+);
+
 // Render a file's body only once it scrolls near the viewport.
 function useNear<T extends Element>() {
   const ref = useRef<T>(null);
@@ -2156,7 +2161,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
-          <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
+          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
           <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
           <div class="md" data-lang={ctx.langFor(t.path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
           <SuggestionActions t={t} c={c} ctx={ctx} />
@@ -2563,7 +2568,7 @@ function Conversation({ pr, items, lang, repo, me, mentions }: { pr: PR; items: 
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="comment" id="pr-description">
-        <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
+        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
         {me === pr.user.login && !editing && (
           <button class="icon-btn" title="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />
@@ -2582,7 +2587,7 @@ function Conversation({ pr, items, lang, repo, me, mentions }: { pr: PR; items: 
       {items.map((c) => {
         const head = (
           <>
-            <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
+            <Avatar login={c.author} src={c.avatar} /> <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
             {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
           </>
