@@ -809,3 +809,5 @@ html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
    way first. */
 .file-name { overflow: hidden; }
 .file-name .file-mod { flex-shrink: 1; min-width: 0; overflow: hidden; }
+.ticket-wait { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 12px; color: var(--muted); font-size: calc(13px * var(--ts)); }
+.ticket-wait .sk-line { width: 40%; }

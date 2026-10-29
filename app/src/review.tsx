@@ -533,6 +533,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     return () => void (stop = true);
   }, [data?.pr.head.sha, threads, me]);
 
+  // A PR opens at its top (the window keeps the last PR's scroll otherwise), unless it resumes where I left off.
+  useLayoutEffect(() => void scrollTo(0, 0), [repo, n]);
+
   // Remember this visit when leaving the PR (or the page): file versions seen, and the reading position.
   useEffect(() => {
     if (!data) return;
@@ -2283,13 +2286,31 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
 }
 
 // The Jira ticket the PR names, so the review can be held against its intent without leaving the page.
+// Tickets as last loaded, so a PR shows its ticket at once (no jump when Jira answers); refreshed each time. The 40
+// most recent are kept.
+const jiraSeen = (): Record<string, JiraIssue> => {
+  try {
+    return JSON.parse(localStorage.getItem('jiraSeen') ?? '{}');
+  } catch {
+    return {};
+  }
+};
+const keepJira = (issue: JiraIssue) => {
+  try {
+    const all = jiraSeen();
+    delete all[issue.key];
+    localStorage.setItem('jiraSeen', JSON.stringify(Object.fromEntries([...Object.entries(all), [issue.key, issue]].slice(-40))));
+  } catch {}
+};
+
 function Ticket({ id, lang }: { id: string; lang?: string }) {
-  const [issue, setIssue] = useState<JiraIssue | null>(null);
+  const [issue, setIssue] = useState<JiraIssue | null>(() => jiraSeen()[id] ?? null);
   const [err, setErr] = useState('');
   const [open, toggle] = useStoredFlag('ticketOpen', true);
-  useEffect(() => void fetchJira(id).then(setIssue, (e) => setErr(e.message)), [id]);
-  if (err) return <p class="note ticket-err">Jira {id}: {err}</p>;
-  if (!issue) return null;
+  useEffect(() => void fetchJira(id).then((i) => (setIssue(i), keepJira(i)), (e) => setErr(e.message)), [id]);
+  if (err && !issue) return <p class="note ticket-err">Jira {id}: {err}</p>;
+  // The first time: a placeholder its summary's height while Jira answers.
+  if (!issue) return <div class="ticket ticket-wait"><span class="sk sk-line" /> {id}</div>;
   const html = md.render(adfToMarkdown(issue.description));
   return (
     <details class="ticket" open={open} onToggle={(e) => e.currentTarget.open !== open && toggle()}>
