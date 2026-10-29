@@ -858,3 +858,8 @@ html.ln-bar .chunk tr[data-chg]:not(:has([data-chg])) { background: none; box-sh
 html.ln-bar .chunk tr[data-chg]:not(:has([data-chg])) > :first-child { box-shadow: inset 3px 0 var(--addfg); }
 html.ln-bar .removed { background: none; }
 html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: underline 2px var(--addfg); text-underline-offset: 3px; }
+/* The index's file icons (fileicons.ts), with a dot in the corner for an added, removed or renamed file; modified is the
+   usual, so no dot. */
+.ficon { position: relative; flex: none; display: inline-grid; width: 14px; height: 14px; }
+.ficon img { width: 14px; height: 14px; }
+.ficon .fdot { position: absolute; right: -2px; bottom: -1px; width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--bg); }

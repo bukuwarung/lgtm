@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
 import { codeWithoutTests, inTests, moduleName } from './files.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
+import { fileIcon } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -493,7 +494,10 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
               title={f.filename}
               onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}
             >
-              <span class={'fdot s-' + f.status} title={f.status} />
+              <span class="ficon" title={f.status}>
+                <img src={fileIcon(f.filename)} alt="" />
+                {f.status !== 'modified' && <i class={'fdot s-' + f.status} />}
+              </span>
               <span class="tree-name">{f.filename.split('/').pop()}</span>
               {inTests(f.filename) && <TestMark />}
               {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
