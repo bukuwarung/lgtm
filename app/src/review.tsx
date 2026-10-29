@@ -1747,6 +1747,7 @@ function RichView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         >
           +
         </button>}
+        <span class="removed-label">Removed</span>
         <pre>{r.lines.join('\n')}</pre>
         <Notes
           ctx={ctx}

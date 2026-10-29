@@ -41,6 +41,8 @@ function App() {
     document.documentElement.classList.toggle('tags-text', tagStyle === 'text');
     document.documentElement.classList.toggle('tags-icons', tagStyle === 'icons');
   }, [tagStyle]);
+  const [strike] = useStoredFlag('strikeRemoved', false); // Settings → Diff: removed markdown struck through
+  useEffect(() => void document.documentElement.classList.toggle('strike-removed', strike), [strike]);
   const [lineStyle] = useStoredValue('lineStyle', 'fill'); // Settings → Diff: changed lines filled, tinted or barred
   useEffect(() => {
     document.documentElement.classList.toggle('ln-subtle', lineStyle === 'subtle');

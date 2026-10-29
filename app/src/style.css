@@ -268,7 +268,9 @@ main { padding: 16px; }
 .chunk [data-nd] { opacity: .75; }
 .chunk [data-nd] [data-nd] { opacity: 1; }
 .removed { position: relative; margin: 8px 0; padding: 4px 8px; background: var(--del); border-left: 3px solid var(--delfg); }
-.removed pre { margin: 0; white-space: pre-wrap; text-decoration: line-through; color: var(--muted); font-size: calc(12px * var(--ts)); }
+.removed pre { margin: 0; white-space: pre-wrap; color: var(--muted); font-size: calc(12px * var(--ts)); }
+html.strike-removed .removed pre { text-decoration: line-through; }
+.removed-label { display: block; margin-bottom: 2px; font-size: calc(11px * var(--ts)); font-weight: 600; color: var(--delfg); }
 .removed-c { position: absolute; left: -36px; top: 4px; width: 20px; height: 20px; padding: 0; line-height: 18px; }
 
 .notes { display: grid; gap: 8px; margin: 8px 0; font: calc(14px * var(--ts))/1.5 var(--sans); }
