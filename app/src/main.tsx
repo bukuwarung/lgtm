@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getEmails, getEstimates, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { getChecks, getEmails, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
@@ -554,21 +554,31 @@ const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string, strin
   DIRTY: ['conflicts', 'p-bad', 'conflict'],
 };
 
-// "behind base" on your PR: a click brings the base branch in (GitHub's Update branch, a merge commit).
-function UpdateBase({ i }: { i: QueueItem }) {
-  const [step, setStep] = useState<'idle' | 'updating' | 'done' | string>('idle');
+// A pill on your PR that does its fix in a click: idle, working, done, or failed (click again to retry).
+function QuickPill({ icon, tone, idle, busy, done, title, run }: { icon: string; tone: string; idle: string; busy: string; done: string; title: string; run: () => Promise<unknown> }) {
+  const [step, setStep] = useState<'idle' | 'busy' | 'done' | string>('idle');
+  const failed = !['idle', 'busy', 'done'].includes(step);
   const go = (e: Event) => {
     e.preventDefault();
     e.stopPropagation();
-    if (step !== 'idle' && !step.startsWith('failed')) return;
-    setStep('updating');
-    updateBranch({ id: i.id }).then(() => setStep('done'), (err) => setStep(`failed: ${err.message}`));
+    if (step !== 'idle' && !failed) return;
+    setStep('busy');
+    run().then(() => setStep('done'), (err) => setStep(`failed: ${err.message}`));
   };
   return (
-    <button class={step === 'done' ? 'pill p-ok' : step.startsWith('failed') ? 'pill p-bad' : 'pill p-warn'} title={step.startsWith('failed') ? step : 'Behind its base branch: click to merge the base in (Update branch)'} onClick={go}>
-      {step === 'done' ? <Tg i="approved" t="branch updated" /> : <Tg i="behind" t={step === 'updating' ? 'updating…' : step === 'idle' ? 'behind base · update' : "couldn't update · retry"} />}
+    <button class={step === 'done' ? 'pill p-ok' : failed ? 'pill p-bad' : `pill ${tone}`} title={failed ? step : title} onClick={go}>
+      {step === 'done' ? <Tg i="approved" t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : step === 'idle' ? idle : `couldn't · retry`} />}
     </button>
   );
+}
+// "behind base": GitHub's Update branch (a merge commit). "CI failing": every failed GitHub Actions job runs again.
+const UpdateBase = ({ i }: { i: QueueItem }) => (
+  <QuickPill icon="behind" tone="p-warn" idle="behind base · update" busy="updating…" done="branch updated" title="Behind its base branch: click to merge the base in (Update branch)" run={() => updateBranch({ id: i.id })} />
+);
+async function rerunFailed(i: QueueItem) {
+  const runs = [...new Set((await getChecks(i.repo, i.number)).filter((c) => c.state === 'failure' && c.jobId).map(runOf).filter(Boolean))] as string[];
+  if (!runs.length) throw new Error("the failed checks aren't GitHub Actions, so they can't be run again from here");
+  await Promise.all(runs.map((r) => rerunFailedJobs(i.repo, r)));
 }
 
 const DAY = 24 * 3600 * 1000;
@@ -698,6 +708,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   const [notifyVerdicts] = useStoredFlag('notifyVerdicts', true);
   const [notifyCI] = useStoredFlag('notifyCI', true);
   const [notifyMentions] = useStoredFlag('notifyMentions', true);
+  const [notifyQueue] = useStoredFlag('notifyQueue', true);
   const seen = useRef<Set<string> | null>(null);
   const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
   // The Claude Code sessions linked to listed PRs, and what each is doing, every 15 seconds.
@@ -733,7 +744,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i);
       for (const i of items) {
         const was = before.current.get(i.id);
-        if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI })) tell(n, i);
+        if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue })) tell(n, i);
         else if (notifyMentions && mentionNew(i)) tell('Mentioned you', i);
       }
     }
@@ -780,7 +791,12 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
         )}
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
-        {(i.ci === 'FAILURE' || i.ci === 'ERROR') && <span class="pill p-bad"><Tg i="ci" t="CI failing" /></span>}
+        {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&
+          (kind === MINE ? (
+            <QuickPill icon="ci" tone="p-bad" idle="CI failing · re-run" busy="re-running…" done="re-running failed jobs" title="Click to run the failed GitHub Actions jobs again" run={() => rerunFailed(i)} />
+          ) : (
+            <span class="pill p-bad"><Tg i="ci" t="CI failing" /></span>
+          ))}
         {!i.isDraft && i.noReviewers && (
           <button
             class="pill p-warn"

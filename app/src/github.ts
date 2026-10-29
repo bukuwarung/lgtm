@@ -880,12 +880,14 @@ export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
 
 // What changed on a listed PR between two refreshes, worth a notification: new replies waiting on me; on my PR, a
 // verdict or its checks finishing.
-export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean }): string[] {
+export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean }): string[] {
   const running = (ci: QueueItem['ci']) => ci === 'PENDING' || ci === 'EXPECTED';
   return [
     on.replies && was.thread && now.thread && now.thread.awaiting > was.thread.awaiting && 'New reply for you',
     on.verdicts && now.authored && now.reviewDecision !== was.reviewDecision && ({ APPROVED: 'Approved', CHANGES_REQUESTED: 'Changes requested' } as Record<string, string>)[now.reviewDecision ?? ''],
     on.ci && now.authored && running(was.ci) && now.ci && !running(now.ci) && (now.ci === 'SUCCESS' ? 'Checks passed' : 'Checks failed'),
+    // Auto-merge that hands over to the merge queue isn't news; dropping out of either is (a merged PR leaves the list).
+    on.queue && now.authored && !now.queue && (was.queue ? 'Left the merge queue' : was.autoMerge && !now.autoMerge && 'Auto-merge turned off'),
   ].filter((x): x is string => !!x);
 }
 // Each PR's rough time to review, asked after the list shows (its description and per-file line counts would slow the

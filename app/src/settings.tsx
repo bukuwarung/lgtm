@@ -267,6 +267,7 @@ export function Settings() {
           <Flag k="notifyVerdicts" initial={true} label="Your PR approved, or changes requested" />
           <Flag k="notifyCI" initial={true} label="Your PR's checks passed or failed" />
           <Flag k="notifyMentions" initial={true} label="Someone mentions you in a PR" />
+          <Flag k="notifyQueue" initial={true} label="Your PR left the merge queue, or its auto-merge turned off" />
         </fieldset>
         <label class="set-row">
           <span>
