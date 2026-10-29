@@ -12,6 +12,7 @@ import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
+import { fileIcon } from './fileicons.ts';
 import { StackNav } from './stacknav.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
@@ -1245,6 +1246,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref} style={{ containIntrinsicSize: placeholder }}>
       <header class="file-h">
         <span class={`st s-${file.status}`}><Tg i={file.status} t={file.status} /></span>
+        {inTests(path) && <TestMark label />}
         {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
             src/), cut from the left (the nearest folders stay); the full path on hover. */}
         <a
@@ -1254,7 +1256,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           rel="noopener"
           title={file.previous_filename ? `${file.previous_filename} → ${path}` : path}
         >
-          {inTests(path) && <TestMark label />}
+          <img class="file-icon" src={fileIcon(path)} alt="" />
           <b>
             {file.previous_filename && base(file.previous_filename) !== base(path) && <>{base(file.previous_filename)} → </>}
             {base(path)}
