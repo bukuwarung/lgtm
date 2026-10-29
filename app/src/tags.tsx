@@ -47,6 +47,7 @@ const ICONS: Record<string, string> = {
   merge: 'git-merge',
   behind: 'arrow-down',
   mention: 'mention',
+  ws: 'eye/',
   history: 'history',
   aging: 'hourglass',
   auto: 'clock',

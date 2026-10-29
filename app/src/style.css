@@ -868,3 +868,11 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 /* A lone comment line rendered (Settings: Single comment lines): lighter than a doc block, no box. */
 .doc-render.doc-one { margin: 0; padding: 0 8px; background: none; border-left-width: 2px; color: var(--muted); }
 .doc-render.doc-one .doc-source { margin-bottom: 0; }
+/* A changed image swiped: old and new stacked on a checkerboard (for transparency), the new cut at the slider. */
+.img-modes { flex-basis: 100%; }
+.swipe-preview { flex-direction: column; align-items: flex-start; }
+.img-swipe { position: relative; display: grid; max-width: 100%; background: conic-gradient(var(--soft) 25%, transparent 0 50%, var(--soft) 0 75%, transparent 0) 0 0 / 16px 16px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.img-swipe img { grid-area: 1 / 1; display: block; width: auto; max-width: 100%; object-fit: contain; border: 0; border-radius: 0; }
+.img-swipe-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
+.swipe-preview input[type=range] { width: min(100%, 420px); }
+.img-swipe-labels { display: flex; justify-content: space-between; width: min(100%, 420px); font-size: calc(11px * var(--ts)); color: var(--muted); }

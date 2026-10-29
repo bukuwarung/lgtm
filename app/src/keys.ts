@@ -16,6 +16,7 @@ export const ACTIONS = [
   ['index', 'Show / hide the index', 'i'],
   ['merge', 'Open / close the merge box (your PRs)', 'm'],
   ['stack', "Open / close the stack's overview", 's'],
+  ['githubDev', 'Open the file in view on github.dev', '.'],
   ['help', 'Keyboard shortcuts', '?'],
 ] as const;
 export type Action = (typeof ACTIONS)[number][0];

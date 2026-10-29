@@ -784,6 +784,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     ignoreWs ? files.filter((f) => !f.generated && !f.noDiff && whitespaceOnly(f)).map((f) => f.filename) : [],
   );
   const visible = files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename));
+  const wsFolded = ignoreWs ? visible.reduce((n, f) => n + wsSections(f).folded, 0) : 0; // sections folded in the rest
   const generated = files.filter((f) => f.generated);
   const noDiff = files.filter((f) => f.noDiff && !f.generated);
   const wsOnly = files.filter((f) => wsOnlySet.has(f.filename));
@@ -853,6 +854,14 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
       help: () => setHelp(!help),
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
+      // The file in view on github.dev, at the first line showing below the bars.
+      githubDev: () => {
+        const sec = sections[Math.max(cur, 0)];
+        if (!sec) return;
+        const row = [...sec.querySelectorAll<HTMLElement>('tr.ln:not(.d)')].find((r) => r.getBoundingClientRect().top >= top);
+        const line = Number([...(row?.querySelectorAll('td.num') ?? [])].at(-1)?.textContent) || undefined; // the new number
+        void openExternal(githubDev(headRepo, pr.head.sha, sec.id.slice(2), line));
+      },
     };
     function go(i: number) {
       threadCursor.current = i;
@@ -967,6 +976,15 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
               </PillMenu>
             )}
             <ModulesPill modules={byModule ? modules : undefined} />
+            {ignoreWs && (
+              <button
+                class="pill"
+                title={`Whitespace-only changes are hidden: ${wsOnlySet.size} file${wsOnlySet.size === 1 ? '' : 's'} and ${wsFolded} section${wsFolded === 1 ? '' : 's'} in others. Click to show them (w)`}
+                onClick={toggleWs}
+              >
+                <Tg i="ws" t="whitespace ignored" />
+              </button>
+            )}
             {points && points.length > 1 && (
               <PillMenu label={<Tg i="history" t="changes since…" />} head="Show only what changed after:">
                 {lastReviewed && (
@@ -1155,26 +1173,33 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
   );
 }
 
-// A file on github.dev (VS Code in the browser, with the whole repo) at the PR's commit, at its first change.
+// A file on github.dev (VS Code in the browser, with the whole repo) at the PR's commit; the . key too.
+const githubDev = (headRepo: string, sha: string, path: string, line?: number) =>
+  `https://github.dev/${headRepo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}${line ? `#L${line}` : ''}`;
 function OpenInEditor({ headRepo, sha, path, line }: { headRepo: string; sha: string; path: string; line?: number }) {
   return (
     <button
       class="icon-btn"
-      title={`Open on github.dev, at the PR's commit${line ? `, line ${line}` : ''}`}
-      onClick={() => openExternal(`https://github.dev/${headRepo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}${line ? `#L${line}` : ''}`)}
+      title={`Open on github.dev, at the PR's commit${line ? `, line ${line}` : ''} (.)`}
+      onClick={() => openExternal(githubDev(headRepo, sha, path, line))}
     >
       <Octicon name="code" />
     </button>
   );
 }
 
-// Whether every change in a file is whitespace (blank lines included), worked out once per loaded file.
-const wsOnlySeen = new WeakMap<File, boolean>();
-function whitespaceOnly(f: File): boolean {
-  if (!f.patch) return false;
-  if (!wsOnlySeen.has(f)) wsOnlySeen.set(f, ignoreWhitespace(parsePatch(f.patch)).every((h) => h.lines.every((l) => l.kind === ' ')));
-  return wsOnlySeen.get(f)!;
+// A file's sections (hunks) whose every change is whitespace, blank lines included, and how many it has: worked out
+// once per loaded file.
+const wsSeen = new WeakMap<File, { folded: number; total: number }>();
+function wsSections(f: File) {
+  if (!f.patch) return { folded: 0, total: 0 };
+  if (!wsSeen.has(f)) {
+    const hs = ignoreWhitespace(parsePatch(f.patch));
+    wsSeen.set(f, { folded: hs.filter((h) => h.lines.every((l) => l.kind === ' ')).length, total: hs.length });
+  }
+  return wsSeen.get(f)!;
 }
+const whitespaceOnly = (f: File) => { const s = wsSections(f); return s.total > 0 && s.folded === s.total; };
 
 // A comment author's picture beside their name (GitHub's own URL for it when the data has one; bots' differ).
 const Avatar = ({ login, src }: { login: string; src?: string }) => (
@@ -1365,6 +1390,9 @@ type Shot = { src: string; size?: string; note?: string; noLink?: boolean };
 function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () => void }) {
   const [shots, setShots] = useState<{ before: Shot | null; after: Shot | null } | null>(null);
   const [dims, setDims] = useState<Record<string, string>>({});
+  const [mode, setMode] = useStoredValue('imageCompare', 'side'); // a changed image: side by side, or swiped
+  const [x, setX] = useState(50);
+  const [h, setH] = useState(160); // the swipe's height: the new image's, small icons scaled up as side by side
   useEffect(() => {
     const load = async (repo: string, path: string, ref: string): Promise<Shot | null> => {
       if (BITMAP.test(file.filename)) {
@@ -1402,10 +1430,39 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
       </figure>
     );
   const note = shots.before?.note ?? shots.after?.note;
+  const both = shots.before && shots.after;
+  const modes = both && (
+    <span class="set-seg img-modes" role="radiogroup" aria-label="Compare">
+      {([['side', 'Side by side'], ['swipe', 'Swipe']] as const).map(([v, name]) => (
+        <button role="radio" aria-checked={mode === v} class={mode === v ? 'on' : ''} onClick={() => setMode(v)}>{name}</button>
+      ))}
+    </span>
+  );
+  // Swipe: the new version over the old, cut at the slider; left of it the old, right the new.
+  if (both && mode === 'swipe')
+    return (
+      <div class="vector-preview swipe-preview">
+        {modes}
+        <div class="img-swipe">
+          <img src={shots.before!.src} alt={`Before: ${file.filename}`} style={{ height: `${h}px` }} />
+          <img
+            src={shots.after!.src}
+            alt={`After: ${file.filename}`}
+            style={{ height: `${h}px`, clipPath: `inset(0 0 0 ${x}%)` }}
+            onLoad={(e) => setH(Math.min(320, Math.max(96, e.currentTarget.naturalHeight)))}
+          />
+          <span class="img-swipe-line" style={{ left: `${x}%` }} />
+        </div>
+        <input type="range" min={0} max={100} value={x} onInput={(e) => setX(Number(e.currentTarget.value))} aria-label="Before ↔ after" />
+        <span class="img-swipe-labels"><span>Before</span><span>After</span></span>
+        {note && <p class="note">{note}</p>}
+      </div>
+    );
   return (
     <div class="vector-preview">
+      {modes}
       {fig('Before', shots.before)}
-      {shots.before && shots.after && <span class="vp-arrow">→</span>}
+      {both && <span class="vp-arrow">→</span>}
       {fig(shots.before ? 'After' : file.status === 'removed' ? 'Deleted' : 'New', shots.after)}
       {note && <p class="note">{note}</p>}
     </div>
