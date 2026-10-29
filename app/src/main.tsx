@@ -41,6 +41,11 @@ function App() {
     document.documentElement.classList.toggle('tags-text', tagStyle === 'text');
     document.documentElement.classList.toggle('tags-icons', tagStyle === 'icons');
   }, [tagStyle]);
+  const [wordStyle] = useStoredValue('wordStyle', 'fill'); // Settings → Diff: changed words filled, boxed or squiggled
+  useEffect(() => {
+    document.documentElement.classList.toggle('wd-box', wordStyle === 'box');
+    document.documentElement.classList.toggle('wd-squiggle', wordStyle === 'squiggle');
+  }, [wordStyle]);
   useEffect(() => void initDesktop((r) => (location.hash = r)), []); // the app: links to the browser, lgtm:// links
   // The PR list's latest items (to pick the next PR to review), and a message to show on the page we move to.
   const queue = useRef<QueueItem[]>([]);

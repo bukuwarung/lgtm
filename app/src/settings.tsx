@@ -34,6 +34,23 @@ export function useTheme() {
 
 // A switch; with an example (demos.tsx) it also shows what it does, the side you have now outlined. Children are
 // sub-switches: indented under it, and greyed out while it's off.
+// How changed words are marked: filled (GitHub's way), boxed, or a wavy underline like a typo's.
+function WordStyle() {
+  const [style, setStyle] = useStoredValue('wordStyle', 'fill');
+  return (
+    <div class="set-row">
+      <span>Style</span>
+      <span class="set-seg" role="radiogroup" aria-label="Word highlight style">
+        {([['fill', 'Fill'], ['box', 'Box'], ['squiggle', 'Squiggle']] as const).map(([v, name]) => (
+          <button role="radio" aria-checked={style === v} class={style === v ? 'on' : ''} onClick={() => setStyle(v)}>
+            <span class={`wd-sample wd-${v}`}><mark class="wd-del">old</mark> <mark class="wd-add">new</mark></span> {name}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 // Tags and pills (a file's added / modified, a PR's "CI failing"…) as words, icons or both. Icons alone say their words
 // on hover; numbers always show.
 function TagStyle() {
@@ -269,7 +286,9 @@ export function Settings() {
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)." />
         <Flag k="rainbowBrackets" initial={false} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)." />
-        <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo />
+        <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
+          <WordStyle />
+        </Flag>
         <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode." demo>
           <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source." />
           <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines read as prose. Commented-out code stays source." />
