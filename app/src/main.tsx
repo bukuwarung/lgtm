@@ -554,26 +554,39 @@ const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string, strin
   DIRTY: ['conflicts', 'p-bad', 'conflict'],
 };
 
-// A pill on your PR that does its fix in a click: idle, working, done, or failed (click again to retry).
-function QuickPill({ icon, tone, idle, busy, done, title, run }: { icon: string; tone: string; idle: string; busy: string; done: string; title: string; run: () => Promise<unknown> }) {
+// A pill on your PR with its fix in a little menu (so a stray click on the list does nothing): idle, working, done, or
+// failed (open the menu again to retry).
+function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon: string; tone: string; idle: string; action: string; busy: string; done: string; title: string; run: () => Promise<unknown> }) {
   const [step, setStep] = useState<'idle' | 'busy' | 'done' | string>('idle');
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
   const failed = !['idle', 'busy', 'done'].includes(step);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => (e.type === 'keydown' ? (e as KeyboardEvent).key === 'Escape' : !box.current?.contains(e.target as Node)) && setOpen(false);
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', away);
+    return () => (document.removeEventListener('pointerdown', away), document.removeEventListener('keydown', away));
+  }, [open]);
+  const stop = (e: Event) => (e.preventDefault(), e.stopPropagation());
   const go = (e: Event) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (step !== 'idle' && !failed) return;
+    stop(e);
+    setOpen(false);
     setStep('busy');
     run().then(() => setStep('done'), (err) => setStep(`failed: ${err.message}`));
   };
   return (
-    <button class={step === 'done' ? 'pill p-ok' : failed ? 'pill p-bad' : `pill ${tone}`} title={failed ? step : title} onClick={go}>
-      {step === 'done' ? <Tg i="approved" t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : step === 'idle' ? idle : `couldn't · retry`} />}
-    </button>
+    <span class="pill-drop" ref={box}>
+      <button class={step === 'done' ? 'pill p-ok' : failed ? 'pill p-bad' : `pill ${tone}`} title={failed ? step : title} aria-expanded={open} onClick={(e) => (stop(e), (step === 'idle' || failed) && setOpen(!open))}>
+        {step === 'done' ? <Tg i="approved" t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : `${step === 'idle' ? idle : "couldn't"} ▾`} />}
+      </button>
+      {open && <button class="pill-menu" onClick={go}>{failed ? `${action} again` : action}</button>}
+    </span>
   );
 }
 // "behind base": GitHub's Update branch (a merge commit). "CI failing": every failed GitHub Actions job runs again.
 const UpdateBase = ({ i }: { i: QueueItem }) => (
-  <QuickPill icon="behind" tone="p-warn" idle="behind base · update" busy="updating…" done="branch updated" title="Behind its base branch: click to merge the base in (Update branch)" run={() => updateBranch({ id: i.id })} />
+  <QuickPill icon="behind" tone="p-warn" idle="behind base" action="Update branch" busy="updating…" done="branch updated" title="Behind its base branch: Update branch merges the base in" run={() => updateBranch({ id: i.id })} />
 );
 async function rerunFailed(i: QueueItem) {
   const runs = [...new Set((await getChecks(i.repo, i.number)).filter((c) => c.state === 'failure' && c.jobId).map(runOf).filter(Boolean))] as string[];
@@ -793,7 +806,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&
           (kind === MINE ? (
-            <QuickPill icon="ci" tone="p-bad" idle="CI failing · re-run" busy="re-running…" done="re-running failed jobs" title="Click to run the failed GitHub Actions jobs again" run={() => rerunFailed(i)} />
+            <QuickPill icon="ci" tone="p-bad" idle="CI failing" action="Re-run failed jobs" busy="re-running…" done="re-running failed jobs" title="Its checks failed: Re-run failed jobs runs the failed GitHub Actions jobs again" run={() => rerunFailed(i)} />
           ) : (
             <span class="pill p-bad"><Tg i="ci" t="CI failing" /></span>
           ))}
