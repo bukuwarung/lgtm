@@ -50,7 +50,7 @@ const ICONS: Record<string, string> = {
   ws: 'eye/',
   history: 'history',
   aging: 'hourglass',
-  auto: 'clock',
+  auto: 'git-merge',
   queue: 'git-merge-queue',
   unsent: 'pencil',
   '🔔': 'bell',

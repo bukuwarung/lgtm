@@ -788,7 +788,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
             {i.queue.state === 'UNMERGEABLE' ? <Tg i="queue" t="queue: can't merge" /> : <Tg i="queue" n={`#${i.queue.position}`} t="in merge queue" />}
           </span>
         ) : (
-          i.autoMerge && <span class="pill" title="It merges by itself once its checks and reviews pass"><Tg i="auto" t="auto-merge on" /></span>
+          i.autoMerge && <span class="pill p-ok" title="It merges by itself once its checks and reviews pass"><Tg i="auto" t="auto-merge on" /></span>
         )}
         {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>}
