@@ -544,4 +544,9 @@ test('addsLogic: only changes with logic need a test', () => {
   for (const yes of [p('fun total(xs: List<Int>) = xs.sum()'), p('    fun save(u: User) {'), p('    if (x > 0) return x'), p('val f = { x: Int -> x + 1 }'), p('const f = (a) => a * 2'), p('export function go() {')])
     assert.ok(addsLogic(yes), yes);
   assert.ok(addsLogic(undefined)); // no patch: can't tell
+  // Other languages
+  for (const yes of [p('    public void setName(String name) {'), p('fn parse(s: &str) -> Result<u32> {'), p('def total(xs):'), p('  def name'), p('func (s *Server) Start() error {'), p('  func load() async throws -> User {'), p('  Future<void> save(User u) async {'), p('    get total() {'), p('square = lambda x: x * x'), p('int add(int a, int b) {')])
+    assert.ok(addsLogic(yes), yes);
+  for (const no of [p('enum class Status(val code: Int) {'), p('public class User {'), p('public static final int MAX = 3;'), p('int add(int a, int b);'), p('    String name;'), p('struct Point { x: i32, y: i32 }'), p('    case pending = "pending"')])
+    assert.ok(!addsLogic(no), no);
 });

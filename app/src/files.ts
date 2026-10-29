@@ -25,7 +25,16 @@ const CODE = /\.(kt|kts|java|swift|m|mm|go|py|rb|rs|dart|scala|cs|php|c|cc|cpp|h
 const base = (p: string) => p.split('/').pop()!.replace(/^test_/, '');
 // Did the change add logic worth a test: a function with a body, a lambda, or control flow? Constants, enum entries,
 // properties, imports, annotations and abstract declarations don't count. Without a patch (too large), assume so.
-const LOGIC = /\b(fun|function|def|func)\b[^;]*[{=]\s*($|[^=])|=>|->|\b(if|else|when|for|while|switch|case|return|try|catch|throw|match)\b/;
+// Functions by keyword (Kotlin fun, JS function, Python/Ruby/Scala def, Go/Swift func, Rust fn) or, for languages
+// without one (Java, C#, C/C++, Dart, TS class methods), a call-shaped line opening a body that isn't a type.
+const LOGIC = new RegExp(
+  [
+    /\bdef\b|\b(fun|function|func|fn)\b[^;]*[{=]\s*($|[^=])/.source,
+    /^\s*(?!.*\b(class|enum|interface|object|record|struct|trait|impl|namespace|extension|protocol)\b)[\w<>[\],.?:@\s]*\b\w+\s*\([^;]*\)[^;=]*\{\s*$/.source,
+    /=>|->|\blambda\b|\bcase\b.*:\s*$/.source, // a switch's case (Swift's enum cases have no colon)
+    /\b(if|else|elif|elsif|unless|guard|when|for|foreach|while|do|loop|switch|match|select|return|yield|try|catch|except|throw|raise|defer)\b/.source,
+  ].join('|'),
+);
 const QUIET = /^\s*(\/\/|\/?\*|#|import\b|package\b|@)/;
 export const addsLogic = (patch?: string) =>
   patch == null || patch.split('\n').some((l) => l[0] === '+' && !l.startsWith('+++') && !QUIET.test(l.slice(1)) && LOGIC.test(l.slice(1)));
