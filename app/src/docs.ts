@@ -26,14 +26,24 @@ export function docBlocks(hunks: Hunk[]): DocBlock[] {
   return out;
 }
 
-// Languages whose line comments are //.
-export const lineCommentSyntax = (path: string) => /\.(kt|kts|java|[cm]?[jt]sx?|swift|go|rs|dart|scala|cs|php|c|cc|cpp|h|hpp|m|mm|groovy|gradle)$/.test(path);
+// A language's line comments: // (C family and friends) or # (Python, Ruby, shell, YAML, TOML, properties, ProGuard,
+// Dockerfile, Makefile…); null for others.
+export type LineMarker = '//' | '#';
+export const lineCommentSyntax = (path: string): LineMarker | null =>
+  /\.(kt|kts|java|[cm]?[jt]sx?|swift|go|rs|dart|scala|cs|php|c|cc|cpp|h|hpp|m|mm|groovy|gradle)$/.test(path) ? '//'
+  : /\.(py|pyi|rb|sh|bash|zsh|fish|ya?ml|toml|properties|pro|cfg|conf|ini|r|pl|pm|tf|tfvars|hcl|nix|cmake|mk|ps1|graphqls?|gql|dockerignore|gitignore|gitattributes|editorconfig|env)$/i.test(path) ||
+      /(^|\/)(Dockerfile|Containerfile|Makefile|Gemfile|Rakefile|Podfile|Brewfile|CMakeLists\.txt|\.env(\.\w+)?)$/.test(path)
+    ? '#'
+  : null;
 
-// Runs of two or more // comment lines (comment-only lines) to show as prose: all of one kind, or (with `edited`) edited,
-// read from the new side like editedDocBlocks. A run that reads as commented-out code stays source.
-const LINE = /^(\s*)\/\/(?!\/\/)/;
-const CODEISH = /[;{}]\s*$|^\s*(val|var|fun|if|else|for|while|return|import|package|class|private|public|const|let|def)\b|^\s*[\w.]+\(.*\)\s*$|^\s*[\w.]+\s*=[^=]/;
-export function lineCommentBlocks(hunks: Hunk[], edited: boolean): DocBlock[] {
+// Runs of two or more line comments (comment-only lines) to show as prose: all of one kind, or (with `edited`) edited,
+// read from the new side like editedDocBlocks. A run that reads as commented-out code stays source. With #: not a
+// shebang (#!) or a ## divider, and commented-out YAML keys and ProGuard rules count as code.
+const LINES: Record<LineMarker, RegExp> = { '//': /^(\s*)\/\/(?!\/\/)/, '#': /^(\s*)#(?![#!])/ };
+const STRIP: Record<LineMarker, RegExp> = { '//': /^\s*\/\/\/? ?/, '#': /^\s*# ?/ };
+const CODEISH = /[;{}]\s*$|^\s*(val|var|fun|if|else|for|while|return|import|package|class|private|public|const|let|def)\b|^\s*[\w.]+\(.*\)\s*$|^\s*[\w.]+\s*=[^=]|^\s*[\w.-]+:\s+\S|^\s*-[a-z]+\b/;
+export function lineCommentBlocks(hunks: Hunk[], edited: boolean, marker: LineMarker = '//'): DocBlock[] {
+  const LINE = LINES[marker];
   const out: DocBlock[] = [];
   hunks.forEach((h, hi) => {
     const L = h.lines;
@@ -44,7 +54,7 @@ export function lineCommentBlocks(hunks: Hunk[], edited: boolean): DocBlock[] {
       const run = L.slice(i, end + 1);
       const same = run.every((l) => l.kind === run[0].kind);
       const shown = same ? run : run.filter((l) => l.kind !== '-');
-      const body = shown.map((l) => l.text.replace(/^\s*\/\/\/? ?/, ''));
+      const body = shown.map((l) => l.text.replace(STRIP[marker], ''));
       const code = body.filter((t) => t.trim() && CODEISH.test(t)).length;
       if (shown.length >= 2 && (same || edited) && code * 2 < body.filter((t) => t.trim()).length) {
         let removed = false;
@@ -131,7 +141,7 @@ export function docParts(lines: DocLine[], syntax: 'kdoc' | 'java' | 'jsdoc', st
     // KDoc/JSDoc links [Foo] / {@link Foo} read as code names.
     return s.replace(/\{@link\s+([^}\s|]+)[^}]*\}/g, '`$1`').replace(/(?<![\]`])\[([\w.#]+)\](?![(\[:])/g, '`$1`');
   };
-  const text = lines.map((l, i) => ({ text: style === 'line' ? l.text.replace(/^\s*\/\/\/? ?/, '') : stripLine(l.text, i, lines.length), changed: l.changed }));
+  const text = lines.map((l, i) => ({ text: style === 'line' ? l.text.replace(/^\s*(\/\/\/?|#) ?/, '') : stripLine(l.text, i, lines.length), changed: l.changed }));
   // Segments: body paragraphs, then one per @tag (running to the next). A paragraph ends at a blank line, or at a line
   // ending a sentence when the next starts one (not lowercase: "e.g." doesn't split); lists and code blocks stay whole.
   const segs: { tag: boolean; lines: DocLine[] }[] = [];

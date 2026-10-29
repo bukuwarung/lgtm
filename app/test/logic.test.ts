@@ -396,6 +396,18 @@ test('lineCommentBlocks: // runs as prose, not single lines or commented-out cod
   assert.deepEqual(docParts(blocks[0].lines!, 'kdoc', 'line').paras.map((p) => p.md), ['Retries the charge with backoff.', 'Network errors only: a declined card\nis final.']);
 });
 
+test('lineCommentBlocks: # runs too (Python, YAML, ProGuard), not shebangs or commented-out keys and rules', async () => {
+  const { lineCommentBlocks, lineCommentSyntax, docParts } = await import('../src/docs.ts');
+  assert.deepEqual(['a.py', 'ci.yml', 'proguard-rules.pro', 'Dockerfile', 'a.kt', 'README.md'].map(lineCommentSyntax), ['#', '#', '#', '#', '//', null]);
+  const h = parsePatch([
+    '@@ -1,2 +1,10 @@', '+#!/usr/bin/env python', '+# Retries the charge with backoff.', '+# A declined card is final.', ' x = 1',
+    '+# -keep class com.a.** { *; }', '+# -dontwarn okhttp3.**', '+# timeout: 30', '+# retries: 3',
+  ].join('\n'));
+  const blocks = lineCommentBlocks(h, true, '#');
+  assert.deepEqual(blocks.map((b) => [b.start, b.end]), [[1, 2]]);
+  assert.deepEqual(docParts(blocks[0].lines!, 'kdoc', 'line').paras.map((p) => p.md), ['Retries the charge with backoff.', 'A declined card is final.']);
+});
+
 test('reviewDonePrompt: the review, as a message back to the Claude session', async () => {
   const { reviewDonePrompt } = await import('../src/claude.ts');
   const p = reviewDonePrompt({ html_url: 'https://github.com/o/r/pull/7', number: 7, title: 'Retry payments' }, 'REQUEST_CHANGES', 'Close.', [{ path: 'Pay.kt', line: 12, body: 'Stop retrying\non declines.' }]);

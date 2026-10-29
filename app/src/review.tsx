@@ -1547,7 +1547,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         ? []
         : [
             ...(docSyntax(path) ? [...docBlocks(hunks), ...(renderEdited ? editedDocBlocks(hunks) : [])] : []),
-            ...(renderLine && lineCommentSyntax(path) ? lineCommentBlocks(hunks, renderEdited) : []),
+            ...(renderLine && lineCommentSyntax(path) ? lineCommentBlocks(hunks, renderEdited, lineCommentSyntax(path)!) : []),
           ],
     [hunks, renderDocs, renderEdited, renderLine],
   );
