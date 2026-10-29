@@ -662,10 +662,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   // them and files are tagged; with one, a pill names it.
   const [byModule] = useStoredFlag('gradleModules', true);
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
-  const view = byModule ? moduleView(modules) : 'none';
   const ctx: Ctx = {
     untested: noTests,
-    modules: view === 'all' ? modules : undefined,
+    modules: undefined, // set below, once the shown files are known
     sinceComment,
     pr,
     headRepo,
@@ -795,6 +794,10 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const wsOnly = files.filter((f) => wsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
   const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : [])];
+  // Modules as the files on show have them (not the ones waiting behind a row).
+  const shownModules = new Map(shown.map((f) => [f.filename, modules.get(f.filename) ?? '']));
+  const view = byModule ? moduleView(shownModules) : 'none';
+  ctx.modules = view === 'all' ? shownModules : undefined;
   const section = (f: File) => (
     <FileSection
       key={f.filename}
@@ -902,7 +905,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
               slackWith={new Set(slackThreads.map((t) => t.login))}
               reRequest={!!me && pr.user.login === me ? reRequest : undefined}
               me={me}
-              modules={view === 'all' ? modules : undefined}
+              modules={view === 'all' ? shownModules : undefined}
               ask={
                 !!me && pr.user.login === me && (
                   <AskReviewer
@@ -980,7 +983,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
                 ))}
               </PillMenu>
             )}
-            <ModulesPill modules={view !== 'none' ? modules : undefined} />
+            <ModulesPill modules={view !== 'none' ? shownModules : undefined} />
             {ignoreWs && (
               <button
                 class="pill"
