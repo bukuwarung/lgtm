@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getEmails, getEstimates, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { getEmails, getEstimates, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
@@ -549,9 +549,25 @@ const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string, strin
   CLEAN: ['ready to merge', 'p-ok', 'merge'],
   HAS_HOOKS: ['ready to merge', 'p-ok', 'merge'],
   UNSTABLE: ['mergeable', 'p-ok', 'merge'], // with the "CI failing" pill beside it
-  BEHIND: ['behind base', '', 'behind'],
   DIRTY: ['conflicts', 'p-bad', 'conflict'],
 };
+
+// "behind base" on your PR: a click brings the base branch in (GitHub's Update branch, a merge commit).
+function UpdateBase({ i }: { i: QueueItem }) {
+  const [step, setStep] = useState<'idle' | 'updating' | 'done' | string>('idle');
+  const go = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (step !== 'idle' && !step.startsWith('failed')) return;
+    setStep('updating');
+    updateBranch({ id: i.id }).then(() => setStep('done'), (err) => setStep(`failed: ${err.message}`));
+  };
+  return (
+    <button class={step === 'done' ? 'pill p-ok' : step.startsWith('failed') ? 'pill p-bad' : 'pill p-warn'} title={step.startsWith('failed') ? step : 'Behind its base branch: click to merge the base in (Update branch)'} onClick={go}>
+      {step === 'done' ? <Tg i="approved" t="branch updated" /> : <Tg i="behind" t={step === 'updating' ? 'updating…' : step === 'idle' ? 'behind base · update' : "couldn't update · retry"} />}
+    </button>
+  );
+}
 
 const DAY = 24 * 3600 * 1000;
 // A PR linked to a Claude Code session with commits since it was last opened here (or linked).
@@ -782,6 +798,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {i.assigned && !i.authored && <span class="pill"><Tg i="assigned" t="assigned to you" /></span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t="PR approved" /></span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t="PR changes requested" /></span>}
+        {kind === MINE && !i.isDraft && i.mergeState === 'BEHIND' && <UpdateBase i={i} />}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}><Tg i={MERGE_PILL[i.mergeState]![2]} t={MERGE_PILL[i.mergeState]![0]} /></span>}
         {i.queue ? (
           <span class={i.queue.state === 'UNMERGEABLE' ? 'pill p-bad' : 'pill p-ok'} title={QUEUE_STATE[i.queue.state]}>

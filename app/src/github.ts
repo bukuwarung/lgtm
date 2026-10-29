@@ -840,7 +840,7 @@ export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' |
 }
 export const disableAutoMerge = (id: string) =>
   graphql(`mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}`, { id });
-export const updateBranch = (s: MergeState) =>
+export const updateBranch = (s: { id: string; headRefOid?: string }) =>
   graphql(`mutation($id:ID!,$oid:GitObjectID){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}`, { id: s.id, oid: s.headRefOid });
 export const markReady = (id: string) =>
   graphql(`mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}`, { id });
