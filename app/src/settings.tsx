@@ -302,6 +302,7 @@ export function Settings() {
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)." />
+        <Flag k="fileFooter" initial={true} label="Show a bar at the end of each file" hint="Its name, Comment and Viewed, as in its header." />
         <Flag k="rainbowBrackets" initial={false} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)." />
         <LineStyle />
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
