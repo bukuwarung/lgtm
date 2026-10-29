@@ -844,3 +844,5 @@ html.ln-bar .diff tr.d .code::before { color: var(--delfg); }
 .ln-sample i.a { background: var(--add); } .ln-sample i.d { background: var(--del); }
 .ln-sample.ln-subtle i.a { background: color-mix(in srgb, var(--add) 45%, transparent); } .ln-sample.ln-subtle i.d { background: color-mix(in srgb, var(--del) 45%, transparent); }
 .ln-sample.ln-bar i { background: none; } .ln-sample.ln-bar i.a { box-shadow: inset 3px 0 var(--addfg); } .ln-sample.ln-bar i.d { box-shadow: inset 3px 0 var(--delfg); }
+/* Bar style: where removed lines meet the added ones replacing them, a line between (no colours to tell them apart). */
+html.ln-bar .diff :is(tr.d + tr.a, tr.a + tr.d) > td { border-top: 1px dashed color-mix(in srgb, var(--muted) 85%, transparent); }
