@@ -84,8 +84,28 @@ export function gradleModules(paths: string[]): Map<string, string> {
   return out;
 }
 
-// A module as Gradle names it: its folder with ':' for '/' (core/network → :core:network); the root project, ':'.
-export const moduleName = (m: string) => (m === '.' ? ':' : ':' + m.replaceAll('/', ':'));
+// Modules from where the repo's build files sit (build.gradle(.kts), package.json, go.mod, Cargo.toml, pyproject.toml;
+// github.ts getBuildRoots): each path in the deepest one holding it ('.' the repo's root). Without them, the guess above.
+export type BuildRoot = { dir: string; gradle: boolean };
+const plainRoots = new Set<string>(); // modules that aren't Gradle's, named by folder
+export function modulesOf(paths: string[], roots: BuildRoot[] | null): Map<string, string> {
+  if (!roots) return gradleModules(paths);
+  const deepest = [...roots].sort((a, b) => b.dir.length - a.dir.length);
+  for (const r of roots) if (!r.gradle) plainRoots.add(r.dir);
+  return new Map(paths.map((p) => [p, deepest.find((r) => r.dir === '.' || p.startsWith(r.dir + '/'))?.dir ?? '']));
+}
+
+// Whether modules say anything about a PR: 'all' (2+ touched: group the index, tag files, a pill), 'pill' (just one,
+// named in a pill), or 'none' (none, or only the repo's root).
+export function moduleView(modules: Map<string, string>): 'all' | 'pill' | 'none' {
+  const touched = new Set([...modules.values()].filter(Boolean));
+  return touched.size >= 2 ? 'all' : touched.size === 1 && !touched.has('.') ? 'pill' : 'none';
+}
+
+// A module's name: Gradle's (core/network → :core:network; the root project ':'), else its folder.
+export const moduleName = (m: string) => (plainRoots.has(m) ? (m === '.' ? '(root)' : m) : m === '.' ? ':' : ':' + m.replaceAll('/', ':'));
+// As a heading: the root spelled out.
+export const moduleLabel = (m: string) => (m === '.' && !plainRoots.has(m) ? ': (root)' : moduleName(m));
 
 // Whether a set of changed files (a module's) changes code but none of its tests: code changed and added to (not
 // build scripts or debug-only sources), and no test file among them.

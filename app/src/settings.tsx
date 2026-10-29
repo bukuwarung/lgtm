@@ -288,7 +288,7 @@ export function Settings() {
         <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation" />
         <JiraAfterMerge />
-        <Flag k="gradleModules" initial={true} label="Group files by Gradle module" hint="In Gradle projects: the PR index lists files by module (the folder before src/), and a pill says how many modules the PR touches." />
+        <Flag k="gradleModules" initial={true} label="Group files by module" hint="Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a PR touches two or more, the index groups its files by them and each file says its own; with one, a pill names it." />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review." />
         <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
       </section>

@@ -4,7 +4,7 @@ import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -22,7 +22,7 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
-import { gradleModules, inTests, moduleName, reviewOrder, untested } from './files.ts';
+import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
@@ -170,15 +170,15 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
 const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const dir = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf('/')));
 
-// How many Gradle modules the PR touches; a click lists them, each with its files, and goes to its first.
+// How many modules the PR touches (or the one); a click lists them, each with its files, and goes to its first.
 function ModulesPill({ modules }: { modules?: Map<string, string> }) {
   const by = new Map<string, string[]>();
   for (const [p, m] of modules ?? []) if (m) by.set(m, [...(by.get(m) ?? []), p]);
   if (!by.size) return null;
-  const label = (m: string) => (m === '.' ? ': (root)' : moduleName(m));
+  const label = moduleLabel;
   const list = [...by].sort(([a], [b]) => label(a).localeCompare(label(b)));
   return (
-    <PillMenu label={by.size === 1 ? <Tg i={<ModuleIcon />} n={label(list[0][0])} /> : <Tg i={<ModuleIcon />} n={by.size} t="modules" />} head="Gradle modules this PR changes:">
+    <PillMenu label={by.size === 1 ? <Tg i={<ModuleIcon />} n={label(list[0][0])} /> : <Tg i={<ModuleIcon />} n={by.size} t="modules" />} head="Modules this PR changes:">
       {list.map(([m, paths]) => (
         <button onClick={() => jumpTo('f-' + paths[0])} title={m === '.' ? 'The root project' : `In ${m}/`}>
           <b>{label(m)}</b> <small>{paths.length} file{paths.length > 1 ? 's' : ''}</small>
@@ -364,6 +364,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const [mine, setMine] = useState(false); // I opened it or it's assigned to me: show the merge box
   useEffect(onOpened, [repo, n]);
   const [batch, setBatch] = useState<Suggestion[]>([]);
+  const [roots, setRoots] = useState<BuildRoot[] | null>(null); // the repo's modules (files.ts modulesOf)
+  const rootsAt = data && `${data.headRepo}@${data.pr.head.sha}`;
+  useEffect(() => void (data && getBuildRoots(data.headRepo, data.pr.head.sha).then(setRoots, () => setRoots(null))), [rootsAt]);
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
   const [stale, setStale] = useState<number | null>(null); // showing the copy loaded at this time, while refreshing
@@ -655,12 +658,14 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const mainLang = majorityLanguage(data.files.filter((f) => !f.generated).map((f) => f.filename));
   const [flagUntested] = useStoredFlag('flagUntested', true);
   const noTests = useMemo(() => new Set(flagUntested ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested]);
-  // Gradle modules (Settings → Reviewing): the index groups files by them, a pill says how many the PR touches.
+  // Modules (Settings → Reviewing), from where the repo's build files sit: with 2+ touched the index groups files by
+  // them and files are tagged; with one, a pill names it.
   const [byModule] = useStoredFlag('gradleModules', true);
-  const modules = useMemo(() => gradleModules(data.files.map((f) => f.filename)), [data.files]);
+  const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
+  const view = byModule ? moduleView(modules) : 'none';
   const ctx: Ctx = {
     untested: noTests,
-    modules: byModule ? modules : undefined,
+    modules: view === 'all' ? modules : undefined,
     sinceComment,
     pr,
     headRepo,
@@ -897,7 +902,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
               slackWith={new Set(slackThreads.map((t) => t.login))}
               reRequest={!!me && pr.user.login === me ? reRequest : undefined}
               me={me}
-              modules={byModule ? modules : undefined}
+              modules={view === 'all' ? modules : undefined}
               ask={
                 !!me && pr.user.login === me && (
                   <AskReviewer
@@ -975,7 +980,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
                 ))}
               </PillMenu>
             )}
-            <ModulesPill modules={byModule ? modules : undefined} />
+            <ModulesPill modules={view !== 'none' ? modules : undefined} />
             {ignoreWs && (
               <button
                 class="pill"

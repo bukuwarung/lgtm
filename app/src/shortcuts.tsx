@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
-import { codeWithoutTests, inTests, moduleName } from './files.ts';
+import { codeWithoutTests, inTests, moduleLabel, moduleName } from './files.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { fileIcon } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
@@ -404,7 +404,7 @@ function ModuleTrees({ files, modules, counts, viewed, onViewed }: { files: File
       {groups.map(([m, fs]) => (
         <details open class="tree-dir mod-group" key={m}>
           <summary title={m === '.' ? 'The root project' : m ? `Module ${moduleName(m)}, in ${m}/` : 'Not in a module'}>
-            <span class="tree-dir-name">{m === '' ? 'Other files' : <><ModuleIcon /> {m === '.' ? ': (root)' : moduleName(m)}</>}</span> <span class="count">{fs.length}</span>
+            <span class="tree-dir-name">{m === '' ? 'Other files' : <><ModuleIcon /> {moduleLabel(m)}</>}</span> <span class="count">{fs.length}</span>
             {flagTests && m !== '' && codeWithoutTests(fs) && (
               <NoTestMark title="No test changes: this module's code changes, but none of its tests" />
             )}

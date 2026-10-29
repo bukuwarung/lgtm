@@ -1,6 +1,6 @@
 import { setEmojiMap } from './emoji.ts';
 import { fetchToken, recordError } from './platform.ts';
-import { estimate, type Estimate } from './files.ts';
+import { estimate, type BuildRoot, type Estimate } from './files.ts';
 
 export type PR = {
   number: number;
@@ -365,6 +365,30 @@ export async function getPushPoints(repo: string, n: number): Promise<PushPoint[
     )
     .filter((x: PushPoint | null): x is PushPoint => !!x)
     .reverse();
+}
+
+// Where a repo's build files sit at a commit, from its file list (one request, kept per commit): the folders that are
+// modules (Gradle, npm/TypeScript, Go, Rust, Python). Not ones under src/, node_modules or fixtures. Null if GitHub cuts
+// the list short (a huge repo).
+const BUILD_FILE = /(^|\/)(build\.gradle(\.kts)?|package\.json|go\.mod|Cargo\.toml|pyproject\.toml)$/;
+const rootsSeen = new Map<string, Promise<BuildRoot[] | null>>();
+export function getBuildRoots(repo: string, sha: string): Promise<BuildRoot[] | null> {
+  const key = `${repo}@${sha}`;
+  if (!rootsSeen.has(key))
+    rootsSeen.set(
+      key,
+      json(`/repos/${repo}/git/trees/${sha}?recursive=1`).then((d: any) => {
+        if (d.truncated) return null;
+        const roots = new Map<string, boolean>();
+        for (const e of d.tree as { path: string; type: string }[]) {
+          if (e.type !== 'blob' || !BUILD_FILE.test(e.path) || /(^|\/)(src|node_modules|fixtures)\//.test(e.path)) continue;
+          const dir = e.path.includes('/') ? e.path.slice(0, e.path.lastIndexOf('/')) : '.';
+          roots.set(dir, (roots.get(dir) ?? false) || /build\.gradle/.test(e.path));
+        }
+        return [...roots].map(([dir, gradle]) => ({ dir, gradle }));
+      }),
+    );
+  return rootsSeen.get(key)!;
 }
 
 // The PR's head commit now, cheaply: to notice a push while it's open.

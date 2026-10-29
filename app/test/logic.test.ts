@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { enclosing, addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { applySuggestions, awaitsMe, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { addsLogic, codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
+import { addsLogic, codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, rainbow, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -579,4 +579,17 @@ test('ignoreWhitespace: blank lines added or removed on their own count as white
   assert.ok(lines.every((l) => l.kind === ' '), JSON.stringify(lines));
   assert.deepEqual(lines.map((l) => [l.old ?? null, l.new ?? null]), [[1, 1], [null, 2], [2, 3], [3, null], [4, 4]]);
   assert.deepEqual(gaps(ignoreWhitespace([h])).at(-1), gaps([h]).at(-1)); // the file's rest lines up as before
+});
+
+test('modulesOf / moduleView: modules from build files, shown only when they tell something', () => {
+  const roots = [{ dir: '.', gradle: true }, { dir: 'app', gradle: true }, { dir: 'core/network', gradle: true }];
+  const m = modulesOf(['app/src/main/A.kt', 'core/network/src/main/B.kt', 'core/network/build.gradle.kts', 'gradle/libs.versions.toml'], roots);
+  assert.deepEqual([...m.values()], ['app', 'core/network', 'core/network', '.']);
+  assert.equal(moduleView(m), 'all');
+  assert.equal(moduleView(modulesOf(['app/src/main/A.kt', 'app/src/main/B.kt'], roots)), 'pill'); // one module: just named
+  assert.equal(moduleView(modulesOf(['src/index.ts', 'package.json'], [{ dir: '.', gradle: false }])), 'none'); // a single-package repo
+  const ts = modulesOf(['packages/pay/lib/a.ts', 'packages/web/index.ts'], [{ dir: '.', gradle: false }, { dir: 'packages/pay', gradle: false }, { dir: 'packages/web', gradle: false }]);
+  assert.equal(moduleView(ts), 'all');
+  assert.equal(moduleName('packages/pay'), 'packages/pay'); // npm packages by folder; Gradle's keep their :names
+  assert.equal(moduleName('core/network'), ':core:network');
 });
