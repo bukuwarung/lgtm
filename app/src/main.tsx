@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getChecks, getEmails, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { getChecks, getEmails, getMergeState, markReady, mergePR, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
@@ -588,6 +588,12 @@ function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon:
 const UpdateBase = ({ i }: { i: QueueItem }) => (
   <QuickPill icon="behind" tone="p-warn" idle="behind base" action="Update branch" busy="updating…" done="branch updated" title="Behind its base branch: Update branch merges the base in" run={() => updateBranch({ id: i.id })} />
 );
+// Auto-merge with the repo's usual method and GitHub's default message, as the merge box would.
+async function autoMerge(i: QueueItem) {
+  const s = await getMergeState(i.repo, i.number);
+  const m = s.methods[0];
+  await mergePR(s, m, s.message[m].title, s.message[m].body, true);
+}
 async function rerunFailed(i: QueueItem) {
   const runs = [...new Set((await getChecks(i.repo, i.number)).filter((c) => c.state === 'failure' && c.jobId).map(runOf).filter(Boolean))] as string[];
   if (!runs.length) throw new Error("the failed checks aren't GitHub Actions, so they can't be run again from here");
@@ -821,6 +827,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         )}
         {kind !== MINE && i.mergeState === 'DIRTY' && <span class="pill p-bad"><Tg i="conflict" t="conflicts" /></span>}
         {i.isDraft && kind !== MINE && <span class="pill"><Tg i="draft" t="draft" /></span>}
+        {i.isDraft && kind === MINE && <QuickPill icon="draft" tone="" idle="draft" action="Ready for review" busy="marking…" done="ready for review" title="A draft: Ready for review lets its reviewers know" run={() => markReady(i.id)} />}
         {kind.colorOf && !i.isDraft && (
           <span class={'pill ' + { APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad', REVIEW_REQUIRED: '' }[i.reviewDecision ?? 'REVIEW_REQUIRED']}>
             <Tg i={DECISION[i.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[i.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
@@ -830,6 +837,9 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t="PR approved" /></span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t="PR changes requested" /></span>}
         {kind === MINE && !i.isDraft && i.mergeState === 'BEHIND' && <UpdateBase i={i} />}
+        {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && i.mergeState === 'BLOCKED' && i.canAutoMerge && !i.autoMerge && !i.queue && (
+          <QuickPill icon="auto" tone="" idle={i.ci === 'PENDING' || i.ci === 'EXPECTED' ? 'checks running' : 'blocked'} action="Enable auto-merge" busy="enabling…" done="auto-merge on" title="Approved, but can't merge yet: Enable auto-merge merges it once it can (the repo's usual method)" run={() => autoMerge(i)} />
+        )}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}><Tg i={MERGE_PILL[i.mergeState]![2]} t={MERGE_PILL[i.mergeState]![0]} /></span>}
         {i.queue ? (
           <span class={i.queue.state === 'UNMERGEABLE' ? 'pill p-bad' : 'pill p-ok'} title={QUEUE_STATE[i.queue.state]}>
