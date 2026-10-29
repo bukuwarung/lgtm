@@ -1918,11 +1918,13 @@ function HoldPlace() {
       const ref = refs.find((r) => r.el.isConnected);
       if (ref) {
         const moved = ref.el.getBoundingClientRect().top - ref.top;
-        if (Math.abs(moved) >= 1) scrollBy(0, moved);
+        if (Math.abs(moved) >= 1 && scrollY > 0) scrollBy(0, moved); // at the very top, new content just flows in below
       }
       note();
     });
-    const watch = () => main.querySelectorAll(':scope > section.file').forEach((f) => ro.observe(f));
+    // The files, and the column itself: banners, pills and the ticket arriving above the files grow it without resizing
+    // any file.
+    const watch = () => (ro.observe(main), main.querySelectorAll(':scope > section.file').forEach((f) => ro.observe(f)));
     watch();
     note();
     const mo = new MutationObserver(watch); // files shown later (generated ones, opened)
