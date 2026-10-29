@@ -228,7 +228,7 @@ main { padding: 16px; }
 /* Rich markdown: the left padding hosts the "+" comment gutter. */
 .rich { padding: 8px 24px 8px 44px; }
 .md { overflow-wrap: anywhere; }
-.md img { max-width: 100%; }
+.md img { max-width: 100%; height: auto; } /* height: auto keeps a reserved width × height in proportion */
 .md pre { color: var(--code-fg); padding: 12px; background: var(--soft); border-radius: 6px; overflow: auto; }
 /* A commentable code block can't clip (that would hide the "+" gutter drawn outside it), so its code scrolls instead. */
 .md pre:has(.cl) { overflow: visible; }
@@ -679,6 +679,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .settings > section { scroll-margin-top: calc(var(--nav) + 16px); }
 @media (max-width: 900px) { .settings { display: block; } .set-toc { display: none; } }
 .scroll-marks .m-view { position: absolute; left: 0; right: 0; cursor: grab; min-height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 26%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 38%, transparent); box-sizing: border-box; }
+.scroll-marks .m-view.glide { transition: top .2s ease-out, height .2s ease-out; }
 .scroll-marks .m-view:hover, .scroll-marks:active .m-view { background: color-mix(in srgb, var(--fg) 36%, transparent); }
 .set-size { display: flex; align-items: center; gap: 8px; font-size: calc(12px * var(--ts)); color: var(--muted); font-variant-numeric: tabular-nums; }
 .set-size input[type=range] { width: 160px; }
@@ -863,6 +864,8 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
    usual, so no dot. */
 .ficon { position: relative; flex: none; display: inline-grid; width: 14px; height: 14px; }
 .ficon img { width: 14px; height: 14px; }
+.dicon { flex: none; width: 14px; height: 14px; margin-right: 4px; }
+.tree-dir[open] > summary > .dicon:not(.open), .tree-dir:not([open]) > summary > .dicon.open { display: none; }
 .ficon .fdot { position: absolute; right: -2px; bottom: -1px; width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--bg); }
 .file-name .file-icon { flex: none; align-self: center; width: 16px; height: 16px; }
 /* A lone comment line rendered (Settings: Single comment lines): lighter than a doc block, no box. */

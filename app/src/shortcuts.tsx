@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName } from './files.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
-import { fileIcon } from './fileicons.ts';
+import { fileIcon, folderIcon } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -520,6 +520,8 @@ function TreeDir({ node, depth, counts, viewed, onViewed }: TreeProps) {
   return (
     <details open class="tree-dir">
       <summary style={{ paddingLeft: `${8 + depth * 14}px` }} title={name}>
+        <img class="dicon" src={folderIcon(name, false)} alt="" />
+        <img class="dicon open" src={folderIcon(name, true)} alt="" />
         <span class="tree-dir-name">{name}</span>
         <ViewedMark paths={allFiles(n)} viewed={viewed} onViewed={onViewed} what="this folder" />
       </summary>
