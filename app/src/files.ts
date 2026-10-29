@@ -23,10 +23,17 @@ export const reviewOrder = (paths: string[]) =>
 // foo.test.ts, tests/test_foo.py → Foo.kt, foo.ts, foo.py), wherever it lives.
 const CODE = /\.(kt|kts|java|swift|m|mm|go|py|rb|rs|dart|scala|cs|php|c|cc|cpp|h|hpp|ts|tsx|js|jsx|mjs|vue|svelte)$/;
 const base = (p: string) => p.split('/').pop()!.replace(/^test_/, '');
-export function untested(files: { filename: string; status: string; additions: number }[]): string[] {
+// Did the change add logic worth a test: a function with a body, a lambda, or control flow? Constants, enum entries,
+// properties, imports, annotations and abstract declarations don't count. Without a patch (too large), assume so.
+const LOGIC = /\b(fun|function|def|func)\b[^;]*[{=]\s*($|[^=])|=>|->|\b(if|else|when|for|while|switch|case|return|try|catch|throw|match)\b/;
+const QUIET = /^\s*(\/\/|\/?\*|#|import\b|package\b|@)/;
+export const addsLogic = (patch?: string) =>
+  patch == null || patch.split('\n').some((l) => l[0] === '+' && !l.startsWith('+++') && !QUIET.test(l.slice(1)) && LOGIC.test(l.slice(1)));
+type Changed = { filename: string; status: string; additions: number; patch?: string };
+export function untested(files: Changed[]): string[] {
   const tested = new Set(files.filter((f) => isTest(f.filename) || /(^|\/)test_[^/]+$/.test(f.filename)).map((f) => base(subject(f.filename))));
   return files
-    .filter((f) => CODE.test(f.filename) && !/\.kts$/.test(f.filename) && !f.filename.includes('/src/debug/') && f.status !== 'removed' && f.additions > 0)
+    .filter((f) => CODE.test(f.filename) && !/\.kts$/.test(f.filename) && !f.filename.includes('/src/debug/') && f.status !== 'removed' && f.additions > 0 && addsLogic(f.patch))
     .filter((f) => !isTest(f.filename) && !/(^|\/)test_[^/]+$/.test(f.filename) && !tested.has(base(f.filename)))
     .map((f) => f.filename);
 }
@@ -73,8 +80,8 @@ export const moduleName = (m: string) => (m === '.' ? ':' : ':' + m.replaceAll('
 
 // Whether a set of changed files (a module's) changes code but none of its tests: code changed and added to (not
 // build scripts or debug-only sources), and no test file among them.
-export function codeWithoutTests(files: { filename: string; status: string; additions: number }[]): boolean {
+export function codeWithoutTests(files: Changed[]): boolean {
   const test = (p: string) => isTest(p) || /(^|\/)test_[^/]+$/.test(p);
   if (files.some((f) => test(f.filename))) return false;
-  return files.some((f) => CODE.test(f.filename) && !/\.kts$/.test(f.filename) && !f.filename.includes('/src/debug/') && f.status !== 'removed' && f.additions > 0);
+  return files.some((f) => CODE.test(f.filename) && !/\.kts$/.test(f.filename) && !f.filename.includes('/src/debug/') && f.status !== 'removed' && f.additions > 0 && addsLogic(f.patch));
 }

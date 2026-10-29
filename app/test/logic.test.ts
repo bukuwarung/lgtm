@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { enclosing, addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { applySuggestions, awaitsMe, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
+import { addsLogic, codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, rainbow, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -535,4 +535,13 @@ test('rainbow: brackets coloured by depth, not inside strings or comments', () =
   assert.equal(rainbow('f(a[b])'), 'f<span class="rb0">(</span>a<span class="rb1">[</span>b<span class="rb1">]</span><span class="rb0">)</span>');
   assert.equal(rainbow('x(<span class="hljs-string">"(a"</span>)'), 'x<span class="rb0">(</span><span class="hljs-string">"(a"</span><span class="rb0">)</span>');
   assert.equal(rainbow(') &lt;('), '<span class="rb2">)</span> &lt;<span class="rb2">(</span>'); // a hunk can start inside brackets
+});
+
+test('addsLogic: only changes with logic need a test', () => {
+  const p = (...lines: string[]) => '@@ -1,1 +1,3 @@\n' + lines.map((l) => '+' + l).join('\n');
+  for (const no of [p('    PENDING("pending"),', '    const val MAX_RETRIES = 3'), p('enum class Status { A, B }'), p('data class User(val id: String, val name: String)'), p('interface Repo {', '    fun load(id: String): User', '}'), p('import a.b.C', '// if this changes')])
+    assert.ok(!addsLogic(no), no);
+  for (const yes of [p('fun total(xs: List<Int>) = xs.sum()'), p('    fun save(u: User) {'), p('    if (x > 0) return x'), p('val f = { x: Int -> x + 1 }'), p('const f = (a) => a * 2'), p('export function go() {')])
+    assert.ok(addsLogic(yes), yes);
+  assert.ok(addsLogic(undefined)); // no patch: can't tell
 });
