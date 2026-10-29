@@ -43,7 +43,7 @@ function App() {
   }, [tagStyle]);
   const [strike] = useStoredFlag('strikeRemoved', false); // Settings → Diff: removed markdown struck through
   useEffect(() => void document.documentElement.classList.toggle('strike-removed', strike), [strike]);
-  const [footer] = useStoredFlag('fileFooter', true); // Settings → Diff: each file's closing bar
+  const [footer] = useStoredFlag('fileFooter', false); // Settings → Diff: each file's closing bar
   useEffect(() => void document.documentElement.classList.toggle('no-file-footer', !footer), [footer]);
   const [lineStyle] = useStoredValue('lineStyle', 'fill'); // Settings → Diff: changed lines filled, tinted or barred
   useEffect(() => {
