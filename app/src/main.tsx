@@ -8,7 +8,7 @@ import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, since, askNotifications, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -558,6 +558,7 @@ const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string, strin
 // failed (open the menu again to retry).
 function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon: string; tone: string; idle: string; action: string; busy: string; done: string; title: string; run: () => Promise<unknown> }) {
   const [step, setStep] = useState<'idle' | 'busy' | 'done' | string>('idle');
+  const [said, setSaid] = useState(''); // what the action reported, as the done pill's tooltip
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   const failed = !['idle', 'busy', 'done'].includes(step);
@@ -573,11 +574,19 @@ function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon:
     stop(e);
     setOpen(false);
     setStep('busy');
-    run().then(() => setStep('done'), (err) => setStep(`failed: ${err.message}`));
+    run().then(
+      (r) => {
+        setSaid(typeof r === 'string' ? r : '');
+        setStep('done');
+        // The list again, so the PR moves to where it now stands (GitHub's search takes a moment to catch up).
+        setTimeout(() => dispatchEvent(new Event('lgtm:list-refresh')), 2000);
+      },
+      (err) => setStep(`failed: ${err.message}`),
+    );
   };
   return (
     <span class="pill-drop" ref={box}>
-      <button class={step === 'done' ? 'pill p-ok' : failed ? 'pill p-bad' : `pill ${tone}`} title={failed ? step : title} aria-expanded={open} onClick={(e) => (stop(e), (step === 'idle' || failed) && setOpen(!open))}>
+      <button class={step === 'done' ? 'pill p-ok' : failed ? 'pill p-bad' : `pill ${tone}`} title={failed ? step : (step === 'done' && said) || title} aria-expanded={open} onClick={(e) => (stop(e), (step === 'idle' || failed) && setOpen(!open))}>
         {step === 'done' ? <Tg i="approved" t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : `${step === 'idle' ? idle : "couldn't"} ▾`} />}
       </button>
       {open && <button class="pill-menu" onClick={go}>{failed ? `${action} again` : action}</button>}
@@ -593,6 +602,20 @@ async function autoMerge(i: QueueItem) {
   const s = await getMergeState(i.repo, i.number);
   const m = s.methods[0];
   await mergePR(s, m, s.message[m].title, s.message[m].body, true);
+}
+// Whoever requested changes, asked to review again on GitHub, then sent the "again" message on Slack (as the PR
+// view's re-request does; none if that message is emptied or Slack isn't set up).
+async function askAgain(i: QueueItem): Promise<string> {
+  await Promise.all(i.changesBy.map((l) => requestReview(i.repo, i.number, l)));
+  const text = fillSlack(slackTemplate('again'), prValues({ repo: i.repo, number: i.number, title: i.title, url: `https://github.com/${i.repo}/pull/${i.number}`, author: i.author }));
+  if (!text || !(await slackStatus(`${i.repo}#${i.number}`).catch(() => null))?.configured) return 'Asked again on GitHub';
+  try {
+    const emails = await getEmails(i.repo.split('/')[0], i.changesBy);
+    const missed = (await notifySlack(i.changesBy.map((login) => ({ login, emails: emails[login] ?? [] })), text, `${i.repo}#${i.number}`)).filter((r) => !r.ok);
+    return missed.length ? `Asked again on GitHub; Slack didn't reach ${missed.map((r) => '@' + r.login).join(', ')}` : 'Asked again on GitHub and Slack';
+  } catch (e: any) {
+    return `Asked again on GitHub; Slack failed (${e.message})`;
+  }
 }
 async function rerunFailed(i: QueueItem) {
   const runs = [...new Set((await getChecks(i.repo, i.number)).filter((c) => c.state === 'failure' && c.jobId).map(runOf).filter(Boolean))] as string[];
@@ -714,7 +737,13 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       return 0;
     }
   };
-  useEffect(load, [version]);
+  const [again, setAgain] = useState(0); // a pill's action asks for the list again
+  useEffect(load, [version, again]);
+  useEffect(() => {
+    const more = () => setAgain((n) => n + 1);
+    addEventListener('lgtm:list-refresh', more);
+    return () => removeEventListener('lgtm:list-refresh', more);
+  }, []);
   useEffect(() => {
     if (requested.current !== team) loadTeam(team);
   }, [team]);
@@ -838,7 +867,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t="PR changes requested" /></span>}
         {kind === MINE && !i.isDraft && i.mergeState === 'BEHIND' && <UpdateBase i={i} />}
         {kind === MINE && !i.isDraft && i.reviewDecision === 'CHANGES_REQUESTED' && i.changesBy.length > 0 && (
-          <QuickPill icon="changes" tone="p-bad" idle="changes requested" action={`Ask ${i.changesBy.map((l) => '@' + l).join(', ')} again`} busy="asking…" done="asked again" title="Once you've made the changes: ask whoever requested them to review again" run={() => Promise.all(i.changesBy.map((l) => requestReview(i.repo, i.number, l)))} />
+          <QuickPill icon="changes" tone="p-bad" idle="changes requested" action={`Ask ${i.changesBy.map((l) => '@' + l).join(', ')} again`} busy="asking…" done="asked again" title="Once you've made the changes: ask whoever requested them to review again" run={() => askAgain(i)} />
         )}
         {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && i.mergeState === 'BLOCKED' && i.canAutoMerge && !i.autoMerge && !i.queue && (
           <QuickPill icon="auto" tone="" idle={i.ci === 'PENDING' || i.ci === 'EXPECTED' ? 'checks running' : 'blocked'} action="Enable auto-merge" busy="enabling…" done="auto-merge on" title="Approved, but can't merge yet: Enable auto-merge merges it once it can (the repo's usual method)" run={() => autoMerge(i)} />
