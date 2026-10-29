@@ -2000,7 +2000,9 @@ function HoldPlace() {
     if (CSS.supports('overflow-anchor', 'auto') && getComputedStyle(document.documentElement).overflowAnchor !== 'none') return;
     const main = document.querySelector('main');
     if (!main) return;
-    let refs: { el: Element; top: number }[] = [];
+    // The reference's place on the page (not in the window), so scrolling between a look and a resize doesn't count
+    // as a move.
+    let refs: { el: Element; at: number }[] = [];
     let notedY = scrollY; // where the page was when refs were taken
     const note = () => {
       refs = [];
@@ -2011,20 +2013,20 @@ function HoldPlace() {
         const el = document.elementFromPoint(x, y);
         // Pinned headers stay put, so they can't say where you are.
         if (el && main.contains(el) && !el.closest('.file-h, tr.hunk, .pill-pop')) {
-          refs.push({ el, top: el.getBoundingClientRect().top });
+          refs.push({ el, at: el.getBoundingClientRect().top + scrollY });
           break;
         }
       }
       const next = [...main.querySelectorAll(':scope > section.file')].find((f) => f.getBoundingClientRect().top >= top);
-      if (next) refs.push({ el: next, top: next.getBoundingClientRect().top });
+      if (next) refs.push({ el: next, at: next.getBoundingClientRect().top + scrollY });
     };
     const ro = new ResizeObserver(() => {
-      // Scrolled since the last look (a jump to a thread, resuming where I left off) before its scroll event came:
-      // the refs are stale, so take new ones rather than "correct" against the old place.
-      if (Math.abs(scrollY - notedY) > 1) return note();
+      // Jumped more than a screen since the last look (to a thread, resuming where I left off) before its scroll event
+      // came: the refs are for another part of the page, so take new ones rather than "correct" against them.
+      if (Math.abs(scrollY - notedY) > innerHeight) return note();
       const ref = refs.find((r) => r.el.isConnected);
       if (ref) {
-        const moved = ref.el.getBoundingClientRect().top - ref.top;
+        const moved = ref.el.getBoundingClientRect().top + scrollY - ref.at;
         if (Math.abs(moved) >= 1 && scrollY > 0) scrollBy(0, moved); // at the very top, new content just flows in below
       }
       note();
