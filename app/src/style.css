@@ -830,3 +830,17 @@ html.wd-box mark:is(.wd-del, .wd-add):is(.wd-s, .wd-m, .wd-e) { box-shadow: inse
 html.wd-box mark:is(.wd-del, .wd-add).wd-s { --wd-l: inset 1px 0 var(--wd); border-radius: 4px 0 0 4px; padding-right: 0; margin-right: 0; }
 html.wd-box mark:is(.wd-del, .wd-add).wd-m { border-radius: 0; padding-left: 0; padding-right: 0; margin: 0; }
 html.wd-box mark:is(.wd-del, .wd-add).wd-e { --wd-r: inset -1px 0 var(--wd); border-radius: 0 4px 4px 0; padding-left: 0; margin-left: 0; }
+/* Added and removed lines tinted lighter, or only a bar at their left edge (Settings → Diff). */
+html.ln-subtle .diff tr.a { background: color-mix(in srgb, var(--add) 45%, transparent); }
+html.ln-subtle .diff tr.d { background: color-mix(in srgb, var(--del) 45%, transparent); }
+html.ln-bar .diff :is(tr.a, tr.d) { background: none; }
+html.ln-bar .diff tr > td.code { border-left: 3px solid transparent; } /* every row, so nothing shifts */
+html.ln-bar .diff tr.a > td.code { border-left-color: var(--addfg); }
+html.ln-bar .diff tr.d > td.code { border-left-color: var(--delfg); }
+html.ln-bar .diff tr.a .code::before { color: var(--addfg); }
+html.ln-bar .diff tr.d .code::before { color: var(--delfg); }
+.ln-sample { display: inline-grid; gap: 2px; width: 22px; margin-right: 4px; vertical-align: middle; }
+.ln-sample i { display: block; height: 5px; border-radius: 1px; }
+.ln-sample i.a { background: var(--add); } .ln-sample i.d { background: var(--del); }
+.ln-sample.ln-subtle i.a { background: color-mix(in srgb, var(--add) 45%, transparent); } .ln-sample.ln-subtle i.d { background: color-mix(in srgb, var(--del) 45%, transparent); }
+.ln-sample.ln-bar i { background: none; } .ln-sample.ln-bar i.a { box-shadow: inset 3px 0 var(--addfg); } .ln-sample.ln-bar i.d { box-shadow: inset 3px 0 var(--delfg); }

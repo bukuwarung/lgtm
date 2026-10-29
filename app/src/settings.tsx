@@ -34,6 +34,23 @@ export function useTheme() {
 
 // A switch; with an example (demos.tsx) it also shows what it does, the side you have now outlined. Children are
 // sub-switches: indented under it, and greyed out while it's off.
+// How added and removed lines are marked: filled (GitHub's way), a lighter tint, or just a bar at their left edge.
+function LineStyle() {
+  const [style, setStyle] = useStoredValue('lineStyle', 'fill');
+  return (
+    <div class="set-row">
+      <span>Changed lines</span>
+      <span class="set-seg" role="radiogroup" aria-label="Changed line style">
+        {([['fill', 'Fill'], ['subtle', 'Subtle'], ['bar', 'Bar']] as const).map(([v, name]) => (
+          <button role="radio" aria-checked={style === v} class={style === v ? 'on' : ''} onClick={() => setStyle(v)}>
+            <span class={`ln-sample ln-${v}`}><i class="d" /><i class="a" /></span> {name}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 // How changed words are marked: filled (GitHub's way), boxed, or a wavy underline like a typo's.
 function WordStyle() {
   const [style, setStyle] = useStoredValue('wordStyle', 'fill');
@@ -286,6 +303,7 @@ export function Settings() {
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)." />
         <Flag k="rainbowBrackets" initial={false} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)." />
+        <LineStyle />
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
           <WordStyle />
         </Flag>

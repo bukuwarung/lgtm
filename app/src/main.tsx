@@ -41,6 +41,11 @@ function App() {
     document.documentElement.classList.toggle('tags-text', tagStyle === 'text');
     document.documentElement.classList.toggle('tags-icons', tagStyle === 'icons');
   }, [tagStyle]);
+  const [lineStyle] = useStoredValue('lineStyle', 'fill'); // Settings → Diff: changed lines filled, tinted or barred
+  useEffect(() => {
+    document.documentElement.classList.toggle('ln-subtle', lineStyle === 'subtle');
+    document.documentElement.classList.toggle('ln-bar', lineStyle === 'bar');
+  }, [lineStyle]);
   const [wordStyle] = useStoredValue('wordStyle', 'fill'); // Settings → Diff: changed words filled, boxed or squiggled
   useEffect(() => {
     document.documentElement.classList.toggle('wd-box', wordStyle === 'box');
