@@ -329,6 +329,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const [target, setTarget] = useState<Target | null>(null);
   const [showGenerated, setShowGenerated] = useState(false);
   const [showNoDiff, setShowNoDiff] = useState(false);
+  const [showWsOnly, setShowWsOnly] = useState(false);
   // Feature switches (Settings → Diff).
   const { bots } = useBots();
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
@@ -780,11 +781,16 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     }
   }
 
-  const visible = files.filter((f) => !f.generated && !f.noDiff);
+  // With whitespace ignored, files whose every change is whitespace wait behind one row too.
+  const wsOnlySet = new Set(
+    ignoreWs ? files.filter((f) => !f.generated && !f.noDiff && whitespaceOnly(f)).map((f) => f.filename) : [],
+  );
+  const visible = files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename));
   const generated = files.filter((f) => f.generated);
   const noDiff = files.filter((f) => f.noDiff && !f.generated);
+  const wsOnly = files.filter((f) => wsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
-  const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : [])];
+  const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : [])];
   const section = (f: File) => (
     <FileSection
       key={f.filename}
@@ -1040,6 +1046,12 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
                 {noDiff.length} file{noDiff.length > 1 ? 's' : ''} renamed or moved without changes hidden. Show
               </button>
             ))}
+          {wsOnly.length > 0 &&
+            (showWsOnly ? wsOnly.map(section) : (
+              <button class="gen-row" onClick={() => setShowWsOnly(true)}>
+                {wsOnly.length} file{wsOnly.length > 1 ? 's' : ''} with only whitespace changes hidden. Show
+              </button>
+            ))}
         </main>
       </div>
     </div>
@@ -1156,6 +1168,14 @@ function OpenInEditor({ headRepo, sha, path, line }: { headRepo: string; sha: st
       <Octicon name="code" />
     </button>
   );
+}
+
+// Whether every change in a file is whitespace (blank lines included), worked out once per loaded file.
+const wsOnlySeen = new WeakMap<File, boolean>();
+function whitespaceOnly(f: File): boolean {
+  if (!f.patch) return false;
+  if (!wsOnlySeen.has(f)) wsOnlySeen.set(f, ignoreWhitespace(parsePatch(f.patch)).every((h) => h.lines.every((l) => l.kind === ' ')));
+  return wsOnlySeen.get(f)!;
 }
 
 // Render a file's body only once it scrolls near the viewport.
