@@ -824,3 +824,9 @@ mark.wd-add { --wd: var(--addfg); }
 .wd-sample.wd-fill mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); box-shadow: none; text-decoration: none; }
 .wd-sample.wd-box mark:is(.wd-del, .wd-add) { text-decoration: none; }
 .wd-sample.wd-squiggle mark:is(.wd-del, .wd-add) { box-shadow: none; }
+/* One change split into pieces by the syntax colours (diff.ts markText) is one box: the first piece has its left
+   edge, the last its right, those between only the top and bottom lines. */
+html.wd-box mark:is(.wd-del, .wd-add):is(.wd-s, .wd-m, .wd-e) { box-shadow: inset 0 1px var(--wd), inset 0 -1px var(--wd), var(--wd-l, 0 0 #0000), var(--wd-r, 0 0 #0000); }
+html.wd-box mark:is(.wd-del, .wd-add).wd-s { --wd-l: inset 1px 0 var(--wd); border-radius: 4px 0 0 4px; padding-right: 0; margin-right: 0; }
+html.wd-box mark:is(.wd-del, .wd-add).wd-m { border-radius: 0; padding-left: 0; padding-right: 0; margin: 0; }
+html.wd-box mark:is(.wd-del, .wd-add).wd-e { --wd-r: inset -1px 0 var(--wd); border-radius: 0 4px 4px 0; padding-left: 0; margin-left: 0; }

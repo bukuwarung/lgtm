@@ -340,7 +340,7 @@ test('untested: code changed without a matching test change', () => {
 
 test('markText marks text only, closing around tags and counting entities as one', () => {
   assert.equal(markText('val fee', 4, 7, 'm'), 'val <mark class="m">fee</mark>');
-  assert.equal(markText('<span class="k">val</span> a &amp; b', 2, 7, 'm'), '<span class="k">va<mark class="m">l</mark></span><mark class="m"> a &amp;</mark> b');
+  assert.equal(markText('<span class="k">val</span> a &amp; b', 2, 7, 'm'), '<span class="k">va<mark class="m wd-s">l</mark></span><mark class="m wd-e"> a &amp;</mark> b');
   assert.equal(markText('x', 1, 1, 'm'), 'x');
 });
 
@@ -549,4 +549,12 @@ test('addsLogic: only changes with logic need a test', () => {
     assert.ok(addsLogic(yes), yes);
   for (const no of [p('enum class Status(val code: Int) {'), p('public class User {'), p('public static final int MAX = 3;'), p('int add(int a, int b);'), p('    String name;'), p('struct Point { x: i32, y: i32 }'), p('    case pending = "pending"')])
     assert.ok(!addsLogic(no), no);
+});
+
+test('markText: a range split by tags is tagged first, middle and last', () => {
+  assert.equal(markText('ab', 0, 2, 'm'), '<mark class="m">ab</mark>');
+  assert.equal(
+    markText('<i>a</i> <b>b</b>', 0, 3, 'm'),
+    '<i><mark class="m wd-s">a</mark></i><mark class="m wd-m"> </mark><b><mark class="m wd-m">b</mark></b><mark class="m wd-e"></mark>',
+  );
 });
