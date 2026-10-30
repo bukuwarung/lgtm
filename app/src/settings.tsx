@@ -6,8 +6,8 @@ import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
-import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes, themeStyle } from './look.ts';
-import { fromZedFile, parseThemeFile, pickVariant, type AppTheme } from './themes.ts';
+import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes, saveTheme, setTrial, themeStyle } from './look.ts';
+import { fromVSCode, fromZedFile, parseThemeFile, pickVariant, type AppTheme } from './themes.ts';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
@@ -465,12 +465,6 @@ const savedThemes = (look: Look): Record<string, AppTheme> => {
     return {};
   }
 };
-const saveTheme = (look: Look, key: string, t: AppTheme | null) => {
-  const all = savedThemes(look);
-  if (t) all[key] = t;
-  else delete all[key];
-  look.setMine(JSON.stringify(all));
-};
 
 // The picked theme, when it's one you added: its light and dark version (for a file with several), where it's from,
 // and a way to remove it.
@@ -495,7 +489,7 @@ function MyTheme({ look }: { look: Look }) {
             </select>
           ) : null,
         )}
-        <button onClick={() => (look.setAppTheme('lgtm'), saveTheme(look, look.appTheme, null))}>Remove</button>
+        <button onClick={() => (saveTheme(look, look.appTheme, null), look.setAppTheme('lgtm'))}>Remove</button>
       </span>
     </div>
   );
@@ -537,7 +531,7 @@ function ThemeGallery({ look }: { look: Look }) {
     }
     setBusy('');
   };
-  const install = (key: string, t: AppTheme) => (saveTheme(look, key, t), look.setAppTheme(key), setFiles(null), setPreview(null));
+  const install = (key: string, t: AppTheme) => (saveTheme(look, key, t), setTrial(null), setFiles(null), setPreview(null));
   // A theme file fetched for its preview card; several in one extension (Catppuccin's accents) go by their file names.
   const fetchTheme = async (ext: ZedExtension, name: string, several: boolean, busyAs = name) => {
     setBusy(busyAs);
@@ -563,6 +557,7 @@ function ThemeGallery({ look }: { look: Look }) {
         </span>
         <span class="row">
           <button class="primary" onClick={() => install(preview.key, preview.t)}>Add</button>
+          <button title="See it on the whole app first: look around, then keep it or not" onClick={() => setTrial(preview)}>Try</button>
           <button onClick={() => setPreview(null)}>Cancel</button>
         </span>
       </div>
@@ -570,10 +565,13 @@ function ThemeGallery({ look }: { look: Look }) {
   const fromFile = async (f: File | undefined) => {
     if (!f) return;
     try {
-      const t = fromZedFile(parseThemeFile(await f.text()), '');
+      const file = parseThemeFile(await f.text());
+      // Zed's: a family of themes; VS Code's: one theme's colors and tokenColors.
+      const t = file.themes ? fromZedFile(file, '') : file.colors || file.tokenColors ? fromVSCode({ name: f.name.replace(/\.json$/i, ''), ...file }, '') : null;
+      if (!t) throw new Error('it has neither a Zed theme list nor VS Code colours');
       install(`file:${f.name}`, t);
     } catch (e: any) {
-      setErr(`That file isn't a Zed theme: ${e.message}`);
+      setErr(`Couldn't use that file: ${e.message}`);
     }
   };
   if (!open)
@@ -581,7 +579,7 @@ function ThemeGallery({ look }: { look: Look }) {
       <div class="set-row">
         <span>
           More themes
-          <small>Any of the hundreds in Zed's theme gallery, or a Zed theme file you have.</small>
+          <small>Any of the hundreds in Zed's theme gallery, or a Zed or VS Code theme file you have.</small>
         </span>
         <span class="row">
           <button onClick={() => setOpen(true)}>Browse Zed themes</button>

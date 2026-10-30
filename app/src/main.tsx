@@ -13,7 +13,7 @@ import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { DemoPage } from './demos.tsx';
-import { CODE_SIZE, TEXT_SIZE, useCodeLook } from './look.ts';
+import { CODE_SIZE, TEXT_SIZE, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 
@@ -21,6 +21,20 @@ import { Resizer } from './resizer.tsx';
 export function parseRoute(s: string) {
   const m = s.match(/([^/\s#]+\/[^/\s]+)\/pull\/(\d+)/);
   return m ? { repo: m[1], n: +m[2] } : null;
+}
+
+// A theme being tried on the whole app (from Settings' theme gallery): keep it, or go back to yours. On every page, so
+// a PR can be read in it first.
+function TrialBar({ look }: { look: ReturnType<typeof useCodeLook> }) {
+  const tried = useTrial();
+  if (!tried) return null;
+  return (
+    <div class="toast trial" role="status">
+      Trying <b>{tried.t.name}</b>
+      <button class="primary" onClick={() => (saveTheme(look, tried.key, tried.t), setTrial(null))}>Keep it</button>
+      <button onClick={() => setTrial(null)}>Back to yours</button>
+    </div>
+  );
 }
 
 function App() {
@@ -204,6 +218,7 @@ function App() {
       {isDesktop && <FindBar />}
       <WhatsNew />
       <SetupCheck />
+      <TrialBar look={look} />
       {toast && (
         <div class="toast" role="status">
           {toast.text}

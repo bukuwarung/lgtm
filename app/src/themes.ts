@@ -82,6 +82,59 @@ export function parseThemeFile(text: string): any {
   }
 }
 
+// A VS Code colour theme file (its UI `colors` and syntax `tokenColors`) as lgtm's tokens. It has one look, for both
+// light and dark. One that only `include`s another file has too little in it to use.
+export function fromVSCode(file: any, source: string): AppTheme {
+  const c = file.colors ?? {};
+  const rules: { scopes: string[]; fg?: string }[] = (file.tokenColors ?? []).map((r: any) => ({
+    scopes: (Array.isArray(r.scope) ? r.scope : String(r.scope ?? '').split(',')).map((x: string) => x.trim()),
+    fg: r.settings?.foreground,
+  }));
+  // The colour of the first scope, in order of preference, that a rule names exactly, else one it starts.
+  const tok = (...want: string[]) =>
+    want.map((w) => rules.find((r) => r.fg && r.scopes.includes(w))?.fg).find(Boolean) ??
+    want.map((w) => rules.find((r) => r.fg && r.scopes.some((s) => s.startsWith(w + '.') || s.startsWith(w + ' ')))?.fg).find(Boolean);
+  if (!c['editor.background'] && !rules.length) throw new Error("it has no colours of its own (it may only include another file)");
+  const added = c['gitDecoration.addedResourceForeground'] ?? c['terminal.ansiGreen'];
+  const deleted = c['gitDecoration.deletedResourceForeground'] ?? c['terminal.ansiRed'];
+  const warning = c['editorWarning.foreground'] ?? c['terminal.ansiYellow'];
+  const s = {
+    'editor.background': c['editor.background'],
+    'editor.foreground': c['editor.foreground'],
+    'surface.background': c['sideBar.background'] ?? c['panel.background'] ?? c['editorWidget.background'],
+    border: c['panel.border'] ?? c['editorGroup.border'] ?? c['sideBar.border'] ?? c['contrastBorder'] ?? c['input.border'],
+    text: c['foreground'] ?? c['editor.foreground'],
+    'text.muted': c['descriptionForeground'] ?? c['editorLineNumber.foreground'],
+    'text.accent': c['textLink.foreground'] ?? c['focusBorder'] ?? c['button.background'],
+    created: added,
+    deleted,
+    modified: c['gitDecoration.modifiedResourceForeground'] ?? c['terminal.ansiBlue'],
+    warning,
+    'search.match_background': c['editor.findMatchHighlightBackground'],
+    'search.active_match_background': c['editor.findMatchBackground'],
+    accents: [1, 2, 3].map((n) => c[`editorBracketHighlight.foreground${n}`]).filter(Boolean),
+    syntax: Object.fromEntries(
+      Object.entries({
+        keyword: tok('keyword', 'keyword.control', 'storage.type', 'storage'),
+        function: tok('entity.name.function', 'support.function', 'meta.function-call'),
+        number: tok('constant.numeric', 'constant'),
+        string: tok('string'),
+        type: tok('entity.name.type', 'support.type', 'entity.name.class', 'support.class', 'storage.type'),
+        comment: tok('comment'),
+        tag: tok('entity.name.tag'),
+        attribute: tok('meta.annotation', 'storage.type.annotation', 'meta.decorator', 'entity.name.function.decorator'),
+        property: tok('variable.other.property', 'variable.other.object.property', 'support.variable.property', 'variable.other.member'),
+        'variable.parameter': tok('variable.parameter'),
+        'variable.special': tok('variable.language'),
+      }).filter(([, v]) => v).map(([k, v]) => [k, { color: v }]),
+    ),
+  };
+  const tokens = fromZed(s);
+  const name = file.name ?? 'VS Code theme';
+  const appearance = /light/i.test(file.type ?? '') ? 'light' : 'dark';
+  return { name, light: tokens, dark: tokens, credit: file.author, source, variants: [{ name, appearance, tokens }], pick: { light: name, dark: name } };
+}
+
 // A theme file added in Settings: every version kept, so its light and dark one can be picked.
 export function fromZedFile(file: any, source: string): AppTheme {
   const t = fromZedFamily(file);

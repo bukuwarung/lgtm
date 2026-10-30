@@ -593,3 +593,36 @@ test('modulesOf / moduleView: modules from build files, shown only when they tel
   assert.equal(moduleName('packages/pay'), 'packages/pay'); // npm packages by folder; Gradle's keep their :names
   assert.equal(moduleName('core/network'), ':core:network');
 });
+
+test('theme files: VS Code colours and tokens, Zed families, lenient JSON', async () => {
+  const { fromVSCode, fromZedFile, parseThemeFile } = await import('../src/themes.ts');
+  const vs = parseThemeFile(`{
+    // VS Code themes are often JSONC
+    "name": "Night", "type": "dark",
+    "colors": { "editor.background": "#101010", "foreground": "#eeeeee", "gitDecoration.addedResourceForeground": "#00ff00", "terminal.ansiRed": "#ff0000", },
+    "tokenColors": [
+      { "scope": ["keyword.control", "storage"], "settings": { "foreground": "#ff00ff" } },
+      { "scope": "string.quoted.double", "settings": { "foreground": "#ffff00" } },
+      { "scope": "comment", "settings": { "fontStyle": "italic" } },
+    ],
+  }`);
+  const t = fromVSCode(vs, '');
+  assert.equal(t.dark['--bg'], '#101010');
+  assert.equal(t.dark['--fg'], '#eeeeee');
+  assert.equal(t.dark['--addfg'], '#00ff00');
+  assert.equal(t.dark['--delfg'], '#ff0000'); // from the terminal's red, as the theme names no git colour
+  assert.equal(t.dark['--hl-kw'], '#ff00ff'); // keyword.control, the first preference named exactly
+  assert.equal(t.dark['--hl-str'], '#ffff00'); // string.quoted.double starts with string
+  assert.equal(t.dark['--hl-com'], undefined); // a rule with no colour isn't one
+  assert.equal(t.light['--bg'], '#101010'); // one look for both
+  assert.throws(() => fromVSCode({ include: './base.json' }, ''));
+
+  const zed = fromZedFile(
+    { name: 'Pair', themes: [{ name: 'Pair Light', appearance: 'light', style: { 'editor.background': '#ffffffff', created: '#00aa00ff' } }, { name: 'Pair Dark', appearance: 'dark', style: { 'editor.background': '#000000ff' } }] },
+    '',
+  );
+  assert.equal(zed.light['--bg'], '#ffffff'); // an opaque alpha is dropped
+  assert.equal(zed.dark['--bg'], '#000000');
+  assert.equal(zed.light['--add'], 'color-mix(in srgb, #00aa00 16%, #ffffff)');
+  assert.deepEqual(zed.pick, { light: 'Pair Light', dark: 'Pair Dark' });
+});

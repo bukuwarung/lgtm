@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { useStoredValue } from './platform.ts';
 import { BUILTIN_THEMES, themeProps, type AppTheme } from './themes.ts';
 
@@ -108,6 +108,36 @@ export function themeStyle(app: AppTheme | null): Record<string, string> {
   return props;
 }
 
+// A theme being tried on the whole app (Settings → More themes → Try), until it's kept or cancelled: the bar main.tsx
+// shows says so on every page.
+export type Trial = { key: string; t: AppTheme } | null;
+let trial: Trial = null;
+export const getTrial = () => trial;
+export function setTrial(t: Trial) {
+  trial = t;
+  dispatchEvent(new Event('lgtm:trial'));
+}
+export function useTrial(): Trial {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const again = () => bump((n) => n + 1);
+    addEventListener('lgtm:trial', again);
+    return () => removeEventListener('lgtm:trial', again);
+  }, []);
+  return trial;
+}
+// A theme added to yours (saved, and picked); null takes it out.
+export function saveTheme(look: { mine: string; setMine: (v: string) => void; setAppTheme: (v: string) => void }, key: string, t: AppTheme | null) {
+  let all: Record<string, AppTheme> = {};
+  try {
+    all = JSON.parse(look.mine);
+  } catch {}
+  if (t) all[key] = t;
+  else delete all[key];
+  look.setMine(JSON.stringify(all));
+  if (t) look.setAppTheme(key);
+}
+
 let applied: string[] = []; // the colour properties set on the page, to take off when the theme changes
 // Applies the saved app theme, code colours and font, and the text sizes, to the page (once, in App), and gives
 // Settings the setters. Code colours "theme": the app theme's own (lgtm's own look: Classic).
@@ -116,17 +146,19 @@ export function useCodeLook() {
   const [mine, setMine] = useStoredValue('myThemes', '{}');
   const [theme, setTheme] = useStoredValue('codeTheme', 'theme');
   const [font, setFont] = useStoredValue('codeFont', 'jetbrains');
+  const tried = useTrial();
   useEffect(() => {
-    const app = allThemes(mine)[appTheme] ?? null;
+    const app = tried?.t ?? allThemes(mine)[appTheme] ?? null;
+    const own = theme === 'theme' || !!tried; // a theme being tried shows its own code colours
     const props = app ? themeProps(app) : {};
-    if (!app || theme !== 'theme') for (const k of Object.keys(props)) if (k.startsWith('--hl-')) delete props[k];
-    const code = theme === 'theme' ? (app ? null : CODE_THEMES.intellij) : (CODE_THEMES[theme] ?? CODE_THEMES.intellij);
+    if (!app || !own) for (const k of Object.keys(props)) if (k.startsWith('--hl-')) delete props[k];
+    const code = own ? (app ? null : CODE_THEMES.intellij) : (CODE_THEMES[theme] ?? CODE_THEMES.intellij);
     if (code) for (const k of Object.keys(code.light) as (keyof Palette)[]) props[`--hl-${k}`] = `light-dark(${code.light[k]}, ${code.dark[k]})`;
     const style = document.documentElement.style;
     for (const k of applied) if (!(k in props)) style.removeProperty(k);
     for (const [k, v] of Object.entries(props)) style.setProperty(k, v);
     applied = Object.keys(props);
-  }, [appTheme, theme, mine]);
+  }, [appTheme, theme, mine, tried]);
   useEffect(() => {
     const f = CODE_FONTS[font] ?? CODE_FONTS.jetbrains;
     void f.load?.();
