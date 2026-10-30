@@ -1,8 +1,8 @@
 import hljs from 'highlight.js/lib/common';
+export { hljs }; // languages.ts adds to it
 import dockerfile from 'highlight.js/lib/languages/dockerfile';
 import kotlin from 'highlight.js/lib/languages/kotlin';
 import groovy from 'highlight.js/lib/languages/groovy';
-import { alias, load } from 'virtual:hljs-languages';
 import type { Hunk } from './diff.ts';
 
 hljs.registerLanguage('dockerfile', dockerfile);
@@ -59,33 +59,6 @@ hljs.registerLanguage('kotlin', (h) => {
 });
 
 // By extension ("a.ts"), then by whole basename ("Dockerfile", "Makefile").
-// Languages beyond the ones built in, loaded once a PR's files need them (their own small chunks, vite.config.ts).
-// Each repo remembers the ones its PRs needed, and loads them up front: code blocks in comments read them too.
-const loading = new Map<string, Promise<void>>();
-export function loadLanguages(repo: string, paths: string[]): Promise<unknown> {
-  const key = `hlLangs:${repo}`;
-  let known: string[] = [];
-  try {
-    known = JSON.parse(localStorage.getItem(key) ?? '[]');
-  } catch {}
-  const want = new Set(known.filter((n) => load[n]));
-  for (const p of paths) {
-    const base = p.split('/').pop()!.toLowerCase();
-    const names = [base.split('.').pop()!, base];
-    if (!names.some((n) => hljs.getLanguage(n))) names.forEach((n) => alias[n] && want.add(alias[n]));
-  }
-  if (want.size > known.length)
-    try {
-      localStorage.setItem(key, JSON.stringify([...want]));
-    } catch {}
-  return Promise.all(
-    [...want].map((name) => {
-      if (!loading.has(name)) loading.set(name, load[name]().then((m) => hljs.registerLanguage(name, m.default), () => {}));
-      return loading.get(name);
-    }),
-  );
-}
-
 export function languageFor(path: string): string | undefined {
   const base = path.split('/').pop()!.toLowerCase();
   return [base.split('.').pop()!, base].find((n) => hljs.getLanguage(n));
