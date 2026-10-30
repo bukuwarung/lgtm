@@ -32,7 +32,7 @@ export type PRFile = {
   blob_url: string;
 };
 // bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
-export type Comment = { databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number; avatarUrl?: string } | null; originalCommit?: { oid: string } | null };
+export type Comment = { databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number; avatarUrl?: string } | null; originalCommit?: { oid: string } | null; state?: string }; // state PENDING: in my review not yet sent
 export type Thread = {
   id: string;
   path: string;
@@ -420,17 +420,33 @@ export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${re
 export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);
 
 // Everything a PR page shows first, as one bundle (also cached, and loaded ahead for the list's top PRs).
-export type LoadedPR = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null };
+export type LoadedPR = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null; pending?: PendingReview | null };
 export async function loadPR(repo: string, n: number): Promise<LoadedPR> {
   const pr = await getPR(repo, n);
-  const [files, threads, conversation, attrs] = await Promise.all([
+  const [files, threads, conversation, attrs, pending] = await Promise.all([
     getFiles(repo, n),
     getThreads(repo, n),
     getConversation(repo, n),
     getRaw(pr.head.repo?.full_name ?? repo, '.gitattributes', pr.head.sha),
+    getPendingReview(repo, n),
   ]);
-  return { pr, files, threads, conversation, attrs };
+  return { pr, files, threads, conversation, attrs, pending };
 }
+
+// A review I started on github.com and haven't sent (GitHub shows each person only their own): Finish review sends it,
+// with lgtm's drafts added; meanwhile nothing can post on its own (one review at a time, GitHub's rule).
+export type PendingReview = { id: string; count: number };
+export async function getPendingReview(repo: string, n: number): Promise<PendingReview | null> {
+  const [owner, name] = repo.split('/');
+  const d = await graphql(
+    `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviews(states:PENDING,first:1){nodes{id comments{totalCount}}}}}}`,
+    { owner, name, n },
+  );
+  const r = d.repository.pullRequest.reviews.nodes[0];
+  return r ? { id: r.id, count: r.comments.totalCount } : null;
+}
+export const discardReview = (id: string) =>
+  graphql(`mutation($r:ID!){deletePullRequestReview(input:{pullRequestReviewId:$r}){clientMutationId}}`, { r: id });
 
 export async function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
   const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, {}, 'application/vnd.github.raw');
@@ -538,7 +554,7 @@ export function signRelativeImages(root: ParentNode | null, repo: string, ref: s
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
     nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve
-      comments(first:100){nodes{databaseId url body bodyHTML bodyText createdAt author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
+      comments(first:100){nodes{databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');
@@ -743,12 +759,16 @@ export const reply = (repo: string, n: number, commentId: number, body: string) 
   json(`/repos/${repo}/pulls/${n}/comments/${commentId}/replies`, { method: 'POST', body: JSON.stringify({ body }) });
 
 // GraphQL rather than REST: only addPullRequestReviewThread supports file-level comments inside a review.
-export async function submitReview(prId: string, commitOID: string, event: ReviewEvent, body: string, drafts: Draft[]) {
-  const d = await graphql(
-    `mutation($pr:ID!,$c:GitObjectID!){addPullRequestReview(input:{pullRequestId:$pr,commitOID:$c}){pullRequestReview{id}}}`,
-    { pr: prId, c: commitOID },
-  );
-  const reviewId = d.addPullRequestReview.pullRequestReview.id;
+// `pending`: my review already open on GitHub, to add to and send (never deleted here if something fails).
+export async function submitReview(prId: string, commitOID: string, event: ReviewEvent, body: string, drafts: Draft[], pending?: string) {
+  const reviewId =
+    pending ??
+    (
+      await graphql(
+        `mutation($pr:ID!,$c:GitObjectID!){addPullRequestReview(input:{pullRequestId:$pr,commitOID:$c}){pullRequestReview{id}}}`,
+        { pr: prId, c: commitOID },
+      )
+    ).addPullRequestReview.pullRequestReview.id;
   try {
     for (const x of drafts) {
       await graphql(
@@ -771,8 +791,8 @@ export async function submitReview(prId: string, commitOID: string, event: Revie
       { r: reviewId, e: event, b: body || null },
     );
   } catch (e) {
-    // Don't leave a half-built pending review behind; it would block the retry.
-    await graphql(`mutation($r:ID!){deletePullRequestReview(input:{pullRequestReviewId:$r}){clientMutationId}}`, { r: reviewId }).catch(() => {});
+    // Don't leave a half-built pending review behind; it would block the retry. One started on GitHub stays.
+    if (!pending) await discardReview(reviewId).catch(() => {});
     throw e;
   }
 }

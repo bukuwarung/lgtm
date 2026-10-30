@@ -5,7 +5,7 @@ import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
-  type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
+  discardReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, loadLanguages, majorityLanguage, splitLines } from './highlight.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -46,6 +46,7 @@ type Ctx = {
   repo: string;
   mentions: string[]; // people on this PR, for @-completion
   suggestion: (t: Target) => string | null; // the target's lines, for a ```suggestion block
+  pending: boolean; // a review of mine is open on GitHub: comments join it, none post on their own
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
   me: string; // my login ('' until known)
   ignoreWs: boolean; // hide whitespace-only changes
@@ -325,6 +326,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const [points, setPoints] = useState<PushPoint[] | null>(null);
   const [sinceData, setSinceData] = useState<{ status: string; files: File[] } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
+  const [pending, setPending] = useState<PendingReview | null>(null); // my review in progress on GitHub
   const [conversation, setConversation] = useState<ConversationItem[]>([]);
   const [saved, setSaved] = useState<Saved>({ sha: '', drafts: [] });
   const [target, setTarget] = useState<Target | null>(null);
@@ -417,6 +419,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
         if (shownHead && shownHead !== d.pr.head.sha) setSinceData(null); // new commits: compare again
         shownHead = d.pr.head.sha;
         setThreads(d.threads);
+        setPending(d.pending ?? null);
         setConversation(d.conversation);
         setSaved(stored ?? { sha: d.pr.head.sha, drafts: [] });
         setData({ pr: d.pr, headRepo, files: prepare(d.files, rules), rules });
@@ -613,7 +616,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     const head = (await getPR(repo, n)).head.sha;
     const sha = drafts.length ? saved.sha : head;
     if (sha !== head && !confirm('New commits were pushed after you started this review. Submit your comments against the older commit?')) return false;
-    await submitReview(pr.node_id, sha, event, body, drafts);
+    await submitReview(pr.node_id, sha, event, body, drafts, pending?.id);
+    setPending(null);
     // A Claude Code session sent this PR here: offer to send it the outcome (a message stays up past moving on).
     const from = linkedClaude(repo, n);
     if (from) {
@@ -700,6 +704,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
       dispatchEvent(new Event('lgtm:refresh'));
     },
     renderAll,
+    pending: !!pending,
     since: since && !!sinceData,
     me,
     mainLang,
@@ -955,7 +960,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
-            <SubmitPanel count={drafts.length} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -1061,6 +1066,22 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
           )}
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
+          )}
+          {pending && (
+            <p class="warn">
+              You have a review in progress on GitHub ({pending.count} comment{pending.count === 1 ? '' : 's'}): Finish review sends it, with your comments here.{' '}
+              <button
+                class="link"
+                onClick={async () => {
+                  if (!confirm(`Discard your review in progress on GitHub${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`)) return;
+                  await discardReview(pending.id).catch((e) => setError(e.message));
+                  setPending(null);
+                  setThreads(await getThreads(repo, n));
+                }}
+              >
+                Discard it
+              </button>
+            </p>
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
@@ -2312,7 +2333,8 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       <summary>
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}
-        <span class="t-preview"><b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
+        {first?.state === 'PENDING' && <span class="badge">Pending, started on GitHub · </span>}
+        <span class="t-preview"><Avatar login={first?.author?.login ?? 'ghost'} src={first?.author?.avatarUrl} /> <b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
         {t.isResolved && <span class="badge"> · resolved</span>}
         {t.isOutdated && <span class="badge"> · outdated</span>}
         {ctx.sinceComment.get(t.id)?.kind === 'changed' && <span class="badge"> · code changed since</span>}
@@ -2322,24 +2344,29 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
           <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
+          {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
           <div class="md" data-lang={ctx.langFor(t.path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
           <SuggestionActions t={t} c={c} ctx={ctx} />
         </div>
       ))}
-      <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && !busy && send()} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder="Reply… (⌘↵ to send)" />
-      <div class="row">
-        {body.trim() && (
-          <button disabled={busy} onClick={send}>
-            Reply
-          </button>
-        )}
-        {(t.isResolved ? t.viewerCanUnresolve : t.viewerCanResolve) && (
-          <button disabled={busy} onClick={() => act(() => ctx.resolve(t, !t.isResolved))}>
-            {t.isResolved ? 'Unresolve' : 'Resolve conversation'}
-          </button>
-        )}
-      </div>
+      {first?.state !== 'PENDING' && (
+        <>
+        <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && !busy && send()} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder="Reply… (⌘↵ to send)" />
+        <div class="row">
+          {body.trim() && (
+            <button disabled={busy} onClick={send}>
+              Reply
+            </button>
+          )}
+          {(t.isResolved ? t.viewerCanUnresolve : t.viewerCanResolve) && (
+            <button disabled={busy} onClick={() => act(() => ctx.resolve(t, !t.isResolved))}>
+              {t.isResolved ? 'Unresolve' : 'Resolve conversation'}
+            </button>
+          )}
+        </div>
+        </>
+      )}
       {err && <p class="error">{err}</p>}
     </details>
   );
@@ -2451,7 +2478,8 @@ function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; 
 function DraftForm({ ctx }: { ctx: Ctx }) {
   const target = ctx.target!;
   const [body, setBody] = useState(target.body ?? '');
-  const [now] = useStoredFlag('commentNow', false); // Settings → Reviewing: post at once, or keep for Finish review
+  const [nowPref] = useStoredFlag('commentNow', false); // Settings → Reviewing: post at once, or keep for Finish review
+  const now = nowPref && !ctx.pending; // with a review open on GitHub, comments join it
   const [posting, setPosting] = useState<'' | 'posting' | string>('');
 
   function save(post = now && !target.editId) {
@@ -2484,7 +2512,11 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
           {target.editId ? 'Update comment' : now ? (posting === 'posting' ? 'Posting…' : 'Comment') : 'Add to review'}
         </button>
         {!target.editId && (
-          <button disabled={!body.trim() || posting === 'posting'} onClick={() => save(!now)} title={now ? 'Keep it as a draft, sent with Finish review' : 'Post it now, on its own'}>
+          <button
+            disabled={!body.trim() || posting === 'posting' || (!now && ctx.pending)}
+            onClick={() => save(!now)}
+            title={now ? 'Keep it as a draft, sent with Finish review' : ctx.pending ? 'You have a review in progress on GitHub: comments go out with it (Finish review)' : 'Post it now, on its own'}
+          >
             {now ? 'Add to review' : 'Comment now'}
           </button>
         )}

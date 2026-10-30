@@ -415,7 +415,7 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
         <details class="thread" open>
           <summary />
           <div class="comment">
-            <b>{who}</b> <time>{when}</time> <button class="copy-link">🔗</button> <span class="claude-menu"><button class="copy-link">✳</button></span>
+            <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time> <button class="copy-link">🔗</button> <span class="claude-menu"><button class="copy-link">✳</button></span>
             <div class="md" dangerouslySetInnerHTML={{ __html: html }} />
           </div>
           <div class="editor">
@@ -490,7 +490,7 @@ const ReviewScene = ({ thread }: { thread?: ComponentChildren }) => (
 // named by its function, and the changed words picked out; pills that name the modules and the untested file.
 const MdThread = ({ who, when, text }: { who: string; when: string; text: string }) => (
   <div class="comment">
-    <b>{who}</b> <time>{when}</time>
+    <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time>
     <div class="md">
       <p>{text}</p>
     </div>
