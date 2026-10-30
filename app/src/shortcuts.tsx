@@ -133,6 +133,23 @@ function SlackAsk({ login, ask }: { login: string; ask: (login: string) => Promi
   );
 }
 
+// On someone else's PR I'm not reviewing yet: request my own review, so it's on GitHub and in my queue.
+function AddMe({ add }: { add: () => Promise<unknown> }) {
+  const [state, setState] = useState<'' | 'adding' | string>('');
+  return (
+    <button
+      class="ix-item ix-add-me"
+      disabled={state === 'adding'}
+      title={state && state !== 'adding' ? state : 'Request your own review on this PR'}
+      onClick={() => (setState('adding'), add().then(() => setState(''), (e) => setState(`Couldn't add you: ${e.message}`)))}
+    >
+      <span class="ix-label">
+        <Icon name="person" /> {state === 'adding' ? 'Adding you…' : state ? "Couldn't add you · retry" : 'Add me as a reviewer'}
+      </span>
+    </button>
+  );
+}
+
 // Ask a reviewer who's reviewed to look again (after you've pushed fixes): a re-request on GitHub, and on Slack your
 // "look again" message in your thread with them. ✓ once asked.
 function ReRequest({ login, again }: { login: string; again: (login: string) => Promise<boolean> }) {
@@ -241,11 +258,12 @@ type IndexProps = {
   slackAsk?: (login: string) => Promise<boolean>;
   slackWith?: Set<string>; // reviewers I already have a Slack thread with about this PR
   reRequest?: (login: string) => Promise<boolean>; // on my own PR: ask a reviewer who's reviewed to look again
+  addMe?: () => Promise<unknown>; // on someone else's PR: ask myself for a review (it joins my queue)
   onViewed: OnViewed;
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest, addMe }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -319,6 +337,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             </>
           ))}
         {!ask && !reviewers.size && <p class="note ix-pad">Nobody yet.</p>}
+        {addMe && !reviewers.has(me) && <AddMe add={addMe} />}
       </Section>
 
       <Section

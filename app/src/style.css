@@ -709,6 +709,8 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .ix-person img { width: 16px; height: 16px; margin-right: 5px; border-radius: 50%; vertical-align: -3px; }
 .ix-person.asked .ix-meta { color: var(--pill-ok); }
 .ix-person.dim-click { cursor: default; }
+.ix-add-me { color: var(--accent); }
+.ix-add-me .octicon { vertical-align: -2px; }
 .ix-ask-slack { display: grid; gap: 4px; margin: 4px 8px 6px 14px; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .ix-ask-slack textarea { font-size: calc(12px * var(--ts)); resize: vertical; }
 /* A reviewer's verdict, coloured like the pills. */

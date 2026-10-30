@@ -950,6 +950,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
               slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
               slackWith={new Set(slackThreads.map((t) => t.login))}
               reRequest={!!me && pr.user.login === me ? reRequest : undefined}
+              addMe={!!me && pr.user.login !== me ? () => requestReview(repo, n, me).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
               me={me}
               modules={view === 'all' ? shownModules : undefined}
               ask={
