@@ -25,7 +25,7 @@ import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, u
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
-import { below, jumpTo, ModuleIcon, NoTestMark, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
+import { below, jumpTo, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -898,7 +898,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
               drafts={drafts}
               checks={checks}
               onRefreshChecks={loadChecks}
-              files={shown}
+              files={noTests.size ? shown.map((f) => (noTests.has(f.filename) ? { ...f, untested: true } : f)) : shown}
               viewed={viewed}
               onViewed={markViewed}
               slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
@@ -1368,7 +1368,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           rel="noopener"
           title={file.previous_filename ? `${file.previous_filename} → ${path}` : path}
         >
-          <FileIcon path={path} big />
+          <FileIcon path={path} big untested={ctx.untested.has(file.filename)} />
           <b>
             {file.previous_filename && base(file.previous_filename) !== base(path) && <>{base(file.previous_filename)} → </>}
             {base(path)}
@@ -1391,7 +1391,6 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
         </span>
         {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}
-        {ctx.untested.has(file.filename) && <NoTestMark title="No test change: the PR changes this code but no test with its name" label="no test change" />}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}

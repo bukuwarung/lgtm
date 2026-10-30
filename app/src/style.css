@@ -189,7 +189,6 @@ main { padding: 16px; }
 .st.s-added { --st: var(--addfg); }
 .st.s-removed { --st: var(--delfg); }
 .st.s-renamed, .st.s-copied { --st: var(--accent); }
-.st.s-notest { --st: light-dark(#9a6700, #cc7832); }
 .st { flex: none; white-space: nowrap; }
 .counts { font: calc(12px * var(--ts)) var(--mono); }
 .counts .a { color: var(--addfg); }
@@ -875,6 +874,7 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 /* A test that its icon doesn't already say is one: a small flask in the other corner. */
 .ficon .ftest { position: absolute; left: -3px; bottom: -3px; display: inline-grid; place-items: center; width: 9px; height: 9px; border-radius: 50%; color: light-dark(#0a7c86, #4fc1c9); background: var(--bg); }
 .ficon .ftest svg { width: 7px; height: 7px; }
+.ficon .ftest.no { color: light-dark(#9a6700, #cc7832); }
 /* A lone comment line rendered (Settings: Single comment lines): lighter than a doc block, no box. */
 .doc-render.doc-one { margin: 0; padding: 0 8px; background: none; border-left-width: 2px; color: var(--muted); }
 .doc-render.doc-one .doc-source { margin-bottom: 0; }

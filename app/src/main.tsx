@@ -758,6 +758,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   const [notifyCI] = useStoredFlag('notifyCI', true);
   const [notifyMentions] = useStoredFlag('notifyMentions', true);
   const [notifyQueue] = useStoredFlag('notifyQueue', true);
+  const [notifyApprovedPush] = useStoredFlag('notifyApprovedPush', true);
   const seen = useRef<Set<string> | null>(null);
   const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
   // The Claude Code sessions linked to listed PRs, and what each is doing, every 15 seconds.
@@ -793,7 +794,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i);
       for (const i of items) {
         const was = before.current.get(i.id);
-        if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue })) tell(n, i);
+        if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, approvedPush: notifyApprovedPush })) tell(n, i);
         else if (notifyMentions && mentionNew(i)) tell('Mentioned you', i);
       }
     }

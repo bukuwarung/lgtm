@@ -7,7 +7,7 @@ import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, so there's nothing to review.
-export type File = PRFile & { generated: boolean; noDiff: boolean };
+export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean };
 
 // Scroll to an element by id, opening any collapsed <details> around it and flashing it. `near` is scrolled to
 // first when the target isn't in the DOM yet (file bodies render lazily), then we wait for it to appear.
@@ -90,8 +90,9 @@ const Icon = Octicon; // the index's small buttons and marks
 // A test file: a flask (with "test" in the diff's file header).
 // In the diff's file header it's a tag like the file's status (style.css .st).
 // A file's icon by type, with a dot in the corner for added, removed or renamed, and a flask for a test (unless the
-// icon is a test one already, as the theme draws JS and TS tests).
-export const FileIcon = ({ path, status, big }: { path: string; status?: string; big?: boolean }) => (
+// icon is a test one already, as the theme draws JS and TS tests), or a struck-out one for code whose tests the PR
+// doesn't touch.
+export const FileIcon = ({ path, status, big, untested }: { path: string; status?: string; big?: boolean; untested?: boolean }) => (
   <span class={big ? 'ficon big' : 'ficon'} title={status}>
     <img src={fileIcon(path)} alt="" />
     {status && status !== 'modified' && <i class={'fdot s-' + status} />}
@@ -100,13 +101,18 @@ export const FileIcon = ({ path, status, big }: { path: string; status?: string;
         <Icon name="beaker" />
       </i>
     )}
+    {untested && (
+      <i class="ftest no" role="img" title="No test change: the PR changes this code but no test with its name" aria-label="No test change">
+        <Icon name="beaker" slash />
+      </i>
+    )}
   </span>
 );
 
 // Code changed without its tests: an amber struck-out flask, explained on hover.
-export const NoTestMark = ({ title, label }: { title: string; label?: string }) => (
-  <span class={label ? 'st s-notest' : 'badge no-test'} role="img" title={title} aria-label="No test changes">
-    {label ? <Tg i="notest" t={label} /> : <Icon name="beaker" slash />}
+export const NoTestMark = ({ title }: { title: string }) => (
+  <span class="badge no-test" role="img" title={title} aria-label="No test changes">
+    <Icon name="beaker" slash />
   </span>
 );
 
@@ -502,7 +508,7 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
               title={f.filename}
               onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}
             >
-              <FileIcon path={f.filename} status={f.status} />
+              <FileIcon path={f.filename} status={f.status} untested={f.untested} />
               <span class="tree-name">{f.filename.split('/').pop()}</span>
               {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
             </button>
