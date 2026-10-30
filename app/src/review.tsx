@@ -64,7 +64,7 @@ type Saved = { sha: string; drafts: Draft[] };
 type Visit = { files: Record<string, string>; at: { path: string; y: number } | null; seenAt?: number };
 
 
-// The note to the author and assignees after a review (Settings → Slack messages).
+// The note to the author and assignees after a review (Settings → Slack → Messages).
 function slackText(pr: PR, repo: string, n: number, event: ReviewEvent, body: string, comments: number) {
   // :approved: and :request-changes: are the workspace's custom Slack emoji.
   const verdict = { APPROVE: ':approved: Approved', REQUEST_CHANGES: ':request-changes: Requested changes on', COMMENT: '💬 Reviewed' }[event];
@@ -261,7 +261,7 @@ function PRSkeleton() {
   );
 }
 
-// A notice, with a way to fix it when it's someone Slack can't place: "Find @x on Slack" opens Settings → Slack people
+// A notice, with a way to fix it when it's someone Slack can't place: "Find @x on Slack" opens Settings → Slack → People
 // at them. Shared with the PR list's notices (main.tsx).
 export function NoticeText({ text }: { text: string }) {
   const who = [...new Set([...text.matchAll(/no Slack user known: map @([\w-]+)/g)].map((m) => m[1]))];
@@ -466,7 +466,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     })().catch((e) => setError(e.message));
   }, [reloads]);
 
-  // Everyone on this PR, for Settings → Slack people to offer mapping (not just your team).
+  // Everyone on this PR, for Settings → Slack → People to offer mapping (not just your team).
   useEffect(() => {
     if (!data) return;
     const pr = data.pr;
@@ -767,7 +767,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     dispatchEvent(new Event('lgtm:refresh'));
     return true;
   }
-  // Ask a reviewer on Slack, from the index (my own PR): the "ask" message (Settings → Slack messages); its thread
+  // Ask a reviewer on Slack, from the index (my own PR): the "ask" message (Settings → Slack → Messages); its thread
   // then shows by the title.
   async function askOnSlack(login: string): Promise<boolean> {
     try {

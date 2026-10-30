@@ -119,7 +119,7 @@ let slackEmojiList: Promise<Record<string, string>> | undefined;
 export const getSlackEmoji = () =>
   (slackEmojiList ??= (isDesktop ? command<Record<string, string>>('slack_emoji') : fetch('/slack-emoji').then((r) => (r.ok ? r.json() : {}))).catch(() => ({})));
 
-// People met on PRs you open (authors, reviewers, commenters), so Settings → Slack people lists them to map, not just
+// People met on PRs you open (authors, reviewers, commenters), so Settings → Slack → People lists them to map, not just
 // your team; the 200 most recent.
 export function rememberPeople(logins: string[]) {
   try {
@@ -137,7 +137,7 @@ export const peopleSeen = (): string[] => {
     return [];
   }
 };
-// Open Settings → Slack people at someone, to map them (it looks them up on Slack there).
+// Open Settings → Slack → People at someone, to map them (it looks them up on Slack there).
 export function mapOnSlack(login: string) {
   rememberPeople([login]);
   try {

@@ -18,7 +18,7 @@ const ORIGIN = `http://127.0.0.1:${PORT}`;
 const HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 // Your settings, including GitHub login → Slack user (ID, @handle or email): { "slackUsers": { "github-login": "U…" } }.
-// Settings → Slack people fills it in.
+// Settings → Slack → People fills it in.
 const CONFIG = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'config.json');
 // Slack DM thread per PR and person, so later reviews of a PR reply in the same thread: { "o/r#12:login": { channel, ts } }
 const THREADS = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'lgtm', 'slack-threads.json');
@@ -295,7 +295,7 @@ async function notify({ recipients, text, thread }) {
         if (r.ok) return { login, ok: true, threaded: true, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
       }
       const targets = [users[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
-      if (!targets.length) return { login, ok: false, error: `no Slack user known: map @${login} in Settings → Slack people` };
+      if (!targets.length) return { login, ok: false, error: `no Slack user known: map @${login} in Settings → Slack → People` };
       let error = '';
       for (const target of targets) {
         const r = await send([`--recipient-id=${target}`]);

@@ -1,6 +1,6 @@
 import { slackEscape } from './platform.ts';
 
-// The messages lgtm sends on Slack, as templates you can change (Settings → Slack messages). {name} fills in a value;
+// The messages lgtm sends on Slack, as templates you can change (Settings → Slack → Messages). {name} fills in a value;
 // {@recipient} (who gets it; {@them}, its first name, too), {@author} and {@any-github-login} tag that person on Slack (the sender turns <@gh:…> into a Slack mention,
 // through the Slack people mapping; someone it can't place stays @login).
 export type SlackKind = 'review' | 'nudge' | 'ask' | 'again';

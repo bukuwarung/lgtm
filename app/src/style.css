@@ -678,6 +678,9 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .set-toc { grid-column: 1; grid-row: 1 / span 100; align-self: start; position: sticky; top: calc(var(--nav) + 16px); display: grid; gap: 1px; padding-top: 24px; }
 .set-toc button { padding: 5px 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: calc(13px * var(--ts)); text-align: left; }
 .set-toc button:hover { color: var(--fg); background: var(--soft); }
+.set-toc button { display: flex; align-items: center; gap: 8px; }
+.set-toc .octicon, .set-toc-glyph { flex: none; width: 16px; text-align: center; opacity: .8; }
+.settings h4 { margin: 16px 0 8px; font-size: calc(13px * var(--ts)); color: var(--fg); }
 .set-toc button.on { color: var(--fg); background: var(--soft); font-weight: 600; }
 .settings > section { scroll-margin-top: calc(var(--nav) + 16px); }
 @media (max-width: 900px) { .settings { display: block; } .set-toc { display: none; } }
@@ -755,7 +758,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .slack-msg { display: grid; gap: 4px; max-width: 720px; margin: 10px 0 14px; font-size: calc(13px * var(--ts)); }
 .slack-msg > span { display: flex; align-items: center; gap: 6px; }
 .slack-msg textarea { font: calc(13px * var(--ts))/1.45 var(--mono); resize: vertical; }
-/* Settings → Slack messages: each one as Slack will show it, with a sample PR. */
+/* Settings → Slack → Messages: each one as Slack will show it, with a sample PR. */
 .slack-preview { padding: 8px 10px; border-left: 3px solid color-mix(in srgb, var(--fg) 15%, transparent); background: color-mix(in srgb, var(--soft) 60%, transparent); border-radius: 0 6px 6px 0; font-size: calc(13px * var(--ts)); line-height: 1.5; }
 .slack-preview img { width: 1.35em; height: 1.35em; vertical-align: -.3em; object-fit: contain; }
 .slack-preview a { color: #1d9bd1; }

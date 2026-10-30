@@ -121,6 +121,22 @@ function Status({ ok, children }: { ok: boolean | null; children: preact.Compone
 
 // Everything lgtm remembers, in one place, plus whether the tools it drives (gh, slackcli, acli) are signed in.
 // Preferences live in this browser; changing one here updates the open views at once.
+// Each section's icon in the list beside them (Octicons; Claude Code keeps its ✳, as on its buttons).
+const SECTION_ICON: Record<string, string> = {
+  Accounts: 'person',
+  Slack: 'comment-discussion',
+  'Pull request list': 'git-pull-request',
+  'Time to review': 'stopwatch',
+  Reviewing: 'eye',
+  Diff: 'diff',
+  App: 'device-desktop',
+  Appearance: 'paintbrush',
+  'Markdown files': 'markdown',
+  Backup: 'archive',
+  'Keyboard shortcuts': 'command-palette',
+  'Saved replies': 'reply',
+};
+
 export function Settings() {
   const [theme, setTheme] = useTheme();
   const look = useCodeLook();
@@ -183,7 +199,7 @@ export function Settings() {
       <nav class="set-toc" aria-label="Settings sections">
         {toc.map((t) => (
           <button class={cur === t.id ? 'on' : ''} onClick={() => document.getElementById(t.id)?.scrollIntoView({ block: 'start' })}>
-            {t.name}
+            {SECTION_ICON[t.name] ? <Octicon name={SECTION_ICON[t.name]} /> : <span class="set-toc-glyph">✳</span>} {t.name}
           </button>
         ))}
       </nav>
@@ -230,7 +246,7 @@ export function Settings() {
           {!ints ? 'checking…' : ints.slack.ok ? <>signed in{ints.slack.who && <> as <code>{ints.slack.who}</code></>} through slackcli</> : <>not available: {ints.slack.error}</>}
           {ints && !ints.slack.ok && <pre>brew install shaharia-lab/tap/slackcli{'\n'}slackcli auth login-auto</pre>}
           <small>
-            Who's who on Slack is set under Slack people below (saved in <code>~/.config/lgtm/config.json</code>).
+            Who's who on Slack is set under Slack → People below (saved in <code>~/.config/lgtm/config.json</code>).
           </small>
         </Status>
         <Status ok={ints ? ints.jira.ok : null}>
@@ -241,9 +257,11 @@ export function Settings() {
         {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
       </section>
 
-      {ints?.slack.ok && <SlackPeopleSection team={team} />}
-
-      <SlackMessages />
+      <section>
+        <h3>Slack</h3>
+        {ints?.slack.ok && <SlackPeople team={team} />}
+        <SlackMessages />
+      </section>
 
       <section>
         <h3>Pull request list</h3>
@@ -419,17 +437,17 @@ function JiraAfterMerge() {
 function SlackMessages() {
   const { names, emoji } = useSlackEmoji(); // for the previews and the suggestions
   return (
-    <section>
-      <h3>Slack messages</h3>
+    <>
+      <h4>Messages</h4>
       <p class="note">
-        What lgtm says on Slack. Fill-ins: {COMMON_FIELDS}. A tag becomes a Slack mention for people in Slack people above (or, for who gets it, by their
+        What lgtm says on Slack. Fill-ins: {COMMON_FIELDS}. A tag becomes a Slack mention for people in People above (or, for who gets it, by their
         email); anyone else stays @login.
       </p>
       <p class="note">Slack emoji work as on Slack, your workspace's own too: <code>:approved:</code>, <code>:tada:</code>.</p>
       {(Object.keys(SLACK_MESSAGES) as SlackKind[]).map((k) => (
         <SlackMessage k={k} emoji={emoji} names={names} />
       ))}
-    </section>
+    </>
   );
 }
 // A made-up PR, to show a message the way Slack will.
@@ -816,7 +834,7 @@ function SlackPick({ m, busy, onSave, onSearch }: { m: SlackMatch; busy: boolean
   );
 }
 
-function SlackPeopleSection({ team }: { team: string }) {
+function SlackPeople({ team }: { team: string }) {
   const [everyone, setLogins] = useState<string[] | null>(null);
   // Sent here to map someone ("Find @x on Slack" on a notice): them, scrolled to and looked up on Slack.
   const [focus] = useState(() => {
@@ -882,8 +900,8 @@ function SlackPeopleSection({ team }: { team: string }) {
   }, [logins, map, org]);
 
   return (
-    <section>
-      <h3>Slack people</h3>
+    <>
+      <h4>People</h4>
       <p class="note">
         Who gets the Slack message for each GitHub account, saved in your <code>~/.config/lgtm/config.json</code>. Unmapped people are
         still tried by their GitHub email when you send.
@@ -952,7 +970,7 @@ function SlackPeopleSection({ team }: { team: string }) {
           ))}
         </p>
       )}
-    </section>
+    </>
   );
 }
 

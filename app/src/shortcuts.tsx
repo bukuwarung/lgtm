@@ -116,7 +116,7 @@ export const NoTestMark = ({ title }: { title: string }) => (
   </span>
 );
 
-// Ask a reviewer on Slack (your "Asking someone to review" message, Settings → Slack messages): a speech bubble
+// Ask a reviewer on Slack (your "Asking someone to review" message, Settings → Slack → Messages): a speech bubble
 // beside them, ✓ once sent, red if it wasn't.
 function SlackAsk({ login, ask }: { login: string; ask: (login: string) => Promise<boolean> }) {
   const [state, setState] = useState<'' | 'asking' | 'sent' | 'failed'>('');
