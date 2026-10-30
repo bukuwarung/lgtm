@@ -447,12 +447,6 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
       setStale(null);
       show(loaded);
       void prCache.set(`${repo}#${n}`, loaded);
-      Promise.all([slackStatus(`${repo}#${n}`), getViewer()]).then(([slack, me]) => {
-        setSlackThreads(slack.threads);
-        const people = [...new Set([pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login))];
-        setSlackTo(slack.configured ? people : null);
-        setSlackNote(slack.configured ? '' : `Slack unavailable: ${slack.error ?? 'slackcli is not signed in'}`);
-      }, (e) => setSlackNote(`Slack unavailable: ${e.message}`));
       getViewer().then((me) => {
         setMe(me);
         setMine([pr.user, ...pr.assignees].some((u) => u.login === me));
@@ -471,6 +465,37 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
       }, () => {});
     })().catch((e) => setError(e.message));
   }, [reloads]);
+
+  // Slack, with the PR and on each reload; while it isn't reachable (lgtm just launched, or the Mac just woke: slackcli
+  // can fail for a moment), again every 15 seconds for 2 minutes, and whenever the window is back in focus or online.
+  const [slackTry, setSlackTry] = useState(0);
+  useEffect(() => {
+    if (!data) return;
+    const pr = data.pr;
+    let live = true;
+    let timer = 0;
+    const again = () => setSlackTry((k) => k + 1);
+    const retry = () => {
+      if (!live) return;
+      if (slackTry < 8) timer = window.setTimeout(again, 15_000);
+      addEventListener('focus', again);
+      addEventListener('online', again);
+    };
+    Promise.all([slackStatus(`${repo}#${n}`), getViewer()]).then(([slack, me]) => {
+      if (!live) return;
+      setSlackThreads(slack.threads);
+      const people = [...new Set([pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login))];
+      setSlackTo(slack.configured ? people : null);
+      setSlackNote(slack.configured ? '' : `Slack unavailable: ${slack.error ?? 'slackcli is not signed in'}`);
+      if (!slack.configured) retry();
+    }, (e) => live && (setSlackNote(`Slack unavailable: ${e.message}`), retry()));
+    return () => {
+      live = false;
+      clearTimeout(timer);
+      removeEventListener('focus', again);
+      removeEventListener('online', again);
+    };
+  }, [!!data, reloads, slackTry]);
 
   // Everyone on this PR, for Settings → Slack → People to offer mapping (not just your team).
   useEffect(() => {
