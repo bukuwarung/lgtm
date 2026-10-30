@@ -104,6 +104,7 @@ export function majorityLanguage(paths: string[]): string | undefined {
 // language (re-highlighted in our colours); an unmarked one takes `fallback`. Our own already-highlighted blocks
 // (language-* class), rich-markdown blocks (data-src, per-line spans) and mermaid are left alone.
 export function highlightBlocks(root: ParentNode, fallback?: string) {
+  suggestions(root, fallback);
   for (const pre of root.querySelectorAll<HTMLElement>('pre:not([data-hl]):not([data-src])')) {
     if (pre.querySelector('code[class*="language-"]') || pre.closest('.mermaid-svg, .mermaid-block') || pre.getAttribute('lang') === 'mermaid') continue;
     // GitHub names a fence's language as <pre lang="…">, or a highlight-source-… wrapper when it coloured it.
@@ -112,6 +113,41 @@ export function highlightBlocks(root: ParentNode, fallback?: string) {
     pre.dataset.hl = '';
     if (lang) pre.innerHTML = `<code class="hljs">${highlightCode(pre.textContent ?? '', lang)}</code>`;
   }
+}
+
+// Suggested changes drawn as the diff draws code: GitHub's (its own table of removed and added lines, in its classes)
+// and ours (a ```suggestion block in a draft: the new lines only), as rows of removed and added lines, in our colours.
+type SugRow = { kind: '+' | '-'; num: string; text: string };
+function suggestions(root: ParentNode, lang?: string) {
+  for (const blob of root.querySelectorAll<HTMLElement>('.js-suggested-changes-blob')) {
+    const rows = [...blob.querySelectorAll('tr')].flatMap((tr): SugRow[] => {
+      const code = tr.querySelector('.blob-code-inner');
+      if (!code) return [];
+      const kind = code.classList.contains('blob-code-deletion') ? '-' : '+';
+      return [{ kind, num: tr.querySelector('.blob-num')?.getAttribute('data-line-number') ?? '', text: code.textContent?.replace(/\n$/, '') ?? '' }];
+    });
+    blob.replaceWith(suggestionTable(rows, lang));
+  }
+  for (const pre of root.querySelectorAll<HTMLElement>('.suggestion:not([data-hl]) > pre')) {
+    const box = pre.parentElement!;
+    box.replaceWith(suggestionTable((pre.textContent ?? '').replace(/\n$/, '').split('\n').map((text) => ({ kind: '+', num: '', text })), lang));
+  }
+}
+function suggestionTable(rows: SugRow[], lang?: string): HTMLElement {
+  // Each side highlighted in one go, so a token spanning lines (a string, a comment) stays coloured.
+  const side = (k: SugRow['kind']) => {
+    const text = rows.filter((r) => r.kind === k).map((r) => r.text).join('\n');
+    return lang ? splitLines(highlightCode(text, lang)) : text.split('\n').map((l) => l.replace(/[&<>]/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt' }[c]};`));
+  };
+  const html = { '-': side('-'), '+': side('+') };
+  const at = { '-': 0, '+': 0 };
+  const box = document.createElement('div');
+  box.className = 'suggestion';
+  box.dataset.hl = '';
+  box.innerHTML = `<div class="badge">Suggested change</div><table class="diff"><tbody>${rows
+    .map((r) => `<tr class="ln ${r.kind === '-' ? 'd' : 'a'}"><td class="num">${r.kind === '-' ? r.num : ''}</td><td class="num">${r.kind === '+' ? r.num : ''}</td><td class="code">${html[r.kind][at[r.kind]++] ?? ''}</td></tr>`)
+    .join('')}</tbody></table>`;
+  return box;
 }
 
 // Split highlighted HTML into lines, closing and re-opening spans that cross a line break.

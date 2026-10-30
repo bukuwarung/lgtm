@@ -2383,7 +2383,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
           {c.state === 'PENDING' && c.id ? (
             <PendingComment c={c} ctx={ctx} path={t.path} />
           ) : (
-            <div class="md" data-lang={ctx.langFor(t.path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+            <div class="md" data-lang={ctx.langFor(t.path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(t.path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
           )}
           <SuggestionActions t={t} c={c} ctx={ctx} />
         </div>
@@ -2429,7 +2429,7 @@ function PendingComment({ c, ctx, path }: { c: Thread['comments']['nodes'][numbe
     );
   return (
     <>
-      <div class="md" data-lang={ctx.langFor(path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+      <div class="md" data-lang={ctx.langFor(path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
       <div class="row">
         <button disabled={busy} onClick={() => setText(c.body ?? c.bodyText)}>Edit</button>
         <button disabled={busy} onClick={() => run(null)}>Delete</button>
