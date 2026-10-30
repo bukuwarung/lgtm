@@ -632,3 +632,20 @@ test('theme files: VS Code colours and tokens, Zed families, lenient JSON', asyn
   assert.equal(zed.light['--add'], 'color-mix(in srgb, #00aa00 16%, #ffffff)');
   assert.deepEqual(zed.pick, { light: 'Pair Light', dark: 'Pair Dark' });
 });
+
+test('trimContext: with whitespace ignored, only a few unchanged lines around each real change', async () => {
+  const { trimContext } = await import('../src/diff.ts');
+  const ctx = (n: number) => ({ kind: ' ' as const, text: `c${n}`, old: n, new: n });
+  const lines = [...Array.from({ length: 10 }, (_, i) => ctx(i + 1)), { kind: '-' as const, text: 'x', old: 11 }, { kind: '+' as const, text: 'y', new: 11 }, ...Array.from({ length: 10 }, (_, i) => ({ ...ctx(i + 12), old: i + 12, new: i + 12 }))];
+  const [h, ...rest] = trimContext([{ header: '@@ -1,21 +1,21 @@ fun f()', newStart: 1, lines }], 3);
+  assert.equal(rest.length, 0);
+  assert.deepEqual(h.lines.map((l) => l.text), ['c8', 'c9', 'c10', 'x', 'y', 'c12', 'c13', 'c14']);
+  assert.equal(h.header, '@@ -8,7 +8,7 @@ fun f()'); // the function it's in, kept
+  assert.equal(h.newStart, 8);
+  // Two changes far apart: two hunks; a commented line counts as a change.
+  const two = trimContext([{ header: '@@ -1,21 +1,21 @@', newStart: 1, lines: Array.from({ length: 21 }, (_, i) => ctx(i + 1)) }], 3, new Set([2, 20]));
+  assert.deepEqual(two.map((x) => [x.lines[0].new, x.lines.at(-1)!.new]), [[1, 5], [17, 21]]);
+  // Already tight: the hunk as it was.
+  const tight = { header: '@@ -1,3 +1,3 @@', newStart: 1, lines: [ctx(1), { kind: '+' as const, text: 'z', new: 2 }, ctx(3)] };
+  assert.equal(trimContext([tight], 3)[0], tight);
+});

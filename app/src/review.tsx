@@ -1,6 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -1387,7 +1387,12 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
     const all = parsePatch(file.patch ?? '');
     if (!ctx.ignoreWs) return all;
     const noted = new Set([...threads.map((x) => x.line), ...drafts.map((d) => d.line)].filter((n): n is number => n != null));
-    return ignoreWhitespace(all).filter((h) => h.lines.some((l) => l.kind !== ' ' || (l.new != null && noted.has(l.new))));
+    // Then only a few unchanged lines around each real change, as git would show them.
+    return trimContext(
+      ignoreWhitespace(all).filter((h) => h.lines.some((l) => l.kind !== ' ' || (l.new != null && noted.has(l.new)))),
+      3,
+      noted,
+    );
   }, [file.patch, ctx.ignoreWs, threads.length, drafts.length]);
   const path = file.filename;
   const mod = ctx.modules?.get(path) ?? '';

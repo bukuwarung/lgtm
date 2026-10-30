@@ -129,6 +129,29 @@ export function ignoreWhitespace(hunks: Hunk[]): Hunk[] {
   });
 }
 
+// With whitespace ignored, a hunk's re-indented lines read as unchanged: keep `keep` of them around each real change
+// (or a line someone commented on), as git cuts its hunks, and split the hunk there; the lines between become a gap
+// like any other ("Show N unchanged lines").
+export function trimContext(hunks: Hunk[], keep = 3, noted: Set<number> = new Set()): Hunk[] {
+  return hunks.flatMap((h) => {
+    const key = h.lines.map((l) => l.kind !== ' ' || (l.new != null && noted.has(l.new)));
+    const kept = h.lines.map((_, i) => key.slice(Math.max(0, i - keep), i + keep + 1).some(Boolean));
+    if (kept.every(Boolean)) return [h];
+    const out: Hunk[] = [];
+    let run: Line[] = [];
+    const close = () => {
+      if (!run.length) return;
+      const olds = run.filter((l) => l.old != null), news = run.filter((l) => l.new != null);
+      const newStart = news[0]?.new ?? h.newStart;
+      out.push({ header: `@@ -${olds[0]?.old ?? 0},${olds.length} +${newStart},${news.length} @@${h.header.replace(/^@@[^@]*@@/, '')}`, newStart, lines: run });
+      run = [];
+    };
+    h.lines.forEach((l, i) => (kept[i] ? run.push(l) : close()));
+    close();
+    return out;
+  });
+}
+
 // Word-level change inside a modified line: the removed line's [start, end) and the added line's, after the common
 // prefix and suffix. Null when the lines share too little for a highlight to help.
 // ponytail: one changed span per line (prefix/suffix), not a token LCS; two edits far apart highlight everything between.
