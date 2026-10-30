@@ -530,7 +530,7 @@ function ThemeGallery({ look }: { look: Look }) {
     try {
       const names = (await listDir(repo, 'themes')).filter((f) => f.type === 'file' && /\.json$/i.test(f.name)).map((f) => f.name);
       if (!names.length) throw new Error('no theme files in its themes folder');
-      if (names.length === 1) await fetchTheme(ext, names[0], false);
+      if (names.length === 1) await fetchTheme(ext, names[0], false, ext.id);
       else setFiles({ ext, names });
     } catch (e: any) {
       setErr(`Couldn't read ${ext.name}'s themes: ${e.message}`);
@@ -539,8 +539,8 @@ function ThemeGallery({ look }: { look: Look }) {
   };
   const install = (key: string, t: AppTheme) => (saveTheme(look, key, t), look.setAppTheme(key), setFiles(null), setPreview(null));
   // A theme file fetched for its preview card; several in one extension (Catppuccin's accents) go by their file names.
-  const fetchTheme = async (ext: ZedExtension, name: string, several: boolean) => {
-    setBusy(name);
+  const fetchTheme = async (ext: ZedExtension, name: string, several: boolean, busyAs = name) => {
+    setBusy(busyAs);
     setErr('');
     try {
       const repo = repoOf(ext)!;
@@ -551,16 +551,20 @@ function ThemeGallery({ look }: { look: Look }) {
     } catch (e: any) {
       setErr(`Couldn't read it: ${e.message}`);
     }
-    setBusy('');
+    if (busyAs === name) setBusy('');
   };
+  // The fetched theme's card, under its row, scrolled into view (the list scrolls in its own box).
   const Preview = ({ k }: { k: string }) =>
     preview?.key === k ? (
-      <div class="tg-preview">
+      <div class="tg-preview" ref={(el) => el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}>
         <span class="thm-card">
           <ThemeThumb t={preview.t} />
           {preview.t.name}
         </span>
-        <button class="primary" onClick={() => install(preview.key, preview.t)}>Add</button>
+        <span class="row">
+          <button class="primary" onClick={() => install(preview.key, preview.t)}>Add</button>
+          <button onClick={() => setPreview(null)}>Cancel</button>
+        </span>
       </div>
     ) : null;
   const fromFile = async (f: File | undefined) => {

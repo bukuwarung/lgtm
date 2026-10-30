@@ -808,9 +808,9 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 /* Tags and pills as text, icons or both (Settings → Appearance; tags.tsx). */
 .ti { display: inline-flex; align-items: center; vertical-align: -2px; margin-right: .3em; }
 .ti:empty { display: none; }
-.tn + .thm { margin-left: .3em; }
+.tn + .tt { margin-left: .3em; }
 html.tags-text .ti { display: none; }
-html.tags-icons .thm { display: none; }
+html.tags-icons .tt { display: none; }
 html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
 .octicon { flex: none; vertical-align: -2px; }
 .icon-btn { display: inline-grid; place-items: center; padding: 3px 7px; color: var(--muted); }
@@ -922,4 +922,5 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .thm-add { background: var(--add); }
 .tg-item { flex-wrap: wrap; }
 .tg-preview { flex-basis: 100%; display: flex; align-items: end; gap: 10px; padding: 4px 0 6px; }
-.tg-preview .thm-card { width: 200px; }
+.tg-preview .thm-card { width: min(340px, 100%); }
+.tg-preview .thm { height: 96px; font-size: 10px; }
