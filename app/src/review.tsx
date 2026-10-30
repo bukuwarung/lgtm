@@ -7,7 +7,7 @@ import {
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
-import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
+import { highlightBlocks, highlightCode, highlightHunks, languageFor, loadLanguages, majorityLanguage, splitLines } from './highlight.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
@@ -421,7 +421,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
         setData({ pr: d.pr, headRepo, files: prepare(d.files, rules), rules });
       };
       if (first)
-        prCache.get<Loaded>(`${repo}#${n}`).then((c) => {
+        prCache.get<Loaded>(`${repo}#${n}`).then(async (c) => {
+          if (c) await loadLanguages(c.v.files.map((f) => f.filename));
           if (!c || fresh) return;
           setStale(c.at);
           show(c.v);
@@ -437,6 +438,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
         setStale(null);
         return setNotice({ ok: false, text: `Couldn't refresh this PR (${e.message}); showing the copy loaded earlier.` });
       }
+      await loadLanguages(loaded.files.map((f) => f.filename)); // any language beyond the built-in ones, before drawing
       fresh = true;
       setStale(null);
       show(loaded);
