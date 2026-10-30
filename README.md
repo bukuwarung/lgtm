@@ -27,11 +27,15 @@ gh auth login   # once, if you haven't
 </picture>
 
 - Tabs for PRs to review, your own, and a GitHub team you watch, grouped by where they stand.
-- Pills for what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, `↻ re-review`.
-- A rough time to review (⏱) for each PR.
-- When each PR was last active (amber after a week).
-- On the Team tab, how many reviews each member is asked for.
-- Keeps itself fresh, with optional desktop notifications.
+- Pills for what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, `↻ re-review`, `no reviewers`, how long a ready PR has waited, and commits pushed since you approved.
+- On your PRs, a pill's menu fixes what it names: re-run failed jobs, update a branch that's behind, mark a draft ready, turn auto-merge on or off, ask whoever requested changes to look again.
+- PRs that mention you, in their own group.
+- Auto-merge, or a PR's place in its repo's merge queue.
+- Each PR's author picture, a rough time to review (⏱), and when it was last active (amber after a week).
+- On the Team tab, each member folded with their picture and how many reviews they're asked for.
+- Pills as words, icons or both (GitHub's Octicons).
+- Keeps itself fresh, loads the PRs waiting on you ahead, and catches up when you're back online.
+- Notifications, with sound, for replies, verdicts, mentions, CI, new commits on PRs you approved, and your PR leaving the merge queue; a click opens the PR.
 
 ## Reading
 
@@ -42,15 +46,19 @@ gh auth login   # once, if you haven't
 
 - Every changed file on one page: markdown first, tests right after their source.
 - The Jira ticket and PR status on top; an index of comments, reviewers, checks (with failed-job logs), threads and files.
-- Re-reviews start with what happened since your last one, and your threads say whether their lines changed.
-- Reopens where you left off, and marks files changed since your last visit.
+- Re-reviews start with what happened since your last one, and your threads say whether their lines changed; or pick any push to see the changes since.
+- Marks files changed since your last visit, and tells you when new commits land while you read.
+- Holds still while files load, and can reopen where you left off.
 - Status pills (checks failing, files without test changes, modules) open the list behind them.
 - In Kotlin and Java, each hunk names the function it's in, pinned while you scroll.
-- In Gradle projects, files grouped by module, with modules whose code changed but no test did.
+- Files grouped by module (Gradle, npm, Go, Cargo, Python), with modules whose code changed but no test did.
+- Test files, and code whose tests the PR doesn't touch, marked on their icons.
+- File and folder icons by type (Material Icon Theme).
+- `.` opens the file you're on in github.dev.
 - A strip down the right edge is the scrollbar, with marks for threads, drafts and changes.
-- Images in descriptions and comments (private repos too), in markdown files, and SVG files.
-- Your pick of code themes and fonts, ligatures included.
-- Stacked PRs, layer by layer.
+- Images in descriptions and comments (private repos too), in markdown files, and SVG files; swipe between an image's old and new versions.
+- Your pick of code themes and fonts, ligatures included; changed words filled, boxed or squiggled, changed lines filled, subtle or barred; rainbow brackets.
+- Stacked PRs, layer by layer, with an overview of every layer.
 
 ## Less to read
 
@@ -112,7 +120,7 @@ On by default, each with a switch (and these examples) in ⚙ Settings.
 </picture>
 </details>
 
-<details open><summary><b>Ignore whitespace</b>: re-indented lines read as unchanged (<code>w</code>).</summary>
+<details open><summary><b>Ignore whitespace</b>: re-indented lines and lone blank lines read as unchanged, and whitespace-only files and sections fold away (<code>w</code>).</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/ignoreWs-dark.png">
@@ -178,7 +186,8 @@ Markdown themes: lgtm's own or 20 from [markdown.style](https://markdown.style/t
 - Ask a reviewer on Slack, or ask one who's reviewed to look again; after you push, lgtm offers it.
 - Commit reviewers' suggested changes, one at a time or batched into one commit.
 - Mark files, folders or modules viewed from the index; rerun failed GitHub Actions jobs.
-- A merge box with what's blocking: ready for review, update branch, merge, auto-merge, and deleting the branch.
+- A merge box with what's blocking: ready for review, update branch, merge, auto-merge, and deleting the branch; merge a whole stack from its overview.
+- Edit the description in place.
 - Once merged, move the Jira ticket on.
 - Waiting a day for review: `🔔 nudge` reminds the reviewers on Slack.
 
@@ -206,7 +215,7 @@ lgtm messages people as you, through slackcli.
 
 ## On your Mac
 
-- A Dock badge with the "needs your review" count, and notifications.
+- A Dock badge with the "needs your review" count, and notifications that open the PR you click.
 - `lgtm://` links; copy a PR link anywhere and lgtm offers to open it.
 - Several GitHub accounts: switch from your avatar (each one's drafts kept apart).
 - Find across every file, Back and Forward, and text sizes.

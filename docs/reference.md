@@ -13,6 +13,9 @@ Change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 | `v` | Mark the current file viewed |
 | `w` | Ignore whitespace on/off |
 | `[` / `]` | Previous / next PR in the stack |
+| `s` | Open / close the stack's overview |
+| `m` | Open / close the merge box (your PRs) |
+| `.` | Open the file in view on github.dev |
 | `i` | Show / hide the index |
 | `⌘↵` | Finish review |
 | `⌘K` | Go to a PR, file, thread or check |
@@ -33,4 +36,4 @@ Change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 
 ## Slack people
 
-lgtm messages people as you through slackcli, so it needs each GitHub account's Slack user. Settings → Slack people finds them (company email, then name) and you confirm each; with several matches you pick, or search by name, handle, email or a Slack link (their profile, or your DM with them). Mappings are saved in `~/.config/lgtm/config.json` (`{ "slackUsers": { "github-login": "U012ABC" } }`). Mark automation accounts as bots so they're never messaged.
+lgtm messages people as you through slackcli, so it needs each GitHub account's Slack user. Settings → Slack → People finds them (company email, then name) and you confirm each; with several matches you pick, or search by name, handle, email or a Slack link (their profile, or your DM with them). Mappings are saved in `~/.config/lgtm/config.json` (`{ "slackUsers": { "github-login": "U012ABC" } }`). Mark automation accounts as bots so they're never messaged.
