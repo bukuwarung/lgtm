@@ -6,7 +6,7 @@ import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
-import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes } from './look.ts';
+import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes, themeStyle } from './look.ts';
 import { fromZedFile, parseThemeFile, pickVariant, type AppTheme } from './themes.ts';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
@@ -357,15 +357,20 @@ export function Settings() {
         <h3>Appearance</h3>
         <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency." />
         <TagStyle />
-        <label class="set-row">
+        <div class="set-row">
           <span>
             Colour theme
-            <small>The whole app's colours, code included, each in a light and a dark version.</small>
+            <small>The whole app's colours, code included. Each card: its light version, then its dark one.</small>
           </span>
-          <select value={look.appTheme} onChange={(e) => look.setAppTheme(e.currentTarget.value)}>
-            {Object.entries(allThemes(look.mine)).map(([k, t]) => <option value={k}>{t ? t.name : 'lgtm'}</option>)}
-          </select>
-        </label>
+        </div>
+        <div class="thm-grid" role="radiogroup" aria-label="Colour theme">
+          {Object.entries(allThemes(look.mine)).map(([k, t]) => (
+            <button role="radio" aria-checked={look.appTheme === k} class={look.appTheme === k ? 'thm-card on' : 'thm-card'} onClick={() => look.setAppTheme(k)}>
+              <ThemeThumb t={t} />
+              {t ? t.name : 'lgtm'}
+            </button>
+          ))}
+        </div>
         <MyTheme look={look} />
         <ThemeGallery look={look} />
         <div class="set-row">
@@ -433,6 +438,25 @@ export function Settings() {
   );
 }
 
+// A theme in miniature, light half and dark half: a bar, a pill, and a removed and an added line of code.
+function ThemeThumb({ t }: { t: AppTheme | null }) {
+  const c = (k: string, text: string) => <span style={{ color: `var(--hl-${k})` }}>{text}</span>;
+  return (
+    <span class={t ? 'thm' : 'thm lgtm-colors'} style={themeStyle(t)} aria-hidden="true">
+      {(['light', 'dark'] as const).map((m) => (
+        <span class="thm-half" style={{ colorScheme: m }}>
+          <span class="thm-bar">
+            <i class="thm-title" /> <i class="thm-pill" />
+          </span>
+          <span class="thm-line thm-del">{c('kw', 'val')} {c('fn', 'total')} = {c('const', '0')}</span>
+          <span class="thm-line thm-add">{c('kw', 'val')} {c('fn', 'total')} = {c('str', '"sum"')}</span>
+          <span class="thm-line">{c('com', '// cart')}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 type Look = ReturnType<typeof useCodeLook>;
 const savedThemes = (look: Look): Record<string, AppTheme> => {
   try {
@@ -485,6 +509,7 @@ function ThemeGallery({ look }: { look: Look }) {
   const [q, setQ] = useState('');
   const [list, setList] = useState<ZedExtension[] | null>(null);
   const [files, setFiles] = useState<{ ext: ZedExtension; names: string[] } | null>(null);
+  const [preview, setPreview] = useState<{ key: string; t: AppTheme } | null>(null); // fetched, not yet added
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   useEffect(() => {
@@ -505,15 +530,16 @@ function ThemeGallery({ look }: { look: Look }) {
     try {
       const names = (await listDir(repo, 'themes')).filter((f) => f.type === 'file' && /\.json$/i.test(f.name)).map((f) => f.name);
       if (!names.length) throw new Error('no theme files in its themes folder');
-      if (names.length === 1) await add(ext, names[0]);
+      if (names.length === 1) await fetchTheme(ext, names[0], false);
       else setFiles({ ext, names });
     } catch (e: any) {
       setErr(`Couldn't read ${ext.name}'s themes: ${e.message}`);
     }
     setBusy('');
   };
-  const install = (key: string, t: AppTheme) => (saveTheme(look, key, t), look.setAppTheme(key), setFiles(null));
-  const add = async (ext: ZedExtension, name: string) => {
+  const install = (key: string, t: AppTheme) => (saveTheme(look, key, t), look.setAppTheme(key), setFiles(null), setPreview(null));
+  // A theme file fetched for its preview card; several in one extension (Catppuccin's accents) go by their file names.
+  const fetchTheme = async (ext: ZedExtension, name: string, several: boolean) => {
     setBusy(name);
     setErr('');
     try {
@@ -521,14 +547,22 @@ function ThemeGallery({ look }: { look: Look }) {
       const text = await getRaw(repo, `themes/${name}`, 'HEAD');
       if (!text) throw new Error('the file is gone');
       const t = fromZedFile(parseThemeFile(text), `https://github.com/${repo}/blob/HEAD/themes/${name}`);
-      install(`zed:${ext.id}/${name}`, { ...t, name: names(ext, name, t.name) });
+      setPreview({ key: `zed:${ext.id}/${name}`, t: { ...t, name: several ? `${t.name} (${name.replace(/\.json$/i, '')})` : t.name } });
     } catch (e: any) {
-      setErr(`Couldn't add it: ${e.message}`);
+      setErr(`Couldn't read it: ${e.message}`);
     }
     setBusy('');
   };
-  // Several files in one extension (Catppuccin's accents): their file names tell them apart.
-  const names = (ext: ZedExtension, file: string, name: string) => (files && files.names.length > 1 ? `${name} (${file.replace(/\.json$/i, '')})` : name);
+  const Preview = ({ k }: { k: string }) =>
+    preview?.key === k ? (
+      <div class="tg-preview">
+        <span class="thm-card">
+          <ThemeThumb t={preview.t} />
+          {preview.t.name}
+        </span>
+        <button class="primary" onClick={() => install(preview.key, preview.t)}>Add</button>
+      </div>
+    ) : null;
   const fromFile = async (f: File | undefined) => {
     if (!f) return;
     try {
@@ -569,7 +603,8 @@ function ThemeGallery({ look }: { look: Look }) {
           {files.names.map((n) => (
             <div class="tg-item">
               <b>{n.replace(/\.json$/i, '')}</b>
-              <button disabled={!!busy} onClick={() => void add(files.ext, n)}>{busy === n ? 'Adding…' : 'Add'}</button>
+              <button disabled={!!busy} onClick={() => void fetchTheme(files.ext, n, true)}>{busy === n ? 'Getting…' : 'Preview'}</button>
+              <Preview k={`zed:${files.ext.id}/${n}`} />
             </div>
           ))}
         </div>
@@ -582,7 +617,8 @@ function ThemeGallery({ look }: { look: Look }) {
                 <b>{x.name}</b> <small class="note">{x.download_count.toLocaleString()} downloads</small>
                 <small class="note tg-desc">{x.description}</small>
               </span>
-              <button disabled={!!busy} onClick={() => void browse(x)}>{busy === x.id ? 'Getting…' : 'Add'}</button>
+              <button disabled={!!busy} onClick={() => (setPreview(null), void browse(x))}>{busy === x.id ? 'Getting…' : 'Preview'}</button>
+              {preview?.key.startsWith(`zed:${x.id}/`) && <Preview k={preview.key} />}
             </div>
           ))}
         </div>

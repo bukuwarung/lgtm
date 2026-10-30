@@ -98,6 +98,16 @@ export function allThemes(mine: string): Record<string, AppTheme | null> {
   return { lgtm: null, ...BUILTIN_THEMES, ...added };
 }
 
+// A theme's colours as CSS properties, code colours included (lgtm's own: the stylesheet's, with Classic code colours).
+export function themeStyle(app: AppTheme | null): Record<string, string> {
+  const props = app ? themeProps(app) : {};
+  if (!props['--hl-kw']) {
+    const c = CODE_THEMES.intellij;
+    for (const k of Object.keys(c.light) as (keyof Palette)[]) props[`--hl-${k}`] = `light-dark(${c.light[k]}, ${c.dark[k]})`;
+  }
+  return props;
+}
+
 let applied: string[] = []; // the colour properties set on the page, to take off when the theme changes
 // Applies the saved app theme, code colours and font, and the text sizes, to the page (once, in App), and gives
 // Settings the setters. Code colours "theme": the app theme's own (lgtm's own look: Classic).

@@ -2,7 +2,7 @@
    Dark is soft greys and muted syntax colours, not near-black. */
 /* Text sizes (Settings → Appearance): the app's text and the diff's code, as scales of 14px and 12px. */
 :root { --ts: 1; --cs: 1; }
-:root {
+:root, .lgtm-colors { /* .lgtm-colors: lgtm's own colours again inside another theme (its preview card) */
   color-scheme: light dark;
   --bg: light-dark(#fff, #2b2b2b); --soft: light-dark(#f6f8fa, #313335); --border: light-dark(#d1d9e0, #45484a);
   --fg: light-dark(#1f2328, #bbbbbb); --code-fg: light-dark(#1f2328, #a9b7c6); --muted: light-dark(#59636e, #808080);
@@ -51,7 +51,6 @@ code, pre { font-family: var(--mono); }
 
 .top { position: sticky; top: 0; z-index: 10; box-sizing: border-box; height: var(--nav); display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--bg); border-bottom: 1px solid var(--border); }
 .top-actions { display: flex; align-items: center; gap: 6px; }
-.top-actions button.on { border-color: var(--accent); }
 .top-err { font-size: calc(12px * var(--ts)); color: var(--delfg); white-space: nowrap; }
 .top a { font-weight: 600; color: var(--fg); }
 .brand { display: inline-flex; align-items: center; gap: 6px; }
@@ -432,7 +431,7 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .vector-preview .note { flex-basis: 100%; margin: 0; }
 /* Settings page */
 .nav-btn { padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-size: calc(13px * var(--ts)); }
-.nav-btn:hover, .nav-btn.on { border-color: var(--accent); text-decoration: none; }
+.nav-btn:hover { text-decoration: none; }
 /* The examples beside the switches get the width they need (code doesn't wrap); text stays at a readable 720px. */
 .settings { max-width: 960px; }
 .settings .set-row, .settings section > p, .settings .set-int, .settings .set-sub { max-width: 720px; }
@@ -611,7 +610,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .setup-fix pre { margin: 0; padding: 4px 8px; background: var(--soft); border-radius: 4px; font-size: calc(12px * var(--ts)); white-space: pre-wrap; }
 /* Pills, legible: neutral ones in near-text colour on a soft fill; coloured ones in brighter shades than the diff's
    (the dark theme's green and red are dimmed for code) with a light tint of their own colour. */
-:root { --pill-ok: light-dark(#1a7f37, #7fc27a); --pill-bad: light-dark(#cf222e, #f08a84); --pill-warn: light-dark(#9a6700, #e8a95c); --pill-info: light-dark(#0969da, #79b4ff); }
+:root, .lgtm-colors { --pill-ok: light-dark(#1a7f37, #7fc27a); --pill-bad: light-dark(#cf222e, #f08a84); --pill-warn: light-dark(#9a6700, #e8a95c); --pill-info: light-dark(#0969da, #79b4ff); }
 .pill { color: color-mix(in srgb, var(--fg) 88%, var(--bg)); background: var(--soft); border-color: var(--border); }
 .pill.p-ok, .pill.p-claude { color: var(--pill-ok); }
 .pill.p-bad { color: var(--pill-bad); }
@@ -809,9 +808,9 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 /* Tags and pills as text, icons or both (Settings → Appearance; tags.tsx). */
 .ti { display: inline-flex; align-items: center; vertical-align: -2px; margin-right: .3em; }
 .ti:empty { display: none; }
-.tn + .tt { margin-left: .3em; }
+.tn + .thm { margin-left: .3em; }
 html.tags-text .ti { display: none; }
-html.tags-icons .tt { display: none; }
+html.tags-icons .thm { display: none; }
 html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
 .octicon { flex: none; vertical-align: -2px; }
 .icon-btn { display: inline-grid; place-items: center; padding: 3px 7px; color: var(--muted); }
@@ -909,3 +908,18 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .tg-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-file input { display: none; }
 .set-file-btn { display: inline-block; padding: 3px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); cursor: pointer; }
+/* Settings → Appearance: each colour theme as a card, its light and dark half in miniature. */
+.thm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 2px 0 14px; }
+.thm-card { display: grid; gap: 4px; padding: 4px; text-align: center; font-size: calc(12px * var(--ts)); border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--fg); }
+.thm-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.thm { display: grid; grid-template-columns: 1fr 1fr; height: 66px; overflow: hidden; border-radius: 5px; border: 1px solid var(--border); text-align: left; font: 8px/1.55 var(--mono); }
+.thm-half { display: grid; align-content: start; background: var(--bg); color: var(--code-fg); min-width: 0; }
+.thm-bar { display: flex; align-items: center; justify-content: space-between; height: 13px; padding: 0 5px; background: var(--soft); border-bottom: 1px solid var(--border); }
+.thm-title { width: 45%; height: 3px; border-radius: 2px; background: var(--fg); opacity: .75; }
+.thm-pill { width: 16px; height: 7px; border-radius: 4px; background: var(--primary); }
+.thm-line { padding: 0 5px; white-space: nowrap; overflow: hidden; }
+.thm-del { background: var(--del); }
+.thm-add { background: var(--add); }
+.tg-item { flex-wrap: wrap; }
+.tg-preview { flex-basis: 100%; display: flex; align-items: end; gap: 10px; padding: 4px 0 6px; }
+.tg-preview .thm-card { width: 200px; }
