@@ -422,7 +422,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
       };
       if (first)
         prCache.get<Loaded>(`${repo}#${n}`).then(async (c) => {
-          if (c) await loadLanguages(c.v.files.map((f) => f.filename));
+          if (c) await loadLanguages(repo, c.v.files.map((f) => f.filename));
           if (!c || fresh) return;
           setStale(c.at);
           show(c.v);
@@ -438,7 +438,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
         setStale(null);
         return setNotice({ ok: false, text: `Couldn't refresh this PR (${e.message}); showing the copy loaded earlier.` });
       }
-      await loadLanguages(loaded.files.map((f) => f.filename)); // any language beyond the built-in ones, before drawing
+      await loadLanguages(repo, loaded.files.map((f) => f.filename)); // any language beyond the built-in ones, before drawing
       fresh = true;
       setStale(null);
       show(loaded);
