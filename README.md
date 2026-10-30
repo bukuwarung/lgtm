@@ -58,6 +58,7 @@ gh auth login   # once, if you haven't
 - A strip down the right edge is the scrollbar, with marks for threads, drafts and changes.
 - Syntax highlighting for any language highlight.js knows, Groovy and ProGuard rules included.
 - Images in descriptions and comments (private repos too), in markdown files, and SVG files; swipe between an image's old and new versions.
+- Colour themes for the whole app, light and dark: lgtm's own, One, Ayu and Gruvbox, or any of the hundreds in Zed's theme gallery, from Settings.
 - Your pick of code themes and fonts, ligatures included; changed words filled, boxed or squiggled, changed lines filled, subtle or barred; rainbow brackets.
 - Stacked PRs, layer by layer, with an overview of every layer.
 

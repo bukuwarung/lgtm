@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getEmojis, getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
+import { getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir } from './github.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
@@ -7,6 +7,7 @@ import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes } from './look.ts';
+import { fromZedFile, parseThemeFile, pickVariant, type AppTheme } from './themes.ts';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
@@ -365,6 +366,8 @@ export function Settings() {
             {Object.entries(allThemes(look.mine)).map(([k, t]) => <option value={k}>{t ? t.name : 'lgtm'}</option>)}
           </select>
         </label>
+        <MyTheme look={look} />
+        <ThemeGallery look={look} />
         <div class="set-row">
           <span>Light or dark</span>
           <span class="set-seg" role="radiogroup" aria-label="Light or dark">
@@ -426,6 +429,165 @@ export function Settings() {
 
       <SavedReplies />
       <About />
+    </div>
+  );
+}
+
+type Look = ReturnType<typeof useCodeLook>;
+const savedThemes = (look: Look): Record<string, AppTheme> => {
+  try {
+    return JSON.parse(look.mine);
+  } catch {
+    return {};
+  }
+};
+const saveTheme = (look: Look, key: string, t: AppTheme | null) => {
+  const all = savedThemes(look);
+  if (t) all[key] = t;
+  else delete all[key];
+  look.setMine(JSON.stringify(all));
+};
+
+// The picked theme, when it's one you added: its light and dark version (for a file with several), where it's from,
+// and a way to remove it.
+function MyTheme({ look }: { look: Look }) {
+  const t = savedThemes(look)[look.appTheme];
+  if (!t) return null;
+  const of = (a: 'light' | 'dark') => t.variants?.filter((v) => v.appearance === a) ?? [];
+  return (
+    <div class="set-row set-mytheme">
+      <span>
+        {t.name}
+        <small>
+          {t.credit && <>By {t.credit.replace(/\s*<[^>]*>/, '')}. </>}
+          {t.source && <a href={t.source} target="_blank" rel="noopener">Its source</a>}
+        </small>
+      </span>
+      <span class="row">
+        {(['light', 'dark'] as const).map((a) =>
+          of(a).length > 1 ? (
+            <select title={`The ${a} version`} value={t.pick?.[a]} onChange={(e) => saveTheme(look, look.appTheme, pickVariant(t, a, e.currentTarget.value))}>
+              {of(a).map((v) => <option value={v.name}>{v.name}</option>)}
+            </select>
+          ) : null,
+        )}
+        <button onClick={() => (look.setAppTheme('lgtm'), saveTheme(look, look.appTheme, null))}>Remove</button>
+      </span>
+    </div>
+  );
+}
+
+// More themes: Zed's gallery (its theme extensions, most used first; each theme file read from the extension's GitHub
+// repo, as JSON: nothing in them runs), or a Zed theme file of your own.
+type ZedExtension = { id: string; name: string; description: string; repository: string; download_count: number; authors: string[] };
+function ThemeGallery({ look }: { look: Look }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [list, setList] = useState<ZedExtension[] | null>(null);
+  const [files, setFiles] = useState<{ ext: ZedExtension; names: string[] } | null>(null);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => {
+      fetch(`https://api.zed.dev/extensions?filter=${encodeURIComponent(q)}&provides=themes&max_schema_version=1`)
+        .then((r) => r.json())
+        .then((d) => setList((d.data ?? []).sort((a: ZedExtension, b: ZedExtension) => b.download_count - a.download_count).slice(0, 40)), (e) => setErr(`Couldn't reach Zed's gallery: ${e.message}`));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [open, q]);
+  const repoOf = (ext: ZedExtension) => ext.repository.match(/github\.com\/([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/)?.[1];
+  const browse = async (ext: ZedExtension) => {
+    setErr('');
+    const repo = repoOf(ext);
+    if (!repo) return setErr(`${ext.name}'s source isn't on GitHub, so lgtm can't fetch it. Download its theme file and add it with "From a file".`);
+    setBusy(ext.id);
+    try {
+      const names = (await listDir(repo, 'themes')).filter((f) => f.type === 'file' && /\.json$/i.test(f.name)).map((f) => f.name);
+      if (!names.length) throw new Error('no theme files in its themes folder');
+      if (names.length === 1) await add(ext, names[0]);
+      else setFiles({ ext, names });
+    } catch (e: any) {
+      setErr(`Couldn't read ${ext.name}'s themes: ${e.message}`);
+    }
+    setBusy('');
+  };
+  const install = (key: string, t: AppTheme) => (saveTheme(look, key, t), look.setAppTheme(key), setFiles(null));
+  const add = async (ext: ZedExtension, name: string) => {
+    setBusy(name);
+    setErr('');
+    try {
+      const repo = repoOf(ext)!;
+      const text = await getRaw(repo, `themes/${name}`, 'HEAD');
+      if (!text) throw new Error('the file is gone');
+      const t = fromZedFile(parseThemeFile(text), `https://github.com/${repo}/blob/HEAD/themes/${name}`);
+      install(`zed:${ext.id}/${name}`, { ...t, name: names(ext, name, t.name) });
+    } catch (e: any) {
+      setErr(`Couldn't add it: ${e.message}`);
+    }
+    setBusy('');
+  };
+  // Several files in one extension (Catppuccin's accents): their file names tell them apart.
+  const names = (ext: ZedExtension, file: string, name: string) => (files && files.names.length > 1 ? `${name} (${file.replace(/\.json$/i, '')})` : name);
+  const fromFile = async (f: File | undefined) => {
+    if (!f) return;
+    try {
+      const t = fromZedFile(parseThemeFile(await f.text()), '');
+      install(`file:${f.name}`, t);
+    } catch (e: any) {
+      setErr(`That file isn't a Zed theme: ${e.message}`);
+    }
+  };
+  if (!open)
+    return (
+      <div class="set-row">
+        <span>
+          More themes
+          <small>Any of the hundreds in Zed's theme gallery, or a Zed theme file you have.</small>
+        </span>
+        <span class="row">
+          <button onClick={() => setOpen(true)}>Browse Zed themes</button>
+          <label class="set-file">
+            <input type="file" accept=".json,application/json" onChange={(e) => void fromFile(e.currentTarget.files?.[0])} />
+            <span class="set-file-btn">From a file…</span>
+          </label>
+        </span>
+      </div>
+    );
+  return (
+    <div class="theme-gallery">
+      <div class="row">
+        <input type="search" placeholder="Search Zed's themes" value={q} onInput={(e) => (setQ(e.currentTarget.value), setFiles(null))} autoFocus />
+        <button onClick={() => (setOpen(false), setFiles(null))}>Done</button>
+      </div>
+      {err && <p class="error">{err}</p>}
+      {files ? (
+        <div class="tg-list">
+          <p class="note">
+            {files.ext.name} has {files.names.length} theme files. Add one: <button class="link" onClick={() => setFiles(null)}>back</button>
+          </p>
+          {files.names.map((n) => (
+            <div class="tg-item">
+              <b>{n.replace(/\.json$/i, '')}</b>
+              <button disabled={!!busy} onClick={() => void add(files.ext, n)}>{busy === n ? 'Adding…' : 'Add'}</button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div class="tg-list">
+          {!list && <p class="note">Loading…</p>}
+          {list?.map((x) => (
+            <div class="tg-item">
+              <span>
+                <b>{x.name}</b> <small class="note">{x.download_count.toLocaleString()} downloads</small>
+                <small class="note tg-desc">{x.description}</small>
+              </span>
+              <button disabled={!!busy} onClick={() => void browse(x)}>{busy === x.id ? 'Getting…' : 'Add'}</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <p class="note">Themes are their authors' work, under their own licenses; lgtm reads only their colours.</p>
     </div>
   );
 }

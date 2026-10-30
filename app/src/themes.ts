@@ -4,7 +4,9 @@ import { ZED_BUILTIN } from './zedthemes.ts';
 // and a dark version, code colours included; the light/dark switch picks one. lgtm's own look is the stylesheet's.
 // Others come as Zed theme files: built in (One, Ayu, Gruvbox) or added from Zed's gallery or a file.
 type Tokens = Record<string, string>; // --token → colour
-export type AppTheme = { name: string; light: Tokens; dark: Tokens; credit?: string };
+// `variants`: a theme file's versions (Catppuccin's Latte, Frappé, Macchiato, Mocha…), for picking the light and dark one.
+export type Variant = { name: string; appearance: 'light' | 'dark'; tokens: Tokens };
+export type AppTheme = { name: string; light: Tokens; dark: Tokens; credit?: string; source?: string; variants?: Variant[]; pick?: { light: string; dark: string } };
 
 const opaque = (c?: string) => (c && /^#[0-9a-f]{8}$/i.test(c) && c.endsWith('ff') ? c.slice(0, 7) : c);
 
@@ -43,9 +45,9 @@ export function fromZed(s: any): Tokens {
     '--pill-warn': s.warning,
     '--pill-info': accent,
     '--g-commented': s['text.muted'],
-    '--rb0': s.players?.[0]?.cursor,
-    '--rb1': s.players?.[1]?.cursor,
-    '--rb2': s.players?.[2]?.cursor,
+    '--rb0': s.accents?.[0] ?? s.players?.[0]?.cursor,
+    '--rb1': s.accents?.[1] ?? s.players?.[1]?.cursor,
+    '--rb2': s.accents?.[2] ?? s.players?.[2]?.cursor,
     '--hl-kw': syn('keyword'),
     '--hl-fn': syn('function'),
     '--hl-const': syn('number', 'constant'),
@@ -69,6 +71,28 @@ export function fromZedFamily(file: any): AppTheme {
   const light = themes.find((t) => t.appearance === 'light') ?? dark;
   if (!dark?.style) throw new Error("That isn't a Zed theme file");
   return { name: file.name ?? dark.name, light: fromZed(light.style), dark: fromZed(dark.style), credit: file.author };
+}
+
+// A Zed theme file as written: JSON, though some carry comments or trailing commas (Zed reads them leniently).
+export function parseThemeFile(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return JSON.parse(text.replace(/("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m, str) => str ?? '').replace(/,(\s*[}\]])/g, '$1'));
+  }
+}
+
+// A theme file added in Settings: every version kept, so its light and dark one can be picked.
+export function fromZedFile(file: any, source: string): AppTheme {
+  const t = fromZedFamily(file);
+  const variants: Variant[] = (file.themes ?? []).filter((v: any) => v?.style).map((v: any) => ({ name: v.name, appearance: v.appearance === 'light' ? 'light' : 'dark', tokens: fromZed(v.style) }));
+  const first = (a: string) => variants.find((v) => v.appearance === a)?.name ?? variants[0]?.name;
+  return { ...t, source, variants, pick: { light: first('light'), dark: first('dark') } };
+}
+// The same theme with another version picked for light or dark.
+export function pickVariant(t: AppTheme, mode: 'light' | 'dark', name: string): AppTheme {
+  const v = t.variants?.find((x) => x.name === name);
+  return v ? { ...t, [mode]: v.tokens, pick: { ...t.pick!, [mode]: name } } : t;
 }
 
 export const BUILTIN_THEMES: Record<string, AppTheme> = Object.fromEntries(Object.entries(ZED_BUILTIN).map(([k, f]) => [k, fromZedFamily(f)]));

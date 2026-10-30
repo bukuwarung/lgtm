@@ -900,3 +900,12 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .img-swipe-labels { display: flex; justify-content: space-between; width: min(100%, 420px); font-size: calc(11px * var(--ts)); color: var(--muted); }
 /* Settings → Desktop notifications: one sent now, to hear and see it. */
 .set-test { align-self: flex-start; margin: 4px 0 2px; }
+/* Settings → Appearance: Zed's theme gallery, and a theme you added. */
+.theme-gallery { display: grid; gap: 8px; margin: 6px 0 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--soft); }
+.tg-list { display: grid; gap: 2px; max-height: 360px; overflow: auto; }
+.tg-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 6px; border-radius: 6px; }
+.tg-item:hover { background: var(--bg); }
+.tg-item > span { display: grid; min-width: 0; }
+.tg-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-file input { display: none; }
+.set-file-btn { display: inline-block; padding: 3px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); cursor: pointer; }
