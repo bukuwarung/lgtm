@@ -330,6 +330,7 @@ export function Settings() {
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)." />
         <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Its name, Comment and Viewed, as in its header." />
+        <Flag k="hunkNames" initial={true} label="Name the function in hunk headers" hint="Kotlin and Java: the function or class a change is in; as you scroll a hunk, the one you're in. Off: just the line numbers." />
         <Flag k="rainbowBrackets" initial={false} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)." />
         <LineStyle />
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>

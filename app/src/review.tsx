@@ -1658,7 +1658,8 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((src) => src != null && setHead(src.replace(/\n$/, '').split('\n')), () => {});
   }, []);
   // Where each hunk is: that function or class, else git's guess. One that repeats the hunk before shows no label.
-  const where = useMemo(() => hunks.map((h) => (head ? enclosing(head, h) : null) ?? h.header.replace(/^@@[^@]*@@\s*/, '')), [hunks, head]);
+  const [hunkNames] = useStoredFlag('hunkNames', true); // Settings → Diff: off, a hunk header is its line numbers alone
+  const where = useMemo(() => hunks.map((h) => (!hunkNames ? '' : (head ? enclosing(head, h) : null) ?? h.header.replace(/^@@[^@]*@@\s*/, ''))), [hunks, head, hunkNames]);
   const [openGaps, setOpenGaps] = useState<Set<number>>(new Set());
   const [gapErr, setGapErr] = useState('');
   const expand = async (g: Gap) => {
@@ -1787,14 +1788,17 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   // hunk (data-decl) once it's scrolled under the header. Set on the page directly, as you scroll.
   useEffect(() => {
     const el = table.current;
-    if (!el || !jvm) return;
+    if (!el || !jvm || !hunkNames) return;
     let frame = 0;
     const update = () => {
       frame = 0;
       const first = el.querySelector<HTMLElement>('tr.hunk td');
       const r = el.getBoundingClientRect();
       if (!first || r.bottom < 0 || r.top > innerHeight) return;
-      const pin = parseFloat(getComputedStyle(first).top) + first.offsetHeight;
+      // Where the pinned hunk header ends: under the file's own pinned header (measured, as WebKit may not resolve the
+      // sticky offset's calc() for getComputedStyle).
+      const fileHead = el.closest('section.file')?.querySelector<HTMLElement>('.file-h');
+      const pin = Math.max(fileHead?.getBoundingClientRect().bottom ?? 0, 0) + first.offsetHeight;
       let head: HTMLElement | null = null;
       let label: string | null = null;
       const show = () => {
@@ -1811,7 +1815,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     const onScroll = () => (frame ||= requestAnimationFrame(update));
     addEventListener('scroll', onScroll, { passive: true });
     return () => (removeEventListener('scroll', onScroll), cancelAnimationFrame(frame));
-  }, [jvm, hunks]);
+  }, [jvm, hunks, hunkNames]);
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
   // A doc comment switched to its source: a header row above its first line switches it back.
