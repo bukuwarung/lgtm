@@ -133,7 +133,12 @@ function suggestions(root: ParentNode, lang?: string) {
   }
   for (const pre of root.querySelectorAll<HTMLElement>('.suggestion:not([data-hl]) > pre')) {
     const box = pre.parentElement!;
-    box.replaceWith(suggestionTable((pre.textContent ?? '').replace(/\n$/, '').split('\n').map((text) => ({ kind: '+', num: '', text })), lang));
+    // A draft says which lines it replaces (review.tsx Notes); otherwise only the new lines are known.
+    const host = box.closest<HTMLElement>('[data-old]');
+    const from = Number(host?.dataset.from) || 0;
+    const old: SugRow[] = host ? host.dataset.old!.split('\n').map((text, i) => ({ kind: '-', num: from ? String(from + i) : '', text })) : [];
+    const added: SugRow[] = (pre.textContent ?? '').replace(/\n$/, '').split('\n').map((text) => ({ kind: '+', num: '', text }));
+    box.replaceWith(suggestionTable([...old, ...added], lang));
   }
 }
 function suggestionTable(rows: SugRow[], lang?: string): HTMLElement {

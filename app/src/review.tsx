@@ -2325,7 +2325,15 @@ function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; dr
         .map((d) => (
           <div class="draft" key={d.id} id={'d-' + d.id}>
             <div class="badge">Pending · {where(d)}</div>
-            <div class="md" data-lang={ctx.langFor(d.path) ?? ''} dangerouslySetInnerHTML={{ __html: md.render(d.body) }} />
+            {/* A suggestion shows the lines it replaces (data-old, from data-from on), as GitHub will. */}
+            <div
+              class="md"
+              data-lang={ctx.langFor(d.path) ?? ''}
+              data-old={d.body.includes('```suggestion') ? (ctx.suggestion({ path: d.path, side: d.side, line: d.line, startLine: d.startLine }) ?? undefined) : undefined}
+              data-from={d.startLine ?? d.line}
+              ref={(el) => void (el && highlightBlocks(el, ctx.langFor(d.path), languageFor(d.path)))}
+              dangerouslySetInnerHTML={{ __html: md.render(d.body) }}
+            />
             <div class="row">
               <button onClick={() => ctx.setTarget({ path: d.path, side: d.side, line: d.line, startLine: d.startLine, editId: d.id, body: d.body })}>Edit</button>
               <button onClick={() => ctx.removeDraft(d.id)}>Delete</button>

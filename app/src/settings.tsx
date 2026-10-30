@@ -1266,7 +1266,7 @@ function BackupSection() {
   return (
     <section>
       <h3>Backup</h3>
-      <p class="note">Your preferences and pending (unsubmitted) comments live in this {isDesktop ? 'app' : 'browser'}. Export them to move to {isDesktop ? 'the browser version' : 'the macOS app'} or another Mac.</p>
+      <p class="note">Your preferences (themes you added included) and pending (unsubmitted) comments live in this {isDesktop ? 'app' : 'browser'}. Export them to move to {isDesktop ? 'the browser version' : 'the macOS app'} or another Mac.</p>
       <div class="row">
         <button onClick={() => saveBackup().then((where) => setMsg({ ok: true, text: `Saved to ${where}.` }), (e) => setMsg({ ok: false, text: e.message }))}>Export settings and drafts</button>
         <button onClick={() => file.current?.click()}>Import…</button>
