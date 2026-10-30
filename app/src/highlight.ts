@@ -3,7 +3,7 @@ export { hljs }; // languages.ts adds to it
 import dockerfile from 'highlight.js/lib/languages/dockerfile';
 import kotlin from 'highlight.js/lib/languages/kotlin';
 import groovy from 'highlight.js/lib/languages/groovy';
-import type { Hunk } from './diff.ts';
+import { markText, wordChange, type Hunk } from './diff.ts';
 
 hljs.registerLanguage('dockerfile', dockerfile);
 // Groovy: Jenkins pipelines (Jenkinsfile, vars/*.groovy) and Groovy-DSL Gradle builds.
@@ -103,8 +103,10 @@ export function majorityLanguage(paths: string[]): string | undefined {
 // Highlights code blocks in rendered comment HTML (GitHub's, or ours for drafts). A block GitHub marked keeps its
 // language (re-highlighted in our colours); an unmarked one takes `fallback`. Our own already-highlighted blocks
 // (language-* class), rich-markdown blocks (data-src, per-line spans) and mermaid are left alone.
-export function highlightBlocks(root: ParentNode, fallback?: string) {
-  suggestions(root, fallback);
+// `codeLang`: the commented file's own language, for suggested changes (its lines), even where unmarked blocks read as
+// the PR's main language (a comment on a markdown file).
+export function highlightBlocks(root: ParentNode, fallback?: string, codeLang = fallback) {
+  suggestions(root, codeLang);
   for (const pre of root.querySelectorAll<HTMLElement>('pre:not([data-hl]):not([data-src])')) {
     if (pre.querySelector('code[class*="language-"]') || pre.closest('.mermaid-svg, .mermaid-block') || pre.getAttribute('lang') === 'mermaid') continue;
     // GitHub names a fence's language as <pre lang="…">, or a highlight-source-… wrapper when it coloured it.
@@ -124,7 +126,8 @@ function suggestions(root: ParentNode, lang?: string) {
       const code = tr.querySelector('.blob-code-inner');
       if (!code) return [];
       const kind = code.classList.contains('blob-code-deletion') ? '-' : '+';
-      return [{ kind, num: tr.querySelector('.blob-num')?.getAttribute('data-line-number') ?? '', text: code.textContent?.replace(/\n$/, '') ?? '' }];
+      const num = tr.querySelector('.blob-num')?.getAttribute('data-line-number') ?? '';
+      return [{ kind, num: /^\d+$/.test(num) ? num : '', text: code.textContent?.replace(/\n$/, '') ?? '' }]; // "·": no number
     });
     blob.replaceWith(suggestionTable(rows, lang));
   }
@@ -140,12 +143,22 @@ function suggestionTable(rows: SugRow[], lang?: string): HTMLElement {
     return lang ? splitLines(highlightCode(text, lang)) : text.split('\n').map((l) => l.replace(/[&<>]/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt' }[c]};`));
   };
   const html = { '-': side('-'), '+': side('+') };
+  // The words a line changes, marked as in the diff: the i-th removed line against the i-th added one.
+  const dels = rows.filter((r) => r.kind === '-'), adds = rows.filter((r) => r.kind === '+');
+  for (let i = 0; i < Math.min(dels.length, adds.length); i++) {
+    const w = wordChange(dels[i].text, adds[i].text);
+    if (!w) continue;
+    html['-'][i] = markText(html['-'][i], w.del[0], w.del[1], 'wd-del');
+    html['+'][i] = markText(html['+'][i], w.add[0], w.add[1], 'wd-add');
+  }
   const at = { '-': 0, '+': 0 };
+  const nums = rows.some((r) => r.num);
   const box = document.createElement('div');
   box.className = 'suggestion';
   box.dataset.hl = '';
   box.innerHTML = `<div class="badge">Suggested change</div><table class="diff"><tbody>${rows
-    .map((r) => `<tr class="ln ${r.kind === '-' ? 'd' : 'a'}"><td class="num">${r.kind === '-' ? r.num : ''}</td><td class="num">${r.kind === '+' ? r.num : ''}</td><td class="code">${html[r.kind][at[r.kind]++] ?? ''}</td></tr>`)
+    // One line-number column (a suggestion's lines are the same lines, before and after), none when GitHub gives none.
+    .map((r) => `<tr class="ln ${r.kind === '-' ? 'd' : 'a'}">${nums ? `<td class="num">${r.num}</td>` : ''}<td class="code">${html[r.kind][at[r.kind]++] ?? ''}</td></tr>`)
     .join('')}</tbody></table>`;
   return box;
 }
