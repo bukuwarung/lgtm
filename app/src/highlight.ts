@@ -1,9 +1,13 @@
 import hljs from 'highlight.js/lib/common';
 import dockerfile from 'highlight.js/lib/languages/dockerfile';
 import kotlin from 'highlight.js/lib/languages/kotlin';
+import groovy from 'highlight.js/lib/languages/groovy';
 import type { Hunk } from './diff.ts';
 
 hljs.registerLanguage('dockerfile', dockerfile);
+// Groovy: Jenkins pipelines (Jenkinsfile, vars/*.groovy) and Groovy-DSL Gradle builds.
+hljs.registerLanguage('groovy', groovy);
+hljs.registerAliases(['gradle', 'gvy', 'jenkinsfile'], { languageName: 'groovy' });
 // Kotlin closer to IntelliJ: the stock grammar leaves property access, named arguments, `it` and constants plain.
 // These modes come after the stock ones, so keywords, strings and comments still win where they overlap.
 hljs.registerLanguage('kotlin', (h) => {
