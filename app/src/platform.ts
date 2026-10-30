@@ -311,9 +311,13 @@ export async function askNotifications(): Promise<boolean> {
   return (await n.isPermissionGranted()) || (await n.requestPermission()) === 'granted';
 }
 export async function notify(title: string, body: string, open: () => void) {
+  let sound = true; // Settings → Desktop notifications: Play a sound
+  try {
+    sound = localStorage.getItem(own('notifySound')) !== '0';
+  } catch {}
   if (!isDesktop) {
     if (Notification.permission !== 'granted') return;
-    const note = new Notification(title, { body });
+    const note = new Notification(title, { body, silent: !sound }); // the browser's own sound, if it has one
     note.onclick = () => {
       focus();
       open();
@@ -321,7 +325,8 @@ export async function notify(title: string, body: string, open: () => void) {
     return;
   }
   const n = await import('@tauri-apps/plugin-notification');
-  if (await n.isPermissionGranted()) n.sendNotification({ title, body }); // clicking it brings the app forward
+  // macOS plays nothing unless asked; this name is its default notification sound. Clicking it brings the app forward.
+  if (await n.isPermissionGranted()) n.sendNotification({ title, body, ...(sound && { sound: 'NSUserNotificationDefaultSoundName' }) });
 }
 
 // The Dock icon's badge (the app); the browser version shows the count in the tab title instead.

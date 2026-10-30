@@ -263,6 +263,7 @@ export function Settings() {
           </span>
         </label>
         <fieldset class="set-sub" disabled={!notify}>
+          <Flag k="notifySound" initial={true} label="Play a sound" hint="The usual notification sound." />
           <Flag k="notifyReplies" initial={true} label="New replies waiting for you" />
           <Flag k="notifyVerdicts" initial={true} label="Your PR approved, or changes requested" />
           <Flag k="notifyCI" initial={true} label="Your PR's checks passed or failed" />
