@@ -6,8 +6,9 @@ import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
-import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes, saveTheme, setTrial, themeStyle } from './look.ts';
+import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes, saveTheme, setTrial } from './look.ts';
 import { fromVSCode, fromZedFile, parseThemeFile, pickVariant, type AppTheme } from './themes.ts';
+import { ThemeThumb } from './themecard.tsx';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
@@ -435,25 +436,6 @@ export function Settings() {
       <SavedReplies />
       <About />
     </div>
-  );
-}
-
-// A theme in miniature, light half and dark half: a bar, a pill, and a removed and an added line of code.
-function ThemeThumb({ t }: { t: AppTheme | null }) {
-  const c = (k: string, text: string) => <span style={{ color: `var(--hl-${k})` }}>{text}</span>;
-  return (
-    <span class={t ? 'thm' : 'thm lgtm-colors'} style={themeStyle(t)} aria-hidden="true">
-      {(['light', 'dark'] as const).map((m) => (
-        <span class="thm-half" style={{ colorScheme: m }}>
-          <span class="thm-bar">
-            <i class="thm-title" /> <i class="thm-pill" />
-          </span>
-          <span class="thm-line thm-del">{c('kw', 'val')} {c('fn', 'total')} = {c('const', '0')}</span>
-          <span class="thm-line thm-add">{c('kw', 'val')} {c('fn', 'total')} = {c('str', '"sum"')}</span>
-          <span class="thm-line">{c('com', '// cart')}</span>
-        </span>
-      ))}
-    </span>
   );
 }
 

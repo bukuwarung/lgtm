@@ -4,6 +4,8 @@ import { md } from './markdown.ts';
 import { FileIcon, ModuleIcon } from './shortcuts.tsx';
 import { folderIcon } from './fileicons.ts';
 import { CheckMark, Tg } from './tags.tsx';
+import { ThemeThumb } from './themecard.tsx';
+import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
 
 // Small, made-up examples of each diff helper, drawn with the app's own styles: shown beside the switches in
@@ -618,6 +620,32 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
     ),
   },
   claude: { title: 'Claude Code', width: 860, body: <Bar linked /> },
+  themes: {
+    title: 'Themes',
+    width: 760,
+    body: (
+      <div class="scene-themes">
+        <div class="thm-grid">
+          {[['lgtm', null] as const, ...Object.entries(BUILTIN_THEMES)].map(([k, t]) => (
+            <span class={k === 'one' ? 'thm-card on' : 'thm-card'}>
+              <ThemeThumb t={t} />
+              <span class="thm-name">{t ? t.name : 'lgtm'}</span>
+            </span>
+          ))}
+        </div>
+        <div class="set-row">
+          <span>
+            More themes
+            <small>Any of the hundreds in Zed's theme gallery, or a Zed or VS Code theme file you have.</small>
+          </span>
+          <span class="row">
+            <button>Browse Zed themes</button>
+            <button>From a file…</button>
+          </span>
+        </div>
+      </div>
+    ),
+  },
   merge: {
     title: 'Your PRs',
     width: 860,

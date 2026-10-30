@@ -58,7 +58,6 @@ gh auth login   # once, if you haven't
 - A strip down the right edge is the scrollbar, with marks for threads, drafts and changes.
 - Syntax highlighting for any language highlight.js knows, Groovy and ProGuard rules included.
 - Images in descriptions and comments (private repos too), in markdown files, and SVG files; swipe between an image's old and new versions.
-- Colour themes for the whole app, light and dark: lgtm's own, One, Ayu and Gruvbox, or any of the hundreds in Zed's theme gallery, from Settings.
 - Your pick of code themes and fonts, ligatures included; changed words filled, boxed or squiggled, changed lines filled, subtle or barred; rainbow brackets.
 - Stacked PRs, layer by layer, with an overview of every layer.
 
@@ -215,6 +214,17 @@ lgtm messages people as you, through slackcli.
 - Claude sends PRs here for your review, linked to its session.
 - After your review, send Claude the outcome; it can reply on each thread and resolve it.
 - The list shows "✳ updated" when it pushes and "✳ waiting for you" when it needs you.
+
+## Themes
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-themes-dark.png">
+  <img alt="Colour themes as cards, each with its light and dark version: lgtm, One, Ayu and Gruvbox; more from Zed's theme gallery or a file" src="docs/features/scene-themes-light.png" width="760">
+</picture>
+
+- Colour themes for the whole app, code included, each in a light and a dark version: lgtm's own, One, Ayu and Gruvbox.
+- Hundreds more from Zed's theme gallery, previewed first and tried on the whole app before you add them; or a Zed or VS Code theme file of yours.
+- Pick a theme's light and dark version (Catppuccin's Latte with Mocha, say), and code colours of their own if you like.
 
 ## On your Mac
 
