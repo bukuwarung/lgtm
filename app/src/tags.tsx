@@ -46,6 +46,7 @@ const ICONS: Record<string, string> = {
   assigned: 'person',
   merge: 'git-merge',
   behind: 'arrow-down',
+  pushed: 'repo-push',
   mention: 'mention',
   ws: 'eye/',
   history: 'history',

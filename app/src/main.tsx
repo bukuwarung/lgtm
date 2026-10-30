@@ -589,7 +589,7 @@ function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon:
       <button class={step === 'done' ? 'pill p-ok' : failed ? 'pill p-bad' : `pill ${tone}`} title={failed ? step : (step === 'done' && said) || title} aria-expanded={open} onClick={(e) => (stop(e), (step === 'idle' || failed) && setOpen(!open))}>
         {step === 'done' ? <Tg i="approved" t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : `${step === 'idle' ? idle : "couldn't"} ▾`} />}
       </button>
-      {open && <button class="pill-menu" onClick={go}>{failed ? `${action} again` : action}</button>}
+      {open && <button class="quick-menu" onClick={go}>{failed ? `${action} again` : action}</button>}
     </span>
   );
 }
@@ -721,7 +721,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       const [st, est] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items.map((i) => i.id)).catch(() => null)]);
       setItems(items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id) })));
       setSettled(true);
-    }, (e) => setErr(e.message));
+    }, (e) => setErr(e instanceof TypeError && /fetch|load failed|network/i.test(e.message) ? "Couldn't reach GitHub" : e.message));
   };
   // Unsent comments live in localStorage; re-read them whenever a review page saves drafts.
   const [, setStorageTick] = useState(0);
@@ -742,7 +742,8 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   useEffect(() => {
     const more = () => setAgain((n) => n + 1);
     addEventListener('lgtm:list-refresh', more);
-    return () => removeEventListener('lgtm:list-refresh', more);
+    addEventListener('online', more); // back from offline or sleep
+    return () => (removeEventListener('lgtm:list-refresh', more), removeEventListener('online', more));
   }, []);
   useEffect(() => {
     if (requested.current !== team) loadTeam(team);
@@ -863,6 +864,11 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
           </span>
         )}
         {i.assigned && !i.authored && <span class="pill"><Tg i="assigned" t="assigned to you" /></span>}
+        {kind === REVIEWING && !reReview(i) && i.newSinceApproval > 0 && (
+          <span class="pill p-warn" title="Commits written since you approved it (not rebases or merges of the base): worth another look before it merges">
+            <Tg i="pushed" n={i.newSinceApproval} t={`commit${i.newSinceApproval > 1 ? 's' : ''} since your approval`} />
+          </span>
+        )}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t="PR approved" /></span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t="PR changes requested" /></span>}
         {kind === MINE && !i.isDraft && i.mergeState === 'BEHIND' && <UpdateBase i={i} />}
@@ -937,7 +943,12 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   return (
     <aside class={hidden ? 'side prs collapsed' : 'side prs'} aria-hidden={hidden}>
       <div class="side-scroll">
-      {err && <p class="error">{err}</p>}
+      {err && (
+        <p class="error">
+          {err}
+          <button class="link" onClick={() => setAgain((n) => n + 1)}>Retry</button>
+        </p>
+      )}
       {shown && (
         <div class="pr-tabs" role="tablist">
           {([['reviewing', 'Reviewing', shown.filter(listed).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData?.items.length]] as const).map(([t, name, n]) => (

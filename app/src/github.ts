@@ -75,6 +75,7 @@ export type QueueItem = {
   queue: { position: number; state: 'QUEUED' | 'AWAITING_CHECKS' | 'MERGEABLE' | 'UNMERGEABLE' | 'LOCKED' } | null; // its place in the repo's merge queue
   requested: boolean; // my review is currently requested (including re-requests)
   myState: ReviewState | null; // my latest submitted review
+  newSinceApproval: number; // my latest verdict is an approval: commits written since (of the last 20)
   reviewedBefore: boolean; // I've reviewed it (a re-request drops my review from latestReviews, but not from this)
   reviewing: boolean; // in my review queue: requested, or I've reviewed it
   mine: boolean; // I opened it, or it's assigned to me and not in my review queue
@@ -166,11 +167,11 @@ const QUEUE = `query{viewer{login}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}
   mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...F}}}
 fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login} assignees(first:1){nodes{login}}
-  additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} repository{nameWithOwner}
+  additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} recent:commits(last:20){nodes{commit{authoredDate parents{totalCount}}}} repository{nameWithOwner}
   headRefName baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
-  latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state author{login}}}}`;
+  latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
   const d = await graphql(QUEUE, {});
@@ -188,6 +189,12 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
         p.latestOpinionatedReviews.nodes.find((r: any) => r.author?.login === me)?.state ??
         p.latestReviews.nodes.find((r: any) => r.author?.login === me && r.state !== 'PENDING')?.state ??
         null,
+      // I approved, then new work landed: worth a second look before it merges. Written after (a rebase only re-dates
+      // its commits' committer date), and not a merge of the base in.
+      newSinceApproval: ((r) =>
+        r?.state === 'APPROVED' ? p.recent.nodes.filter(({ commit: c }: any) => c.parents.totalCount === 1 && c.authoredDate > r.submittedAt).length : 0)(
+        p.latestOpinionatedReviews.nodes.find((r: any) => r.author?.login === me),
+      ),
       // An assigned PR that's waiting on my review belongs in the review queue, not twice.
       reviewedBefore: reviewed.has(p.id),
       reviewing: !authored.has(p.id) && (requested.has(p.id) || reviewed.has(p.id)),
@@ -230,6 +237,7 @@ const toItem = (p: any): QueueItem => ({
       noReviewers: !p.reviewRequests?.nodes.length && !p.latestReviews.nodes.some((r: any) => r.author?.__typename === 'User' && r.author.login !== p.author?.login),
       requested: false,
       myState: null,
+      newSinceApproval: 0,
       reviewedBefore: false,
       reviewing: false,
       mine: false,
@@ -878,7 +886,7 @@ export function withAnswered(items: QueueItem[], answered: Answered, now = Date.
     const a = answered.get(`${i.repo}#${i.number}`);
     if (!a || now - a.at > 5 * 60_000 || Date.parse(i.waitingSince) > a.at) return i;
     const state = a.event === 'APPROVE' ? 'APPROVED' : a.event === 'REQUEST_CHANGES' ? 'CHANGES_REQUESTED' : (i.myState ?? 'COMMENTED');
-    return { ...i, requested: false, myState: state, reviewedBefore: true };
+    return { ...i, requested: false, myState: state, newSinceApproval: 0, reviewedBefore: true };
   });
 }
 
