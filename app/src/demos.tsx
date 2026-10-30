@@ -29,13 +29,13 @@ function Rows({ rows, extra }: { rows: Row[]; extra?: ComponentChildren }) {
   );
 }
 
-function File({ path, st = 'modified', add, del, mod, children }: { path: string; st?: string; add: number; del: number; mod?: string; children?: ComponentChildren }) {
+function File({ path, st = 'modified', add, del, mod, untested, children }: { path: string; st?: string; add: number; del: number; mod?: string; untested?: boolean; children?: ComponentChildren }) {
   return (
     <section class="file">
       <header class="file-h">
         <span class={`st s-${st}`}><Tg i={st} t={st} /></span>
         <a class="file-name" title={path}>
-          <FileIcon path={path} big />
+          <FileIcon path={path} big untested={untested} />
           <b>{path.slice(path.lastIndexOf('/') + 1)}</b>
           {mod && (
             <span class="file-mod">
@@ -478,7 +478,7 @@ const ReviewScene = ({ thread }: { thread?: ComponentChildren }) => (
           <div class="since on">
             Showing 2 commits since your last review. <button>Show all changes</button>
           </div>
-          <File path="payments/PaymentService.kt" add={3} del={1}>
+          <File path="payments/PaymentService.kt" add={3} del={1} untested>
             <Rows rows={SNIPPET} extra={thread} />
           </File>
         </div>
@@ -546,7 +546,7 @@ const Showcase = () => (
         </div>
       </div>
     </File>
-    <File path="payments/src/main/kotlin/PaymentService.kt" add={3} del={1} mod=":payments">
+    <File path="payments/src/main/kotlin/PaymentService.kt" add={3} del={1} mod=":payments" untested>
       <table class="diff">
         <tbody>
           <Fold text="⋯ +3 imports · new: kotlin.time" />
