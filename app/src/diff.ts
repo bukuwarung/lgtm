@@ -400,7 +400,37 @@ const DECL =
   /^\s*(?:@\w+(?:\([^)]*\))?\s+|(?:public|private|protected|internal|override|open|abstract|final|static|suspend|inline|operator|infix|tailrec|external|data|sealed|enum|annotation|inner|companion|synchronized|native|default|const|actual|expect|value|fun\s+interface)\s+)*(?:fun|class|object|interface|constructor|init)\b|^\s*(?:(?:public|private|protected|static|final|abstract|synchronized|native|default)\s+)+[\w<>[\],.? ]+\s+\w+\s*\(/;
 const COMMENT = /^\s*(\/\*|\*|\/\/|@\w)/;
 const declName = (line: string) => line.trim().replace(/\s*[{=:]\s*$/, '');
+const indent = (s: string) => s.match(/^\s*/)![0].replace(/\t/g, '    ').length;
+
+// Where a hunk is, for its header: the function or class around its first change, when that's declared above the hunk.
+// One declared inside the hunk isn't reached yet at the hunk's top, so the header names what holds the hunk's first line
+// instead ('' at the file's top level); scrolled past the declaration, the header names it (DiffView, declLabel).
 export function enclosing(head: string[], hunk: Hunk): string | null {
+  const s = changeScope(head, hunk);
+  if (!s) return null;
+  const news = hunk.lines.flatMap((l) => l.new ?? []);
+  const top = news[0] ?? hunk.newStart, bottom = news.at(-1) ?? top;
+  // Declared above the hunk (or below it: a doc comment's function): named. Within it: not yet reached at its top.
+  return s.line < top || s.line > bottom ? s.name : (scopeAt(head, top) ?? '');
+}
+// What holds line `n` of the new file: the nearest declaration above it, less indented than it.
+function scopeAt(head: string[], n: number): string | null {
+  const from = head.slice(n - 1).findIndex((l) => l.trim()); // a blank line: its next one with text
+  if (n < 1 || from < 0) return null;
+  let limit = indent(head[n - 1 + from]);
+  for (let i = n - 2; i >= 0 && limit > 0; i--) {
+    const line = head[i];
+    if (!line.trim() || indent(line) >= limit) continue;
+    if (DECL.test(line)) return declName(line);
+    limit = indent(line);
+  }
+  return null;
+}
+// A declaration line's name for a hunk header (fun, class… with its parameters), or null for any other line.
+export const declLabel = (line: string) => (DECL.test(line) ? declName(line) : null);
+
+// The declaration around a hunk's first change, and its line in the new file.
+function changeScope(head: string[], hunk: Hunk): { name: string; line: number } | null {
   const { lines } = hunk;
   let at = lines.findIndex((l) => l.kind !== ' ' && l.text.trim());
   if (at < 0) {
@@ -411,8 +441,7 @@ export function enclosing(head: string[], hunk: Hunk): string | null {
   }
   let d = at;
   while (d < lines.length && lines[d].kind !== ' ' && (COMMENT.test(lines[d].text) || !lines[d].text.trim())) d++;
-  if (d < lines.length && lines[d].kind !== ' ' && DECL.test(lines[d].text)) return declName(lines[d].text);
-  const indent = (s: string) => s.match(/^\s*/)![0].replace(/\t/g, '    ').length;
+  if (d < lines.length && lines[d].kind !== ' ' && DECL.test(lines[d].text)) return { name: declName(lines[d].text), line: lines[d].new ?? lines.slice(d).find((l) => l.new != null)?.new ?? hunk.newStart };
   // (A doc comment's " * " lines sit one space in from where the comment starts.)
   let limit = indent(lines[at].text) - (/^\s*\*/.test(lines[at].text) ? 1 : 0);
   // The changed line's place in the new file: its own number, or (a removal) the next line's there.
@@ -421,14 +450,14 @@ export function enclosing(head: string[], hunk: Hunk): string | null {
     // A doc comment changed: the declaration it documents, below it at its own depth.
     for (let i = next - 1; i < head.length; i++) {
       if (!head[i].trim() || COMMENT.test(head[i])) continue;
-      if (DECL.test(head[i]) && indent(head[i]) === limit) return declName(head[i]);
+      if (DECL.test(head[i]) && indent(head[i]) === limit) return { name: declName(head[i]), line: i + 1 };
       break;
     }
   }
   for (let i = Math.min(next, head.length) - 2; i >= 0 && limit > 0; i--) {
     const line = head[i];
     if (!line.trim() || indent(line) >= limit) continue;
-    if (DECL.test(line)) return declName(line);
+    if (DECL.test(line)) return { name: declName(line), line: i + 1 };
     limit = indent(line);
   }
   return null;

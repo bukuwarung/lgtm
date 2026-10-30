@@ -1,6 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, declLabel, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -227,7 +227,7 @@ function HunkHeader({ header, where }: { header: string; where: string }) {
   return (
     <td colSpan={3}>
       <div class="hunk-line" title={where || undefined}>
-        <span class="hunk-range">{header.match(/^@@[^@]*@@/)?.[0] ?? header}</span> {where && <span class="hunk-ctx">{where}</span>}
+        <span class="hunk-range">{header.match(/^@@[^@]*@@/)?.[0] ?? header}</span> <span class="hunk-ctx">{where}</span>
       </div>
     </td>
   );
@@ -1658,7 +1658,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((src) => src != null && setHead(src.replace(/\n$/, '').split('\n')), () => {});
   }, []);
   // Where each hunk is: that function or class, else git's guess. One that repeats the hunk before shows no label.
-  const where = useMemo(() => hunks.map((h) => (head && enclosing(head, h)) || h.header.replace(/^@@[^@]*@@\s*/, '')), [hunks, head]);
+  const where = useMemo(() => hunks.map((h) => (head ? enclosing(head, h) : null) ?? h.header.replace(/^@@[^@]*@@\s*/, '')), [hunks, head]);
   const [openGaps, setOpenGaps] = useState<Set<number>>(new Set());
   const [gapErr, setGapErr] = useState('');
   const expand = async (g: Gap) => {
@@ -1782,6 +1782,36 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
           ],
     [hunks, renderDocs, renderEdited, renderLine, renderSingle],
   );
+  const jvm = importSyntax(path) === 'jvm'; // Kotlin and Java: a hunk header names the declaration you've scrolled past
+  // The pinned hunk header names where you are: its own label (`where`) at the hunk's top, then each declaration in the
+  // hunk (data-decl) once it's scrolled under the header. Set on the page directly, as you scroll.
+  useEffect(() => {
+    const el = table.current;
+    if (!el || !jvm) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const first = el.querySelector<HTMLElement>('tr.hunk td');
+      const r = el.getBoundingClientRect();
+      if (!first || r.bottom < 0 || r.top > innerHeight) return;
+      const pin = parseFloat(getComputedStyle(first).top) + first.offsetHeight;
+      let head: HTMLElement | null = null;
+      let label: string | null = null;
+      const show = () => {
+        const ctx = head?.querySelector<HTMLElement>('.hunk-ctx');
+        const want = label ?? head?.dataset.where ?? '';
+        if (ctx && ctx.textContent !== want) (ctx.textContent = want), (ctx.title = want);
+      };
+      for (const tr of el.querySelectorAll<HTMLElement>('tr.hunk, tr[data-decl]')) {
+        if (tr.classList.contains('hunk')) (show(), (head = tr), (label = null));
+        else if (tr.getBoundingClientRect().top < pin) label = tr.dataset.decl!;
+      }
+      show();
+    };
+    const onScroll = () => (frame ||= requestAnimationFrame(update));
+    addEventListener('scroll', onScroll, { passive: true });
+    return () => (removeEventListener('scroll', onScroll), cancelAnimationFrame(frame));
+  }, [jvm, hunks]);
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
   // A doc comment switched to its source: a header row above its first line switches it back.
@@ -1794,7 +1824,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
           <>
             {gapBefore(hi) && gapRows(gapBefore(hi)!)}
             {file.status !== 'added' && ( // a new file's one hunk header (@@ -0,0 +1,n @@) says nothing
-              <tr class="hunk">
+              <tr class="hunk" data-where={where[hi] === where[hi - 1] ? '' : where[hi]}>
                 <HunkHeader header={h.header} where={where[hi] === where[hi - 1] ? '' : where[hi]} />
               </tr>
             )}
@@ -1867,7 +1897,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`}>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`} data-decl={(jvm && l.kind !== '-' && declLabel(l.text)) || undefined}>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />

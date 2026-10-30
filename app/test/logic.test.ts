@@ -477,11 +477,19 @@ test('enclosing: the declaration around a change, by indentation', () => {
   assert.equal(enclosing(head, hunk(3, [{ kind: '+', text: '    private val x = 1', new: 3 }])), 'class HomeSaldoFragment @Inject constructor()');
   // at the top level: nothing
   assert.equal(enclosing(head, hunk(1, [{ kind: '+', text: 'import foo', new: 1 }])), null);
-  // a function added (doc comment first): that function
+  // a function added (doc comment first): it's declared inside the hunk, not reached at its top, so what holds the
+  // hunk's first line (the class); the declaration line pins once scrolled past
   assert.equal(
     enclosing(head, hunk(11, [{ kind: '+', text: '    /** Shows it. */', new: 11 }, { kind: '+', text: '    @VisibleForTesting', new: 12 }, { kind: '+', text: '    fun show(x: Long) {', new: 13 }])),
-    'fun show(x: Long)',
+    'class HomeSaldoFragment @Inject constructor()',
   );
+  // a hunk starting above the function its change is in: the class, not yet the function
+  assert.equal(
+    enclosing(head, hunk(2, [{ kind: ' ', text: '    BaseFragment() {', new: 2 }, { kind: ' ', text: '', new: 3 }, { kind: ' ', text: '    private fun bindSaldo(saldo: Long) {', new: 4 }, { kind: '+', text: '        log()', new: 5 }])),
+    'class HomeSaldoFragment @Inject constructor()',
+  );
+  // a hunk at the file's top level, its function inside it: no name ('', not git's guess)
+  assert.equal(enclosing(['fun a() {', '    x()', '}'], hunk(1, [{ kind: ' ', text: 'fun a() {', new: 1 }, { kind: '+', text: '    x()', new: 2 }])), '');
   // a doc comment changed: the function it documents
   const doc = ['class A {', '    /**', '     * Old words.', '     */', '    fun documented() {', '    }', '}'];
   assert.equal(enclosing(doc, hunk(3, [{ kind: '-', text: '     * Old words.' }, { kind: '+', text: '     * New words.', new: 3 }, { kind: ' ', text: '     */', new: 4 }])), 'fun documented()');
