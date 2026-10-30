@@ -37,6 +37,7 @@ type Ctx = {
   target: Target | null;
   setTarget: (t: Target | null) => void;
   addDraft: (d: Omit<Draft, 'id'>) => void;
+  postNow: (d: Omit<Draft, 'id'>) => Promise<void>; // a comment out at once, not kept for Finish review
   updateDraft: (id: string, d: Omit<Draft, 'id'>) => void;
   removeDraft: (id: string) => void;
   reply: (t: Thread, body: string) => Promise<void>;
@@ -681,6 +682,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     },
     resolve: async (t, resolve) => {
       await resolveThread(t.id, resolve);
+      setThreads(await getThreads(repo, n));
+    },
+    // As GitHub's "Add single comment": a one-comment review on the commit on show; then its thread appears.
+    postNow: async (d) => {
+      await submitReview(pr.node_id, pr.head.sha, 'COMMENT', '', [{ ...d, id: '' }]);
       setThreads(await getThreads(repo, n));
     },
     batch,
@@ -2445,12 +2451,17 @@ function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; 
 function DraftForm({ ctx }: { ctx: Ctx }) {
   const target = ctx.target!;
   const [body, setBody] = useState(target.body ?? '');
+  const [now] = useStoredFlag('commentNow', false); // Settings → Reviewing: post at once, or keep for Finish review
+  const [posting, setPosting] = useState<'' | 'posting' | string>('');
 
-  function save() {
-    if (!body.trim()) return;
+  function save(post = now && !target.editId) {
+    if (!body.trim() || posting === 'posting') return;
     const { editId, body: _b, atEnd: _e, ...rest } = target;
     if (editId) ctx.updateDraft(editId, { ...rest, body });
-    else ctx.addDraft({ ...rest, body });
+    else if (post) {
+      setPosting('posting');
+      return void ctx.postNow({ ...rest, body }).then(() => ctx.setTarget(null), (e) => setPosting(`Couldn't post it: ${e.message}`));
+    } else ctx.addDraft({ ...rest, body });
     ctx.setTarget(null);
   }
 
@@ -2460,17 +2471,23 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
       <Editor
         value={body}
         onInput={setBody}
-        onSubmit={save}
+        onSubmit={() => save()}
         onCancel={() => ctx.setTarget(null)}
         repo={ctx.repo}
         mentions={ctx.mentions}
         suggestion={ctx.suggestion(target)}
         autoFocus
       />
+      {posting && posting !== 'posting' && <p class="error">{posting}</p>}
       <div class="row">
-        <button class="primary" disabled={!body.trim()} onClick={save}>
-          {target.editId ? 'Update comment' : 'Add to review'}
+        <button class="primary" disabled={!body.trim() || posting === 'posting'} onClick={() => save()}>
+          {target.editId ? 'Update comment' : now ? (posting === 'posting' ? 'Posting…' : 'Comment') : 'Add to review'}
         </button>
+        {!target.editId && (
+          <button disabled={!body.trim() || posting === 'posting'} onClick={() => save(!now)} title={now ? 'Keep it as a draft, sent with Finish review' : 'Post it now, on its own'}>
+            {now ? 'Add to review' : 'Comment now'}
+          </button>
+        )}
         <button onClick={() => ctx.setTarget(null)}>Cancel</button>
       </div>
     </div>
