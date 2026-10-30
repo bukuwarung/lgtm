@@ -56,6 +56,7 @@ gh auth login   # once, if you haven't
 - File and folder icons by type (Material Icon Theme).
 - `.` opens the file you're on in github.dev.
 - A strip down the right edge is the scrollbar, with marks for threads, drafts and changes.
+- Syntax highlighting for any language highlight.js knows, Groovy and ProGuard rules included.
 - Images in descriptions and comments (private repos too), in markdown files, and SVG files; swipe between an image's old and new versions.
 - Your pick of code themes and fonts, ligatures included; changed words filled, boxed or squiggled, changed lines filled, subtle or barred; rainbow brackets.
 - Stacked PRs, layer by layer, with an overview of every layer.
@@ -171,7 +172,8 @@ Markdown themes: lgtm's own or 20 from [markdown.style](https://markdown.style/t
 
 - Line, range and file comments, rendered markdown included.
 - An editor with preview, `:emoji:` and `@mention` completion, saved replies (`/`), and suggested changes.
-- Drafts survive reloads and go out as one review, the verdict pre-picked; then the next PR opens.
+- Drafts survive reloads and go out as one review, the verdict pre-picked; then the next PR opens. Or post a comment at once.
+- A review you started on github.com shows here, with its comments to edit, and goes out with yours.
 - ⌥-click a line number to copy a link to it.
 
 ## Your PRs
