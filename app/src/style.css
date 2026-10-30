@@ -911,6 +911,8 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 /* Settings → Appearance: each colour theme as a card, its light and dark half in miniature. */
 .thm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 2px 0 14px; }
 .thm-card { display: grid; gap: 4px; padding: 4px; text-align: center; font-size: calc(12px * var(--ts)); border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--fg); }
+.thm-card { min-width: 0; }
+.thm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thm-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .thm { display: grid; grid-template-columns: 1fr 1fr; height: 66px; overflow: hidden; border-radius: 5px; border: 1px solid var(--border); text-align: left; font: 8px/1.55 var(--mono); }
 .thm-half { display: grid; align-content: start; background: var(--bg); color: var(--code-fg); min-width: 0; }

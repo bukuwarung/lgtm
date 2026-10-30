@@ -367,7 +367,7 @@ export function Settings() {
           {Object.entries(allThemes(look.mine)).map(([k, t]) => (
             <button role="radio" aria-checked={look.appTheme === k} class={look.appTheme === k ? 'thm-card on' : 'thm-card'} onClick={() => look.setAppTheme(k)}>
               <ThemeThumb t={t} />
-              {t ? t.name : 'lgtm'}
+              <span class="thm-name" title={t ? t.name : 'lgtm'}>{t ? t.name : 'lgtm'}</span>
             </button>
           ))}
         </div>
@@ -559,7 +559,7 @@ function ThemeGallery({ look }: { look: Look }) {
       <div class="tg-preview" ref={(el) => el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}>
         <span class="thm-card">
           <ThemeThumb t={preview.t} />
-          {preview.t.name}
+          <span class="thm-name" title={preview.t.name}>{preview.t.name}</span>
         </span>
         <span class="row">
           <button class="primary" onClick={() => install(preview.key, preview.t)}>Add</button>
