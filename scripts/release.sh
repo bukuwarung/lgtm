@@ -13,6 +13,7 @@ rm -rf "$out" && mkdir -p "$out"
 sed -i '' -E "s/^  \"version\": \"[^\"]*\"/  \"version\": \"$v\"/" desktop/src-tauri/tauri.conf.json
 sed -i '' -E "1,5 s/^version = \"[^\"]*\"/version = \"$v\"/" desktop/src-tauri/Cargo.toml
 
+node scripts/notices.mjs # the licenses of everything in this release, current
 export LGTM_RELEASE=1 # a release build: no DEV badge
 (cd app && npm ci && npm test)
 (cd desktop && npm ci && npm run build -- --target universal-apple-darwin) # builds app/ first

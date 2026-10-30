@@ -11,7 +11,7 @@ const p = (kw: string, fn: string, cnst: string, str: string, builtin: string, c
 
 export const CODE_THEMES: Record<string, CodeTheme> = {
   intellij: {
-    name: 'IntelliJ (Light / Darcula)',
+    name: 'Classic (Light / Dark)',
     light: p('#0033b3', '#00627a', '#1750eb', '#067d17', '#871094', '#8c8c8c', '#0033b3', '#9e880d', '#871094', '#4a86e8', '#0033b3'),
     dark: p('#cc7832', '#ffc66d', '#6897bb', '#6a8759', '#9876aa', '#808080', '#e8bf6a', '#bbb529', '#9876aa', '#467cda', '#507874'),
   },

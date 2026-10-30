@@ -1,5 +1,5 @@
 /* Each token is light-dark(light, dark). The theme toggle sets color-scheme; "auto" follows the OS.
-   Dark is JetBrains Darcula: softer greys and muted syntax colors instead of near-black. */
+   Dark is soft greys and muted syntax colours, not near-black. */
 /* Text sizes (Settings → Appearance): the app's text and the diff's code, as scales of 14px and 12px. */
 :root { --ts: 1; --cs: 1; }
 :root {
@@ -13,7 +13,7 @@
   --hl-kw: light-dark(#cf222e, #cc7832); --hl-fn: light-dark(#8250df, #ffc66d); --hl-const: light-dark(#0550ae, #6897bb);
   --hl-str: light-dark(#0a3069, #6a8759); --hl-builtin: light-dark(#953800, #9876aa); --hl-com: light-dark(#59636e, #808080);
   --hl-tag: light-dark(#116329, #e8bf6a);
-  /* IntelliJ (Light / Darcula) colours for the Kotlin extras */
+  /* The Classic code colours for the Kotlin extras */
   --hl-ann: light-dark(#9e880d, #bbb529); --hl-prop: light-dark(#871094, #9876aa); --hl-arg: light-dark(#4a86e8, #467cda); --hl-it: light-dark(#0033b3, #507874);
   --g-needs: var(--accent); --g-changes: var(--delfg); --g-commented: light-dark(#8c959f, #808080); --g-approved: var(--addfg);
   --bar: 44px; --nav: 46px; /* the review bar, and the app's top bar above it */

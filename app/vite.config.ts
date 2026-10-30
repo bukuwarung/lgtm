@@ -30,6 +30,14 @@ function hljsLanguages() {
 
 export default defineConfig({
   plugins: [
+    // The licenses of everything lgtm includes (scripts/notices.mjs), shipped with the UI: the app and the CLI both carry it.
+    {
+      name: 'third-party-notices',
+      generateBundle() {
+        const file = new URL('../THIRD-PARTY-NOTICES.md', import.meta.url);
+        this.emitFile({ type: 'asset', fileName: 'THIRD-PARTY-NOTICES.md', source: readFileSync(file) });
+      },
+    },
     {
       name: 'hljs-languages',
       resolveId: (id) => (id === 'virtual:hljs-languages' ? '\0hljs-languages' : undefined),

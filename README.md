@@ -230,4 +230,4 @@ lgtm messages people as you, through slackcli.
 
 ## License
 
-[MIT](LICENSE). The markdown themes are adapted from [markdown.style](https://markdown.style) (Apache 2.0); the icons are GitHub's [Octicons](https://github.com/primer/octicons) (MIT, © GitHub Inc.) and, for file types, [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) (MIT, © Material Extensions).
+[MIT](LICENSE). The markdown themes are adapted from [markdown.style](https://markdown.style) (Apache 2.0); the icons are GitHub's [Octicons](https://github.com/primer/octicons) (MIT, © GitHub Inc.) and, for file types, [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) (MIT, © Material Extensions). The code colour themes take their palettes from One (Atom), GitHub Primer, VS Code, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night and Nord, all MIT. Every license, with the npm packages and Rust crates lgtm includes, is in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

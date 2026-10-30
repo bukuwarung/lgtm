@@ -687,6 +687,11 @@ function About() {
         </button>{' '}
         {copied || 'Version, macOS, which sign-ins work and recent errors, for a bug report. No tokens or PR text.'}
       </p>
+      <p>
+        lgtm is <a href="https://github.com/bukuwarung/lgtm/blob/main/LICENSE" target="_blank" rel="noopener">MIT licensed</a>. Its colour themes, icons,
+        fonts and libraries are others' open-source work:{' '}
+        <a href="https://github.com/bukuwarung/lgtm/blob/main/THIRD-PARTY-NOTICES.md" target="_blank" rel="noopener">third-party notices</a> (also in the app, as THIRD-PARTY-NOTICES.md).
+      </p>
       {text && <textarea class="diag" readOnly rows={8} value={text} onFocus={(e) => e.currentTarget.select()} />}
     </div>
   );
