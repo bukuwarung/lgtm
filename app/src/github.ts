@@ -32,7 +32,7 @@ export type PRFile = {
   blob_url: string;
 };
 // bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
-export type Comment = { databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number; avatarUrl?: string } | null; originalCommit?: { oid: string } | null; state?: string }; // state PENDING: in my review not yet sent
+export type Comment = { id?: string; databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number; avatarUrl?: string } | null; originalCommit?: { oid: string } | null; state?: string }; // state PENDING: in my review not yet sent
 export type Thread = {
   id: string;
   path: string;
@@ -445,6 +445,11 @@ export async function getPendingReview(repo: string, n: number): Promise<Pending
   const r = d.repository.pullRequest.reviews.nodes[0];
   return r ? { id: r.id, count: r.comments.totalCount } : null;
 }
+// A comment in my pending review, changed or taken out (GitHub allows both until the review is sent).
+export const editReviewComment = (id: string, body: string) =>
+  graphql(`mutation($id:ID!,$b:String!){updatePullRequestReviewComment(input:{pullRequestReviewCommentId:$id,body:$b}){clientMutationId}}`, { id, b: body });
+export const deleteReviewComment = (id: string) =>
+  graphql(`mutation($id:ID!){deletePullRequestReviewComment(input:{id:$id}){clientMutationId}}`, { id });
 export const discardReview = (id: string) =>
   graphql(`mutation($r:ID!){deletePullRequestReview(input:{pullRequestReviewId:$r}){clientMutationId}}`, { r: id });
 
@@ -554,7 +559,7 @@ export function signRelativeImages(root: ParentNode | null, repo: string, ref: s
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
     nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve
-      comments(first:100){nodes{databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
+      comments(first:100){nodes{id databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');

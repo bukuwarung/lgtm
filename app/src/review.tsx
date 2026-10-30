@@ -5,7 +5,7 @@ import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
-  discardReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
+  discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, loadLanguages, majorityLanguage, splitLines } from './highlight.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -47,6 +47,7 @@ type Ctx = {
   mentions: string[]; // people on this PR, for @-completion
   suggestion: (t: Target) => string | null; // the target's lines, for a ```suggestion block
   pending: boolean; // a review of mine is open on GitHub: comments join it, none post on their own
+  editPending: (id: string, body: string | null) => Promise<void>; // one of its comments changed, or (null) deleted
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
   me: string; // my login ('' until known)
   ignoreWs: boolean; // hide whitespace-only changes
@@ -730,6 +731,12 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     },
     renderAll,
     pending: !!pending,
+    editPending: async (id, body) => {
+      await (body == null ? deleteReviewComment(id) : editReviewComment(id, body));
+      const [t, p] = await Promise.all([getThreads(repo, n), getPendingReview(repo, n)]);
+      setThreads(t);
+      setPending(p);
+    },
     since: since && !!sinceData,
     me,
     mainLang,
@@ -2371,7 +2378,11 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
           <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
-          <div class="md" data-lang={ctx.langFor(t.path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+          {c.state === 'PENDING' && c.id ? (
+            <PendingComment c={c} ctx={ctx} path={t.path} />
+          ) : (
+            <div class="md" data-lang={ctx.langFor(t.path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+          )}
           <SuggestionActions t={t} c={c} ctx={ctx} />
         </div>
       ))}
@@ -2394,6 +2405,35 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       )}
       {err && <p class="error">{err}</p>}
     </details>
+  );
+}
+
+// A comment in my review in progress on GitHub: still mine to change or take out, as lgtm's own drafts.
+function PendingComment({ c, ctx, path }: { c: Thread['comments']['nodes'][number]; ctx: Ctx; path: string }) {
+  const [text, setText] = useState<string | null>(null); // being edited
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const run = (body: string | null) => (setBusy(true), setErr(''), ctx.editPending(c.id!, body).then(() => setText(null), (e) => setErr(e.message)).finally(() => setBusy(false)));
+  if (text != null)
+    return (
+      <>
+        <Editor value={text} onInput={setText} onSubmit={() => text.trim() && run(text)} onCancel={() => setText(null)} repo={ctx.repo} mentions={ctx.mentions} autoFocus />
+        <div class="row">
+          <button class="primary" disabled={busy || !text.trim()} onClick={() => run(text)}>Update comment</button>
+          <button onClick={() => setText(null)}>Cancel</button>
+        </div>
+        {err && <p class="error">{err}</p>}
+      </>
+    );
+  return (
+    <>
+      <div class="md" data-lang={ctx.langFor(path) ?? ''} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+      <div class="row">
+        <button disabled={busy} onClick={() => setText(c.body ?? c.bodyText)}>Edit</button>
+        <button disabled={busy} onClick={() => run(null)}>Delete</button>
+      </div>
+      {err && <p class="error">{err}</p>}
+    </>
   );
 }
 
