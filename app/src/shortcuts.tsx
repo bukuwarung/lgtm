@@ -6,7 +6,7 @@ import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
-// noDiff: renamed/copied/mode-changed with no content change, so there's nothing to review.
+// noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean };
 
 // Scroll to an element by id, opening any collapsed <details> around it and flashing it. `near` is scrolled to

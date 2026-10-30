@@ -88,7 +88,9 @@ const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>)
     .map((f) => ({
       ...f,
       generated: isGenerated(rules, f.filename),
-      noDiff: ['renamed', 'copied', 'changed'].includes(f.status) && !f.additions && !f.deletions,
+      // Nothing in it changed: renamed, copied or mode-changed as it was, or an empty text file added or deleted (GitHub
+      // gives that no diff, as it does a binary one: its type tells them apart).
+      noDiff: !f.additions && !f.deletions && (['renamed', 'copied', 'changed'].includes(f.status) || (!f.patch && ['added', 'removed'].includes(f.status) && !!languageFor(f.filename))),
     }))
     .sort((a, b) => order.get(a.filename)! - order.get(b.filename)!);
 };
@@ -1137,7 +1139,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
           {noDiff.length > 0 &&
             (noDiffOpen ? noDiff.map(section) : (
               <button class="gen-row" onClick={() => setShowNoDiff(true)}>
-                {noDiff.length} file{noDiff.length > 1 ? 's' : ''} renamed or moved without changes hidden. Show
+                {noDiff.length} file{noDiff.length > 1 ? 's' : ''} with no content change (renamed, moved or empty) hidden. Show
               </button>
             ))}
           {wsOnly.length > 0 &&
@@ -1506,7 +1508,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         <ImagePreview file={file} ctx={ctx} onFail={() => (setCanPreview(false), setPreview(false))} />
       ) : !file.patch ? (
         <p class="note pad">
-          No diff to show (binary, too large, or renamed without changes).{' '}
+          {!file.additions && !file.deletions && ['added', 'removed'].includes(file.status) && !!languageFor(file.filename) ? `An empty file, ${file.status === 'added' ? 'added' : 'deleted'}.` : 'No diff to show (binary, too large, or renamed without changes).'}{' '}
           <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a>
         </p>
       ) : hideDeleted ? (
