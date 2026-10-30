@@ -10,6 +10,11 @@
   --addfg: light-dark(#1a7f37, #629755); --delfg: light-dark(#d1242f, #c75450); --modfg: light-dark(#bf8700, #6897bb);
   --accent: light-dark(#0969da, #589df6); --primary: light-dark(#1f883d, #3d6b45); --on-primary: light-dark(#fff, #e6e6e6);
   --shadow: light-dark(#0003, #0008);
+  /* More of what a theme (themes.ts) sets: amber text, word highlights, find matches, the image checkerboard, the test
+     flask, rainbow brackets. */
+  --warnfg: light-dark(#9a6700, #cc7832); --wd-add: light-dark(#a6f0b5, #3a6b45); --wd-del: light-dark(#ffb8b0, #7a3b3b);
+  --find: light-dark(#fff3a3, #6b5f1f); --find-current: light-dark(#ffb84d, #b3741f); --checker: light-dark(#e6e6e6, #3a3a3a);
+  --test: light-dark(#0a7c86, #4fc1c9); --rb0: light-dark(#b08800, #e5c07b); --rb1: light-dark(#a626a4, #c678dd); --rb2: light-dark(#0184bc, #61afef);
   --hl-kw: light-dark(#cf222e, #cc7832); --hl-fn: light-dark(#8250df, #ffc66d); --hl-const: light-dark(#0550ae, #6897bb);
   --hl-str: light-dark(#0a3069, #6a8759); --hl-builtin: light-dark(#953800, #9876aa); --hl-com: light-dark(#59636e, #808080);
   --hl-tag: light-dark(#116329, #e8bf6a);
@@ -334,7 +339,7 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .merge { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 6px; font-size: calc(13px * var(--ts)); display: grid; gap: 8px; }
 .merge.m-ok, .merge.m-merged { border-left-color: var(--addfg); }
 .merge.m-bad, .merge.m-closed { border-left-color: var(--delfg); }
-.merge.m-wait { border-left-color: light-dark(#bf8700, #cc7832); }
+.merge.m-wait { border-left-color: var(--warnfg); }
 .merge-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
 .merge-why { color: var(--muted); }
 .merge-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -344,7 +349,7 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .panel.merge { margin: 0; width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 80px); overflow: auto; }
 .merge-bar { flex: none; }
 .merge-bar > button { white-space: nowrap; }
-.merge-state.m-wait { color: light-dark(#9a6700, #cc7832); }
+.merge-state.m-wait { color: var(--warnfg); }
 .merge-state.m-bad { color: var(--delfg); }
 .merge-state.m-merged { color: var(--addfg); }
 .copy-link { padding: 0 4px; font-size: calc(11px * var(--ts)); border: none; background: none; color: var(--muted); cursor: pointer; opacity: 0.6; }
@@ -355,10 +360,10 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .ticket > summary { cursor: pointer; }
 .ticket > .md { max-height: 320px; overflow: auto; margin-top: 8px; }
 .jira-st { padding: 0 6px; border-radius: 4px; font-size: calc(11px * var(--ts)); font-weight: 600; text-transform: uppercase; background: var(--soft); }
-.jira-st.js-indeterminate { color: light-dark(#0055cc, #6897bb); }
+.jira-st.js-indeterminate { color: var(--accent); }
 .jira-st.js-done { color: var(--addfg); }
 .ticket-err { margin: 0 0 8px; font-size: calc(12px * var(--ts)); }
-.pill.p-warn { color: light-dark(#9a6700, #cc7832); border-color: currentColor; }
+.pill.p-warn { color: var(--warnfg); border-color: currentColor; }
 .pill.p-reply { color: var(--accent); border-color: currentColor; }
 .pill.p-size { border-color: transparent; padding: 0 2px; }
 .pill.p-size .a { color: var(--addfg); font-weight: 400; } .pill.p-size .d { color: var(--delfg); font-weight: 400; }
@@ -421,7 +426,7 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .vector-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px; }
 .vector-preview figure { margin: 0; display: grid; gap: 4px; justify-items: center; }
 .vector-preview img { max-width: 100%; border: 1px solid var(--border); border-radius: 4px;
-  background: repeating-conic-gradient(light-dark(#e6e6e6, #3a3a3a) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+  background: repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
 .vector-preview figcaption { font-size: calc(11px * var(--ts)); color: var(--muted); }
 .vector-preview .vp-arrow { color: var(--muted); font-size: calc(20px * var(--ts)); }
 .vector-preview .note { flex-basis: 100%; margin: 0; }
@@ -465,8 +470,10 @@ button.link { border: none; background: none; padding: 0 4px; color: var(--accen
 .demo-side .conversation { margin: 0; }
 .demo-side .vector-preview { padding: 8px; }
 .demo-md { padding: 4px 12px; }
-mark.wd-del { background: light-dark(#ffb8b0, #7a3b3b); color: inherit; padding: 0; }
-mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding: 0; }
+mark.wd-del { background: var(--wd-del); color: inherit; padding: 0; }
+mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
+/* A changed word inside a comment: the code's own text colour, as dim comment colours fade into the highlight. */
+:is(.hljs-comment, .hljs-quote) :is(mark.wd-add, mark.wd-del), :is(mark.wd-add, mark.wd-del) :is(.hljs-comment, .hljs-quote) { color: var(--code-fg); }
 .demo-page { width: 980px; padding: 16px; }
 .demo-page h3 { margin: 0 0 10px; font-size: calc(15px * var(--ts)); }
 .demo-page .demo-pair { margin: 0; font-size: calc(13px * var(--ts)); }
@@ -495,8 +502,8 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .find-bar { position: fixed; top: calc(var(--nav) + 6px); right: 12px; z-index: 50; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgb(0 0 0 / .2); }
 .find-bar input { width: 220px; padding: 3px 8px; }
 .find-count { min-width: 64px; font-size: calc(12px * var(--ts)); color: var(--muted); text-align: center; }
-::highlight(lgtm-find) { background-color: light-dark(#fff3a3, #6b5f1f); }
-::highlight(lgtm-find-current) { background-color: light-dark(#ffb84d, #b3741f); }
+::highlight(lgtm-find) { background-color: var(--find); }
+::highlight(lgtm-find-current) { background-color: var(--find-current); }
 .set-version { margin-top: 8px; font-size: calc(12px * var(--ts)); }
 /* "✳ Claude": send a PR or comment to Claude Code */
 .claude-menu { position: relative; display: inline-flex; align-items: center; gap: 6px; }
@@ -540,7 +547,7 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .demo-chunk .thread { padding-left: 12px; }
 .demo-chunk .comment { border-top: 0; padding-top: 0; }
 .demo-side .diff .num { min-width: 28px; padding: 0 4px; }
-.badge.no-test { display: inline-flex; vertical-align: -2px; color: light-dark(#9a6700, #cc7832); }
+.badge.no-test { display: inline-flex; vertical-align: -2px; color: var(--warnfg); }
 .ed-reply { margin-left: 8px; color: var(--muted); font-size: calc(12px * var(--ts)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
 .set-replies { width: 100%; max-width: 720px; border-collapse: collapse; margin-bottom: 8px; }
 .set-replies td { padding: 3px 4px; vertical-align: top; }
@@ -577,7 +584,7 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 .set-sources { margin: 0 0 8px; padding-left: 18px; max-width: 720px; }
 .set-sources li { margin: 2px 0; }
 .set-pace input[type=range] { width: 220px; }
-.idle.old { color: light-dark(#9a6700, #cc7832); }
+.idle.old { color: var(--warnfg); }
 .set-head { display: flex; align-items: center; gap: 12px; max-width: 720px; margin: 20px 0 16px; }
 .set-head h2 { margin: 0; flex: 1; }
 .set-search { width: 240px; padding: 4px 10px; }
@@ -595,11 +602,11 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
 /* ✳ Claude with a linked session: a dot */
 .claude-dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: var(--addfg); vertical-align: middle; }
 .claude-btn.linked { border-color: var(--addfg); }
-.claude-dot.waiting { background: light-dark(#9a6700, #cc7832); }
+.claude-dot.waiting { background: var(--warnfg); }
 .claude-state { font-size: calc(12px * var(--ts)); color: var(--muted); }
-.claude-state.waiting { color: light-dark(#9a6700, #cc7832); font-weight: 600; }
+.claude-state.waiting { color: var(--warnfg); font-weight: 600; }
 .pill.p-claude { color: var(--addfg); border-color: currentColor; }
-.pill.p-claude-wait { color: light-dark(#9a6700, #cc7832); border-color: currentColor; font-weight: 600; }
+.pill.p-claude-wait { color: var(--warnfg); border-color: currentColor; font-weight: 600; }
 .setup-fix { margin-top: 4px; }
 .setup-fix pre { margin: 0; padding: 4px 8px; background: var(--soft); border-radius: 4px; font-size: calc(12px * var(--ts)); white-space: pre-wrap; }
 /* Pills, legible: neutral ones in near-text colour on a soft fill; coloured ones in brighter shades than the diff's
@@ -617,8 +624,8 @@ mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); color: inherit; padding:
    surfaces are translucent and blurred, with a light top edge; buttons in the bars are capsules. Off with the
    switch, and with "Reduce transparency" (main.tsx doesn't set .glass then). */
 :root {
-  --glass-bg: light-dark(rgb(255 255 255 / .62), rgb(43 43 43 / .6));
-  --glass-solid: light-dark(rgb(255 255 255 / .84), rgb(43 43 43 / .84));
+  --glass-bg: color-mix(in srgb, var(--bg) 61%, transparent);
+  --glass-solid: color-mix(in srgb, var(--bg) 84%, transparent);
   --glass-edge: light-dark(rgb(255 255 255 / .85), rgb(255 255 255 / .1));
   --glass-line: light-dark(rgb(0 0 0 / .09), rgb(255 255 255 / .09));
   --glass-blur: blur(22px) saturate(180%);
@@ -813,9 +820,9 @@ html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
 .edit-desc { display: grid; gap: 8px; margin-top: 8px; }
 .edit-desc > input { width: 100%; font: inherit; font-weight: 600; }
 /* Rainbow brackets (Settings → Diff): three colours by nesting depth, as in IntelliJ. */
-.rb0 { color: light-dark(#b08800, #e5c07b); }
-.rb1 { color: light-dark(#a626a4, #c678dd); }
-.rb2 { color: light-dark(#0184bc, #61afef); }
+.rb0 { color: var(--rb0); }
+.rb1 { color: var(--rb1); }
+.rb2 { color: var(--rb2); }
 /* A narrow file header: the name area clips instead of running over the counts and buttons, the module chip giving
    way first. */
 .file-name { overflow: hidden; }
@@ -831,8 +838,8 @@ mark.wd-add { --wd: var(--addfg); }
 .wd-sample { margin-right: 4px; font: calc(11px * var(--ts)) var(--mono); }
 .wd-sample.wd-fill mark { padding: 0 1px; }
 /* Each sample in Settings shows its own style, whichever is chosen. */
-.wd-sample.wd-fill mark.wd-del { background: light-dark(#ffb8b0, #7a3b3b); box-shadow: none; text-decoration: none; }
-.wd-sample.wd-fill mark.wd-add { background: light-dark(#a6f0b5, #3a6b45); box-shadow: none; text-decoration: none; }
+.wd-sample.wd-fill mark.wd-del { background: var(--wd-del); box-shadow: none; text-decoration: none; }
+.wd-sample.wd-fill mark.wd-add { background: var(--wd-add); box-shadow: none; text-decoration: none; }
 .wd-sample.wd-box mark:is(.wd-del, .wd-add) { text-decoration: none; }
 .wd-sample.wd-squiggle mark:is(.wd-del, .wd-add) { box-shadow: none; }
 /* One change split into pieces by the syntax colours (diff.ts markText) is one box: the first piece has its left
@@ -877,9 +884,9 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .file-name .ficon.big { align-self: center; }
 .ficon.big, .ficon.big img { width: 16px; height: 16px; }
 /* A test that its icon doesn't already say is one: a small flask in the other corner. */
-.ficon .ftest { position: absolute; left: -3px; bottom: -3px; display: inline-grid; place-items: center; width: 9px; height: 9px; border-radius: 50%; color: light-dark(#0a7c86, #4fc1c9); background: var(--bg); }
+.ficon .ftest { position: absolute; left: -3px; bottom: -3px; display: inline-grid; place-items: center; width: 9px; height: 9px; border-radius: 50%; color: var(--test); background: var(--bg); }
 .ficon .ftest svg { width: 7px; height: 7px; }
-.ficon .ftest.no { color: light-dark(#9a6700, #cc7832); }
+.ficon .ftest.no { color: var(--warnfg); }
 /* A lone comment line rendered (Settings: Single comment lines): lighter than a doc block, no box. */
 .doc-render.doc-one { margin: 0; padding: 0 8px; background: none; border-left-width: 2px; color: var(--muted); }
 .doc-render.doc-one .doc-source { margin-bottom: 0; }

@@ -1,5 +1,6 @@
 import { useEffect } from 'preact/hooks';
 import { useStoredValue } from './platform.ts';
+import { BUILTIN_THEMES, themeProps, type AppTheme } from './themes.ts';
 
 // Code colours and font, picked in Settings → Appearance. A theme is a light and a dark palette for the
 // highlighter's tokens (style.css --hl-*); the app's own light/dark choice picks which one shows.
@@ -87,14 +88,35 @@ const FALLBACK = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 export const TEXT_SIZE = 14;
 export const CODE_SIZE = 12;
 
-// Applies the saved code theme and font, and the text sizes, to the page (once, in App), and gives Settings the setters.
+// Every app theme: lgtm's own (the stylesheet's colours, so nothing to set), the built-in ones, and ones added in
+// Settings (saved as JSON under myThemes).
+export function allThemes(mine: string): Record<string, AppTheme | null> {
+  let added: Record<string, AppTheme> = {};
+  try {
+    added = JSON.parse(mine);
+  } catch {}
+  return { lgtm: null, ...BUILTIN_THEMES, ...added };
+}
+
+let applied: string[] = []; // the colour properties set on the page, to take off when the theme changes
+// Applies the saved app theme, code colours and font, and the text sizes, to the page (once, in App), and gives
+// Settings the setters. Code colours "theme": the app theme's own (lgtm's own look: Classic).
 export function useCodeLook() {
-  const [theme, setTheme] = useStoredValue('codeTheme', 'intellij');
+  const [appTheme, setAppTheme] = useStoredValue('appTheme', 'lgtm');
+  const [mine, setMine] = useStoredValue('myThemes', '{}');
+  const [theme, setTheme] = useStoredValue('codeTheme', 'theme');
   const [font, setFont] = useStoredValue('codeFont', 'jetbrains');
   useEffect(() => {
-    const t = CODE_THEMES[theme] ?? CODE_THEMES.intellij;
-    for (const k of Object.keys(t.light) as (keyof Palette)[]) document.documentElement.style.setProperty(`--hl-${k}`, `light-dark(${t.light[k]}, ${t.dark[k]})`);
-  }, [theme]);
+    const app = allThemes(mine)[appTheme] ?? null;
+    const props = app ? themeProps(app) : {};
+    if (!app || theme !== 'theme') for (const k of Object.keys(props)) if (k.startsWith('--hl-')) delete props[k];
+    const code = theme === 'theme' ? (app ? null : CODE_THEMES.intellij) : (CODE_THEMES[theme] ?? CODE_THEMES.intellij);
+    if (code) for (const k of Object.keys(code.light) as (keyof Palette)[]) props[`--hl-${k}`] = `light-dark(${code.light[k]}, ${code.dark[k]})`;
+    const style = document.documentElement.style;
+    for (const k of applied) if (!(k in props)) style.removeProperty(k);
+    for (const [k, v] of Object.entries(props)) style.setProperty(k, v);
+    applied = Object.keys(props);
+  }, [appTheme, theme, mine]);
   useEffect(() => {
     const f = CODE_FONTS[font] ?? CODE_FONTS.jetbrains;
     void f.load?.();
@@ -104,5 +126,5 @@ export function useCodeLook() {
   const [codeSize, setCodeSize] = useStoredValue('codeSize', String(CODE_SIZE));
   useEffect(() => document.documentElement.style.setProperty('--ts', String(Number(textSize) / TEXT_SIZE)), [textSize]);
   useEffect(() => document.documentElement.style.setProperty('--cs', String(Number(codeSize) / CODE_SIZE)), [codeSize]);
-  return { theme, setTheme, font, setFont, textSize: Number(textSize), setTextSize, codeSize: Number(codeSize), setCodeSize };
+  return { appTheme, setAppTheme, mine, setMine, theme, setTheme, font, setFont, textSize: Number(textSize), setTextSize, codeSize: Number(codeSize), setCodeSize };
 }

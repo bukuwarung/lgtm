@@ -6,7 +6,7 @@ import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
-import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook } from './look.ts';
+import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes } from './look.ts';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
@@ -356,9 +356,18 @@ export function Settings() {
         <h3>Appearance</h3>
         <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency." />
         <TagStyle />
+        <label class="set-row">
+          <span>
+            Colour theme
+            <small>The whole app's colours, code included, each in a light and a dark version.</small>
+          </span>
+          <select value={look.appTheme} onChange={(e) => look.setAppTheme(e.currentTarget.value)}>
+            {Object.entries(allThemes(look.mine)).map(([k, t]) => <option value={k}>{t ? t.name : 'lgtm'}</option>)}
+          </select>
+        </label>
         <div class="set-row">
-          <span>Theme</span>
-          <span class="set-seg" role="radiogroup" aria-label="Theme">
+          <span>Light or dark</span>
+          <span class="set-seg" role="radiogroup" aria-label="Light or dark">
             {THEMES.map(([t, name, icon]) => (
               <button role="radio" aria-checked={theme === t} class={theme === t ? 'on' : ''} onClick={() => setTheme(t)}>
                 {icon} {name}
@@ -391,6 +400,7 @@ export function Settings() {
         <label class="set-row">
           <span>Code colours</span>
           <select value={look.theme} onChange={(e) => look.setTheme(e.currentTarget.value)}>
+            <option value="theme">The colour theme's own</option>
             {Object.entries(CODE_THEMES).map(([k, t]) => <option value={k}>{t.name}</option>)}
           </select>
         </label>
