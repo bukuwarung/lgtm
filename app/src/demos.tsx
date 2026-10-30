@@ -1,7 +1,9 @@
 import type { ComponentChildren } from 'preact';
 import { highlightCode, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
-import { ModuleIcon } from './shortcuts.tsx';
+import { FileIcon, ModuleIcon } from './shortcuts.tsx';
+import { folderIcon } from './fileicons.ts';
+import { CheckMark, Tg } from './tags.tsx';
 import { parseDoc } from './docs.ts';
 
 // Small, made-up examples of each diff helper, drawn with the app's own styles: shown beside the switches in
@@ -31,8 +33,9 @@ function File({ path, st = 'modified', add, del, mod, children }: { path: string
   return (
     <section class="file">
       <header class="file-h">
-        <span class={`st s-${st}`}>{st}</span>
+        <span class={`st s-${st}`}><Tg i={st} t={st} /></span>
         <a class="file-name" title={path}>
+          <FileIcon path={path} big />
           <b>{path.slice(path.lastIndexOf('/') + 1)}</b>
           {mod && (
             <span class="file-mod">
@@ -374,19 +377,25 @@ export function DemoPair({ k, active }: { k: string; active?: boolean }) {
 }
 
 // Scenes of the app for the README's "What it does" (#/demo/scene-<key>): made-up PRs drawn with the app's own markup.
-type Item = { g: string; title: string; meta: string; layer?: string; pills: [cls: string, text: ComponentChildren][] };
+// Made-up people get a lettered circle, never a GitHub picture (the names could be real accounts).
+const face = (who: string) =>
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="hsl(${[...who].reduce((h, c) => h + c.charCodeAt(0) * 37, 0) % 360} 55% 55%)"/><text x="10" y="14" font-family="system-ui" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">${who[0].toUpperCase()}</text></svg>`,
+  )}`;
+type Item = { g: string; title: string; who: string; repo: string; when: string; layer?: string; pills: [cls: string, content: ComponentChildren][] };
 const size = (a: number, d: number, f: number): [string, ComponentChildren] => ['p-size', <><b class="a">+{a}</b> <b class="d">−{d}</b> · {f} files</>];
+const time = (t: string): [string, ComponentChildren] => ['p-time', <Tg i="⏱" n={t} />];
 const QUEUE: [g: string, label: string, items: Item[]][] = [
   ['needs', 'Needs your review', [
-    { g: 'needs', title: 'Retry failed payments with backoff', meta: 'acme/shop#412 · rina · 20 minutes ago', pills: [['p-strong', '↻ re-review'], size(84, 12, 4)] },
-    { g: 'needs', title: 'Cart: keep the promo code after login', layer: '2/3 ', meta: 'acme/shop#409 · budi · 2 hours ago', pills: [['p-warn', '2 unsent comments'], size(156, 40, 7)] },
-    { g: 'needs', title: 'Move order history to the new API', meta: 'acme/app#88 · sari · yesterday', pills: [['p-bad', 'CI failing'], ['p-bad', 'conflicts'], size(610, 233, 18)] },
+    { g: 'needs', title: 'Retry failed payments with backoff', who: 'rina', repo: 'acme/shop#412', when: '20 minutes ago', pills: [['p-strong', <Tg i="again" t="re-review" />], time('~10 min'), size(84, 12, 4)] },
+    { g: 'needs', title: 'Cart: keep the promo code after login', layer: '2/3', who: 'budi', repo: 'acme/shop#409', when: '2 hours ago', pills: [['p-warn', <Tg i="unsent" n={2} t="unsent comments" />], ['p-warn', <Tg i="aging" t="waiting 3 days" />], time('~25 min'), size(156, 40, 7)] },
+    { g: 'needs', title: 'Move order history to the new API', who: 'sari', repo: 'acme/app#88', when: 'yesterday', pills: [['p-bad', <Tg i="ci" t="CI failing" />], ['p-bad', <Tg i="conflict" t="conflicts" />], time('~1 h'), size(610, 233, 18)] },
   ]],
   ['changes', 'You requested changes', [
-    { g: 'changes', title: 'Add the refund screen', meta: 'acme/app#85 · dewi · 3 days ago', pills: [['p-reply', '💬 1 awaiting your reply'], size(342, 8, 11)] },
+    { g: 'changes', title: 'Add the refund screen', who: 'dewi', repo: 'acme/app#85', when: '3 days ago', pills: [['p-reply', <Tg i="reply" n={1} t="awaiting your reply" />], time('~30 min'), size(342, 8, 11)] },
   ]],
   ['approved', 'You approved', [
-    { g: 'approved', title: 'Bump Kotlin to 2.1', meta: 'acme/app#90 · eko · 5 hours ago', pills: [['p-ok', 'PR approved'], size(6, 6, 2)] },
+    { g: 'approved', title: 'Bump Kotlin to 2.1', who: 'eko', repo: 'acme/app#90', when: '5 hours ago', pills: [['p-warn', <Tg i="pushed" n={2} t="commits since your approval" />], ['p-ok', <Tg i="queue" n="#2" t="in merge queue" />], size(6, 6, 2)] },
   ]],
 ];
 
@@ -462,8 +471,8 @@ const ReviewScene = ({ thread }: { thread?: ComponentChildren }) => (
             </summary>
           </details>
           <div class="pills pr-status">
-            <span class="pill p-strong">↻ re-review</span>
-            <span class="pill p-ok">checks passing</span>
+            <span class="pill"><Tg i="waiting" t="awaiting review" /></span>
+            <span class="pill p-warn"><Tg i="notest" n={1} t="file without test changes" /> <span class="pill-caret">▾</span></span>
             {(([c, t]) => <span class={`pill ${c}`}>{t}</span>)(size(84, 12, 4))}
           </div>
           <div class="since on">
@@ -491,11 +500,10 @@ const Showcase = () => (
   <>
     <Bar />
     <div class="pills pr-status">
-      <span class="pill p-strong">↻ re-review</span>
-      <span class="pill p-ok">checks passing</span>
-      <span class="pill p-warn">1 file without test changes <span class="pill-caret">▾</span></span>
+      <span class="pill p-ok"><Tg i="approved" t="approved" /></span>
+      <span class="pill p-warn"><Tg i="notest" n={1} t="file without test changes" /> <span class="pill-caret">▾</span></span>
       <span class="pill">
-        <ModuleIcon /> 2 modules <span class="pill-caret">▾</span>
+        <Tg i={<ModuleIcon />} n={2} t="modules" /> <span class="pill-caret">▾</span>
       </span>
       {(([c, t]) => <span class={`pill ${c}`}>{t}</span>)(size(84, 12, 4))}
     </div>
@@ -584,8 +592,8 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
                 <a class={`pr-item g-${i.g}`}>
                   <span class="pr-title">{i.title}</span>
                   <span class="meta">
-                    {i.layer && <b class="layer">{i.layer}</b>}
-                    {i.meta}
+                    <img class="pr-face" src={face(i.who)} alt="" /> {i.who} · {i.layer && <b class="layer">{i.layer} </b>}
+                    {i.repo} · <span class="idle">active {i.when}</span>
                   </span>
                   <span class="pills">{i.pills.map(([cls, t]) => <span class={`pill ${cls}`}>{t}</span>)}</span>
                 </a>
@@ -666,36 +674,53 @@ SCENES.app = {
               <details open class="ix-sec">
                 <summary>Conversation <span class="count">3</span></summary>
                 <button class="ix-item"><span class="ix-label">Description <span class="ix-meta">rina</span></span></button>
-                <button class="ix-item"><span class="ix-label">budi <span class="ix-meta">✓ approved</span></span><span class="ix-sub">Nice, much safer.</span></button>
+                <button class="ix-item"><span class="ix-label">budi <span class="ix-meta"><Tg i="approved" t="approved" /></span></span><span class="ix-sub">Nice, much safer.</span></button>
               </details>
               <details open class="ix-sec">
                 <summary>Reviewers <span class="count">2</span></summary>
-                <button class="ix-item ix-person"><span class="ix-label">@budi <span class="ix-meta v-APPROVED">✓ approved</span></span></button>
-                <button class="ix-item ix-person"><span class="ix-label">@you <span class="ix-meta v-WAITING">waiting</span></span></button>
+                <button class="ix-item ix-person"><span class="ix-label"><img src={face('budi')} alt="" />@budi <span class="ix-meta v-APPROVED"><Tg i="approved" t="approved" /></span></span></button>
+                <button class="ix-item ix-person"><span class="ix-label"><img src={face('you')} alt="" />@you <span class="ix-meta v-WAITING"><Tg i="waiting" t="waiting" /></span></span></button>
               </details>
               <details open class="ix-sec">
                 <summary>Checks <span class="count">6</span></summary>
-                <details class="ix-ckgroup"><summary><span class="ck ck-success">✓</span> 6 passed</summary></details>
+                <details class="ix-ckgroup"><summary><CheckMark state="success" /> 6 passed</summary></details>
               </details>
               <details open class="ix-sec">
                 <summary>Review threads <span class="count">1</span></summary>
                 <button class="ix-item"><span class="ix-label">retries.md:5 <span class="ix-meta">you</span></span><span class="ix-sub">Does this cover expired cards too?</span></button>
               </details>
               <details open class="ix-sec">
-                <summary>Files <span class="count">4</span> <span class="ck-sum">1/4 viewed</span></summary>
-                {[[':payments', ['PaymentService.kt', 'RetryPolicy.kt']], [':app', ['strings.xml']], ['', ['retries.md']]].map(([m, files]) => (
-                  <details open class="tree-dir mod-group">
-                    <summary><span class="tree-dir-name">{m ? <><ModuleIcon /> {m}</> : 'Other files'} <span class="count">{files.length}</span></span></summary>
-                    {(files as string[]).map((f, i) => (
-                      <div class={f === 'strings.xml' ? 'tree-row dim' : 'tree-row'}>
-                        <button class="tree-file" style={{ paddingLeft: '22px' }}>
-                          <span class={`fdot s-${i === 1 ? 'added' : 'modified'}`} />
-                          <span class="tree-name">{f}</span>
+                <summary>Files <span class="count">5</span> <span class="ck-sum">1/5 viewed</span></summary>
+                {([
+                  [':payments', 'main/kotlin', ['payments/src/main/kotlin/PaymentService.kt', 'payments/src/main/kotlin/RetryPolicy.kt']],
+                  [':payments', 'test/kotlin', ['payments/src/test/kotlin/RetryPolicyTest.kt']],
+                  [':app', 'main/res/values', ['app/src/main/res/values/strings.xml']],
+                  ['', '', ['docs/payments/retries.md']],
+                ] as [string, string, string[]][]).map(([m, dir, files], k, all) => (
+                  <>
+                    {m !== all[k - 1]?.[0] && (
+                      <div class="tree-row">
+                        <span class="tree-dir-name" style={{ paddingLeft: '8px' }}>{m ? <><ModuleIcon /> {m}</> : 'Other files'}</span>
+                      </div>
+                    )}
+                    {dir && (
+                      <div class="tree-row">
+                        <span class="tree-dir-name" style={{ paddingLeft: '22px' }}>
+                          <img class="dicon" src={folderIcon(dir, true)} alt="" />
+                          {dir}
+                        </span>
+                      </div>
+                    )}
+                    {files.map((f) => (
+                      <div class={f.endsWith('strings.xml') ? 'tree-row dim' : 'tree-row'}>
+                        <button class="tree-file" style={{ paddingLeft: dir ? '36px' : '22px' }}>
+                          <FileIcon path={f} status={f.endsWith('RetryPolicy.kt') || f.endsWith('Test.kt') ? 'added' : 'modified'} untested={f.endsWith('PaymentService.kt')} />
+                          <span class="tree-name">{f.split('/').pop()}</span>
                         </button>
-                        <span class={f === 'strings.xml' ? 'vmark on' : 'vmark'}>{f === 'strings.xml' ? '✓' : ''}</span>
+                        <span class={f.endsWith('strings.xml') ? 'vmark on' : 'vmark'}>{f.endsWith('strings.xml') ? '✓' : ''}</span>
                       </div>
                     ))}
-                  </details>
+                  </>
                 ))}
               </details>
             </div>
