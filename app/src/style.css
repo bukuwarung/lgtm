@@ -90,8 +90,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 .pills:empty { display: none; }
 /* A pill's one-item menu (Update branch, Re-run failed jobs), just under it. */
 .pill-drop { position: relative; display: inline-block; }
-.pill-menu { position: absolute; left: 0; top: calc(100% + 3px); z-index: 20; white-space: nowrap; padding: 4px 10px; font: inherit; font-size: calc(12px * var(--ts)); color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); cursor: pointer; }
-.pill-menu:hover { background: var(--soft); }
+.quick-menu { position: absolute; left: 0; top: calc(100% + 3px); z-index: 20; white-space: nowrap; padding: 4px 10px; font: inherit; font-size: calc(12px * var(--ts)); color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); cursor: pointer; }
+.quick-menu:hover { background: var(--soft); }
 .pill { display: inline-block; margin-right: 4px; padding: 0 6px; font-size: calc(11px * var(--ts)); border: 1px solid var(--border); border-radius: 10px; color: var(--muted); }
 .pill.p-ok { color: var(--addfg); border-color: currentColor; }
 .pill.p-bad { color: var(--delfg); border-color: currentColor; }
