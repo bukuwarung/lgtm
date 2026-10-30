@@ -189,7 +189,6 @@ main { padding: 16px; }
 .st.s-added { --st: var(--addfg); }
 .st.s-removed { --st: var(--delfg); }
 .st.s-renamed, .st.s-copied { --st: var(--accent); }
-.st.s-test { --st: light-dark(#0a7c86, #4fc1c9); }
 .st.s-notest { --st: light-dark(#9a6700, #cc7832); }
 .st { flex: none; white-space: nowrap; }
 .counts { font: calc(12px * var(--ts)) var(--mono); }
@@ -796,7 +795,6 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .pr-face { width: 14px; height: 14px; border-radius: 50%; vertical-align: -3px; }
 .g-face { width: 18px; height: 18px; border-radius: 50%; vertical-align: -4px; }
 /* Test files: a teal flask (and "test" in the diff's file header). */
-.test-mark { flex: none; display: inline-flex; align-items: center; gap: 3px; color: light-dark(#0a7c86, #4fc1c9); font-size: calc(11px * var(--ts)); font-weight: 400; white-space: nowrap; }
 /* Tags and pills as text, icons or both (Settings → Appearance; tags.tsx). */
 .ti { display: inline-flex; align-items: center; vertical-align: -2px; margin-right: .3em; }
 .ti:empty { display: none; }
@@ -865,14 +863,18 @@ html.ln-bar .chunk tr[data-chg]:not(:has([data-chg])) { background: none; box-sh
 html.ln-bar .chunk tr[data-chg]:not(:has([data-chg])) > :first-child { box-shadow: inset 3px 0 var(--addfg); }
 html.ln-bar .removed { background: none; }
 html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: underline 2px var(--addfg); text-underline-offset: 3px; }
-/* The index's file icons (fileicons.ts), with a dot in the corner for an added, removed or renamed file; modified is the
-   usual, so no dot. */
+/* File icons (fileicons.ts), with a dot in the corner for an added, removed or renamed file; modified is the usual, so
+   no dot. */
 .ficon { position: relative; flex: none; display: inline-grid; width: 14px; height: 14px; }
 .ficon img { width: 14px; height: 14px; }
 .dicon { flex: none; width: 14px; height: 14px; margin-right: 4px; }
 .tree-dir[open] > summary > .dicon:not(.open), .tree-dir:not([open]) > summary > .dicon.open { display: none; }
 .ficon .fdot { position: absolute; right: -2px; bottom: -1px; width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--bg); }
-.file-name .file-icon { flex: none; align-self: center; width: 16px; height: 16px; }
+.file-name .ficon.big { align-self: center; }
+.ficon.big, .ficon.big img { width: 16px; height: 16px; }
+/* A test that its icon doesn't already say is one: a small flask in the other corner. */
+.ficon .ftest { position: absolute; left: -3px; bottom: -3px; display: inline-grid; place-items: center; width: 9px; height: 9px; border-radius: 50%; color: light-dark(#0a7c86, #4fc1c9); background: var(--bg); }
+.ficon .ftest svg { width: 7px; height: 7px; }
 /* A lone comment line rendered (Settings: Single comment lines): lighter than a doc block, no box. */
 .doc-render.doc-one { margin: 0; padding: 0 8px; background: none; border-left-width: 2px; color: var(--muted); }
 .doc-render.doc-one .doc-source { margin-bottom: 0; }

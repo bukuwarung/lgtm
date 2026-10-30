@@ -18,12 +18,15 @@ Object.assign(NAMES, { 'proguard-rules.txt': 'android', 'proguard-android.txt': 
 
 // As VS Code picks: the whole file name first, then the longest extension (foo.test.ts → test.ts before ts).
 const uris = new Map<string, string>();
-export function fileIcon(path: string): string {
+export function iconOf(path: string): string {
   const name = path.split('/').pop()!.toLowerCase();
   let icon = NAMES[name];
   const parts = name.split('.');
   for (let k = 1; !icon && k < parts.length; k++) icon = EXT[parts.slice(k).join('.')];
-  icon ??= 'file';
+  return icon ?? 'file';
+}
+export function fileIcon(path: string): string {
+  const icon = iconOf(path);
   if (!uris.has(icon)) uris.set(icon, `data:image/svg+xml,${encodeURIComponent(SVG[icon])}`);
   return uris.get(icon)!;
 }

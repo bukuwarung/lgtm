@@ -12,7 +12,6 @@ import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts
 import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
-import { fileIcon } from './fileicons.ts';
 import { StackNav } from './stacknav.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
@@ -26,7 +25,7 @@ import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, u
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
-import { below, jumpTo, ModuleIcon, NoTestMark, TestMark, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
+import { below, jumpTo, ModuleIcon, NoTestMark, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -1360,7 +1359,6 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref} style={{ containIntrinsicSize: placeholder }}>
       <header class="file-h">
         <span class={`st s-${file.status}`}><Tg i={file.status} t={file.status} /></span>
-        {inTests(path) && <TestMark label />}
         {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
             src/), cut from the left (the nearest folders stay); the full path on hover. */}
         <a
@@ -1370,7 +1368,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           rel="noopener"
           title={file.previous_filename ? `${file.previous_filename} → ${path}` : path}
         >
-          <img class="file-icon" src={fileIcon(path)} alt="" />
+          <FileIcon path={path} big />
           <b>
             {file.previous_filename && base(file.previous_filename) !== base(path) && <>{base(file.previous_filename)} → </>}
             {base(path)}

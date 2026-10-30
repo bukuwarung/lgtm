@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName } from './files.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
-import { fileIcon, folderIcon } from './fileicons.ts';
+import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
@@ -89,9 +89,17 @@ const Icon = Octicon; // the index's small buttons and marks
 
 // A test file: a flask (with "test" in the diff's file header).
 // In the diff's file header it's a tag like the file's status (style.css .st).
-export const TestMark = ({ label }: { label?: boolean }) => (
-  <span class={label ? 'st s-test' : 'test-mark'} role="img" title="A test (in a test folder, or named as one)" aria-label="Test">
-    {label ? <Tg i="test" t="test" /> : <Icon name="beaker" />}
+// A file's icon by type, with a dot in the corner for added, removed or renamed, and a flask for a test (unless the
+// icon is a test one already, as the theme draws JS and TS tests).
+export const FileIcon = ({ path, status, big }: { path: string; status?: string; big?: boolean }) => (
+  <span class={big ? 'ficon big' : 'ficon'} title={status}>
+    <img src={fileIcon(path)} alt="" />
+    {status && status !== 'modified' && <i class={'fdot s-' + status} />}
+    {inTests(path) && !iconOf(path).startsWith('test-') && (
+      <i class="ftest" role="img" title="A test (in a test folder, or named as one)" aria-label="Test">
+        <Icon name="beaker" />
+      </i>
+    )}
   </span>
 );
 
@@ -494,12 +502,8 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
               title={f.filename}
               onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}
             >
-              <span class="ficon" title={f.status}>
-                <img src={fileIcon(f.filename)} alt="" />
-                {f.status !== 'modified' && <i class={'fdot s-' + f.status} />}
-              </span>
+              <FileIcon path={f.filename} status={f.status} />
               <span class="tree-name">{f.filename.split('/').pop()}</span>
-              {inTests(f.filename) && <TestMark />}
               {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
             </button>
             <ViewedMark paths={[f.filename]} viewed={viewed} onViewed={onViewed} what="this file" />
