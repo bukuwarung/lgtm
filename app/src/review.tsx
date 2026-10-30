@@ -1,6 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -335,6 +335,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const [showGenerated, setShowGenerated] = useState(false);
   const [showNoDiff, setShowNoDiff] = useState(false);
   const [showWsOnly, setShowWsOnly] = useState(false);
+  const [showImportsOnly, setShowImportsOnly] = useState(false);
+  const [foldImports] = useStoredFlag('foldImports', true);
   // Feature switches (Settings → Diff).
   const { bots } = useBots();
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
@@ -833,13 +835,18 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const wsOnlySet = new Set(
     ignoreWs ? files.filter((f) => !f.generated && !f.noDiff && whitespaceOnly(f)).map((f) => f.filename) : [],
   );
-  const visible = files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename));
+  // And, with imports folded, files whose every change is an import.
+  const importsOnlySet = new Set(
+    foldImports ? files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && onlyImports(f, ignoreWs)).map((f) => f.filename) : [],
+  );
+  const visible = files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && !importsOnlySet.has(f.filename));
   const wsFolded = ignoreWs ? visible.reduce((n, f) => n + wsSections(f).folded, 0) : 0; // sections folded in the rest
   const generated = files.filter((f) => f.generated);
   const noDiff = files.filter((f) => f.noDiff && !f.generated);
   const wsOnly = files.filter((f) => wsOnlySet.has(f.filename));
+  const importOnly = files.filter((f) => importsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
-  const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : [])];
+  const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : [])];
   // Modules as the files on show have them (not the ones waiting behind a row).
   const shownModules = new Map(shown.map((f) => [f.filename, modules.get(f.filename) ?? '']));
   const view = byModule ? moduleView(shownModules) : 'none';
@@ -1139,6 +1146,12 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
                 {wsOnly.length} file{wsOnly.length > 1 ? 's' : ''} with only whitespace changes hidden. Show
               </button>
             ))}
+          {importOnly.length > 0 &&
+            (showImportsOnly ? importOnly.map(section) : (
+              <button class="gen-row" onClick={() => setShowImportsOnly(true)}>
+                {importOnly.length} file{importOnly.length > 1 ? 's' : ''} with only import changes hidden. Show
+              </button>
+            ))}
         </main>
       </div>
     </div>
@@ -1269,6 +1282,15 @@ function wsSections(f: File) {
     wsSeen.set(f, { folded: hs.filter((h) => h.lines.every((l) => l.kind === ' ')).length, total: hs.length });
   }
   return wsSeen.get(f)!;
+}
+// A file whose every change is an import (diff.ts importsOnly), worked out once per loaded file and whitespace setting.
+const importsSeen = new WeakMap<File, Map<boolean, boolean>>();
+function onlyImports(f: File, ws: boolean) {
+  if (!f.patch) return false;
+  const seen = importsSeen.get(f) ?? new Map<boolean, boolean>();
+  importsSeen.set(f, seen);
+  if (!seen.has(ws)) seen.set(ws, importsOnly(f.filename, ws ? ignoreWhitespace(parsePatch(f.patch)) : parsePatch(f.patch)));
+  return seen.get(ws)!;
 }
 const whitespaceOnly = (f: File) => { const s = wsSections(f); return s.total > 0 && s.folded === s.total; };
 

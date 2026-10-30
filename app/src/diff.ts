@@ -282,6 +282,22 @@ export const importSyntax = (path: string) => (/\.(kt|kts|java)$/.test(path) ? '
 // everyday wiring, so only packages outside it are called out as new.
 export const ownRoot = (path: string) => path.match(/\/(?:java|kotlin)\/(\w+)\/(\w+)\//)?.slice(1).join('.') ?? null;
 
+// A file whose every change is in its imports (a wildcard spelled out, imports sorted or added), blank lines aside:
+// with imports folded there's nothing left in it to read.
+export function importsOnly(path: string, hunks: Hunk[]): boolean {
+  const syntax = importSyntax(path);
+  if (!syntax) return false;
+  const folds = importFolds(hunks, syntax);
+  let changed = false;
+  for (const [hi, h] of hunks.entries())
+    for (const [i, l] of h.lines.entries()) {
+      if (l.kind === ' ') continue;
+      changed = true;
+      if (l.text.trim() && !folds.some((f) => f.hunk === hi && i >= f.start && i <= f.end)) return false;
+    }
+  return changed;
+}
+
 export function importFolds(hunks: Hunk[], lang: 'jvm' | 'ts' = 'jvm'): ImportFold[] {
   const { starts, ends, pkg, packageOf } = SYNTAX[lang];
   const known = new Set(hunks.flatMap((h) => h.lines.filter((l) => l.kind !== '+').map((l) => packageOf(l.text)).filter((p) => p != null)));

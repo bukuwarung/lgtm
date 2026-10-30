@@ -649,3 +649,23 @@ test('trimContext: with whitespace ignored, only a few unchanged lines around ea
   const tight = { header: '@@ -1,3 +1,3 @@', newStart: 1, lines: [ctx(1), { kind: '+' as const, text: 'z', new: 2 }, ctx(3)] };
   assert.equal(trimContext([tight], 3)[0], tight);
 });
+
+test('importsOnly: a file whose every change is an import', async () => {
+  const { importsOnly, parsePatch } = await import('../src/diff.ts');
+  const imports = parsePatch(`@@ -1,5 +1,6 @@
+ package com.acme.ui
+ 
+-import androidx.compose.foundation.layout.*
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
+ import androidx.compose.runtime.Composable`);
+  assert.equal(importsOnly('app/src/main/java/com/acme/ui/Home.kt', imports), true);
+  assert.equal(importsOnly('docs/Home.md', imports), false); // not a language with imports
+  const code = parsePatch(`@@ -1,4 +1,5 @@
+ import androidx.compose.runtime.Composable
++import androidx.compose.foundation.layout.Box
+ 
+-fun a() = 1
++fun a() = 2`);
+  assert.equal(importsOnly('Home.kt', code), false);
+});
