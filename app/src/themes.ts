@@ -85,8 +85,35 @@ export function parseThemeFile(text: string): any {
 // A VS Code colour theme file (its UI `colors` and syntax `tokenColors`) as lgtm's tokens. It has one look, for both
 // light and dark. One that only `include`s another file has too little in it to use.
 export function fromVSCode(file: any, source: string): AppTheme {
+  const tokens = vsTokens(file);
+  const name = file.name ?? 'VS Code theme';
+  const appearance = /light/i.test(file.type ?? '') ? 'light' : 'dark';
+  return { name, light: tokens, dark: tokens, credit: file.author, source, variants: [{ name, appearance, tokens }], pick: { light: name, dark: name } };
+}
+
+// A VS Code extension's colour themes as one lgtm theme, each a version to pick for light or dark (its first of each by
+// default; with only dark ones, the first for both).
+export function fromVSCodeSet(name: string, themes: { label: string; appearance: 'light' | 'dark'; file: any }[], source: string, credit?: string): AppTheme {
+  const variants: Variant[] = themes.map((t) => ({ name: t.label, appearance: t.appearance, tokens: vsTokens(t.file) }));
+  if (!variants.length) throw new Error('it has no colour themes');
+  const dark = variants.find((v) => v.appearance === 'dark') ?? variants[0];
+  const light = variants.find((v) => v.appearance === 'light') ?? dark;
+  return { name, light: light.tokens, dark: dark.tokens, credit, source, variants, pick: { light: light.name, dark: dark.name } };
+}
+
+// A VS Code theme's appearance, from its uiTheme in the extension (vs, vs-dark, hc-black, hc-light).
+export const vsAppearance = (uiTheme?: string): 'light' | 'dark' => (uiTheme === 'vs' || uiTheme === 'hc-light' ? 'light' : 'dark');
+
+// A VS Code theme file with the files it `include`s merged under it (each include's colours first, its own over them).
+export async function withIncludes(file: any, read: (path: string) => Promise<any>, depth = 0): Promise<any> {
+  if (!file.include || depth > 3) return file;
+  const base = await withIncludes(await read(file.include), read, depth + 1);
+  return { ...base, ...file, colors: { ...base.colors, ...file.colors }, tokenColors: [...(Array.isArray(file.tokenColors) ? file.tokenColors : []), ...(Array.isArray(base.tokenColors) ? base.tokenColors : [])] };
+}
+
+function vsTokens(file: any): Tokens {
   const c = file.colors ?? {};
-  const rules: { scopes: string[]; fg?: string }[] = (file.tokenColors ?? []).map((r: any) => ({
+  const rules: { scopes: string[]; fg?: string }[] = (Array.isArray(file.tokenColors) ? file.tokenColors : []).map((r: any) => ({
     scopes: (Array.isArray(r.scope) ? r.scope : String(r.scope ?? '').split(',')).map((x: string) => x.trim()),
     fg: r.settings?.foreground,
   }));
@@ -129,10 +156,7 @@ export function fromVSCode(file: any, source: string): AppTheme {
       }).filter(([, v]) => v).map(([k, v]) => [k, { color: v }]),
     ),
   };
-  const tokens = fromZed(s);
-  const name = file.name ?? 'VS Code theme';
-  const appearance = /light/i.test(file.type ?? '') ? 'light' : 'dark';
-  return { name, light: tokens, dark: tokens, credit: file.author, source, variants: [{ name, appearance, tokens }], pick: { light: name, dark: name } };
+  return fromZed(s);
 }
 
 // A theme file added in Settings: every version kept, so its light and dark one can be picked.

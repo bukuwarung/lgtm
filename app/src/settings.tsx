@@ -7,7 +7,7 @@ import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes, saveTheme, setTrial } from './look.ts';
-import { fromVSCode, fromZedFile, parseThemeFile, pickVariant, type AppTheme } from './themes.ts';
+import { fromVSCode, fromVSCodeSet, fromZedFile, parseThemeFile, pickVariant, vsAppearance, withIncludes, type AppTheme } from './themes.ts';
 import { ThemeThumb } from './themecard.tsx';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
@@ -366,10 +366,17 @@ export function Settings() {
         </div>
         <div class="thm-grid" role="radiogroup" aria-label="Colour theme">
           {Object.entries(allThemes(look.mine)).map(([k, t]) => (
-            <button role="radio" aria-checked={look.appTheme === k} class={look.appTheme === k ? 'thm-card on' : 'thm-card'} onClick={() => look.setAppTheme(k)}>
-              <ThemeThumb t={t} />
-              <span class="thm-name" title={t ? t.name : 'lgtm'}>{t ? t.name : 'lgtm'}</span>
-            </button>
+            <span class="thm-slot">
+              <button role="radio" aria-checked={look.appTheme === k} class={look.appTheme === k ? 'thm-card on' : 'thm-card'} onClick={() => look.setAppTheme(k)}>
+                <ThemeThumb t={t} />
+                <span class="thm-name" title={t ? t.name : 'lgtm'}>{t ? t.name : 'lgtm'}</span>
+              </button>
+              {k in savedThemes(look) && (
+                <button class="thm-remove" title={`Delete ${t?.name}`} aria-label={`Delete ${t?.name}`} onClick={() => (look.appTheme === k && look.setAppTheme('lgtm'), saveTheme(look, k, null))}>
+                  <Octicon name="x" />
+                </button>
+              )}
+            </span>
           ))}
         </div>
         <MyTheme look={look} />
@@ -471,51 +478,96 @@ function MyTheme({ look }: { look: Look }) {
             </select>
           ) : null,
         )}
-        <button onClick={() => (saveTheme(look, look.appTheme, null), look.setAppTheme('lgtm'))}>Remove</button>
+        <button onClick={() => (saveTheme(look, look.appTheme, null), look.setAppTheme('lgtm'))}>Delete</button>
       </span>
     </div>
   );
 }
 
-// More themes: Zed's gallery (its theme extensions, most used first; each theme file read from the extension's GitHub
-// repo, as JSON: nothing in them runs), or a Zed theme file of your own.
-type ZedExtension = { id: string; name: string; description: string; repository: string; download_count: number; authors: string[] };
+// More themes: Zed's theme gallery, or VS Code's from Open VSX (the open registry of VS Code extensions), most used
+// first. Zed themes are read from their extension's GitHub repo, VS Code ones from Open VSX: as JSON, nothing in them
+// runs. Or a Zed or VS Code theme file of your own.
+type Source = 'zed' | 'vsx';
+type Ext = { src: Source; id: string; name: string; description: string; downloads: number; repository?: string; ns?: string; ext?: string; version?: string; author?: string };
+const VSX = 'https://open-vsx.org/api';
+async function listThemes(src: Source, q: string): Promise<Ext[]> {
+  if (src === 'zed') {
+    const d = await (await fetch(`https://api.zed.dev/extensions?filter=${encodeURIComponent(q)}&provides=themes&max_schema_version=1`)).json();
+    return (d.data ?? []).map((x: any): Ext => ({ src, id: x.id, name: x.name, description: x.description, downloads: x.download_count, repository: x.repository }));
+  }
+  const d = await (await fetch(`${VSX}/-/search?category=Themes&size=60&sortBy=downloadCount&sortOrder=desc&query=${encodeURIComponent(q)}`)).json();
+  return (d.extensions ?? [])
+    // Icon themes share the category; VS Code's built-in themes aren't readable from Open VSX.
+    .filter((x: any) => !/icon/i.test(`${x.name} ${x.displayName}`) && x.namespace !== 'vscode')
+    .map((x: any): Ext => ({ src, id: `${x.namespace}.${x.name}`, name: x.displayName || x.name, description: x.description ?? '', downloads: x.downloadCount ?? 0, ns: x.namespace, ext: x.name, version: x.version, author: x.namespace }));
+}
+// A file in an Open VSX extension's package, as JSON (lenient: VS Code themes are often JSONC).
+const vsxFile = async (x: Ext, path: string) => {
+  const r = await fetch(`https://open-vsx.org/vscode/unpkg/${x.ns}/${x.ext}/${x.version}/extension/${path.replace(/^\.\//, '')}`);
+  if (!r.ok) throw new Error(`${path}: ${r.status}`);
+  return parseThemeFile(await r.text());
+};
+const relPath = (from: string, rel: string) => new URL(rel, `https://x/${from.replace(/^\.\//, '')}`).pathname.slice(1);
+
 function ThemeGallery({ look }: { look: Look }) {
   const [open, setOpen] = useState(false);
+  const [src, setSrc] = useState<Source>('zed');
   const [q, setQ] = useState('');
-  const [list, setList] = useState<ZedExtension[] | null>(null);
-  const [files, setFiles] = useState<{ ext: ZedExtension; names: string[] } | null>(null);
+  const [list, setList] = useState<Ext[] | null>(null);
+  const [files, setFiles] = useState<{ ext: Ext; names: string[] } | null>(null);
   const [preview, setPreview] = useState<{ key: string; t: AppTheme } | null>(null); // fetched, not yet added
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   useEffect(() => {
     if (!open) return;
+    setList(null);
+    let live = true; // a slower answer for the other gallery or an older search doesn't replace this one
     const t = setTimeout(() => {
-      fetch(`https://api.zed.dev/extensions?filter=${encodeURIComponent(q)}&provides=themes&max_schema_version=1`)
-        .then((r) => r.json())
-        .then((d) => setList((d.data ?? []).sort((a: ZedExtension, b: ZedExtension) => b.download_count - a.download_count).slice(0, 40)), (e) => setErr(`Couldn't reach Zed's gallery: ${e.message}`));
+      listThemes(src, q).then(
+        (l) => live && setList(l.sort((a, b) => b.downloads - a.downloads).slice(0, 40)),
+        (e) => live && setErr(`Couldn't reach the gallery: ${e.message}`),
+      );
     }, 250);
-    return () => clearTimeout(t);
-  }, [open, q]);
-  const repoOf = (ext: ZedExtension) => ext.repository.match(/github\.com\/([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/)?.[1];
-  const browse = async (ext: ZedExtension) => {
+    return () => ((live = false), clearTimeout(t));
+  }, [open, q, src]);
+  const repoOf = (ext: Ext) => ext.repository?.match(/github\.com\/([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/)?.[1];
+  const browse = async (ext: Ext) => {
     setErr('');
-    const repo = repoOf(ext);
-    if (!repo) return setErr(`${ext.name}'s source isn't on GitHub, so lgtm can't fetch it. Download its theme file and add it with "From a file".`);
     setBusy(ext.id);
     try {
-      const names = (await listDir(repo, 'themes')).filter((f) => f.type === 'file' && /\.json$/i.test(f.name)).map((f) => f.name);
-      if (!names.length) throw new Error('no theme files in its themes folder');
-      if (names.length === 1) await fetchTheme(ext, names[0], false, ext.id);
-      else setFiles({ ext, names });
+      if (ext.src === 'vsx') await fetchVSCode(ext);
+      else {
+        const repo = repoOf(ext);
+        if (!repo) throw new Error(`its source isn't on GitHub. Download its theme file and add it with "From a file"`);
+        const names = (await listDir(repo, 'themes')).filter((f) => f.type === 'file' && /\.json$/i.test(f.name)).map((f) => f.name);
+        if (!names.length) throw new Error('no theme files in its themes folder');
+        if (names.length === 1) await fetchTheme(ext, names[0], false, ext.id);
+        else setFiles({ ext, names });
+      }
     } catch (e: any) {
       setErr(`Couldn't read ${ext.name}'s themes: ${e.message}`);
     }
     setBusy('');
   };
+  // A VS Code extension's colour themes (up to 8), as one theme whose versions can be picked for light and dark.
+  const fetchVSCode = async (ext: Ext) => {
+    const themes: any[] = (await vsxFile(ext, 'package.json')).contributes?.themes ?? [];
+    if (!themes.length) throw new Error('it has no colour themes (only icons, perhaps)');
+    // A theme whose file isn't in the package (some are written only once running in VS Code) is skipped.
+    const got = await Promise.allSettled(
+      themes.slice(0, 8).map(async (t) => ({
+        label: t.label ?? t.id ?? t.path,
+        appearance: vsAppearance(t.uiTheme),
+        file: await withIncludes(await vsxFile(ext, t.path), (p) => vsxFile(ext, relPath(t.path, p))),
+      })),
+    );
+    const entries = got.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    if (!entries.length) throw new Error(`its theme files aren't in its package (${(got[0] as PromiseRejectedResult).reason?.message}). Its Zed version, if it has one, will work`);
+    setPreview({ key: `vsx:${ext.id}`, t: fromVSCodeSet(ext.name, entries, `https://open-vsx.org/extension/${ext.ns}/${ext.ext}`, ext.author) });
+  };
   const install = (key: string, t: AppTheme) => (saveTheme(look, key, t), setTrial(null), setFiles(null), setPreview(null));
-  // A theme file fetched for its preview card; several in one extension (Catppuccin's accents) go by their file names.
-  const fetchTheme = async (ext: ZedExtension, name: string, several: boolean, busyAs = name) => {
+  // A Zed theme file fetched for its preview card; several in one extension (Catppuccin's accents) go by their file names.
+  const fetchTheme = async (ext: Ext, name: string, several: boolean, busyAs = name) => {
     setBusy(busyAs);
     setErr('');
     try {
@@ -529,6 +581,7 @@ function ThemeGallery({ look }: { look: Look }) {
     }
     if (busyAs === name) setBusy('');
   };
+  const previewOf = (x: Ext) => (preview && (preview.key === `vsx:${x.id}` || preview.key.startsWith(`zed:${x.id}/`)) ? preview.key : null);
   // The fetched theme's card, under its row, scrolled into view (the list scrolls in its own box).
   const Preview = ({ k }: { k: string }) =>
     preview?.key === k ? (
@@ -561,12 +614,12 @@ function ThemeGallery({ look }: { look: Look }) {
       <div class="set-row">
         <span>
           More themes
-          <small>Any of the hundreds in Zed's theme gallery, or a Zed or VS Code theme file you have.</small>
+          <small>Hundreds from Zed's theme gallery and from VS Code's (Open VSX), or a Zed or VS Code theme file you have.</small>
         </span>
         <span class="row">
-          <button onClick={() => setOpen(true)}>Browse Zed themes</button>
+          <button onClick={() => setOpen(true)}>Browse themes</button>
           <label class="set-file">
-            <input type="file" accept=".json,application/json" onChange={(e) => void fromFile(e.currentTarget.files?.[0])} />
+            <input type="file" accept=".json,.jsonc,application/json" onChange={(e) => void fromFile(e.currentTarget.files?.[0])} />
             <span class="set-file-btn">From a file…</span>
           </label>
         </span>
@@ -575,7 +628,14 @@ function ThemeGallery({ look }: { look: Look }) {
   return (
     <div class="theme-gallery">
       <div class="row">
-        <input type="search" placeholder="Search Zed's themes" value={q} onInput={(e) => (setQ(e.currentTarget.value), setFiles(null))} autoFocus />
+        <span class="set-seg" role="radiogroup" aria-label="Gallery">
+          {(['zed', 'vsx'] as const).map((s) => (
+            <button role="radio" aria-checked={src === s} class={src === s ? 'on' : ''} onClick={() => (setSrc(s), setFiles(null), setPreview(null), setErr(''))}>
+              {s === 'zed' ? 'Zed' : 'VS Code'}
+            </button>
+          ))}
+        </span>
+        <input type="search" placeholder={src === 'zed' ? "Search Zed's themes" : 'Search VS Code themes (Open VSX)'} value={q} onInput={(e) => (setQ(e.currentTarget.value), setFiles(null))} autoFocus />
         <button onClick={() => (setOpen(false), setFiles(null))}>Done</button>
       </div>
       {err && <p class="error">{err}</p>}
@@ -595,14 +655,15 @@ function ThemeGallery({ look }: { look: Look }) {
       ) : (
         <div class="tg-list">
           {!list && <p class="note">Loading…</p>}
+          {list?.length === 0 && <p class="note">No themes match.</p>}
           {list?.map((x) => (
             <div class="tg-item">
               <span>
-                <b>{x.name}</b> <small class="note">{x.download_count.toLocaleString()} downloads</small>
+                <b>{x.name}</b> <small class="note">{x.downloads.toLocaleString()} downloads</small>
                 <small class="note tg-desc">{x.description}</small>
               </span>
               <button disabled={!!busy} onClick={() => (setPreview(null), void browse(x))}>{busy === x.id ? 'Getting…' : 'Preview'}</button>
-              {preview?.key.startsWith(`zed:${x.id}/`) && <Preview k={preview.key} />}
+              {previewOf(x) && <Preview k={previewOf(x)!} />}
             </div>
           ))}
         </div>

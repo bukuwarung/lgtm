@@ -223,7 +223,7 @@ lgtm messages people as you, through slackcli.
 </picture>
 
 - Colour themes for the whole app, code included, each in a light and a dark version: lgtm's own, One, Ayu and Gruvbox.
-- Hundreds more from Zed's theme gallery, previewed first and tried on the whole app before you add them; or a Zed or VS Code theme file of yours.
+- Hundreds more from Zed's theme gallery and VS Code's (Open VSX), previewed first and tried on the whole app before you add them; or a Zed or VS Code theme file of yours. Delete one from its card.
 - Pick a theme's light and dark version (Catppuccin's Latte with Mocha, say), and code colours of their own if you like.
 
 ## On your Mac

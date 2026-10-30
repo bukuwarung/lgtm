@@ -901,6 +901,7 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .set-test { align-self: flex-start; margin: 4px 0 2px; }
 /* Settings → Appearance: Zed's theme gallery, and a theme you added. */
 .theme-gallery { display: grid; gap: 8px; margin: 6px 0 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--soft); }
+.theme-gallery .set-seg { flex: none; white-space: nowrap; }
 .tg-list { display: grid; gap: 2px; max-height: 360px; overflow: auto; }
 .tg-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 6px; border-radius: 6px; }
 .tg-item:hover { background: var(--bg); }
@@ -912,6 +913,10 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .thm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 2px 0 14px; }
 .thm-card { display: grid; gap: 4px; padding: 4px; text-align: center; font-size: calc(12px * var(--ts)); border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--fg); }
 .thm-card { min-width: 0; }
+.thm-slot { position: relative; display: grid; min-width: 0; }
+.thm-remove { position: absolute; top: -6px; right: -6px; display: none; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: 50%; background: var(--bg); color: var(--muted); }
+.thm-slot:hover .thm-remove, .thm-remove:focus-visible { display: grid; }
+.thm-remove:hover { color: var(--delfg); border-color: currentColor; }
 .thm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thm-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .thm { display: grid; grid-template-columns: 1fr 1fr; height: 66px; overflow: hidden; border-radius: 5px; border: 1px solid var(--border); text-align: left; font: 8px/1.55 var(--mono); }

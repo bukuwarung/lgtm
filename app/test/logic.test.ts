@@ -616,6 +616,12 @@ test('theme files: VS Code colours and tokens, Zed families, lenient JSON', asyn
   assert.equal(t.dark['--hl-com'], undefined); // a rule with no colour isn't one
   assert.equal(t.light['--bg'], '#101010'); // one look for both
   assert.throws(() => fromVSCode({ include: './base.json' }, ''));
+  const { withIncludes, fromVSCodeSet, vsAppearance } = await import('../src/themes.ts');
+  const merged = await withIncludes({ include: 'base.json', colors: { 'editor.background': '#111111' } }, async () => ({ colors: { 'editor.background': '#000000', foreground: '#cccccc' }, tokenColors: [{ scope: 'comment', settings: { foreground: '#777777' } }] }));
+  assert.deepEqual(merged.colors, { 'editor.background': '#111111', foreground: '#cccccc' }); // its own over the include's
+  assert.equal(merged.tokenColors.length, 1);
+  const set = fromVSCodeSet('Ext', [{ label: 'Day', appearance: vsAppearance('vs'), file: vs }, { label: 'Night', appearance: vsAppearance('vs-dark'), file: vs }], '');
+  assert.deepEqual(set.pick, { light: 'Day', dark: 'Night' });
 
   const zed = fromZedFile(
     { name: 'Pair', themes: [{ name: 'Pair Light', appearance: 'light', style: { 'editor.background': '#ffffffff', created: '#00aa00ff' } }, { name: 'Pair Dark', appearance: 'dark', style: { 'editor.background': '#000000ff' } }] },
