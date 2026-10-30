@@ -886,3 +886,5 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .img-swipe-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
 .swipe-preview input[type=range] { width: min(100%, 420px); }
 .img-swipe-labels { display: flex; justify-content: space-between; width: min(100%, 420px); font-size: calc(11px * var(--ts)); color: var(--muted); }
+/* Settings → Desktop notifications: one sent now, to hear and see it. */
+.set-test { align-self: flex-start; margin: 4px 0 2px; }

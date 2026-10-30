@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "allow-gh-token",
+    "allow-notify",
     "allow-gh-accounts",
     "allow-slack-emoji",
     "allow-jira-move",

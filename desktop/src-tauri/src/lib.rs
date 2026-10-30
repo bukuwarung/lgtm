@@ -149,6 +149,7 @@ pub fn run() {
             commands::claude_skill,
             commands::claude_outbox,
             commands::claude_session,
+            commands::notify,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lgtm");

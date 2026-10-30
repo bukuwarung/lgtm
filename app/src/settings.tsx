@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis, getPeople, getReviewQueue, getTeamMembers, getTeams, getViewer } from './github.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
-import { ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
@@ -264,6 +264,9 @@ export function Settings() {
         </label>
         <fieldset class="set-sub" disabled={!notify}>
           <Flag k="notifySound" initial={true} label="Play a sound" hint="The usual notification sound." />
+          <button class="set-test" onClick={() => void sendNotification('lgtm', 'A test notification. Click it to come back to lgtm.', '')}>
+            Send a test notification
+          </button>
           <Flag k="notifyReplies" initial={true} label="New replies waiting for you" />
           <Flag k="notifyVerdicts" initial={true} label="Your PR approved, or changes requested" />
           <Flag k="notifyCI" initial={true} label="Your PR's checks passed or failed" />

@@ -1973,6 +1973,7 @@ dependencies = [
 name = "lgtm"
 version = "0.3.0"
 dependencies = [
+ "mac-notification-sys",
  "regex",
  "serde",
  "serde_json",

@@ -869,3 +869,33 @@ mod live {
         assert!(block_on(job_log("bad repo".into(), 1, None)).is_err());
     }
 }
+
+// A desktop notification that, once clicked, brings the window forward and opens `route` (a PR's "/owner/repo/pull/n";
+// empty: just the window). Each waits for its click on a thread of its own.
+// ponytail: one parked thread per notification left unclicked, until it's dismissed or lgtm quits; few a day.
+#[tauri::command]
+pub fn notify(app: tauri::AppHandle, title: String, body: String, sound: bool, route: String) {
+    std::thread::spawn(move || {
+        #[cfg(target_os = "macos")]
+        {
+            use mac_notification_sys::{Notification, NotificationResponse, Sound};
+            use tauri::{Emitter, Manager};
+            let _ = mac_notification_sys::set_application(&app.config().identifier);
+            let mut n = Notification::new();
+            n.title(&title).message(&body).wait_for_click(true);
+            if sound {
+                n.sound(Sound::Default);
+            }
+            if let Ok(NotificationResponse::Click) = n.send() {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.unminimize();
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+                if !route.is_empty() {
+                    let _ = app.emit("open-route", route);
+                }
+            }
+        }
+    });
+}

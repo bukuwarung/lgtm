@@ -788,9 +788,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
     // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
     if (seen.current && notify) {
       const tell = (what: string, i: QueueItem) =>
-        void notifyNative(`${what}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, () => {
-          location.hash = `/${i.repo}/pull/${i.number}`;
-        });
+        void notifyNative(`${what}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, `/${i.repo}/pull/${i.number}`);
       for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i);
       for (const i of items) {
         const was = before.current.get(i.id);

@@ -310,7 +310,8 @@ export async function askNotifications(): Promise<boolean> {
   const n = await import('@tauri-apps/plugin-notification');
   return (await n.isPermissionGranted()) || (await n.requestPermission()) === 'granted';
 }
-export async function notify(title: string, body: string, open: () => void) {
+// `route`: the PR a click opens ("/owner/repo/pull/n"); empty, just lgtm.
+export async function notify(title: string, body: string, route: string) {
   let sound = true; // Settings → Desktop notifications: Play a sound
   try {
     sound = localStorage.getItem(own('notifySound')) !== '0';
@@ -320,13 +321,13 @@ export async function notify(title: string, body: string, open: () => void) {
     const note = new Notification(title, { body, silent: !sound }); // the browser's own sound, if it has one
     note.onclick = () => {
       focus();
-      open();
+      if (route) location.hash = route;
     };
     return;
   }
   const n = await import('@tauri-apps/plugin-notification');
-  // macOS plays nothing unless asked; this name is its default notification sound. Clicking it brings the app forward.
-  if (await n.isPermissionGranted()) n.sendNotification({ title, body, ...(sound && { sound: 'NSUserNotificationDefaultSoundName' }) });
+  // Sent by lgtm's own command (desktop/src-tauri/src/commands.rs), which hears the click; macOS plays no sound unless asked.
+  if (await n.isPermissionGranted()) await command('notify', { title, body, sound, route });
 }
 
 // The Dock icon's badge (the app); the browser version shows the count in the tab title instead.
@@ -371,6 +372,7 @@ export async function initDesktop(go: (route: string) => void) {
   // The menu bar's own items (desktop/src-tauri/src/lib.rs), passed on as "lgtm:menu" with the item's id.
   const { listen } = await import('@tauri-apps/api/event');
   await listen<string>('menu', (e) => dispatchEvent(new CustomEvent('lgtm:menu', { detail: e.payload })));
+  await listen<string>('open-route', (e) => go(e.payload)); // a notification clicked
 }
 
 // The app: the GitHub PR link on the clipboard, if there is one (only the link ever leaves the app's side).
