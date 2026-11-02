@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { addedLines, commonIndent, dedentHtml, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { applySuggestions, awaitsMe, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
@@ -629,4 +629,13 @@ test('importsOnly: a file whose every change is an import', async () => {
 -fun a() = 1
 +fun a() = 2`);
   assert.equal(importsOnly('Home.kt', code), false);
+});
+
+test('commonIndent and dedentHtml leave out the shared indentation', () => {
+  assert.equal(commonIndent(['    a', '      b', '', '  ', '    c']), 4);
+  assert.equal(commonIndent(['\t\tx', '\ty']), 1);
+  assert.equal(commonIndent(['', '  ']), 0);
+  assert.equal(dedentHtml('<span class="x">    </span><span>fun</span>', 4), '<span class="x"></span><span>fun</span>');
+  assert.equal(dedentHtml('  <span>  a</span>', 3), '<span> a</span>');
+  assert.equal(dedentHtml(' x', 4), 'x');
 });

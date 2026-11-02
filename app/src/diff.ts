@@ -152,6 +152,25 @@ export function trimContext(hunks: Hunk[], keep = 3, noted: Set<number> = new Se
   });
 }
 
+// The indentation every non-blank line shares, in characters (a tab counts as one): what a diff can leave out.
+export function commonIndent(texts: string[]): number {
+  const widths = texts.filter((t) => t.trim()).map((t) => t.match(/^[ \t]*/)![0].length);
+  return widths.length ? Math.min(...widths) : 0;
+}
+// A line's highlighted HTML without its first `n` characters of leading whitespace, its tags kept in place.
+export function dedentHtml(html: string, n: number): string {
+  let out = '', i = 0;
+  while (i < html.length && n > 0) {
+    if (html[i] === '<') {
+      const j = html.indexOf('>', i) + 1 || html.length;
+      out += html.slice(i, j);
+      i = j;
+    } else if (html[i] === ' ' || html[i] === '\t') i++, n--;
+    else break;
+  }
+  return out + html.slice(i);
+}
+
 // Word-level change inside a modified line: the removed line's [start, end) and the added line's, after the common
 // prefix and suffix. Null when the lines share too little for a highlight to help.
 // ponytail: one changed span per line (prefix/suffix), not a token LCS; two edits far apart highlight everything between.

@@ -1,6 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -1655,6 +1655,9 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const path = file.filename;
   const [rainbowOn] = useStoredFlag('rainbowBrackets', false); // highlightCode reads it (main.tsx sets it)
   const hl = useMemo(() => highlightHunks(hunks, path), [hunks, rainbowOn]);
+  // The indentation all the file's shown lines share, left out (Settings → Diff), so nested code starts at the left.
+  const [trimIndent] = useStoredFlag('trimIndent', true);
+  const indent = useMemo(() => (trimIndent ? commonIndent(hunks.flatMap((h) => h.lines.map((l) => l.text))) : 0), [hunks, trimIndent]);
   // "Show more lines": unchanged stretches come from the head version of the file, fetched on first use.
   const gapList = useMemo(() => (file.status === 'added' || file.status === 'removed' ? [] : gaps(hunks)), [hunks]);
   const [head, setHead] = useState<string[] | null>(null);
@@ -1695,7 +1698,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
       <tr class="x">
         <td class="num">{g.from + i + g.offset}</td>
         <td class="num">{g.from + i}</td>
-        {html ? <td class="code" dangerouslySetInnerHTML={{ __html: html[i] }} /> : <td class="code">{text}</td>}
+        {html ? <td class="code" dangerouslySetInnerHTML={{ __html: dedentHtml(html[i], indent) }} /> : <td class="code">{text.replace(new RegExp(`^[ \\t]{0,${indent}}`), '')}</td>}
       </tr>
     ));
   };
@@ -1741,7 +1744,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const codeHtml = (hi: number, li: number, text: string) => {
     const html = hl ? hl[hi][li] : md.utils.escapeHtml(text);
     const w = words.get(`${hi}-${li}`);
-    return w ? markText(html, w[1], w[2], w[0]) : html;
+    return dedentHtml(w ? markText(html, w[1], w[2], w[0]) : html, indent);
   };
   const mv = ctx.moved.get(path);
   // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
@@ -2550,6 +2553,7 @@ function ThenNow({ s }: { s?: SinceComment }) {
       </p>
     );
   const shown = s.lines.slice(0, 12);
+  const indent = commonIndent(shown.map((l) => l.text));
   return (
     <div class="then-now changed">
       ✎ Changed since this thread started:
@@ -2557,7 +2561,7 @@ function ThenNow({ s }: { s?: SinceComment }) {
         <tbody>
           {shown.map((l) => (
             <tr class={l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln'}>
-              <td class="code">{l.text}</td>
+              <td class="code">{l.text.slice(indent)}</td>
             </tr>
           ))}
         </tbody>
