@@ -218,10 +218,6 @@ main { padding: 16px; }
 .diff tr.a .code::before { content: "+"; }
 .diff tr.d { background: var(--del); }
 .diff tr.d .code::before { content: "-"; }
-.diff tr.hunk td { padding: 4px 8px; background: var(--soft); color: var(--muted); }
-.hunk-range { opacity: .7; }
-/* One line, cut with … when long (the whole of it on hover); width 0 so it never widens the table. */
-.hunk-line { width: 0; min-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .diff tr.gap td { padding: 0; background: color-mix(in srgb, var(--soft) 50%, transparent); }
 /* Unchanged lines to expand: there when wanted, quiet otherwise (the accent on hover). */
 .diff tr.gap button { width: 100%; padding: 1px 12px; border: 0; border-radius: 0; background: none; text-align: left; font: calc(11px * var(--cs)) var(--sans); color: color-mix(in srgb, var(--muted) 75%, transparent); }

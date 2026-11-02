@@ -552,13 +552,6 @@ const Showcase = () => (
       <table class="diff">
         <tbody>
           <Fold text="⋯ +3 imports · new: kotlin.time" />
-          <tr class="hunk">
-            <td colSpan={3}>
-              <div class="hunk-line">
-                <span class="hunk-range">@@ -28,6 +28,8 @@</span>
-              </div>
-            </td>
-          </tr>
         </tbody>
       </table>
       <Rows

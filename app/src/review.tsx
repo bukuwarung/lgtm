@@ -221,17 +221,6 @@ function PillMenu({ cls = '', label, head, children }: { cls?: string; label: Co
   );
 }
 
-// A hunk's header: its line ranges.
-function HunkHeader({ header }: { header: string }) {
-  return (
-    <td colSpan={3}>
-      <div class="hunk-line">
-        <span class="hunk-range">{header.match(/^@@[^@]*@@/)?.[0] ?? header}</span>
-      </div>
-    </td>
-  );
-}
-
 // While a PR loads (one never opened before; others show their saved copy at once): its shape, shimmering, where the
 // index, title, pills and files will be.
 const SKEL_LINES = [62, 48, 71, 35, 80, 54, 66, 28];
@@ -1774,12 +1763,8 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
       <tbody>
         {hunks.map((h, hi) => (
           <>
+            {/* No @@ header row: the line numbers say where each line is, and the gap rows divide the hunks. */}
             {gapBefore(hi) && gapRows(gapBefore(hi)!)}
-            {file.status !== 'added' && ( // a new file's one hunk header (@@ -0,0 +1,n @@) says nothing
-              <tr class="hunk">
-                <HunkHeader header={h.header} />
-              </tr>
-            )}
             {h.lines.map((l, li) => {
               const fold = foldAt(hi, li);
               // Outside the project and the standard library, one name per library (dagger.hilt rides with dagger).
@@ -2164,7 +2149,7 @@ function HoldPlace() {
       for (let y = top + 8; y < innerHeight - 20; y += 12) {
         const el = document.elementFromPoint(x, y);
         // Pinned headers stay put, so they can't say where you are.
-        if (el && main.contains(el) && !el.closest('.file-h, tr.hunk, .pill-pop')) {
+        if (el && main.contains(el) && !el.closest('.file-h, .pill-pop')) {
           refs.push({ el, at: el.getBoundingClientRect().top + scrollY });
           // If that gets re-drawn (gone), the file it's in stands for it: it stays, and only what's above in it can
           // move it. (The next file down would also move by this one's change.)
