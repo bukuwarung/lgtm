@@ -262,27 +262,33 @@ export async function getTeamMembers(team: string): Promise<string[]> {
 }
 
 // Plus each member's review load: open PRs that ask them, by name, for a review.
-// A team's open PRs by its members, and the open PRs in the org asking each member, by name, for a review (`asked`,
-// up to 30 each; `load` counts them all).
-export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number>; asked: Record<string, QueueItem[]> }> {
+// A team's open PRs by its members, and how many open PRs in the org ask each member, by name, for a review.
+export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
   const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
-  if (!chunks.length) return { members, items: [], load: {}, asked: {} };
+  if (!chunks.length) return { members, items: [], load: {} };
   const vars = {
     ...Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`])),
     ...Object.fromEntries(members.map((m, k) => [`r${k}`, `is:open is:pr archived:false org:${org} user-review-requested:${m}`])),
   };
   const d = await graphql(
     `query(${Object.keys(vars).map((v) => `$${v}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){nodes{...F}}`).join(' ')}
-    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:30){issueCount nodes{...F}}`).join(' ')}}
+    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}
     ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
     vars,
   );
   const items = chunks.flatMap((_, k) => d[`s${k}`].nodes.map(toItem)) as QueueItem[];
   const load = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].issueCount as number]));
-  const asked = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].nodes.map(toItem) as QueueItem[]]));
-  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load, asked };
+  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load };
+}
+// The open PRs in an org asking someone, by name, for a review (up to 50), the longest-waiting first.
+export async function getAskedPRs(org: string, login: string): Promise<QueueItem[]> {
+  const d = await graphql(
+    `query($q:String!){s:search(query:$q,type:ISSUE,first:50){nodes{...F}}} ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+    { q: `is:open is:pr archived:false org:${org} user-review-requested:${login}` },
+  );
+  return (d.s.nodes.map(toItem) as QueueItem[]).sort((a, b) => a.waitingSince.localeCompare(b.waitingSince));
 }
 
 // Top-level PR comments plus submitted reviews that carry a verdict or a summary.

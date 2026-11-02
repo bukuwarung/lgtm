@@ -611,9 +611,10 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const conv = useMemo(() => (bots.size ? conversation.map((c) => (bots.has(c.author) ? { ...c, bot: true } : c)) : conversation), [conversation, bots.size]);
   // Resolved and outdated conversations are hidden unless I'm in them (Settings → Conversations), until "show".
   const [hideSettled] = useStoredFlag('hideSettled', true);
-  const [showSettled, setShowSettled] = useState(false);
+  const [showSettled, setShowSettled] = useStoredFlag(`showSettled:${repo}#${n}`, false); // remembered per PR
   const settled = (t: Thread) => (t.isResolved || t.isOutdated) && !t.comments.nodes.some((c) => c.author?.login === me);
-  const hiddenThreads = hideSettled && !showSettled ? allThreads.filter(settled).length : 0;
+  const settledCount = hideSettled ? allThreads.filter(settled).length : 0;
+  const hiddenThreads = showSettled ? 0 : settledCount;
   const shownThreads = (since && sinceData ? allThreads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : allThreads).filter((t) => !hiddenThreads || !settled(t));
   const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
   useEffect(() => {
@@ -962,8 +963,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
               pr={pr}
               conversation={conv}
               threads={shownThreads}
-              hiddenThreads={hiddenThreads}
-              onShowHidden={() => setShowSettled(true)}
+              settled={settledCount}
+              settledShown={showSettled}
+              onToggleSettled={setShowSettled}
               drafts={drafts}
               checks={checks}
               onRefreshChecks={loadChecks}

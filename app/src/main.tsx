@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
@@ -515,8 +515,8 @@ const inReviewing = (i: QueueItem) => i.reviewing || mentionNew(i);
 
 // A sidebar section: its groups in priority order, which group a PR falls in, and (if not the group's) its colour.
 // people: groups are people (the Team tab), shown with their picture and starting folded.
-// asked: (Team tab) the PRs asking a member for a review, listed under their own.
-type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string; note?: (g: string) => string; people?: boolean; asked?: (g: string) => QueueItem[] };
+// asked: (Team tab) how many PRs ask a member for a review; listed under their own once unfolded.
+type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string; note?: (g: string) => string; people?: boolean; asked?: (g: string) => number };
 const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 // My own PRs (and ones assigned to me), by where they stand.
 const MINE: Kind = {
@@ -534,7 +534,7 @@ const MINE: Kind = {
 // Each member's label also says how many reviews they're asked for, to help pick a reviewer who isn't swamped.
 // Ordered by whose PR has waited longest for review (ready, not yet approved), by who's least busy, or by name.
 type TeamSort = 'waiting' | 'free' | 'name';
-const teamKind = (members: string[], load: Record<string, number>, items: QueueItem[], sort: TeamSort, asked: Record<string, QueueItem[]> = {}): Kind => {
+const teamKind = (members: string[], load: Record<string, number>, items: QueueItem[], sort: TeamSort): Kind => {
   const waiting: Record<string, string> = {};
   for (const i of items) if (!i.isDraft && i.reviewDecision !== 'APPROVED' && (!waiting[i.author] || i.waitingSince < waiting[i.author])) waiting[i.author] = i.waitingSince;
   const order = [...members].sort(
@@ -550,7 +550,7 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     note: (m) =>
       [load[m] && `${load[m]} review${load[m] > 1 ? 's' : ''} requested`, waiting[m] && `a PR waiting ${since(waiting[m])}`].filter(Boolean).join(' · '),
     people: true,
-    asked: (m) => asked[m] ?? [],
+    asked: (m) => load[m] ?? 0,
   };
 };
 const avatar = (login: string) => `https://github.com/${encodeURIComponent(login)}.png?size=40`;
@@ -707,7 +707,11 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   const [team, setTeam] = useStoredValue('team', '');
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
-  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number>; asked: Record<string, QueueItem[]> } | null>(null);
+  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
+  // A member's "Asked to review" list, fetched each time it's unfolded (the last one shows meanwhile).
+  const [asked, setAsked] = useState<Record<string, QueueItem[] | string>>({});
+  const loadAsked = (login: string) =>
+    getAskedPRs(team.split('/')[0], login).then((l) => setAsked((a) => ({ ...a, [login]: l })), (e) => setAsked((a) => ({ ...a, [login]: a[login] ?? e.message })));
   const [teamErr, setTeamErr] = useState('');
   const teamRef = useRef(team); // the 3-minute refresh closes over the first render; read the current team here
   teamRef.current = team;
@@ -822,6 +826,8 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
   const shown = items?.filter((i) => i.mine || showDrafts || !i.isDraft || isCurrent(i));
+  const teamDrafts = teamData?.items.filter((i) => i.isDraft && !isCurrent(i)).length ?? 0;
+  const teamItems = teamData?.items.filter((i) => showDrafts || !i.isDraft || isCurrent(i)) ?? [];
   const listed = (i: QueueItem) => inReviewing(i) || (!!i.mentioned && !i.reviewing && !i.authored && isCurrent(i)); // the one you're on stays
   // The top PRs waiting on me load ahead, a few at a time, so opening one is instant; only ones that changed since
   // their cached copy, and not while lgtm is in the background.
@@ -951,10 +957,10 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
                   item(kind, e, layerOf.get(e.id))
                 ),
               )}
-              {!!kind.asked?.(g).length && (
-                <details class="asked">
-                  <summary class="asked-h">Asked to review <span class="count">{kind.asked(g).length}</span></summary>
-                  {kind.asked(g).map((i) => item(kind, i))}
+              {!!kind.asked?.(g) && (
+                <details class="asked" onToggle={(e) => e.currentTarget.open && loadAsked(g)}>
+                  <summary class="asked-h">Asked to review <span class="count">{kind.asked(g)}</span></summary>
+                  {typeof asked[g] === 'string' ? <p class="error">{asked[g] as string}</p> : asked[g] ? (asked[g] as QueueItem[]).map((i) => item(kind, i)) : <p class="note">Loading…</p>}
                 </details>
               )}
             </details>
@@ -975,18 +981,18 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       )}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', shown.filter(listed).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData?.items.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', shown.filter(listed).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
               {name} {n != null && <span class="count">{n}</span>}
             </button>
           ))}
         </div>
       )}
-      {tab === 'reviewing' && draftCount > 0 && (
+      {(tab === 'reviewing' || tab === 'team') && ((c) => c > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
-          {showDrafts ? `Hide ${draftCount} draft PR${draftCount > 1 ? 's' : ''}` : `${draftCount} draft PR${draftCount > 1 ? 's' : ''} hidden · show`}
+          {showDrafts ? `Hide ${c} draft PR${c > 1 ? 's' : ''}` : `${c} draft PR${c > 1 ? 's' : ''} hidden · show`}
         </button>
-      )}
+      ))(tab === 'team' ? teamDrafts : draftCount)}
       {!shown ? (
         !err && <p class="note">Loading…</p>
       ) : (
@@ -1008,7 +1014,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
               </div>
               {teamErr && <p class="error">{teamErr}</p>}
               {team && !teamData && !teamErr && <p class="note">Loading…</p>}
-              {teamData?.team === team && section(teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort, teamData.asked), teamData.items)}
+              {teamData?.team === team && section(teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamItems)}
             </>
           )}
         </>

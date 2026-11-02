@@ -247,8 +247,9 @@ type IndexProps = {
   pr: PR;
   conversation: ConversationItem[];
   threads: Thread[];
-  hiddenThreads?: number; // resolved or outdated ones left out
-  onShowHidden?: () => void;
+  settled?: number; // resolved or outdated ones, left out unless settledShown
+  settledShown?: boolean;
+  onToggleSettled?: () => void;
   drafts: Draft[];
   checks: Check[] | null;
   onRefreshChecks: () => void;
@@ -267,7 +268,7 @@ type IndexProps = {
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, hiddenThreads = 0, onShowHidden, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest, addMe }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest, addMe }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -413,10 +414,10 @@ export function ShortcutIndex({ repo, pr, conversation, threads, hiddenThreads =
             {tiers.resolved.map((t) => threadEntry(t, 'resolved'))}
           </details>
         )}
-        {!threads.length && !drafts.length && !hiddenThreads && <p class="note ix-pad">No review threads.</p>}
-        {hiddenThreads > 0 && (
-          <button class="link ix-pad ix-hidden" onClick={onShowHidden}>
-            {hiddenThreads} resolved or outdated hidden · show
+        {!threads.length && !drafts.length && !(settled && !settledShown) && <p class="note ix-pad">No review threads.</p>}
+        {settled > 0 && (
+          <button class="link ix-pad ix-hidden" onClick={onToggleSettled}>
+            {settledShown ? `Hide ${settled} resolved or outdated` : `${settled} resolved or outdated hidden · show`}
           </button>
         )}
       </Section>
