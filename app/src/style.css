@@ -87,7 +87,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 .pr-item:hover { background: var(--soft); text-decoration: none; }
 .stack { margin: 6px 0; padding: 2px 0 2px 4px; border: 1px dashed var(--border); border-radius: 6px; }
 .stack-h { padding: 2px 4px; font-size: calc(11px * var(--ts)); color: var(--muted); }
-.asked-h { padding: 6px 4px 2px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+.asked-h { padding: 6px 4px 2px; font-size: calc(11px * var(--ts)); color: var(--muted); cursor: pointer; }
+.asked-h:hover { color: var(--fg); }
 .layer { color: var(--fg); font-weight: 600; }
 .pr-item.cur { background: var(--soft); outline: 1px solid var(--border); }
 .pr-title { font-size: calc(13px * var(--ts)); line-height: 1.35; }

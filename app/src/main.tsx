@@ -952,10 +952,10 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
                 ),
               )}
               {!!kind.asked?.(g).length && (
-                <>
-                  <div class="asked-h">Asked to review</div>
+                <details class="asked">
+                  <summary class="asked-h">Asked to review <span class="count">{kind.asked(g).length}</span></summary>
                   {kind.asked(g).map((i) => item(kind, i))}
-                </>
+                </details>
               )}
             </details>
           );
