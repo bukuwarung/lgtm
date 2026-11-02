@@ -1,6 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, anchor, enclosing, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, declLabel, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -221,13 +221,12 @@ function PillMenu({ cls = '', label, head, children }: { cls?: string; label: Co
   );
 }
 
-// A hunk's header: its line ranges, faint, then where it is (DiffView `where`: its function or class), in full. It
-// stays pinned under the file's header while you're in the hunk (style.css), so a long one keeps its place in view.
-function HunkHeader({ header, where }: { header: string; where: string }) {
+// A hunk's header: its line ranges.
+function HunkHeader({ header }: { header: string }) {
   return (
     <td colSpan={3}>
-      <div class="hunk-line" title={where || undefined}>
-        <span class="hunk-range">{header.match(/^@@[^@]*@@/)?.[0] ?? header}</span> <span class="hunk-ctx">{where}</span>
+      <div class="hunk-line">
+        <span class="hunk-range">{header.match(/^@@[^@]*@@/)?.[0] ?? header}</span>
       </div>
     </td>
   );
@@ -509,15 +508,6 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     const pr = data.pr;
     rememberPeople([pr.user.login, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => !c.bot).map((c) => c.author)]);
   }, [data, conversation]);
-
-  // The file header's height, for the hunk header pinned under it (style.css); it changes with the text size.
-  useEffect(() => {
-    const h = document.querySelector<HTMLElement>('main .file-h');
-    if (!h) return;
-    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--file-h', `${h.offsetHeight}px`));
-    ro.observe(h);
-    return () => ro.disconnect();
-  }, [data]);
 
   const sinceBase = fromSha ?? lastReviewed;
   useEffect(() => void getPushPoints(repo, n).then(setPoints, () => setPoints([])), [repo, n, data?.pr.head.sha]);
@@ -1651,15 +1641,6 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   // "Show more lines": unchanged stretches come from the head version of the file, fetched on first use.
   const gapList = useMemo(() => (file.status === 'added' || file.status === 'removed' ? [] : gaps(hunks)), [hunks]);
   const [head, setHead] = useState<string[] | null>(null);
-  // Kotlin and Java: the file at the head, as it comes into view, so each hunk can say which function it's in (git's
-  // header names the class for everything inside one). Also what "show unchanged lines" expands from.
-  useEffect(() => {
-    if (head || file.status === 'removed' || !/\.(kt|kts|java|scala|groovy)$/.test(path)) return;
-    getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((src) => src != null && setHead(src.replace(/\n$/, '').split('\n')), () => {});
-  }, []);
-  // Where each hunk is: that function or class, else git's guess. One that repeats the hunk before shows no label.
-  const [hunkNames] = useStoredFlag('hunkNames', true); // Settings → Diff: off, a hunk header is its line numbers alone
-  const where = useMemo(() => hunks.map((h) => (!hunkNames ? '' : (head ? enclosing(head, h) : null) ?? h.header.replace(/^@@[^@]*@@\s*/, ''))), [hunks, head, hunkNames]);
   const [openGaps, setOpenGaps] = useState<Set<number>>(new Set());
   const [gapErr, setGapErr] = useState('');
   const expand = async (g: Gap) => {
@@ -1783,39 +1764,6 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
           ],
     [hunks, renderDocs, renderEdited, renderLine, renderSingle],
   );
-  const jvm = importSyntax(path) === 'jvm'; // Kotlin and Java: a hunk header names the declaration you've scrolled past
-  // The pinned hunk header names where you are: its own label (`where`) at the hunk's top, then each declaration in the
-  // hunk (data-decl) once it's scrolled under the header. Set on the page directly, as you scroll.
-  useEffect(() => {
-    const el = table.current;
-    if (!el || !jvm || !hunkNames) return;
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const first = el.querySelector<HTMLElement>('tr.hunk td');
-      const r = el.getBoundingClientRect();
-      if (!first || r.bottom < 0 || r.top > innerHeight) return;
-      // Where the pinned hunk header ends: under the file's own pinned header (measured, as WebKit may not resolve the
-      // sticky offset's calc() for getComputedStyle).
-      const fileHead = el.closest('section.file')?.querySelector<HTMLElement>('.file-h');
-      const pin = Math.max(fileHead?.getBoundingClientRect().bottom ?? 0, 0) + first.offsetHeight;
-      let head: HTMLElement | null = null;
-      let label: string | null = null;
-      const show = () => {
-        const ctx = head?.querySelector<HTMLElement>('.hunk-ctx');
-        const want = label ?? head?.dataset.where ?? '';
-        if (ctx && ctx.textContent !== want) (ctx.textContent = want), (ctx.title = want);
-      };
-      for (const tr of el.querySelectorAll<HTMLElement>('tr.hunk, tr[data-decl]')) {
-        if (tr.classList.contains('hunk')) (show(), (head = tr), (label = null));
-        else if (tr.getBoundingClientRect().top < pin) label = tr.dataset.decl!;
-      }
-      show();
-    };
-    const onScroll = () => (frame ||= requestAnimationFrame(update));
-    addEventListener('scroll', onScroll, { passive: true });
-    return () => (removeEventListener('scroll', onScroll), cancelAnimationFrame(frame));
-  }, [jvm, hunks, hunkNames]);
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
   // A doc comment switched to its source: a header row above its first line switches it back.
@@ -1828,8 +1776,8 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
           <>
             {gapBefore(hi) && gapRows(gapBefore(hi)!)}
             {file.status !== 'added' && ( // a new file's one hunk header (@@ -0,0 +1,n @@) says nothing
-              <tr class="hunk" data-where={where[hi] === where[hi - 1] ? '' : where[hi]}>
-                <HunkHeader header={h.header} where={where[hi] === where[hi - 1] ? '' : where[hi]} />
+              <tr class="hunk">
+                <HunkHeader header={h.header} />
               </tr>
             )}
             {h.lines.map((l, li) => {
@@ -1901,7 +1849,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`} data-decl={(jvm && l.kind !== '-' && declLabel(l.text)) || undefined}>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`}>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />

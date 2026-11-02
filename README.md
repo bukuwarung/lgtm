@@ -50,7 +50,6 @@ gh auth login   # once, if you haven't
 - Marks files changed since your last visit, and tells you when new commits land while you read.
 - Holds still while files load, and can reopen where you left off.
 - Status pills (checks failing, files without test changes, modules) open the list behind them.
-- In Kotlin and Java, each hunk names the function it's in, pinned while you scroll.
 - Files grouped by module (Gradle, npm, Go, Cargo, Python), with modules whose code changed but no test did.
 - Test files, and code whose tests the PR doesn't touch, marked on their icons.
 - File and folder icons by type (Material Icon Theme).

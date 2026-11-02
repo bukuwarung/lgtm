@@ -488,8 +488,8 @@ const ReviewScene = ({ thread }: { thread?: ComponentChildren }) => (
 );
 
 // The whole window's PR: what plain GitHub can't show you. A markdown file rendered (in lgtm's theme), its changed
-// blocks marked, with a review thread inside the document; a Kotlin file with its imports folded to one line, the hunk
-// named by its function, and the changed words picked out; pills that name the modules and the untested file.
+// blocks marked, with a review thread inside the document; a Kotlin file with its imports folded to one line and the
+// changed words picked out; pills that name the modules and the untested file.
 const MdThread = ({ who, when, text }: { who: string; when: string; text: string }) => (
   <div class="comment">
     <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time>
@@ -555,7 +555,7 @@ const Showcase = () => (
           <tr class="hunk">
             <td colSpan={3}>
               <div class="hunk-line">
-                <span class="hunk-range">@@ -28,6 +28,8 @@</span> <span class="hunk-ctx">suspend fun charge(order: Order): Result&lt;Receipt&gt;</span>
+                <span class="hunk-range">@@ -28,6 +28,8 @@</span>
               </div>
             </td>
           </tr>
