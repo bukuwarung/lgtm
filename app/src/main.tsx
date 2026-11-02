@@ -515,7 +515,7 @@ const inReviewing = (i: QueueItem) => i.reviewing || mentionNew(i);
 
 // A sidebar section: its groups in priority order, which group a PR falls in, and (if not the group's) its colour.
 // people: groups are people (the Team tab), shown with their picture and starting folded.
-// asked: (Team tab) how many PRs ask a member for a review; listed under their own once unfolded.
+// asked: (Team tab) how many PRs ask a member for a review; listed in its own tab under their name.
 type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string; note?: (g: string) => string; people?: boolean; asked?: (g: string) => number };
 const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 // My own PRs (and ones assigned to me), by where they stand.
@@ -708,8 +708,9 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
   const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
-  // A member's "Asked to review" list, fetched each time it's unfolded (the last one shows meanwhile).
+  // A member's "Asked to review" list, fetched each time its tab is picked (the last one shows meanwhile).
   const [asked, setAsked] = useState<Record<string, QueueItem[] | string>>({});
+  const [askedTab, setAskedTab] = useState<Record<string, boolean>>({});
   const loadAsked = (login: string) =>
     getAskedPRs(team.split('/')[0], login).then((l) => setAsked((a) => ({ ...a, [login]: l })), (e) => setAsked((a) => ({ ...a, [login]: a[login] ?? e.message })));
   const [teamErr, setTeamErr] = useState('');
@@ -947,22 +948,28 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
                 {kind.people ? <img class="g-face" src={avatar(g)} alt="" /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
                 {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review; how long their oldest PR has waited for one">{kind.note(g)}</span>}
               </summary>
-              {entries.map((e) =>
-                Array.isArray(e) ? (
-                  <div class="stack" key={e[0].id}>
-                    <div class="stack-h"><Octicon name="stack" /> Stack · bottom first</div>
-                    {e.map((i) => item(kind, i, layerOf.get(i.id)))}
-                  </div>
-                ) : (
-                  item(kind, e, layerOf.get(e.id))
-                ),
-              )}
               {!!kind.asked?.(g) && (
-                <details class="asked" onToggle={(e) => e.currentTarget.open && loadAsked(g)}>
-                  <summary class="asked-h">Asked to review <span class="count">{kind.asked(g)}</span></summary>
-                  {typeof asked[g] === 'string' ? <p class="error">{asked[g] as string}</p> : asked[g] ? (asked[g] as QueueItem[]).map((i) => item(kind, i)) : <p class="note">Loading…</p>}
-                </details>
+                <div class="member-tabs" role="tablist">
+                  <button role="tab" aria-selected={!askedTab[g]} onClick={() => setAskedTab((a) => ({ ...a, [g]: false }))}>
+                    PRs <span class="count">{inGroup.length}</span>
+                  </button>
+                  <button role="tab" aria-selected={!!askedTab[g]} onClick={() => (setAskedTab((a) => ({ ...a, [g]: true })), loadAsked(g))}>
+                    Asked to review <span class="count">{kind.asked(g)}</span>
+                  </button>
+                </div>
               )}
+              {askedTab[g] && kind.asked?.(g)
+                ? typeof asked[g] === 'string' ? <p class="error">{asked[g] as string}</p> : asked[g] ? (asked[g] as QueueItem[]).map((i) => item(kind, i)) : <p class="note">Loading…</p>
+                : entries.map((e) =>
+                    Array.isArray(e) ? (
+                      <div class="stack" key={e[0].id}>
+                        <div class="stack-h"><Octicon name="stack" /> Stack · bottom first</div>
+                        {e.map((i) => item(kind, i, layerOf.get(i.id)))}
+                      </div>
+                    ) : (
+                      item(kind, e, layerOf.get(e.id))
+                    ),
+                  )}
             </details>
           );
         })}
