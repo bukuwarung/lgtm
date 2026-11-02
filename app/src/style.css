@@ -113,6 +113,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ix-label, .ix-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ix-meta, .ix-sub { color: var(--muted); font-weight: 400; }
 .ix-sub { font-size: calc(11px * var(--ts)); }
+.ix-inline { margin-left: 2px; }
 .ix-pad { margin: 2px 14px; font-size: calc(12px * var(--ts)); }
 .ix-refresh { margin-left: auto; padding: 0 4px; color: var(--muted); font-weight: 400; cursor: pointer; }
 .ix-refresh:hover { color: var(--accent); }
@@ -944,3 +945,9 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .scene-themes .thm { height: 92px; font-size: 9px; }
 .scene-themes .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .scene-themes .set-row small { display: block; color: var(--muted); }
+/* A file header's folder: the tree and the module tag already place the file; it shows on hover. */
+.file-h .file-dir { opacity: 0; transition: opacity .12s; }
+.file-h:hover .file-dir { opacity: 1; }
+/* Filled changed lines (the default style) need no + / − signs: the colour says it, and the code gets that column back.
+   The subtle and bar styles keep them. */
+html:not(.ln-subtle):not(.ln-bar) .diff .code::before { content: none; }

@@ -1056,7 +1056,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
                 <Tg i="ws" t="whitespace ignored" />
               </button>
             )}
-            {points && points.length > 1 && (
+            {/* On a re-review (or while showing changes since a point): the push to show changes after. */}
+            {points && points.length > 1 && (lastReviewed || since) && (
               <PillMenu label={<Tg i="history" t="changes since…" />} head="Show only what changed after:">
                 {lastReviewed && (
                   <button onClick={() => showSince(null)}>

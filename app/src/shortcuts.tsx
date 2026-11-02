@@ -73,13 +73,15 @@ function Section({ id, title, count, extra, children }: { id?: string; title: st
   );
 }
 
-function Entry({ label, meta, sub, dim, onClick }: { label: ComponentChildren; meta?: ComponentChildren; sub?: string; dim?: boolean; onClick: () => void }) {
+// `inline`: the excerpt on the same line, after the label (review threads), not a line of its own.
+function Entry({ label, meta, sub, dim, inline, onClick }: { label: ComponentChildren; meta?: ComponentChildren; sub?: string; dim?: boolean; inline?: boolean; onClick: () => void }) {
   return (
     <button class={dim ? 'ix-item dim' : 'ix-item'} onClick={onClick} title={sub || (typeof label === 'string' ? label : undefined)}>
       <span class="ix-label">
         {label} {meta && <span class="ix-meta">{meta}</span>}
+        {inline && sub && <span class="ix-sub ix-inline"> {sub}</span>}
       </span>
-      {sub && <span class="ix-sub">{sub}</span>}
+      {!inline && sub && <span class="ix-sub">{sub}</span>}
     </button>
   );
 }
@@ -285,6 +287,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
         label={<>{waiting && <Octicon name="comment" />} {`${base(t.path)}${t.line ? ':' + t.line : ''}`}</>}
         meta={[inGroup !== 'bot' && first?.author?.login, waiting && 'awaiting your reply', inGroup !== 'resolved' && t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
         sub={oneLine(first?.bodyText ?? '')}
+        inline
         dim={t.isResolved || t.isOutdated}
         onClick={() => jumpTo('t-' + t.id, 'f-' + t.path)}
       />
@@ -391,6 +394,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             label={`${base(d.path)}${d.line ? ':' + d.line : ''}`}
             meta="pending"
             sub={oneLine(d.body)}
+            inline
             onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
           />
         ))}
@@ -552,7 +556,8 @@ function TreeDir({ node, depth, counts, viewed, onViewed }: TreeProps) {
       <summary style={{ paddingLeft: `${8 + depth * 14}px` }} title={name}>
         <img class="dicon" src={folderIcon(name, false)} alt="" />
         <img class="dicon open" src={folderIcon(name, true)} alt="" />
-        <span class="tree-dir-name">{name}</span>
+        {/* A long chain shows its last two folders (the whole of it on hover). */}
+        <span class="tree-dir-name">{name.split('/').length > 2 ? '…/' + name.split('/').slice(-2).join('/') : name}</span>
         <ViewedMark paths={allFiles(n)} viewed={viewed} onViewed={onViewed} what="this folder" />
       </summary>
       <TreeChildren node={n} depth={depth + 1} counts={counts} viewed={viewed} onViewed={onViewed} />
