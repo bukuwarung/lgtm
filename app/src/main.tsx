@@ -59,6 +59,8 @@ function App() {
   useEffect(() => void document.documentElement.classList.toggle('strike-removed', strike), [strike]);
   const [footer] = useStoredFlag('fileFooter', false); // Settings → Diff: each file's closing bar
   useEffect(() => void document.documentElement.classList.toggle('no-file-footer', !footer), [footer]);
+  const [signs] = useStoredFlag('diffSigns', false); // Settings → Diff: + and − before changed lines
+  useEffect(() => void document.documentElement.classList.toggle('no-signs', !signs), [signs]);
   const [lineStyle] = useStoredValue('lineStyle', 'fill'); // Settings → Diff: changed lines filled, tinted or barred
   useEffect(() => {
     document.documentElement.classList.toggle('ln-subtle', lineStyle === 'subtle');
