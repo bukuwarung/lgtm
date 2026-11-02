@@ -515,7 +515,8 @@ const inReviewing = (i: QueueItem) => i.reviewing || mentionNew(i);
 
 // A sidebar section: its groups in priority order, which group a PR falls in, and (if not the group's) its colour.
 // people: groups are people (the Team tab), shown with their picture and starting folded.
-type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string; note?: (g: string) => string; people?: boolean };
+// asked: (Team tab) the PRs asking a member for a review, listed under their own.
+type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) => string; colorOf?: (i: QueueItem) => string; note?: (g: string) => string; people?: boolean; asked?: (g: string) => QueueItem[] };
 const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 // My own PRs (and ones assigned to me), by where they stand.
 const MINE: Kind = {
@@ -533,7 +534,7 @@ const MINE: Kind = {
 // Each member's label also says how many reviews they're asked for, to help pick a reviewer who isn't swamped.
 // Ordered by whose PR has waited longest for review (ready, not yet approved), by who's least busy, or by name.
 type TeamSort = 'waiting' | 'free' | 'name';
-const teamKind = (members: string[], load: Record<string, number>, items: QueueItem[], sort: TeamSort): Kind => {
+const teamKind = (members: string[], load: Record<string, number>, items: QueueItem[], sort: TeamSort, asked: Record<string, QueueItem[]> = {}): Kind => {
   const waiting: Record<string, string> = {};
   for (const i of items) if (!i.isDraft && i.reviewDecision !== 'APPROVED' && (!waiting[i.author] || i.waitingSince < waiting[i.author])) waiting[i.author] = i.waitingSince;
   const order = [...members].sort(
@@ -549,6 +550,7 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     note: (m) =>
       [load[m] && `${load[m]} review${load[m] > 1 ? 's' : ''} requested`, waiting[m] && `a PR waiting ${since(waiting[m])}`].filter(Boolean).join(' · '),
     people: true,
+    asked: (m) => asked[m] ?? [],
   };
 };
 const avatar = (login: string) => `https://github.com/${encodeURIComponent(login)}.png?size=40`;
@@ -705,7 +707,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
   const [team, setTeam] = useStoredValue('team', '');
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
-  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
+  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number>; asked: Record<string, QueueItem[]> } | null>(null);
   const [teamErr, setTeamErr] = useState('');
   const teamRef = useRef(team); // the 3-minute refresh closes over the first render; read the current team here
   teamRef.current = team;
@@ -949,6 +951,12 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
                   item(kind, e, layerOf.get(e.id))
                 ),
               )}
+              {!!kind.asked?.(g).length && (
+                <>
+                  <div class="asked-h">Asked to review</div>
+                  {kind.asked(g).map((i) => item(kind, i))}
+                </>
+              )}
             </details>
           );
         })}
@@ -1000,7 +1008,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
               </div>
               {teamErr && <p class="error">{teamErr}</p>}
               {team && !teamData && !teamErr && <p class="note">Loading…</p>}
-              {teamData?.team === team && section(teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamData.items)}
+              {teamData?.team === team && section(teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort, teamData.asked), teamData.items)}
             </>
           )}
         </>

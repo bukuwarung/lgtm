@@ -262,24 +262,27 @@ export async function getTeamMembers(team: string): Promise<string[]> {
 }
 
 // Plus each member's review load: open PRs that ask them, by name, for a review.
-export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
+// A team's open PRs by its members, and the open PRs in the org asking each member, by name, for a review (`asked`,
+// up to 30 each; `load` counts them all).
+export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number>; asked: Record<string, QueueItem[]> }> {
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
   const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
-  if (!chunks.length) return { members, items: [], load: {} };
+  if (!chunks.length) return { members, items: [], load: {}, asked: {} };
   const vars = {
     ...Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`])),
     ...Object.fromEntries(members.map((m, k) => [`r${k}`, `is:open is:pr archived:false org:${org} user-review-requested:${m}`])),
   };
   const d = await graphql(
     `query(${Object.keys(vars).map((v) => `$${v}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){nodes{...F}}`).join(' ')}
-    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}
+    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:30){issueCount nodes{...F}}`).join(' ')}}
     ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
     vars,
   );
   const items = chunks.flatMap((_, k) => d[`s${k}`].nodes.map(toItem)) as QueueItem[];
   const load = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].issueCount as number]));
-  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load };
+  const asked = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].nodes.map(toItem) as QueueItem[]]));
+  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load, asked };
 }
 
 // Top-level PR comments plus submitted reviews that carry a verdict or a summary.
