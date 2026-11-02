@@ -1758,8 +1758,9 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     if (!f || lineNoted(hunks[hi].lines[li])) return undefined;
     return { ...f, head: li === f.start || lineNoted(hunks[hi].lines[li - 1]) };
   };
-  // Hunks that are nothing but a folded import block, one after another (a long import list changed in two places):
-  // one row for them all, the unchanged imports between them included, until it's opened.
+  // Hunks that are nothing but a folded import block (one, or several in a row: a long import list changed in two
+  // places): one row for them all until it's opened, taking in the unchanged imports between them and, at the file's
+  // top, the lines above; the unchanged lines after them get their button in that same row.
   const importRuns = useMemo(() => {
     const only = hunks.map((h, hi) => !h.lines.some(lineNoted) && folds.some((f) => f.hunk === hi && f.start === 0 && f.end === h.lines.length - 1));
     const runs: { first: number; last: number }[] = [];
@@ -1769,9 +1770,15 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
       if (r && r.last === hi - 1) r.last = hi;
       else runs.push({ first: hi, last: hi });
     });
-    return runs.filter((r) => r.last > r.first);
+    return runs;
   }, [hunks, folds, threads.length, drafts.length]);
   const closedRun = (hi: number) => importRuns.find((r) => hi >= r.first && hi <= r.last && !folds.some((f) => f.hunk >= r.first && f.hunk <= r.last && openFolds.has(`${f.hunk}-${f.start}`)));
+  // The gap row before hunk `i` that a closed run's one row stands in for: between its hunks, above it at the file's
+  // top, and (until opened) the one after it.
+  const gapInRun = (i: number) => {
+    const at = closedRun(i), before = closedRun(i - 1);
+    return (!!at && (i > at.first || at.first === 0)) || (!!before && before.last === i - 1 && !openGaps.has(i));
+  };
   // KDoc / Javadoc / JSDoc comments, rendered like IntelliJ's reader mode; "source" shows the lines again.
   const [renderDocs] = useStoredFlag('renderDocs', true);
   const [renderEdited] = useStoredFlag('renderEditedDocs', true); // edited ones too, changed parts marked
@@ -1798,7 +1805,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         {hunks.map((h, hi) => (
           <>
             {/* No @@ header row: the line numbers say where each line is, and the gap rows divide the hunks. */}
-            {gapBefore(hi) && !(closedRun(hi) && hi > closedRun(hi)!.first) && gapRows(gapBefore(hi)!)}
+            {gapBefore(hi) && !gapInRun(hi) && gapRows(gapBefore(hi)!)}
             {h.lines.map((l, li) => {
               const one = foldAt(hi, li);
               const run = one && closedRun(hi);
@@ -1810,8 +1817,11 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                 : one;
               const open = () => {
                 setOpenFolds((s) => new Set([...s, ...(run ? members : [one!]).map((f) => `${f.hunk}-${f.start}`)]));
-                if (run) for (let i = run.first + 1; i <= run.last; i++) if (gapBefore(i)) void expand(gapBefore(i)!);
+                if (run) for (let i = run.first === 0 ? 0 : run.first + 1; i <= run.last; i++) if (gapBefore(i)) void expand(gapBefore(i)!);
               };
+              // The unchanged lines after the run, as a button in its row (not a row of their own).
+              const after = run && gapBefore(run.last + 1);
+              const afterCount = after && (after.to === null ? null : after.to - after.from + 1);
               // Outside the project and the standard library, one name per library (dagger.hilt rides with dagger).
               const outside = fold ? fold.newPackages.filter((p) => (!root || !p.startsWith(root)) && !/^(java|kotlin)(\.|$)/.test(p)) : [];
               const external = outside.filter((p) => !outside.some((q) => p.startsWith(q + '.')));
@@ -1826,6 +1836,9 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                         ⋯ {[fold.packageMoved && 'package moved', (fold.added || fold.removed) && [fold.added && `+${fold.added}`, fold.removed && `−${fold.removed}`].filter(Boolean).join(' ') + ' imports'].filter(Boolean).join(', ') || 'package'}
                         {external.length > 0 && <span class="new-pkgs"> · new: {external.slice(0, 3).join(', ')}{external.length > 3 ? ` +${external.length - 3}` : ''}</span>}
                       </button>
+                      {after && !openGaps.has(after.before) && !(after.to === null && head && after.from > head.length) && (
+                        <button onClick={() => void expand(after)}>{afterCount === null ? ' · ↓ Show the rest of the file' : ` · ↕ Show ${afterCount} unchanged line${afterCount === 1 ? '' : 's'}`}</button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -1891,7 +1904,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
             })}
           </>
         ))}
-        {gapBefore(hunks.length) && gapRows(gapBefore(hunks.length)!)}
+        {gapBefore(hunks.length) && !gapInRun(hunks.length) && gapRows(gapBefore(hunks.length)!)}
       </tbody>
     </table>
   );
