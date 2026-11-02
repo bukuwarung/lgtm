@@ -221,6 +221,17 @@ function PillMenu({ cls = '', label, head, children }: { cls?: string; label: Co
   );
 }
 
+// A file's Viewed switch as an icon: an eye, a green check once viewed. Still a checkbox underneath (keyboard, screen
+// readers), only drawn as the icon.
+function ViewedToggle({ viewed, onToggle, title }: { viewed: boolean; onToggle: () => void; title: string }) {
+  return (
+    <label class={viewed ? 'viewed-box on' : 'viewed-box'} title={title}>
+      <input type="checkbox" checked={viewed} onChange={onToggle} aria-label="Viewed" />
+      <Octicon name={viewed ? 'check' : 'eye'} />
+    </label>
+  );
+}
+
 // While a PR loads (one never opened before; others show their saved copy at once): its shape, shimmering, where the
 // index, title, pills and files will be.
 const SKEL_LINES = [62, 48, 71, 35, 80, 54, 66, 28];
@@ -1482,14 +1493,11 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
-        {/* Shown on hover (or keyboard focus); they keep their place so the header doesn't shift. */}
-        <span class="file-acts">
-          {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
-          <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
-        </span>
-        <label class="viewed-box" title={`Mark as viewed on GitHub${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').viewed)}`}>
-          <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
-        </label>
+        {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
+        <button class="icon-btn" title={`Comment on this file${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fileComment)}`} aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>
+          <Octicon name="comment" />
+        </button>
+        <ViewedToggle viewed={viewed} onToggle={onToggleViewed} title={`${viewed ? 'Viewed: click to mark as not viewed' : 'Mark as viewed'} on GitHub${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').viewed)}`} />
       </header>
       {collapsed ? (
         <button class="collapsed-row" onClick={onExpand}>
@@ -1524,19 +1532,18 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           <Notes ctx={ctx} threads={[]} drafts={[]} form={t?.path === path && !!t.atEnd} />
           {!hideDeleted && <footer class="file-f">
             <span class="file-f-name" title={path}>{path.split('/').pop()}</span>
-            <button onClick={() => ctx.setTarget({ path, side: 'RIGHT', atEnd: true })}>Comment</button>
-            <label class="viewed-box" title="Mark as viewed and go to the next file">
-              <input
-                type="checkbox"
-                checked={viewed}
-                onChange={() => {
-                  onToggleViewed();
-                  // Done with this file: collapse it and bring the next one up.
-                  if (!viewed) requestAnimationFrame(() => (ref.current?.nextElementSibling as HTMLElement | null)?.scrollIntoView());
-                }}
-              />{' '}
-              Viewed
-            </label>
+            <button class="icon-btn" title="Comment on this file" aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT', atEnd: true })}>
+              <Octicon name="comment" />
+            </button>
+            <ViewedToggle
+              viewed={viewed}
+              title={viewed ? 'Viewed: click to mark as not viewed' : 'Mark as viewed and go to the next file'}
+              onToggle={() => {
+                onToggleViewed();
+                // Done with this file: collapse it and bring the next one up.
+                if (!viewed) requestAnimationFrame(() => (ref.current?.nextElementSibling as HTMLElement | null)?.scrollIntoView());
+              }}
+            />
           </footer>}
         </>
       )}

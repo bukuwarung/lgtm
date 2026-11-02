@@ -133,7 +133,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 .thread, .draft, .comment { scroll-margin-top: calc(var(--nav) + var(--bar) + 48px); }
 @keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
 .flash { animation: flash 1.6s ease-out; }
-.viewed-box { display: flex; align-items: center; gap: 4px; font-size: calc(12px * var(--ts)); color: var(--muted); cursor: pointer; }
+.viewed-box { position: relative; display: inline-grid; place-items: center; padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); color: var(--muted); cursor: pointer; }
+.viewed-box:hover { color: var(--fg); }
+.viewed-box.on { color: var(--addfg); border-color: currentColor; }
+.viewed-box input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.viewed-box:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .file.viewed .file-h { opacity: .75; }
 .file-f { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--soft); border-radius: 0 0 6px 6px; }
 html.no-file-footer .file-f { display: none; }
@@ -940,6 +944,3 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .scene-themes .thm { height: 92px; font-size: 9px; }
 .scene-themes .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .scene-themes .set-row small { display: block; color: var(--muted); }
-/* A file header's <> and Comment: on hover or keyboard focus only, keeping their room. */
-.file-acts { display: inline-flex; align-items: center; gap: 8px; visibility: hidden; }
-.file-h:hover .file-acts, .file-h:focus-within .file-acts { visibility: visible; }
