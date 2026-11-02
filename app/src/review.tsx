@@ -1491,8 +1491,16 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         </span>
         {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
-        {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
-        {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
+        {canRich && (
+          <button class="icon-btn" title={rich ? 'Show the source' : 'Show it rendered'} aria-label={rich ? 'Show the source' : 'Show it rendered'} onClick={() => setRich(!rich)}>
+            <Octicon name={rich ? 'file-diff' : 'markdown'} />
+          </button>
+        )}
+        {canPreview && (
+          <button class="icon-btn" title={preview ? 'Show the source' : 'Show the image'} aria-label={preview ? 'Show the source' : 'Show the image'} onClick={() => setPreview(!preview)}>
+            <Octicon name={preview ? 'file-diff' : 'image'} />
+          </button>
+        )}
         {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
         <button class="icon-btn" title={`Comment on this file${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fileComment)}`} aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>
           <Octicon name="comment" />
@@ -1997,7 +2005,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
   if (src === undefined) return <p class="note pad" style={{ minHeight: stand }}>Loading…</p>;
-  if (src === null) return <p class="note pad">Couldn't load this file. Switch to Source.</p>;
+  if (src === null) return <p class="note pad">Couldn't load this file. The icon in its header switches to the source.</p>;
 
   const t = ctx.target?.path === path ? ctx.target : null;
   // Threads, drafts and removals attach to the first top-level block ending at or after their line.
