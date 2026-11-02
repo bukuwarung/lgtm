@@ -23,7 +23,7 @@ import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
-import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { Resizer } from './resizer.tsx';
 import { below, jumpTo, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -2731,6 +2731,8 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
 // the Claude app records it. ⌥-click starts a new one anyway.
 function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: string; prUrl: string; label?: string }) {
   const [note, setNote] = useState('');
+  const [offer, setOffer] = useState(false); // the lgtm-review skill isn't installed: offer it
+  const [offerSkill, noOffer] = useStoredFlag('offerSkill', true);
   const [session, setSession] = useState<SessionState>(null);
   const title = session?.title ?? '';
   const [, setTick] = useState(0);
@@ -2765,7 +2767,9 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
     if (from && !e.altKey) return flash(await backToClaude(from.id, label ? '' : prompt));
     await openClaude(claudeNewLink(prompt, claudeFolder(repo)));
     linkNewClaude(pr.repo, pr.n, prUrl);
+    if (offerSkill && !(await claudeSkill().catch(() => null))?.installed) setOffer(true);
   };
+  const install = () => claudeSkill(true).then(() => (setOffer(false), flash('Skill installed: Claude can now send PRs here')), (e) => flash(`Couldn't install it: ${e.message}`));
   const what = label ? 'this PR' : 'this comment';
   return (
     <span class="claude-menu">
@@ -2780,6 +2784,12 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
         {label && session?.state === 'waiting' && <span class="claude-state waiting"> waiting for you</span>}
       </button>
       {note && <span class="claude-note">{note}</span>}
+      {offer && !note && (
+        <span class="claude-note">
+          Add the lgtm skill so Claude sends PRs ready for review here, linked to its session.{' '}
+          <button class="link" onClick={install}>Add it</button> · <button class="link" onClick={() => (setOffer(false), noOffer())}>Don't ask again</button>
+        </span>
+      )}
     </span>
   );
 }
