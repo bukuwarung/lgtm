@@ -379,6 +379,12 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .diff tr.import-fold td { padding: 0 8px; font: calc(11px * var(--cs)) var(--sans); }
 .import-fold button { border: none; background: none; padding: 0; color: var(--muted); opacity: .8; cursor: pointer; }
 .import-fold button:hover { color: var(--accent); opacity: 1; }
+/* Rows standing in for lines not shown (unchanged lines, folded imports): a tinted strip, its words on hover (or keyboard
+   focus) only. They keep their height, so nothing moves. */
+.diff tr.import-fold td { background: color-mix(in srgb, var(--soft) 50%, transparent); }
+.diff :is(tr.gap, tr.import-fold) button { opacity: 0; transition: opacity .12s; }
+.diff :is(tr.gap, tr.import-fold):is(:hover, :focus-within) button { opacity: 1; }
+.demo-page .diff :is(tr.gap, tr.import-fold) button { opacity: 1; } /* the README pictures show what they say */
 .new-pkgs { font-family: var(--mono); }
 .bar-group { flex: none; display: flex; align-items: center; gap: 6px; }
 .bar-index { padding: 3px 8px; }
