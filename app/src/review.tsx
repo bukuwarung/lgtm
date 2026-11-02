@@ -1417,11 +1417,10 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   // the folded hunk added; split the gap there if that matters.
   const hunks = useMemo(() => {
     const all = parsePatch(file.patch ?? '');
-    if (!ctx.ignoreWs) return all;
     const noted = new Set([...threads.map((x) => x.line), ...drafts.map((d) => d.line)].filter((n): n is number => n != null));
-    // Then only a few unchanged lines around each real change, as git would show them.
+    // Then only a few unchanged lines around each real change, as git would show them, minus the ones that say nothing.
     return trimContext(
-      ignoreWhitespace(all).filter((h) => h.lines.some((l) => l.kind !== ' ' || (l.new != null && noted.has(l.new)))),
+      ctx.ignoreWs ? ignoreWhitespace(all).filter((h) => h.lines.some((l) => l.kind !== ' ' || (l.new != null && noted.has(l.new)))) : all,
       3,
       noted,
     );

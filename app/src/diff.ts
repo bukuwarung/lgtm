@@ -133,13 +133,16 @@ export function ignoreWhitespace(hunks: Hunk[]): Hunk[] {
 // (or a line someone commented on), as git cuts its hunks, and split the hunk there; the lines between become a gap
 // like any other ("Show N unchanged lines").
 export function trimContext(hunks: Hunk[], keep = 3, noted: Set<number> = new Set()): Hunk[] {
+  const idle = (l: Line) => l.kind === ' ' && !(l.new != null && noted.has(l.new)) && /^\s*(?:[})\]]+[;,]?|\*\/)?\s*$/.test(l.text);
   return hunks.flatMap((h) => {
     const key = h.lines.map((l) => l.kind !== ' ' || (l.new != null && noted.has(l.new)));
     const kept = h.lines.map((_, i) => key.slice(Math.max(0, i - keep), i + keep + 1).some(Boolean));
-    if (kept.every(Boolean)) return [h];
     const out: Hunk[] = [];
     let run: Line[] = [];
     const close = () => {
+      // Unchanged lines at a hunk's edges that say nothing (blank, a lone } or ) or */) stay folded.
+      while (run.length && idle(run[0])) run.shift();
+      while (run.length && idle(run.at(-1)!)) run.pop();
       if (!run.length) return;
       const olds = run.filter((l) => l.old != null), news = run.filter((l) => l.new != null);
       const newStart = news[0]?.new ?? h.newStart;
@@ -148,7 +151,7 @@ export function trimContext(hunks: Hunk[], keep = 3, noted: Set<number> = new Se
     };
     h.lines.forEach((l, i) => (kept[i] ? run.push(l) : close()));
     close();
-    return out;
+    return out.length === 1 && out[0].lines.length === h.lines.length ? [h] : out;
   });
 }
 

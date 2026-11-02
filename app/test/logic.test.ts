@@ -609,6 +609,13 @@ test('trimContext: with whitespace ignored, only a few unchanged lines around ea
   // Already tight: the hunk as it was.
   const tight = { header: '@@ -1,3 +1,3 @@', newStart: 1, lines: [ctx(1), { kind: '+' as const, text: 'z', new: 2 }, ctx(3)] };
   assert.equal(trimContext([tight], 3)[0], tight);
+  // Unchanged lines at the edges that say nothing (blank, }, ), */) are left out; inside a hunk they stay.
+  const c = (n: number, text: string) => ({ kind: ' ' as const, text, old: n, new: n });
+  const edges = trimContext([{ header: '@@ -1,7 +1,7 @@', newStart: 1, lines: [c(1, '    }'), c(2, '}'), c(3, ''), { kind: '-' as const, text: 'a', old: 4 }, { kind: '+' as const, text: 'b', new: 4 }, c(5, '  '), c(6, 'x()'), c(7, '  */')] }], 3);
+  assert.deepEqual(edges[0].lines.map((l) => l.text), ['a', 'b', '  ', 'x()']);
+  assert.equal(edges[0].newStart, 4);
+  // …unless someone commented on one.
+  assert.equal(trimContext([{ header: '@@ -1,2 +1,2 @@', newStart: 1, lines: [c(1, '}'), { kind: '+' as const, text: 'z', new: 2 }] }], 3, new Set([1]))[0].lines.length, 2);
 });
 
 test('importsOnly: a file whose every change is an import', async () => {
