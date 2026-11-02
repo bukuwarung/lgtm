@@ -253,8 +253,9 @@ main { padding: 16px; }
 .mermaid-source > summary { cursor: pointer; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .md code { padding: .1em .3em; background: var(--soft); border-radius: 4px; font-size: 85%; }
 .md pre code { padding: 0; background: none; }
-.md table { border-collapse: collapse; }
-.md th, .md td { padding: 4px 10px; border: 1px solid var(--border); }
+/* Cells keep words whole (overflow-wrap: anywhere would let a column shrink to "Sche/dule"); a table too wide scrolls. */
+.md table { display: block; width: max-content; max-width: 100%; overflow: auto; border-collapse: collapse; }
+.md th, .md td { padding: 4px 10px; border: 1px solid var(--border); overflow-wrap: normal; }
 .md blockquote { margin: 0; padding: 0 1em; color: var(--muted); border-left: 3px solid var(--border); }
 .chunk [data-src], .chunk tr[data-src] > :first-child { position: relative; }
 .chunk [data-chg]:not(:has([data-chg])) { background: var(--add); box-shadow: -6px 0 0 var(--add), 6px 0 0 var(--add); }
