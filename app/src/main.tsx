@@ -847,11 +847,12 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
     return () => void (stop = true);
   }, [items, settled]);
 
-  const item = (kind: Kind, i: QueueItem, layer?: string) => (
+  // who: the person the list is already about (you on "Your PRs", the member on their PRs tab); their face is left out.
+  const item = (kind: Kind, i: QueueItem, layer?: string, who?: string) => (
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
-        <img class="pr-face" src={avatar(i.face)} alt="" title={i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`} /> {i.face} ·{' '}
+        {i.face !== who && <><img class="pr-face" src={avatar(i.face)} alt="" title={i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`} /> {i.face} ·{' '}</>}
         {layer && <b class="layer">{layer} </b>}
         {i.repo}#{i.number} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>
@@ -940,6 +941,7 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
       <>
         {kind.groups.map(([g, label]) => {
           const inGroup = list.filter((i) => kind.groupOf(i) === g);
+          const own = (i: QueueItem) => (kind.people ? g : kind === MINE && i.authored ? i.author : undefined);
           const stackOf = new Map(findStacks(inGroup).flatMap((st) => st.map((i) => [i.id, st] as const)));
           const entries = inGroup.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
           return (
@@ -964,10 +966,10 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
                     Array.isArray(e) ? (
                       <div class="stack" key={e[0].id}>
                         <div class="stack-h"><Octicon name="stack" /> Stack · bottom first</div>
-                        {e.map((i) => item(kind, i, layerOf.get(i.id)))}
+                        {e.map((i) => item(kind, i, layerOf.get(i.id), own(i)))}
                       </div>
                     ) : (
-                      item(kind, e, layerOf.get(e.id))
+                      item(kind, e, layerOf.get(e.id), own(e))
                     ),
                   )}
             </details>
