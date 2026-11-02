@@ -881,9 +881,26 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
     const cur = sections.reduce((c, s, i) => (s.getBoundingClientRect().top <= top ? i : c), -1);
     const path = sections[Math.max(cur, 0)]?.id.slice(2);
     const ordered = threadOrder(shownThreads, drafts, shown);
+    // The next (or previous) change below the bars: where a run of changed lines starts, or a changed block in a
+    // rendered markdown file. Files draw as they come near, so past the last drawn one, the next file with changes.
+    const jumpChange = (dir: 1 | -1, again = true) => {
+      const isChange = (el: Element | null) => !!el?.matches('tr.ln.a, tr.ln.d');
+      const starts = [...document.querySelectorAll<HTMLElement>('main > .file tr.ln.a, main > .file tr.ln.d, main > .file [data-chg]')].filter(
+        (el) => !el.matches('tr') || !isChange(el.previousElementSibling),
+      );
+      const at = (el: HTMLElement) => el.getBoundingClientRect().top - top;
+      const next = dir > 0 ? starts.find((el) => at(el) > 2) : starts.findLast((el) => at(el) < -2);
+      if (next) return scrollBy({ top: at(next) });
+      const file = dir > 0 ? sections.slice(cur + 1).find((s) => !s.querySelector('table.diff, .rich')) : null;
+      if (!file) return;
+      file.scrollIntoView();
+      if (again) setTimeout(() => jumpChange(dir, false), 250); // once it has drawn, its first change
+    };
     const act: Record<Action, () => void> = {
       nextFile: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
       prevFile: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
+      nextChange: () => jumpChange(1),
+      prevChange: () => jumpChange(-1),
       nextThread: () => ordered.length && go(Math.min(threadCursor.current + 1, ordered.length - 1)),
       prevThread: () => ordered.length && go(Math.max(threadCursor.current - 1, 0)),
       viewed: () => path && toggleViewed(path),

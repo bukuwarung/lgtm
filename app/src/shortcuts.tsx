@@ -272,7 +272,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
   const rerunnable = checks?.filter((c) => c.state === 'failure' && c.jobId && runOf(c)) ?? [];
   const bots = conversation.filter((c) => c.bot);
   const convEntry = (c: ConversationItem, i: number) => (
-    <Entry key={c.id} label={c.author} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : 'commented'} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+    <Entry key={c.id} label={c.author} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
   );
   const tiers = threadTiers(sortedThreads, me);
   const threadEntry = (t: Thread) => {

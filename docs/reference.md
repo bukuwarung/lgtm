@@ -8,6 +8,7 @@ Change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 |---|---|
 | `j` / `k` | Next / previous file |
 | `n` / `p` | Next / previous review thread |
+| `d` / `⇧D` | Next / previous change, across files |
 | `Space` | Comment on the line under the mouse |
 | `c` | Comment on the current file |
 | `v` | Mark the current file viewed |

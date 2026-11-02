@@ -7,6 +7,8 @@ export const ACTIONS = [
   ['prevFile', 'Previous file', 'k'],
   ['nextThread', 'Next review thread', 'n'],
   ['prevThread', 'Previous review thread', 'p'],
+  ['nextChange', 'Next change (across files)', 'd'],
+  ['prevChange', 'Previous change', 'D'],
   ['viewed', 'Mark the current file viewed', 'v'],
   ['whitespace', 'Ignore whitespace on/off', 'w'],
   ['comment', 'Comment on the line under the mouse (or at the top of the view)', ' '],
