@@ -247,6 +247,8 @@ type IndexProps = {
   pr: PR;
   conversation: ConversationItem[];
   threads: Thread[];
+  hiddenThreads?: number; // resolved or outdated ones left out
+  onShowHidden?: () => void;
   drafts: Draft[];
   checks: Check[] | null;
   onRefreshChecks: () => void;
@@ -265,7 +267,7 @@ type IndexProps = {
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest, addMe }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, hiddenThreads = 0, onShowHidden, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest, addMe }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -411,7 +413,12 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             {tiers.resolved.map((t) => threadEntry(t, 'resolved'))}
           </details>
         )}
-        {!threads.length && !drafts.length && <p class="note ix-pad">No review threads.</p>}
+        {!threads.length && !drafts.length && !hiddenThreads && <p class="note ix-pad">No review threads.</p>}
+        {hiddenThreads > 0 && (
+          <button class="link ix-pad ix-hidden" onClick={onShowHidden}>
+            {hiddenThreads} resolved or outdated hidden · show
+          </button>
+        )}
       </Section>
 
       <Section title="Files" count={files.length} extra={viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>

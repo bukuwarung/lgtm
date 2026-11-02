@@ -609,7 +609,12 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   // Accounts marked as bots in Settings count as bots here, like GitHub's own.
   const allThreads = useMemo(() => markBots(threads, bots), [threads, bots.size]);
   const conv = useMemo(() => (bots.size ? conversation.map((c) => (bots.has(c.author) ? { ...c, bot: true } : c)) : conversation), [conversation, bots.size]);
-  const shownThreads = since && sinceData ? allThreads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : allThreads;
+  // Resolved and outdated conversations are hidden unless I'm in them (Settings → Conversations), until "show".
+  const [hideSettled] = useStoredFlag('hideSettled', true);
+  const [showSettled, setShowSettled] = useState(false);
+  const settled = (t: Thread) => (t.isResolved || t.isOutdated) && !t.comments.nodes.some((c) => c.author?.login === me);
+  const hiddenThreads = hideSettled && !showSettled ? allThreads.filter(settled).length : 0;
+  const shownThreads = (since && sinceData ? allThreads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : allThreads).filter((t) => !hiddenThreads || !settled(t));
   const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
   useEffect(() => {
     const main = document.querySelector('main');
@@ -957,6 +962,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
               pr={pr}
               conversation={conv}
               threads={shownThreads}
+              hiddenThreads={hiddenThreads}
+              onShowHidden={() => setShowSettled(true)}
               drafts={drafts}
               checks={checks}
               onRefreshChecks={loadChecks}
@@ -1881,7 +1888,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                       {at.new ?? ''}
                     </td>
                     <td class="code">
-                      <DocView doc={doc} syntax={docSyntax(path) ?? 'kdoc'} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
+                      <DocView doc={indent ? { ...doc, indent: Math.max(0, doc.indent - indent) } : doc} syntax={docSyntax(path) ?? 'kdoc'} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
                     </td>
                   </tr>
                 );

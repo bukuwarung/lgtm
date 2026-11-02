@@ -343,13 +343,14 @@ export function Settings() {
             <Flag k="renderSingleComments" initial={false} label="Single comment lines too" hint="A lone comment line, lighter. Comments after code on the same line stay as they are." />
           </Flag>
         </Flag>
-        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Source is a click away per file. Their look: Markdown files, below." demo>
+        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. The source is a click away per file. Their look: Markdown files, below." demo>
           <Flag k="strikeRemoved" initial={false} label="Strike through removed text" hint="Removed passages show in a red box, as their source." />
         </Flag>
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
         <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo>
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
         </Flag>
+        <Flag k="hideSettled" initial={true} label="Hide resolved and outdated conversations" hint="Unless you commented in them. The index offers to show them per PR." />
         <Flag k="resumePosition" initial={false} label="Reopen a PR where you left off" hint="Off: every PR opens at its top." />
         <Flag k="flagUntested" initial={true} label="Point out code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)." />
       </section>
