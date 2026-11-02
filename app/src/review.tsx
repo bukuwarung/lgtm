@@ -1446,7 +1446,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   return (
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref} style={{ containIntrinsicSize: placeholder }}>
       <header class="file-h">
-        <span class={`st s-${file.status}`}><Tg i={file.status} t={file.status} /></span>
+        {file.status !== 'modified' && <span class={`st s-${file.status}`}><Tg i={file.status} t={file.status} /></span>}{/* modified: the usual, untagged */}
         {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
             src/), cut from the left (the nearest folders stay); the full path on hover. */}
         <a
@@ -1482,8 +1482,11 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <button onClick={() => setRich(!rich)}>{rich ? 'Source' : 'Rich'}</button>}
         {canPreview && <button onClick={() => setPreview(!preview)}>{preview ? 'Source' : 'Preview'}</button>}
-        {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
-        <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
+        {/* Shown on hover (or keyboard focus); they keep their place so the header doesn't shift. */}
+        <span class="file-acts">
+          {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
+          <button onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>Comment</button>
+        </span>
         <label class="viewed-box" title={`Mark as viewed on GitHub${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').viewed)}`}>
           <input type="checkbox" checked={viewed} onChange={onToggleViewed} /> Viewed
         </label>
@@ -1755,6 +1758,20 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     if (!f || lineNoted(hunks[hi].lines[li])) return undefined;
     return { ...f, head: li === f.start || lineNoted(hunks[hi].lines[li - 1]) };
   };
+  // Hunks that are nothing but a folded import block, one after another (a long import list changed in two places):
+  // one row for them all, the unchanged imports between them included, until it's opened.
+  const importRuns = useMemo(() => {
+    const only = hunks.map((h, hi) => !h.lines.some(lineNoted) && folds.some((f) => f.hunk === hi && f.start === 0 && f.end === h.lines.length - 1));
+    const runs: { first: number; last: number }[] = [];
+    only.forEach((yes, hi) => {
+      if (!yes) return;
+      const r = runs.at(-1);
+      if (r && r.last === hi - 1) r.last = hi;
+      else runs.push({ first: hi, last: hi });
+    });
+    return runs.filter((r) => r.last > r.first);
+  }, [hunks, folds, threads.length, drafts.length]);
+  const closedRun = (hi: number) => importRuns.find((r) => hi >= r.first && hi <= r.last && !folds.some((f) => f.hunk >= r.first && f.hunk <= r.last && openFolds.has(`${f.hunk}-${f.start}`)));
   // KDoc / Javadoc / JSDoc comments, rendered like IntelliJ's reader mode; "source" shows the lines again.
   const [renderDocs] = useStoredFlag('renderDocs', true);
   const [renderEdited] = useStoredFlag('renderEditedDocs', true); // edited ones too, changed parts marked
@@ -1781,9 +1798,20 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         {hunks.map((h, hi) => (
           <>
             {/* No @@ header row: the line numbers say where each line is, and the gap rows divide the hunks. */}
-            {gapBefore(hi) && gapRows(gapBefore(hi)!)}
+            {gapBefore(hi) && !(closedRun(hi) && hi > closedRun(hi)!.first) && gapRows(gapBefore(hi)!)}
             {h.lines.map((l, li) => {
-              const fold = foldAt(hi, li);
+              const one = foldAt(hi, li);
+              const run = one && closedRun(hi);
+              if (run && (hi > run.first || !one.head)) return null; // the run's one row is its first hunk's
+              // A run of import-only hunks: its folds added up, and opening it opens them all and the imports between.
+              const members = run ? folds.filter((f) => f.hunk >= run.first && f.hunk <= run.last) : [];
+              const fold = one && run
+                ? { ...one, added: members.reduce((n, f) => n + f.added, 0), removed: members.reduce((n, f) => n + f.removed, 0), newPackages: [...new Set(members.flatMap((f) => f.newPackages))], packageMoved: members.some((f) => f.packageMoved) }
+                : one;
+              const open = () => {
+                setOpenFolds((s) => new Set([...s, ...(run ? members : [one!]).map((f) => `${f.hunk}-${f.start}`)]));
+                if (run) for (let i = run.first + 1; i <= run.last; i++) if (gapBefore(i)) void expand(gapBefore(i)!);
+              };
               // Outside the project and the standard library, one name per library (dagger.hilt rides with dagger).
               const outside = fold ? fold.newPackages.filter((p) => (!root || !p.startsWith(root)) && !/^(java|kotlin)(\.|$)/.test(p)) : [];
               const external = outside.filter((p) => !outside.some((q) => p.startsWith(q + '.')));
@@ -1793,7 +1821,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                     <td colSpan={3}>
                       <button
                         title={`Show the package and imports${fold.newPackages.length ? `\nNew to this file: ${fold.newPackages.join(', ')}` : ''}`}
-                        onClick={() => setOpenFolds((s) => new Set(s).add(`${hi}-${fold.start}`))}
+                        onClick={open}
                       >
                         ⋯ {[fold.packageMoved && 'package moved', (fold.added || fold.removed) && [fold.added && `+${fold.added}`, fold.removed && `−${fold.removed}`].filter(Boolean).join(' ') + ' imports'].filter(Boolean).join(', ') || 'package'}
                         {external.length > 0 && <span class="new-pkgs"> · new: {external.slice(0, 3).join(', ')}{external.length > 3 ? ` +${external.length - 3}` : ''}</span>}
@@ -2859,7 +2887,7 @@ function Conversation({ pr, items, lang, repo, me, mentions }: { pr: PR; items: 
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="comment" id="pr-description">
-        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b>{pr.user.login}</b> <span class="badge">opened this pull request</span> <CopyLink url={pr.html_url} />
+        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b>{pr.user.login}</b> <CopyLink url={pr.html_url} />
         {me === pr.user.login && !editing && (
           <button class="icon-btn" title="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />

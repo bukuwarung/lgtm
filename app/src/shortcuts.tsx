@@ -275,14 +275,15 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
     <Entry key={c.id} label={c.author} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
   );
   const tiers = threadTiers(sortedThreads, me);
-  const threadEntry = (t: Thread) => {
+  // In the bots' and the resolved group, their author and "resolved" go without saying.
+  const threadEntry = (t: Thread, inGroup?: 'bot' | 'resolved') => {
     const first = t.comments.nodes[0];
     const waiting = !!me && awaitsMe(t, me, pr.user.login === me);
     return (
       <Entry
         key={t.id}
         label={<>{waiting && <Octicon name="comment" />} {`${base(t.path)}${t.line ? ':' + t.line : ''}`}</>}
-        meta={[first?.author?.login, waiting && 'awaiting your reply', t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
+        meta={[inGroup !== 'bot' && first?.author?.login, waiting && 'awaiting your reply', inGroup !== 'resolved' && t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
         sub={oneLine(first?.bodyText ?? '')}
         dim={t.isResolved || t.isOutdated}
         onClick={() => jumpTo('t-' + t.id, 'f-' + t.path)}
@@ -301,7 +302,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
   return (
     <div class="index">
       <Section title="Conversation" count={conversation.length + 1}>
-        <Entry label="Description" meta={pr.user.login} onClick={() => jumpTo('pr-description')} />
+        <Entry label="Description" onClick={() => jumpTo('pr-description')} />
         {conversation.map((c, i) => !c.bot && convEntry(c, i))}
         {bots.length > 0 && (
           <details class="ix-ckgroup" open={!foldBots}>
@@ -317,7 +318,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
               <span class="ix-label">
                 {!who.startsWith('team ') && <img src={`https://github.com/${encodeURIComponent(who)}.png?size=40`} alt="" />}
-                {who.startsWith('team ') ? who : '@' + who} <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
+                {who} <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
               </span>
             </button>
             {reRequest && r.id && r.tone !== 'WAITING' && <ReRequest login={who} again={reRequest} />}
@@ -393,23 +394,23 @@ export function ShortcutIndex({ repo, pr, conversation, threads, drafts, checks,
             onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
           />
         ))}
-        {[...tiers.mine, ...tiers.human].map(threadEntry)}
+        {[...tiers.mine, ...tiers.human].map((t) => threadEntry(t))}
         {tiers.bot.length > 0 && (
           <details class="ix-ckgroup" open>
             <summary><Octicon name="dependabot" /> {tiers.bot.length} from bots</summary>
-            {tiers.bot.map(threadEntry)}
+            {tiers.bot.map((t) => threadEntry(t, 'bot'))}
           </details>
         )}
         {tiers.resolved.length > 0 && (
           <details class="ix-ckgroup">
             <summary><Octicon name="check" /> {tiers.resolved.length} resolved</summary>
-            {tiers.resolved.map(threadEntry)}
+            {tiers.resolved.map((t) => threadEntry(t, 'resolved'))}
           </details>
         )}
         {!threads.length && !drafts.length && <p class="note ix-pad">No review threads.</p>}
       </Section>
 
-      <Section title="Files" count={files.length} extra={<span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>
+      <Section title="Files" count={files.length} extra={viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>
         {modules?.size ? (
           <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} onViewed={onViewed} />
         ) : (

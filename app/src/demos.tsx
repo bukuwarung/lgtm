@@ -35,7 +35,7 @@ function File({ path, st = 'modified', add, del, mod, untested, children }: { pa
   return (
     <section class="file">
       <header class="file-h">
-        <span class={`st s-${st}`}><Tg i={st} t={st} /></span>
+        {st !== 'modified' && <span class={`st s-${st}`}><Tg i={st} t={st} /></span>}
         <a class="file-name" title={path}>
           <FileIcon path={path} big untested={untested} />
           <b>{path.slice(path.lastIndexOf('/') + 1)}</b>
@@ -694,13 +694,13 @@ SCENES.app = {
             <div class="index">
               <details open class="ix-sec">
                 <summary>Conversation <span class="count">3</span></summary>
-                <button class="ix-item"><span class="ix-label">Description <span class="ix-meta">rina</span></span></button>
+                <button class="ix-item"><span class="ix-label">Description</span></button>
                 <button class="ix-item"><span class="ix-label">budi <span class="ix-meta"><Tg i="approved" t="approved" /></span></span><span class="ix-sub">Nice, much safer.</span></button>
               </details>
               <details open class="ix-sec">
                 <summary>Reviewers <span class="count">2</span></summary>
-                <button class="ix-item ix-person"><span class="ix-label"><img src={face('budi')} alt="" />@budi <span class="ix-meta v-APPROVED"><Tg i="approved" t="approved" /></span></span></button>
-                <button class="ix-item ix-person"><span class="ix-label"><img src={face('you')} alt="" />@you <span class="ix-meta v-WAITING"><Tg i="waiting" t="waiting" /></span></span></button>
+                <button class="ix-item ix-person"><span class="ix-label"><img src={face('budi')} alt="" />budi <span class="ix-meta v-APPROVED"><Tg i="approved" t="approved" /></span></span></button>
+                <button class="ix-item ix-person"><span class="ix-label"><img src={face('you')} alt="" />you <span class="ix-meta v-WAITING"><Tg i="waiting" t="waiting" /></span></span></button>
               </details>
               <details open class="ix-sec">
                 <summary>Checks <span class="count">6</span></summary>

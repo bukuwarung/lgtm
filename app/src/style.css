@@ -934,3 +934,6 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .scene-themes .thm { height: 92px; font-size: 9px; }
 .scene-themes .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .scene-themes .set-row small { display: block; color: var(--muted); }
+/* A file header's <> and Comment: on hover or keyboard focus only, keeping their room. */
+.file-acts { display: inline-flex; align-items: center; gap: 8px; visibility: hidden; }
+.file-h:hover .file-acts, .file-h:focus-within .file-acts { visibility: visible; }
