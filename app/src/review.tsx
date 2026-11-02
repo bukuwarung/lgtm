@@ -1662,9 +1662,6 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   const path = file.filename;
   const [rainbowOn] = useStoredFlag('rainbowBrackets', false); // highlightCode reads it (main.tsx sets it)
   const hl = useMemo(() => highlightHunks(hunks, path), [hunks, rainbowOn]);
-  // The indentation all the file's shown lines share, left out (Settings → Diff), so nested code starts at the left.
-  const [trimIndent] = useStoredFlag('trimIndent', true);
-  const indent = useMemo(() => (trimIndent ? commonIndent(hunks.flatMap((h) => h.lines.map((l) => l.text))) : 0), [hunks, trimIndent]);
   // "Show more lines": unchanged stretches come from the head version of the file, fetched on first use.
   const gapList = useMemo(() => (file.status === 'added' || file.status === 'removed' ? [] : gaps(hunks)), [hunks]);
   const [head, setHead] = useState<string[] | null>(null);
@@ -1757,6 +1754,13 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
   // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
   const [foldImports] = useStoredFlag('foldImports', true);
   const folds = useMemo(() => (foldImports && importSyntax(path) ? importFolds(hunks, importSyntax(path)!) : []), [hunks, foldImports]);
+  // The indentation all the file's shown lines share, left out (Settings → Diff), so nested code starts at the left.
+  // Folded imports don't count: they sit at the left anyway.
+  const [trimIndent] = useStoredFlag('trimIndent', true);
+  const indent = useMemo(
+    () => (trimIndent ? commonIndent(hunks.flatMap((h, hi) => h.lines.filter((_, i) => !folds.some((f) => f.hunk === hi && i >= f.start && i <= f.end)).map((l) => l.text))) : 0),
+    [hunks, folds, trimIndent],
+  );
   const root = ownRoot(path);
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set());
   const noted = (side: Side, n: number) =>
