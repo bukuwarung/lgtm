@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, commonIndent, dedentHtml, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
-import { codeIndex, refTo, specRefs } from '../src/specrefs.ts';
+import { codeIndex, peekLines, refTo, specRefs } from '../src/specrefs.ts';
 import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
@@ -695,4 +695,8 @@ test('specrefs: code spans in specs naming the PR\'s files, and where', () => {
   const refs = specRefs(files, ix);
   assert.deepEqual(refs.get('app/proguard-rules.pro'), [{ spec: 'openspec/changes/x/tasks.md', line: 1, label: 'tasks.md 2.1' }]);
   assert.deepEqual(refs.get('app/src/main/java/x/LegacySignalHandler.kt'), [{ spec: 'openspec/changes/x/tasks.md', line: 2, label: 'tasks.md 2.2' }]);
+  // The preview: from a little above the declaration; else from the file's first change.
+  const patch = '@@ -1,6 +1,7 @@\n a\n b\n c\n d\n+fun go() {}\n e\n f';
+  assert.deepEqual(peekLines(patch, 5, 3).map((l) => l.text), ['c', 'd', 'fun go() {}']);
+  assert.deepEqual(peekLines(patch, undefined, 2).map((l) => l.text), ['c', 'd']);
 });

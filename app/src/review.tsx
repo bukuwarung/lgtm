@@ -25,7 +25,8 @@ import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lin
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
-import { codeIndex, isDoc, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
+import { codeIndex, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
+import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
 import { below, jumpTo, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
@@ -2082,6 +2083,36 @@ function jumpToLine(path: string, line?: number) {
   setTimeout(go, 50);
 }
 
+// A link's preview: the lines of the change it names, highlighted, below the link (above it near the window's bottom).
+function SpecPeek({ p, ix, onEnter, onLeave, onGo }: { p: { path: string; line?: number; at: DOMRect }; ix: CodeIndex; onEnter: () => void; onLeave: () => void; onGo: () => void }) {
+  const lines = peekLines(ix.patches.get(p.path) ?? '', p.line);
+  const lang = languageFor(p.path);
+  const text = lines.map((l) => l.text).join('\n');
+  const html = lang ? splitLines(highlightCode(text, lang)) : text.split('\n').map((l) => l.replace(/[&<>]/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt' }[c]};`));
+  const below = p.at.bottom + 320 < innerHeight;
+  const style = { left: `${Math.min(p.at.left, innerWidth - 580)}px`, ...(below ? { top: `${p.at.bottom + 6}px` } : { bottom: `${innerHeight - p.at.top + 6}px` }) };
+  return (
+    <div class="spec-peek" style={style} onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={onGo} title="Go there">
+      <div class="spec-peek-h">
+        <b>{base(p.path)}</b>
+        {p.line ? `:${p.line}` : ''} <small>{dir(p.path)}</small>
+      </div>
+      {lines.length ? (
+        <table class="diff">
+          {lines.map((l, i) => (
+            <tr class={l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln'}>
+              <td class="num">{l.new ?? ''}</td>
+              <td class="code" dangerouslySetInnerHTML={{ __html: html[i] ?? '' }} />
+            </tr>
+          ))}
+        </table>
+      ) : (
+        <p class="note">No lines to show.</p>
+      )}
+    </div>
+  );
+}
+
 // A changed file's header: where the specs name it, a chip per spec (its first mention; all of them on hover).
 function SpecChips({ refs }: { refs?: SpecRef[] }) {
   if (!refs?.length) return null;
@@ -2103,6 +2134,23 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const path = file.filename;
   const root = useRef<HTMLDivElement>(null);
   const linkTo = (slug: string) => `https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${path}#${slug}`;
+  // Hovering a link to the code (linkSpecRefs) previews the change it names, after a moment; the preview stays while
+  // the mouse is on it, and a click on it goes there.
+  const [peek, setPeek] = useState<{ path: string; line?: number; at: DOMRect } | null>(null);
+  const peekTimer = useRef(0);
+  const peekOver = (e: MouseEvent) => {
+    const ref = (e.target as Element).closest('[data-jump]');
+    clearTimeout(peekTimer.current);
+    if (!ref) return;
+    peekTimer.current = window.setTimeout(
+      () => setPeek({ path: ref.getAttribute('data-jump')!, line: Number(ref.getAttribute('data-line')) || undefined, at: ref.getBoundingClientRect() }),
+      250,
+    );
+  };
+  const peekOut = () => {
+    clearTimeout(peekTimer.current);
+    peekTimer.current = window.setTimeout(() => setPeek(null), 200);
+  };
   useEffect(() => {
     tidyDoc(root.current, linkTo);
     signRelativeImages(root.current, ctx.headRepo, ctx.pr.head.sha, dir(path)); // its images, by their path in the repo
@@ -2191,12 +2239,25 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
       class={`rich ${look.class}`}
       style={look.style}
       ref={root}
+      onMouseOver={peekOver}
+      onMouseOut={peekOut}
       onClick={(e) => {
         const ref = (e.target as Element).closest('[data-jump]');
         if (ref) return void (e.preventDefault(), jumpToLine(ref.getAttribute('data-jump')!, Number(ref.getAttribute('data-line')) || undefined));
         onDocClick(e, root.current, linkTo);
       }}
     >
+      {peek &&
+        createPortal(
+          <SpecPeek
+            p={peek}
+            ix={ctx.codeIx}
+            onEnter={() => clearTimeout(peekTimer.current)}
+            onLeave={peekOut}
+            onGo={() => (setPeek(null), jumpToLine(peek.path, peek.line))}
+          />,
+          document.body,
+        )}
       <Notes ctx={ctx} threads={orphanT} drafts={orphanD} form={t?.side === 'LEFT' && !removed.some((r) => inRun(r, t.line))} />
       {chunks.map((c, i) => {
         if (hidden(i)) {

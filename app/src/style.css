@@ -76,6 +76,11 @@ code, pre { font-family: var(--mono); }
 .spec-touch:empty { display: none; }
 .spec-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .spec-chip:hover { color: var(--fg); }
+.spec-peek { position: fixed; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: 300px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); cursor: pointer; }
+.spec-peek-h { padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: calc(12px * var(--ts)); }
+.spec-peek-h small { color: var(--muted); }
+.spec-peek table { width: 100%; border-collapse: collapse; font: calc(12px * var(--cs)) / 1.5 var(--mono); }
+.spec-peek td.code { white-space: pre; overflow: hidden; text-overflow: ellipsis; max-width: 0; width: 100%; }
 /* The jump between a PR's specs and its code: bottom right, clear of the scroll strip. */
 .doc-code-jump { position: fixed; right: 28px; bottom: 20px; z-index: 15; padding: 4px 12px; border-radius: 999px; box-shadow: 0 2px 8px var(--shadow); background: var(--bg); }
 .jira-pill { font-variant-numeric: tabular-nums; }

@@ -1,4 +1,4 @@
-import { parsePatch } from './diff.ts';
+import { parsePatch, type Line } from './diff.ts';
 
 // Specs that name the PR's code. A code span in a spec naming a changed file (by path, or its name), or a class or
 // function the PR's diff declares, links to that file; and each file lists where the specs name it.
@@ -8,7 +8,7 @@ export const isDoc = (path: string) => /\.(md|mdx|markdown)$/i.test(path) || /(^
 
 const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 export type Ref = { path: string; line?: number }; // a changed file, and the line declaring what's named (new side)
-export type CodeIndex = { files: string[]; symbols: Map<string, Ref> };
+export type CodeIndex = { files: string[]; symbols: Map<string, Ref>; patches: Map<string, string> };
 type F = { filename: string; patch?: string };
 
 // Declarations in the diff's added and unchanged lines; a file named like a class stands for it (Kotlin, Java, Swift).
@@ -23,7 +23,17 @@ export function codeIndex(files: F[]): CodeIndex {
     const name = base(f.filename).replace(/\.\w+$/, '');
     if (/^[A-Z]\w{2,}$/.test(name) && !symbols.has(name)) symbols.set(name, { path: f.filename });
   }
-  return { files: code.map((f) => f.filename), symbols };
+  return { files: code.map((f) => f.filename), symbols, patches: new Map(code.map((f) => [f.filename, f.patch ?? ''])) };
+}
+
+// What a link's preview shows: the diff around the declaration it names, else the file's first change.
+export function peekLines(patch: string, line?: number, max = 14): Line[] {
+  const hunks = parsePatch(patch);
+  const h = (line && hunks.find((x) => x.lines.some((l) => l.new === line))) || hunks.find((x) => x.lines.some((l) => l.kind !== ' ')) || hunks[0];
+  if (!h) return [];
+  const at = line && h.lines.some((l) => l.new === line) ? h.lines.findIndex((l) => l.new === line) : Math.max(0, h.lines.findIndex((l) => l.kind !== ' '));
+  const from = Math.max(0, at - 2);
+  return h.lines.slice(from, from + max);
 }
 
 // The changed file a code span names, if any: `app/build.gradle.kts`, `proguard-rules.pro`, `Foo.kt:12`,
