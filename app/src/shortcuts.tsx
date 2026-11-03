@@ -466,7 +466,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
         count={files.length}
         extra={
           <>
-            {((code) => code.length > 0 && <span class="ck-sum" title="Code files a spec in this PR names (Settings → Reviewing)">specs name {code.filter((f) => !f.unspecced).length}/{code.length}</span>)(files.filter((f) => f.unspecced !== undefined))}
+            {((code) => code.length > 0 && <span class="ck-sum" title="Of this PR's code files, how many its specs (Markdown, openspec) mention by name; the others are marked “no spec” below. Settings → Reviewing turns this off.">{code.filter((f) => !f.unspecced).length}/{code.length} named in specs</span>)(files.filter((f) => f.unspecced !== undefined))}
             {viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}
           </>
         }

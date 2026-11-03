@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -23,9 +23,9 @@ import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
-import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { reportError, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
-import { changedRange, isStringsXml, parseString, stringHtml } from './strings.ts';
+import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
@@ -655,7 +655,10 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
     if (practice) return onSubmitted(event), onReviewed(null), true;
     // GitHub won't take a comment or a change request with nothing in it. A comment with nothing new (my comments
     // already posted one by one) has nothing to send: it's done, move on. A change request needs to say what.
-    if (event === 'REQUEST_CHANGES' && !body.trim() && !drafts.length && !pending?.count) body = mySummary || 'Please see the comments.';
+    if (event === 'REQUEST_CHANGES' && !body.trim() && !drafts.length && !pending?.count) {
+      if (!mySummary) throw new Error('Write what to change in the summary first.'); // no comments of mine to say it
+      body = mySummary;
+    }
     if (event !== 'APPROVE' && !body.trim() && !drafts.length && !pending?.count) {
       onSubmitted(event);
       if (next || focus) onReviewed(null);
@@ -700,6 +703,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
         result = { ok: false, text: `Review submitted, but Slack failed: ${e.message}` };
       }
     }
+    if (result && !result.ok) reportError(result.text); // the review is in; Slack failed
     if (next || focus) {
       onReviewed(result);
       return true;
@@ -1056,7 +1060,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -1225,6 +1229,7 @@ type SubmitProps = {
   mentions: string[];
   authored: boolean; // my own PR: GitHub only takes comments there
   mySummary: string; // what my open comments ask for, to start a change request's summary from
+  lineComments: { path: string; line?: number | null }[]; // my comments waiting to go with the review
 };
 
 // A change request's summary from my open threads: what I asked, once per text, with where.
@@ -1246,7 +1251,7 @@ const APPROVE_NOTE = 'Approved, but please address the comments';
 // The verdict to start from: pending comments → request changes; my earlier threads still open → comment; else approve.
 export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEvent => (pending ? 'REQUEST_CHANGES' : myOpenThreads ? 'COMMENT' : 'APPROVE');
 
-function SubmitPanel({ count, myOpenThreads, mySummary, slackTo, slackNote, onSubmit, repo, mentions, authored }: SubmitProps) {
+function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, onSubmit, repo, mentions, authored }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
@@ -1285,6 +1290,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, slackTo, slackNote, onSu
       }
     } catch (e: any) {
       setErr(e.message);
+      reportError(`The review wasn't submitted: ${e.message}`);
     }
     setBusy(false);
   }
@@ -1322,6 +1328,25 @@ function SubmitPanel({ count, myOpenThreads, mySummary, slackTo, slackNote, onSu
             </label>
           )}
           {slackNote && <p class="note">{slackNote}</p>}
+          {/* What GitHub (and Slack) will get, so nothing about submitting is a surprise. */}
+          <div class="sends">
+            {event !== 'APPROVE' && !body.trim() && !count && !(event === 'REQUEST_CHANGES' && mySummary) ? (
+              event === 'COMMENT' ? (myOpenThreads ? 'Nothing new to send: your comments are already on GitHub. Submitting just moves on.' : 'Nothing to send yet: write a summary, or comment on lines.') : 'A change request needs to say what to change: write it above.'
+            ) : (
+              <>
+                Sends {authored ? 'a comment' : { COMMENT: 'a comment', APPROVE: 'an approval', REQUEST_CHANGES: 'a change request' }[event]}
+                {body.trim() ? ' with your summary' : event === 'REQUEST_CHANGES' ? ' with a summary of your comments' : ''}
+                {count > 0 && `, and ${count} line comment${count > 1 ? 's' : ''}`}
+                {notify && slackTo && slackTo.length > 0 && `; messages ${slackTo.map((l) => '@' + l).join(', ')} on Slack`}.
+                {lineComments.length > 0 && (
+                  <span class="sends-list">
+                    {lineComments.slice(0, 6).map((d) => `${base(d.path)}${d.line ? ':' + d.line : ''}`).join(' · ')}
+                    {lineComments.length > 6 ? ` · ${lineComments.length - 6} more` : ''}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
           <button class="primary" disabled={busy} onClick={go}>
             {busy ? 'Submitting…' : authored ? 'Comment' : 'Submit review'}
           </button>
@@ -1460,7 +1485,7 @@ function useNear<T extends Element>() {
 }
 
 // stand: the file's expected height (CSS) for a view that draws only once it has loaded, to hold its place till then.
-type BodyProps = { file: File; hunks: Hunk[]; ctx: Ctx; threads: Thread[]; drafts: Draft[]; stand?: string; strings?: boolean }; // strings: an Android strings file, read as texts
+type BodyProps = { file: File; hunks: Hunk[]; ctx: Ctx; threads: Thread[]; drafts: Draft[]; stand?: string; strings?: boolean; sxNotes?: Map<string, string[]> }; // strings: an Android strings file, read as texts; sxNotes: its translation checks
 
 type SectionProps = {
   file: File;
@@ -1489,6 +1514,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
   const hideDeleted = collapseDeleted && file.status === 'removed' && !showDeleted;
   const [ref, near] = useNear<HTMLElement>();
+  const sxNotes = useTranslationNotes(file, ctx, canStrings && strings && near);
   // With whitespace ignored, a hunk left with no change at all (nor a comment on it) folds into the unchanged lines
   // around it. ponytail: those lines' old numbers (shown only with "old line numbers") can be off by the blank lines
   // the folded hunk added; split the gap there if that matters.
@@ -1606,7 +1632,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
       ) : rich ? (
         <RichView {...body} />
       ) : (
-        <DiffView {...body} strings={strings} />
+        <DiffView {...body} strings={strings} sxNotes={sxNotes} />
       )}
           <Notes ctx={ctx} threads={[]} drafts={[]} form={t?.path === path && !!t.atEnd} />
           {!hideDeleted && <footer class="file-f">
@@ -1727,7 +1753,37 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
   );
 }
 
-function DiffView({ file, hunks, ctx, threads, drafts, strings }: BodyProps) {
+// An Android strings file's changed strings checked against the other languages' same file at the PR's commit
+// (strings.ts translationNotes): one folder listing per res/ folder, one file per language.
+const resDirs = new Map<string, Promise<string[]>>();
+function useTranslationNotes(file: File, ctx: Ctx, on: boolean) {
+  const [notes, setNotes] = useState<Map<string, string[]>>(new Map());
+  useEffect(() => {
+    const m = file.filename.match(/^(.*\/res)\/(values[^/]*)\/([^/]+)$/);
+    const changed = on && m && file.patch ? changedStrings(parsePatch(file.patch).flatMap((h) => h.lines)) : null;
+    if (!m || !changed?.size) return;
+    const [, res, dir, name] = m;
+    const sha = ctx.pr.head.sha;
+    let stop = false;
+    (async () => {
+      const key = `${ctx.headRepo}@${sha}:${res}`;
+      if (!resDirs.has(key)) resDirs.set(key, listDir(ctx.headRepo, res, sha).then((l) => l.filter((x) => x.type === 'dir').map((x) => x.name), () => []));
+      const others = [];
+      for (const d of (await resDirs.get(key)!).filter((d) => d !== dir && isLocaleDir(d))) {
+        const path = `${res}/${d}/${name}`;
+        const xml = await getRaw(ctx.headRepo, path, sha).catch(() => null);
+        if (xml == null) continue;
+        const theirs = ctx.codeIx.patches.get(path);
+        others.push({ dir: d, strings: stringsOf(xml), changed: new Set(theirs ? changedStrings(parsePatch(theirs).flatMap((h) => h.lines)).keys() : []) });
+      }
+      if (!stop) setNotes(translationNotes(changed, others));
+    })();
+    return () => void (stop = true);
+  }, [file.sha, on]);
+  return notes;
+}
+
+function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyProps) {
   // One line number, the new one (a removed line shows its old one, faint), unless Settings asks for both.
   const [oldNums] = useStoredFlag('oldLineNumbers', false);
   const path = file.filename;
@@ -1828,7 +1884,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings }: BodyProps) {
     const l = hunks[hi].lines[li];
     const other = l.kind === ' ' ? null : hunks[hi].lines.map((x) => parseString(x.text)).find((o, i) => o && o.name === s.name && hunks[hi].lines[i].kind === (l.kind === '+' ? '-' : '+'));
     const r = other && changedRange(l.kind === '-' ? s.value : other.value, l.kind === '-' ? other.value : s.value);
-    return stringHtml({ ...s, lead: s.lead.slice(indent) }, r ? (l.kind === '-' ? r[0] : r[1]) : undefined);
+    return stringHtml({ ...s, lead: s.lead.slice(indent) }, r ? (l.kind === '-' ? r[0] : r[1]) : undefined, l.kind === '+' ? sxNotes?.get(s.name) : undefined);
   };
   const codeHtml = (hi: number, li: number, text: string) => {
     if (testFile && testPhase(text)) return phaseHtml(text);

@@ -30,9 +30,47 @@ export function changedRange(a: string, b: string): [[number, number], [number, 
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt' }[c]};`);
 const show = (s: string) => esc(s).replace(/%(\d+\$)?[-#+ 0,(]*\d*(\.\d+)?[sdfxXoeEgGc%]/g, '<span class="sx-arg">$&</span>').replace(/\n/g, '<span class="sx-nl">↵</span>');
 // The row: its name, then its text (`changed`: the part to mark, in the readable text).
-export function stringHtml(s: StringLine, changed?: [number, number]): string {
+export function stringHtml(s: StringLine, changed?: [number, number], notes: string[] = []): string {
   const v = s.value;
   const text = changed && changed[1] > changed[0] ? `${show(v.slice(0, changed[0]))}<mark class="sx-ch">${show(v.slice(...changed))}</mark>${show(v.slice(changed[1]))}` : show(v);
   // Name and text side by side, so a long text wraps in its own column; the indentation as a margin.
-  return `<span class="sx" style="padding-left:${s.lead.replace(/\t/g, '    ').length}ch"><span class="sx-key">${esc(s.name)}</span><span class="sx-val">${text || '<span class="sx-empty">empty</span>'}${s.untranslated ? '<span class="sx-tag">not translated</span>' : ''}</span></span>`;
+  return `<span class="sx" style="padding-left:${s.lead.replace(/\t/g, '    ').length}ch"><span class="sx-key">${esc(s.name)}</span><span class="sx-val">${text || '<span class="sx-empty">empty</span>'}${s.untranslated ? '<span class="sx-tag">not translated</span>' : ''}${notes.map((n) => `<span class="sx-warn">${esc(n)}</span>`).join('')}</span></span>`;
+}
+
+// --- Translations: a changed string against the same file in the other languages (values/, values-in/, …) ---
+
+// A language folder (values, values-in, values-zh-rCN, values-b+sr+Latn), not another qualifier (night, v21, sw600dp).
+export const isLocaleDir = (dir: string) => /^values(-[a-z]{2,3}(-r[A-Z]{2})?|-b\+[\w+]+)?$/.test(dir);
+export const placeholders = (v: string) => (v.match(/%(\d+\$)?[-#+ 0,(]*\d*(\.\d+)?[sdfxXoeEgGc]/g) ?? []).sort().join(' ');
+// A file's strings, one line or several: name → readable text; ones not to translate left out.
+export function stringsOf(xml: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of xml.matchAll(/<string\s+name="([^"]+)"([^>]*)>([\s\S]*?)<\/string>/g)) if (!/translatable="false"/.test(m[2])) out.set(m[1], readable(m[3]));
+  return out;
+}
+// What a diff changes: each added string's name → its new text, and whether it was there before (edited, not new).
+export function changedStrings(lines: { kind: string; text: string }[]): Map<string, { value: string; edited: boolean }> {
+  const removed = new Set(lines.filter((l) => l.kind === '-').map((l) => parseString(l.text)?.name).filter(Boolean));
+  const out = new Map<string, { value: string; edited: boolean }>();
+  for (const l of lines) {
+    const s = l.kind === '+' && parseString(l.text);
+    if (s && s.name && !s.untranslated) out.set(s.name, { value: s.value, edited: removed.has(s.name) });
+  }
+  return out;
+}
+// Per changed string, what's off in the other languages: missing there, different placeholders, or (edited here)
+// not updated there too.
+export type Locale = { dir: string; strings: Map<string, string>; changed: Set<string> };
+export function translationNotes(changed: Map<string, { value: string; edited: boolean }>, others: Locale[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const [name, { value, edited }] of changed) {
+    const notes = others.flatMap((o) => {
+      const there = o.strings.get(name);
+      if (there == null) return [`missing in ${o.dir}`];
+      if (placeholders(there) !== placeholders(value)) return [`placeholders differ in ${o.dir}`];
+      return edited && !o.changed.has(name) ? [`${o.dir} not updated`] : [];
+    });
+    if (notes.length) out.set(name, notes);
+  }
+  return out;
 }

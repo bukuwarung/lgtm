@@ -561,6 +561,10 @@ export const UPGRADE = isDesktop ? 'brew upgrade --cask lgtm' : 'brew upgrade lg
 
 // --- Diagnostics (Help → Copy Diagnostics, Settings): what a bug report needs, with no tokens or PR text ---
 const errors: string[] = [];
+// Something the user did failed (a review, a merge, a Slack message): main.tsx shows it in a red bar under the title
+// bar until dismissed, review mode too.
+export const reportError = (text: string) => dispatchEvent(new CustomEvent('lgtm:error', { detail: text }));
+
 export function recordError(text: string) {
   errors.push(`${new Date().toISOString().slice(0, 19)} ${text.slice(0, 300)}`);
   if (errors.length > 20) errors.shift();

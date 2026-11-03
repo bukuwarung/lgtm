@@ -541,8 +541,9 @@ export const deleteReviewComment = (id: string) =>
 export const discardReview = (id: string) =>
   graphql(`mutation($r:ID!){deletePullRequestReview(input:{pullRequestReviewId:$r}){clientMutationId}}`, { r: id });
 
-// A folder's entries in a repo (its default branch).
-export const listDir = (repo: string, path: string): Promise<{ name: string; path: string; type: string }[]> => json(`/repos/${repo}/contents/${path}`);
+// A folder's entries in a repo (its default branch, or at `ref`).
+export const listDir = (repo: string, path: string, ref?: string): Promise<{ name: string; path: string; type: string }[]> =>
+  json(`/repos/${repo}/contents/${path}${ref ? `?ref=${ref}` : ''}`);
 
 export async function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
   const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, {}, 'application/vnd.github.raw');

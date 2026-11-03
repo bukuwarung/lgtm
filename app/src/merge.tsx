@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon } from './tags.tsx';
-import { fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus } from './platform.ts';
+import { reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -30,6 +30,7 @@ export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) =>
 export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[] }) {
   const [s, setS] = useState<MergeState | null>(null);
   const [err, setErr] = useState('');
+  const fail = (text: string) => (setErr(text), reportError(text)); // in the box, and in the bar at the top
   const [busy, setBusy] = useState('');
   const [method, setMethod] = useState<MergeMethod | null>(null);
   const [confirm, setConfirm] = useState<'merge' | 'auto' | null>(null);
@@ -55,7 +56,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
     if (!p) return;
     localStorage.removeItem(pendingKey);
     movePendingTickets(p).then((failed) => {
-      failed.length ? setErr(`Merged, but ${failed.join('; ')}`) : setMoved(`Merged: moved ${p.tickets.join(', ')} to ${p.to}`);
+      failed.length ? fail(`Merged, but ${failed.join('; ')}`) : setMoved(`Merged: moved ${p.tickets.join(', ')} to ${p.to}`);
       setShown(true);
     });
   }, [s?.state]);
@@ -121,6 +122,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
       onChange();
     } catch (e: any) {
       setErr(e.message);
+      reportError(`${label === 'merge' ? "Couldn't merge" : "Couldn't do that"}: ${e.message}`);
     }
     setBusy('');
     load();
@@ -185,9 +187,9 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
               onClick={() =>
                 run('merge', async () => {
                   await mergePR(s, m, msg.title, msg.body, confirm === 'auto');
-                  if (deleting) await deleteBranch(repo, s).catch((e) => setErr(`Merged, but ${e.message}`));
+                  if (deleting) await deleteBranch(repo, s).catch((e) => fail(`Merged, but ${e.message}`));
                   if (confirm === 'merge' && moveTickets)
-                    for (const k of openTickets) await moveJira(k, to).catch((e) => setErr(`Merged, but ${k} didn't move to ${to}: ${e.message}`));
+                    for (const k of openTickets) await moveJira(k, to).catch((e) => fail(`Merged, but ${k} didn't move to ${to}: ${e.message}`));
                   if (confirm === 'auto') moveTickets && openTickets.length ? localStorage.setItem(pendingKey, JSON.stringify({ to, tickets: openTickets })) : localStorage.removeItem(pendingKey);
                 })
               }

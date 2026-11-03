@@ -165,6 +165,12 @@ function App() {
   const routeRef = useRef(route);
   routeRef.current = route;
   const [backTo, setBackTo] = useState('');
+  const [failure, setFailure] = useState(''); // platform.ts reportError
+  useEffect(() => {
+    const show = (e: Event) => setFailure((e as CustomEvent<string>).detail);
+    addEventListener('lgtm:error', show);
+    return () => removeEventListener('lgtm:error', show);
+  }, []);
   useEffect(() => {
     let t = 0;
     const jumped = (e: Event) => (setBackTo((e as CustomEvent<string>).detail), clearTimeout(t), (t = window.setTimeout(() => setBackTo(''), 6000)));
@@ -320,6 +326,12 @@ function App() {
         <AccountMenu />
         </>)}
       </nav>
+      {failure && (
+        <div class="fail-bar" role="alert">
+          <Octicon name="alert" /> <span>{failure}</span>
+          <button class="icon-btn" title="Dismiss" aria-label="Dismiss" onClick={() => setFailure('')}><Octicon name="x" /></button>
+        </div>
+      )}
       {isDesktop && <FindBar />}
       {!rm && (
         <>

@@ -69,6 +69,11 @@ code, pre { font-family: var(--mono); }
 .side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
 .prs .side-scroll { padding: 8px; }
 .review-all { width: 100%; margin-bottom: 6px; }
+.fail-bar { position: sticky; top: var(--nav); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 12px; color: #fff; background: light-dark(#cf222e, #b62324); font-size: calc(13px * var(--ts)); }
+.fail-bar span { flex: 1; }
+.fail-bar .icon-btn { color: #fff; }
+.sends { margin: 6px 0; padding: 6px 8px; border-radius: 6px; font-size: calc(12px * var(--ts)); color: var(--muted); background: var(--soft); }
+.sends-list { display: block; margin-top: 2px; font-family: var(--mono); font-size: calc(11px * var(--ts)); }
 /* Specs naming the PR's code: their code spans link to it, their tasks count it, and files link back. */
 .rich code.spec-ref { cursor: pointer; text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent); text-underline-offset: 3px; }
 .rich code.spec-ref:hover { color: var(--accent); }
@@ -92,6 +97,7 @@ tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transpa
 .sx-nl { color: var(--muted); }
 .sx-empty, .sx-tag { font: italic calc(11px * var(--ts)) var(--sans); color: var(--muted); }
 .sx-tag { margin-left: 8px; }
+.sx-warn { margin-left: 8px; padding: 0 6px; border-radius: 999px; white-space: nowrap; font: calc(11px * var(--ts)) var(--sans); color: light-dark(#8a5300, #e3b341); background: color-mix(in srgb, #d29922 16%, transparent); }
 mark.sx-ch { color: inherit; border-radius: 2px; background: color-mix(in srgb, currentColor 22%, transparent); }
 .no-spec { margin-left: auto; padding: 0 5px; border-radius: 999px; font-size: calc(10px * var(--ts)); color: var(--muted); border: 1px dashed var(--border); white-space: nowrap; }
 .nav-hist { display: inline-flex; align-items: center; gap: 4px; }

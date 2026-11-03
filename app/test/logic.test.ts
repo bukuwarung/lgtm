@@ -733,3 +733,25 @@ test('strings.xml: names and readable texts, the changed part', async () => {
   assert.deepEqual(changedRange('Code sent to %1$s', 'Code sent again to %1$s'), [[10, 10], [10, 16]]);
   assert.match(stringHtml(parseString('<string name="a">Hi %1$s</string>')!), /sx-key">a<.*sx-arg">%1\$s</);
 });
+
+test('translations: a changed string against the other languages', async () => {
+  const { changedStrings, translationNotes, stringsOf, isLocaleDir } = await import('../src/strings.ts');
+  assert.ok(isLocaleDir('values') && isLocaleDir('values-in') && isLocaleDir('values-zh-rCN'));
+  assert.ok(!isLocaleDir('values-night') && !isLocaleDir('values-v21') && !isLocaleDir('values-sw600dp'));
+  const changed = changedStrings([
+    { kind: '-', text: '<string name="sent">Code sent</string>' },
+    { kind: '+', text: '<string name="sent">Code sent to %1$s</string>' },
+    { kind: '+', text: '<string name="title">Verify</string>' },
+    { kind: '+', text: '<string name="ok">OK</string>' },
+    { kind: '+', text: '<string name="id" translatable="false">x</string>' },
+  ]);
+  assert.deepEqual([...changed.keys()], ['sent', 'title', 'ok']);
+  const id = { dir: 'values-in', strings: stringsOf('<resources>\n<string name="sent">Kode dikirim</string>\n<string name="ok">\n  Oke\n</string>\n</resources>'), changed: new Set<string>() };
+  assert.deepEqual(Object.fromEntries(translationNotes(changed, [id])), {
+    sent: ['placeholders differ in values-in'], // %1$s added here only
+    title: ['missing in values-in'],
+  });
+  const updated = { ...id, strings: new Map([['sent', 'Kode dikirim ke %1$s'], ['title', 'Verifikasi'], ['ok', 'Oke']]) };
+  assert.deepEqual(Object.fromEntries(translationNotes(changed, [updated])), { sent: ['values-in not updated'] });
+  assert.deepEqual(Object.fromEntries(translationNotes(changed, [{ ...updated, changed: new Set(['sent']) }])), {});
+});
