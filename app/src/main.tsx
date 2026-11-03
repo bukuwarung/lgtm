@@ -108,10 +108,12 @@ function App() {
   const [rm, setRm] = useState<{ practice?: boolean; seen: string[]; done: number; skipped: number; log: { repo: string; n: number; title: string; how: ReviewEvent | 'skipped' }[] } | null>(null);
   const lastEvent = useRef<ReviewEvent>('COMMENT'); // the review just submitted, for review mode's summary
   useEffect(() => (document.documentElement.classList.toggle('review-mode', !!rm), setPractice(!!rm?.practice)), [rm]);
-  // The PRs to review: the ones that need my review, or (a practice run) my own, not drafts.
+  // The PRs to review: the ones that need my review, or (a practice run) my own. Drafts only while the list shows them,
+  // after the ready ones.
+  const [showDrafts] = useStoredFlag('showDrafts', false);
   const needs = (items: QueueItem[], skip: string[], practice = rm?.practice) => {
-    const l = items.filter((i) => (practice ? i.mine : i.reviewing && groupOf(i) === 'needs') && !i.isDraft && !skip.includes(`${i.repo}#${i.number}`));
-    return rm || practice ? l.sort((a, b) => a.waitingSince.localeCompare(b.waitingSince)) : l; // review mode: longest-waiting first
+    const l = items.filter((i) => (practice ? i.mine : i.reviewing && groupOf(i) === 'needs') && (!i.isDraft || (showDrafts && !practice)) && !skip.includes(`${i.repo}#${i.number}`));
+    return rm || practice ? l.sort((a, b) => +a.isDraft - +b.isDraft || a.waitingSince.localeCompare(b.waitingSince)) : l; // review mode: longest-waiting first
   };
   const goNext = async (from: { repo: string; n: number } | null, notice: { text: string; ok: boolean } | null, skip = rm?.seen ?? [], practice = rm?.practice) => {
     // With the PR list hidden nothing has loaded it; fetch it now (without thread status, so no "comments resolved").
@@ -1142,7 +1144,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         <button class="primary review-all" onClick={() => onReview()} title="The PRs that need your review, longest-waiting first, with nothing else on screen (⇧⌘R in the app)">
           <Octicon name="play" /> Review {c} PR{c > 1 ? 's' : ''}
         </button>
-      ))(shown.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft).length)}
+      ))(shown.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts)).length)}
       {(tab === 'reviewing' || tab === 'team') && ((c) => c > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
           {showDrafts ? `Hide ${c} draft PR${c > 1 ? 's' : ''}` : `${c} draft PR${c > 1 ? 's' : ''} hidden · show`}
