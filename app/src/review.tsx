@@ -397,6 +397,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const focusIndex = useStoredFlag('reviewModeIndex', false);
   const [showIndex, toggleIndex] = focus ? focusIndex : index;
   const [centered, toggleCentered] = useStoredFlag('centerDiff', false);
+  const [split, toggleSplit] = useStoredFlag('splitDiff', false);
   const [fit] = useStoredFlag('centerFit', true);
   const [cols] = useStoredValue('centerCols', '120');
   useEffect(() => {
@@ -932,7 +933,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
   const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : [])];
   // Centred, a changed line too wide for it: the PR fills the window instead (Settings → Diff); tabs count as 4.
-  const tooWide = centered && fit && visible.some((f) => f.patch?.split('\n').some((l) => l[0] !== '@' && l.length > Number(cols) + 1 && l.replace(/\t/g, '    ').length > Number(cols) + 1));
+  const tooWide = centered && (split || (fit && visible.some((f) => f.patch?.split('\n').some((l) => l[0] !== '@' && l.length > Number(cols) + 1 && l.replace(/\t/g, '    ').length > Number(cols) + 1))));
   // Modules as the files on show have them (not the ones waiting behind a row).
   const shownModules = new Map(shown.map((f) => [f.filename, modules.get(f.filename) ?? '']));
   const view = byModule ? moduleView(shownModules) : 'none';
@@ -1105,6 +1106,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
         <div class="bar">
           <button class="bar-index" title={showIndex ? 'Hide the PR index' : 'Show the PR index'} aria-label={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
             <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
+          </button>
+          <button class="bar-index" title={split ? 'One column: removed lines above added ones' : 'Side by side: old and new next to each other'} aria-label="Side by side" aria-pressed={split} onClick={toggleSplit}>
+            <Octicon name="columns" />
           </button>
           <button class="bar-index" title={centered ? 'Fill the window' : 'Centre at a comfortable width'} aria-label={centered ? 'Fill the window' : 'Centre at a comfortable width'} onClick={toggleCentered}>
             <Octicon name={centered ? 'screen-full' : 'screen-normal'} />
@@ -2019,15 +2023,39 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   const [renderEdited] = useStoredFlag('renderEditedDocs', true); // edited ones too, changed parts marked
   const [renderLine] = useStoredFlag('renderLineComments', true); // runs of // comments too
   const [renderSingle] = useStoredFlag('renderSingleComments', false); // and lone comment lines
+  // Side by side (Settings → Diff, or the bar's button): old and new as two halves of each row, removed lines paired
+  // with the added ones after them. Doc comments stay as source there.
+  const [split] = useStoredFlag('splitDiff', false);
+  const splitPlan = useMemo(
+    () =>
+      split
+        ? hunks.map((h) => {
+            const at = new Map<number, [number | null, number | null]>();
+            for (let i = 0; i < h.lines.length; ) {
+              if (h.lines[i].kind === ' ') {
+                at.set(i, [i, i]);
+                i++;
+                continue;
+              }
+              const dels: number[] = [], adds: number[] = [];
+              while (i < h.lines.length && h.lines[i].kind === '-') dels.push(i++);
+              while (i < h.lines.length && h.lines[i].kind === '+') adds.push(i++);
+              for (let k = 0; k < Math.max(dels.length, adds.length); k++) at.set(dels[k] ?? adds[k], [dels[k] ?? null, adds[k] ?? null]);
+            }
+            return at;
+          })
+        : null,
+    [hunks, split],
+  );
   const docs = useMemo(
     () =>
-      !renderDocs
+      !renderDocs || split
         ? []
         : [
             ...(docSyntax(path) ? [...docBlocks(hunks), ...(renderEdited ? editedDocBlocks(hunks) : [])] : []),
             ...(renderLine && lineCommentSyntax(path) ? lineCommentBlocks(hunks, renderEdited, lineCommentSyntax(path)!, renderSingle ? 1 : 2, testFile ? (t) => !!testPhase(t) : undefined) : []),
           ],
-    [hunks, renderDocs, renderEdited, renderLine, renderSingle],
+    [hunks, renderDocs, renderEdited, renderLine, renderSingle, split],
   );
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
   const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
@@ -2097,6 +2125,37 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                       <DocView doc={indent ? { ...doc, indent: Math.max(0, doc.indent - indent) } : doc} syntax={docSyntax(path) ?? 'kdoc'} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
                     </td>
                   </tr>
+                );
+              }
+              if (splitPlan) {
+                const row = splitPlan[hi].get(li);
+                if (!row) return null; // drawn as the right half of its removed line's row
+                const L = row[0] != null ? h.lines[row[0]] : null, R = row[1] != null ? h.lines[row[1]] : null;
+                const half = (x: Line | null, i: number | null, right: boolean) => {
+                  const s: Side = x?.kind === '-' ? 'LEFT' : 'RIGHT';
+                  const n = x ? (right ? x.new! : x.old!) : 0;
+                  return (
+                    <>
+                      <span class={x ? 'num' : 'num none'} title={x ? 'Comment (shift-click to extend)' : undefined} onClick={x ? (e) => pick(e, right ? 'RIGHT' : s, n) : undefined}>
+                        {x ? n : ''}
+                      </span>
+                      <span class={`code${!x ? ' none' : x.kind === '-' ? ' d' : x.kind === '+' ? ' a' : ''}`} dangerouslySetInnerHTML={{ __html: x && i != null ? codeHtml(hi, i, x.text) : '' }} />
+                    </>
+                  );
+                };
+                return (
+                  <>
+                    <tr class="ln split" data-k={`${hi}-${li}`}>
+                      <td colSpan={3} class="split-cell">
+                        <div class="split-row">
+                          {half(L?.kind === '+' ? null : L, row[0], false)}
+                          {half(R?.kind === '-' ? null : R, row[1], true)}
+                        </div>
+                      </td>
+                    </tr>
+                    {L && L.kind !== '+' && notes('LEFT', L.old!)}
+                    {R && R.kind !== '-' && notes('RIGHT', R.new!)}
+                  </>
                 );
               }
               const side: Side = l.kind === '-' ? 'LEFT' : 'RIGHT';

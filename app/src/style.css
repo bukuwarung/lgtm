@@ -353,6 +353,19 @@ main { padding: 16px; }
 .diff tr.a .code::before { content: "+"; }
 .diff tr.d { background: var(--del); }
 .diff tr.d .code::before { content: "-"; }
+/* Side by side: one cell per row, its two halves (number, code) on a grid; empty halves striped. */
+.diff tr.split > td.split-cell { padding: 0; }
+.split-row { display: grid; grid-template-columns: minmax(40px, auto) minmax(0, 1fr) minmax(40px, auto) minmax(0, 1fr); }
+.split-row > .num { padding: 0 8px; text-align: right; color: var(--muted); cursor: pointer; user-select: none; border-left: 1px solid var(--border); }
+.split-row > .num:first-child { border-left: 0; }
+.split-row > .num:hover { color: var(--accent); }
+.split-row > .code { padding: 0 8px; white-space: pre-wrap; word-break: break-word; }
+.split-row > .code::before { content: " "; display: inline-block; width: 1.2em; }
+.split-row > .code.a { background: var(--add); }
+.split-row > .code.a::before { content: "+"; }
+.split-row > .code.d { background: var(--del); }
+.split-row > .code.d::before { content: "-"; }
+.split-row > .none { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--fg) 4%, transparent) 6px 7px); cursor: default; }
 .diff tr.gap td { padding: 0; background: color-mix(in srgb, var(--soft) 50%, transparent); }
 /* Unchanged lines to expand: there when wanted, quiet otherwise (the accent on hover). */
 .diff tr.gap button { width: 100%; padding: 1px 12px; border: 0; border-radius: 0; background: none; text-align: left; font: calc(11px * var(--cs)) var(--sans); color: color-mix(in srgb, var(--muted) 75%, transparent); }

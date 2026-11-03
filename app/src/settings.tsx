@@ -333,6 +333,7 @@ export function Settings() {
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)." />
         <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text." />
+        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint="Old on the left, new on the right; rendered doc comments show as source. The button beside the PR's title switches it too." />
         <Flag k="centerDiff" initial={false} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too.">
           <CenterCols />
           <Flag k="centerFit" initial={true} label="Fill the window when a line in the diff is wider than that" />
