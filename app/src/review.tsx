@@ -2444,19 +2444,28 @@ function SpecChips({ refs, ix }: { refs?: SpecRef[]; ix: CodeIndex }) {
   const peek = useRefPeek(ix);
   if (!refs?.length) return null;
   const bySpec = [...new Map(refs.map((r) => [r.spec, refs.filter((x) => x.spec === r.spec)])).values()];
+  const chip = (l: SpecRef[], cls: string, text: ComponentChildren) => (
+    <button
+      class={cls}
+      title={`Named in ${l.map((r) => r.label).join(', ')}: go there`}
+      onClick={() => jumpToSpec(l[0])}
+      onMouseEnter={(e) => peek.show({ path: l[0].spec, line: l[0].line, go: () => jumpToSpec(l[0]) }, e.currentTarget)}
+      onMouseLeave={peek.out}
+    >
+      {text}
+    </button>
+  );
+  const more = (l: SpecRef[]) => (l.length > 1 ? ` +${l.length - 1}` : '');
+  // One spec: its chip. More: one chip that lists them, each with its folder (specs share names: design.md, tasks.md).
   return (
     <>
-      {bySpec.map((l) => (
-        <button
-          class="spec-chip"
-          title={`Named in ${l.map((r) => r.label).join(', ')}: go there`}
-          onClick={() => jumpToSpec(l[0])}
-          onMouseEnter={(e) => peek.show({ path: l[0].spec, line: l[0].line, go: () => jumpToSpec(l[0]) }, e.currentTarget)}
-          onMouseLeave={peek.out}
-        >
-          <Octicon name="file" /> {l[0].label}{l.length > 1 ? ` +${l.length - 1}` : ''}
-        </button>
-      ))}
+      {bySpec.length === 1 ? (
+        chip(bySpec[0], 'spec-chip', <><Octicon name="file" /> {bySpec[0][0].label}{more(bySpec[0])}</>)
+      ) : (
+        <PillMenu cls="spec-chip" label={<><Octicon name="file" /> {bySpec.length} specs</>} head="Specs that name this file">
+          {bySpec.map((l) => chip(l, 'spec-item', <><Octicon name="file" /> <span class="spec-dir">{l[0].spec.split('/').slice(-2, -1)[0]}/</span>{l[0].spec.split('/').pop()} <small>{l[0].label}{more(l)}</small></>))}
+        </PillMenu>
+      )}
       {peek.node}
     </>
   );
