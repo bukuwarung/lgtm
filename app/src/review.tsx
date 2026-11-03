@@ -21,7 +21,7 @@ import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
-import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, type DocBlock } from './docs.ts';
+import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
@@ -1784,7 +1784,15 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
 
   const table = useRef<HTMLTableElement>(null);
   const words = useWordMarks(hunks);
+  // In a test, a phase comment (// Given …) shows as its label: setup, action and checks each their colour.
+  const testFile = inTests(path);
+  const phaseHtml = (text: string) => {
+    const p = testPhase(text)!;
+    const lead = text.match(/^\s*/)![0].slice(indent);
+    return `${lead}<span class="ph ph-${p.kind}">${p.word}</span>${p.rest ? ` <span class="ph-rest">${md.utils.escapeHtml(p.rest)}</span>` : ''}`;
+  };
   const codeHtml = (hi: number, li: number, text: string) => {
+    if (testFile && testPhase(text)) return phaseHtml(text);
     const html = hl ? hl[hi][li] : md.utils.escapeHtml(text);
     const w = words.get(`${hi}-${li}`);
     return dedentHtml(w ? markText(html, w[1], w[2], w[0]) : html, indent);
@@ -1851,7 +1859,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
         ? []
         : [
             ...(docSyntax(path) ? [...docBlocks(hunks), ...(renderEdited ? editedDocBlocks(hunks) : [])] : []),
-            ...(renderLine && lineCommentSyntax(path) ? lineCommentBlocks(hunks, renderEdited, lineCommentSyntax(path)!, renderSingle ? 1 : 2) : []),
+            ...(renderLine && lineCommentSyntax(path) ? lineCommentBlocks(hunks, renderEdited, lineCommentSyntax(path)!, renderSingle ? 1 : 2, testFile ? (t) => !!testPhase(t) : undefined) : []),
           ],
     [hunks, renderDocs, renderEdited, renderLine, renderSingle],
   );
@@ -1953,7 +1961,7 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '')} data-k={`${hi}-${li}`}>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '')} data-k={`${hi}-${li}`}>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />

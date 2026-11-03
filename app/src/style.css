@@ -76,6 +76,14 @@ code, pre { font-family: var(--mono); }
 .spec-touch:empty { display: none; }
 .spec-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .spec-chip:hover { color: var(--fg); }
+/* A test's phases (// Given, // When, // Then, Arrange / Act / Assert): a label each, and a faint line where one starts. */
+tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transparent); }
+.ph { display: inline-block; padding: 0 7px; border-radius: 4px; font: 600 calc(11px * var(--ts)) / 1.6 var(--sans); letter-spacing: .02em; }
+.ph-given { color: light-dark(#0b5cad, #79b8ff); background: color-mix(in srgb, #2f81f7 16%, transparent); }
+.ph-when { color: light-dark(#8a5300, #e3b341); background: color-mix(in srgb, #d29922 18%, transparent); }
+.ph-then { color: light-dark(#1a7f37, #56d364); background: color-mix(in srgb, #2ea043 16%, transparent); }
+.ph-and { color: var(--muted); background: var(--soft); }
+.ph-rest { color: var(--muted); font-style: italic; }
 .no-spec { margin-left: auto; padding: 0 5px; border-radius: 999px; font-size: calc(10px * var(--ts)); color: var(--muted); border: 1px dashed var(--border); white-space: nowrap; }
 .nav-hist { display: inline-flex; align-items: center; gap: 4px; }
 .back-hint { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12px * var(--ts)); color: var(--muted); }

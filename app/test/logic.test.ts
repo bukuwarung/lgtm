@@ -700,3 +700,16 @@ test('specrefs: code spans in specs naming the PR\'s files, and where', () => {
   assert.deepEqual(peekLines(patch, 5, 3).map((l) => l.text), ['c', 'd', 'fun go() {}']);
   assert.deepEqual(peekLines(patch, undefined, 2).map((l) => l.text), ['c', 'd']);
 });
+
+test('testPhase: Given-When-Then and Arrange-Act-Assert comments', async () => {
+  const { testPhase } = await import('../src/docs.ts');
+  assert.deepEqual(testPhase('    // Given a logged-in user'), { kind: 'given', word: 'Given', rest: 'a logged-in user' });
+  assert.deepEqual(testPhase('// when'), { kind: 'when', word: 'When', rest: '' });
+  assert.deepEqual(testPhase('  # Then: it fails'), { kind: 'then', word: 'Then', rest: 'it fails' });
+  assert.deepEqual(testPhase('/* Act */'), { kind: 'when', word: 'Act', rest: '' });
+  assert.deepEqual(testPhase('// Assert - totals'), { kind: 'then', word: 'Assert', rest: 'totals' });
+  assert.deepEqual(testPhase('// and the cache is warm'), { kind: 'and', word: 'And', rest: 'the cache is warm' });
+  assert.equal(testPhase('// Givens are odd'), null);
+  assert.equal(testPhase('val given = 1 // Given'), null); // a comment after code isn't a phase
+  assert.equal(testPhase('// assertion helper'), null);
+});

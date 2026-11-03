@@ -28,6 +28,16 @@ export function docBlocks(hunks: Hunk[]): DocBlock[] {
 
 // A language's line comments: // (C family and friends) or # (Python, Ruby, shell, YAML, TOML, properties, ProGuard,
 // Dockerfile, Makefile…); null for others.
+// A test's phase comment (Given / When / Then, Arrange / Act / Assert, And / But), with what follows the word: shown as
+// a label in test files instead of a plain comment.
+export type Phase = { kind: 'given' | 'when' | 'then' | 'and'; word: string; rest: string };
+const PHASE = /^\s*(?:\/\/+|#+|\/\*+)\s*(given|when|then|and|but|arrange|act|assert)\b[\s:.,–—-]*(.*?)\s*(?:\*\/)?\s*$/i;
+const KIND: Record<string, Phase['kind']> = { given: 'given', arrange: 'given', when: 'when', act: 'when', then: 'then', assert: 'then', and: 'and', but: 'and' };
+export function testPhase(text: string): Phase | null {
+  const m = text.match(PHASE);
+  return m ? { kind: KIND[m[1].toLowerCase()], word: m[1][0].toUpperCase() + m[1].slice(1).toLowerCase(), rest: m[2] } : null;
+}
+
 export type LineMarker = '//' | '#';
 export const lineCommentSyntax = (path: string): LineMarker | null =>
   /\.(kt|kts|java|[cm]?[jt]sx?|swift|go|rs|dart|scala|cs|php|c|cc|cpp|h|hpp|m|mm|groovy|gradle)$/.test(path) ? '//'
@@ -43,8 +53,9 @@ const LINES: Record<LineMarker, RegExp> = { '//': /^(\s*)\/\/(?!\/\/)/, '#': /^(
 const STRIP: Record<LineMarker, RegExp> = { '//': /^\s*\/\/\/? ?/, '#': /^\s*# ?/ };
 const CODEISH = /[;{}]\s*$|^\s*(val|var|fun|if|else|for|while|return|import|package|class|private|public|const|let|def)\b|^\s*[\w.]+\(.*\)\s*$|^\s*[\w.]+\s*=[^=]|^\s*[\w.-]+:\s+\S|^\s*-[a-z]+\b/;
 // `minLines`: 1 renders a lone comment line too (Settings: Single comment lines).
-export function lineCommentBlocks(hunks: Hunk[], edited: boolean, marker: LineMarker = '//', minLines = 2): DocBlock[] {
-  const LINE = LINES[marker];
+// `skip`: comment lines that stay as they are (a test's phase labels), splitting runs.
+export function lineCommentBlocks(hunks: Hunk[], edited: boolean, marker: LineMarker = '//', minLines = 2, skip?: (text: string) => boolean): DocBlock[] {
+  const LINE = { test: (t: string) => LINES[marker].test(t) && !skip?.(t) };
   const out: DocBlock[] = [];
   hunks.forEach((h, hi) => {
     const L = h.lines;
@@ -65,7 +76,7 @@ export function lineCommentBlocks(hunks: Hunk[], edited: boolean, marker: LineMa
           else lines.push({ text: l.text, changed: !same && (l.kind === '+' || removed) }), (removed = false);
         }
         if (removed && lines.length) lines[lines.length - 1].changed = true;
-        const indent = shown[0].text.match(LINE)![1].length;
+        const indent = shown[0].text.match(LINES[marker])![1].length;
         out.push({ hunk: hi, start: i, end, kind: same ? run[0].kind : '~', text: lines.map((l) => l.text).join('\n'), indent, lines, style: 'line' });
       }
       i = end;
