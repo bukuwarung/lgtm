@@ -773,3 +773,15 @@ test('collapseReviews: comments posted one by one are one review, its strongest 
   assert.deepEqual(out.map((r) => [r.state, r.at]), [['CHANGES_REQUESTED', at(8)], ['APPROVED', at(40)]]);
   assert.equal(out[0].waited, 60 * 60_000);
 });
+
+test('isAway: Slack statuses that mean someone is out today', async () => {
+  const { isAway } = await import('../src/slackmsg.ts');
+  const s = (text: string, emoji = '', until = 0) => ({ text, emoji, until });
+  for (const t of ['Out sick', 'Vacation', 'Out of office', 'OOO', 'Annual leave', 'Sick leave', 'on leave', 'Cuti'])
+    assert.ok(isAway(s(t)), t);
+  assert.ok(isAway(s('', ':palm_tree:')));
+  assert.ok(!isAway(s('In a meeting', ':spiral_calendar_pad:')));
+  assert.ok(!isAway(s('Working remotely', ':house_with_garden:')));
+  assert.ok(!isAway(s('Vacation', '', 1000)), 'expired');
+  assert.ok(!isAway(null));
+});

@@ -446,6 +446,33 @@ fn people() -> Result<Value, String> {
     Ok(json!({ "mine": if c["slackUsers"].is_object() { c["slackUsers"].clone() } else { json!({}) } }))
 }
 
+/// Slack statuses ("🌴 Vacation", "Out sick") of GitHub people, through their Slack mapping, for picking a reviewer.
+/// Asked fresh each time: statuses change during the day.
+#[tauri::command]
+pub async fn slack_presence(logins: Vec<String>) -> Result<Value, String> {
+    let users = config::read("config.json", true).map(|c| c["slackUsers"].clone()).unwrap_or(Value::Null);
+    let asks: Vec<(String, String)> = logins
+        .into_iter()
+        .take(20)
+        .filter_map(|l| users[&l].as_str().filter(|id| re(r"^U[A-Z0-9]{6,}$").is_match(id)).map(|id| (l.clone(), id.to_string())))
+        .collect();
+    let found: Vec<(String, Value)> = std::thread::scope(|s| {
+        let runs: Vec<_> = asks
+            .iter()
+            .map(|(l, id)| {
+                s.spawn(move || {
+                    let r = slackcli(&["users", "info", id, "--json"], None);
+                    let u = if r.ok { parse_json(&r.stdout)? } else { return None };
+                    let p = if u["user"].is_object() { u["user"]["profile"].clone() } else { u["profile"].clone() };
+                    Some((l.clone(), json!({ "text": p["status_text"].as_str().unwrap_or(""), "emoji": p["status_emoji"].as_str().unwrap_or(""), "until": p["status_expiration"].as_i64().unwrap_or(0) })))
+                })
+            })
+            .collect();
+        runs.into_iter().filter_map(|h| h.join().ok().flatten()).collect()
+    });
+    Ok(Value::Object(found.into_iter().collect()))
+}
+
 #[tauri::command]
 pub async fn slack_people_get() -> Result<Value, String> {
     people()

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-presence"
+description = "Enables the slack_presence command without any pre-configured scope."
+commands.allow = ["slack_presence"]
+
+[[permission]]
+identifier = "deny-slack-presence"
+description = "Denies the slack_presence command without any pre-configured scope."
+commands.deny = ["slack_presence"]

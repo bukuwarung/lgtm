@@ -26,6 +26,15 @@ export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string;
     fields: '',
   },
 };
+// A Slack status that says someone is away for now: out sick, vacation, out of office (OOO), any "… leave", or the
+// emoji people set for those. One that has expired doesn't count.
+const AWAY = /\b(out sick|sick|vacation|holiday|out of (the )?office|ooo|on leave|\w+ leave|cuti|day off|pto)\b/i;
+const AWAY_EMOJI = new Set(['palm_tree', 'desert_island', 'beach_with_umbrella', 'airplane', 'face_with_thermometer', 'thermometer', 'sick', 'face_with_head_bandage', 'mask', 'pill', 'hospital', 'baby_bottle']);
+export function isAway(s: { text: string; emoji: string; until: number } | null | undefined, now = Date.now()) {
+  if (!s || (s.until && s.until * 1000 < now)) return false;
+  return AWAY.test(s.text) || AWAY_EMOJI.has(s.emoji.replace(/:/g, ''));
+}
+
 export const COMMON_FIELDS = '{pr} the PR, linked · {title} · {url} · {repo} · {number} · {author} · {@recipient} tags who gets it · {@author} tags the author · {@login} tags anyone';
 
 // Your wording, else lgtm's. Emptied, "again" sends nothing; the others fall back to lgtm's.

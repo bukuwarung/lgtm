@@ -19,11 +19,11 @@ import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action 
 import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
-import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
+import { fillSlack, isAway, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
-import { reportError, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { slackPresence, type SlackPresence, reportError, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -124,6 +124,16 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
   const [state, setState] = useState<Record<string, 'asking' | 'asked'>>({});
   const mark = (login: string, s?: 'asking' | 'asked') => setState((m) => ({ ...m, [login]: s! }));
   useEffect(() => void suggestReviewers(repo, skip, team).then(setPicks, (e) => setErr(e.message)), [team]);
+  // Their Slack statuses: someone out sick, on vacation or leave shows it, and goes to the bottom (still askable).
+  const [presence, setPresence] = useState<Record<string, SlackPresence>>({});
+  const shownPicks = picks?.slice(0, 6).map((p) => p.login).join() ?? '';
+  useEffect(() => void (slackOk && shownPicks && slackPresence(shownPicks.split(',')).then(setPresence, () => {})), [shownPicks, slackOk]);
+  // When it ends: a time today, else the day.
+  const until = (s: SlackPresence) => {
+    if (!s.until) return '';
+    const d = new Date(s.until * 1000);
+    return ` · until ${d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}`;
+  };
   const ask = async (login: string) => {
     mark(login, 'asking');
     setErr('');
@@ -154,19 +164,31 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
       {err && <p class="warn ix-pad">{err}</p>}
       {picks == null && !err && <p class="note ix-pad">Finding who's free…</p>}
       {picks?.length === 0 && <p class="note ix-pad">No one to suggest: nobody else has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</p>}
-      {picks?.slice(0, 5).map((p) => (
-        <button
-          class={`ix-item ix-person ${state[p.login] ?? ''}`}
-          disabled={!!state[p.login]}
-          title={`Ask @${p.login} to review: ${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review`}
-          onClick={() => ask(p.login)}
-        >
-          <span class="ix-label">
-            <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />@{p.login}{' '}
-            <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? <><Octicon name="check" /> asked</> : p.load ? `${p.load} waiting` : 'free'}</span>
-          </span>
-        </button>
-      ))}
+      {picks
+        ?.slice(0, 6)
+        .map((p) => ({ p, s: presence[p.login], away: isAway(presence[p.login]) }))
+        .sort((a, b) => +a.away - +b.away)
+        .slice(0, 5)
+        .map(({ p, s, away }) => (
+          <button
+            class={`ix-item ix-person ${state[p.login] ?? ''}${away ? ' away' : ''}`}
+            disabled={!!state[p.login]}
+            title={`Ask @${p.login} to review: ${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}`}
+            onClick={() => ask(p.login)}
+          >
+            <span class="ix-label">
+              <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />@{p.login}{' '}
+              <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? <><Octicon name="check" /> asked</> : away ? 'away' : p.load ? `${p.load} waiting` : 'free'}</span>
+            </span>
+            {(s?.text || s?.emoji) && (
+              <span class={away ? 'ix-status away' : 'ix-status'}>
+                {s.emoji && emoji.emoji(s.emoji.replace(/:/g, '')) && <img class="ix-status-emoji" src={emoji.emoji(s.emoji.replace(/:/g, ''))} alt="" />}
+                {s.text || s.emoji}
+                {until(s)}
+              </span>
+            )}
+          </button>
+        ))}
       {slackOk ? (
         <label class="ix-ask-slack">
           <span>

@@ -177,6 +177,21 @@ function slackProfile(user) {
   return profiles.get(user);
 }
 
+// Slack statuses ("🌴 Vacation", "Out sick") of GitHub people, through their Slack mapping, for picking a reviewer.
+// Asked fresh each time: statuses change during the day.
+async function slackPresence(logins) {
+  const users = (await readConfig()).slackUsers ?? {};
+  const pairs = await Promise.all(
+    (logins ?? []).filter((l) => LOGIN.test(l) && SLACK_ID.test(users[l] ?? '')).slice(0, 20).map(async (l) => {
+      const r = await slackcli(['users', 'info', users[l], '--json']);
+      const d = r.ok ? parseJson(r.stdout) : null;
+      const p = (d?.user ?? d)?.profile;
+      return p ? [l, { text: p.status_text ?? '', emoji: p.status_emoji ?? '', until: p.status_expiration ?? 0 }] : null;
+    }),
+  );
+  return Object.fromEntries(pairs.filter(Boolean));
+}
+
 // --- GitHub ↔ Slack people (Settings) ---
 
 const LOGIN = /^[\w-]{1,39}$/;
@@ -565,7 +580,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/jira-move', '/jira-statuses'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -578,6 +593,8 @@ const server = createServer(async (req, res) => {
       (e) => res.writeHead(500, { 'Content-Type': 'text/plain' }).end(e.message),
     );
   }
+  if (path === '/slack-presence')
+    return slackPresence((new URL(req.url ?? '/', ORIGIN).searchParams.get('logins') ?? '').split(',')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-people') {
     try {
       if (req.method === 'GET') return json(res, 200, await slackPeople());

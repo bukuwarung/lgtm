@@ -107,6 +107,11 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .person-h h2 { margin: 0; }
 .person-h .note { margin: 2px 0 0; }
 .person-pills { display: flex; gap: 4px; flex-wrap: wrap; align-items: start; }
+/* A suggested reviewer's Slack status; one away (sick, vacation, leave) dimmed, its status in amber. */
+.ix-status { display: flex; align-items: center; gap: 4px; margin: 1px 0 0 26px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+.ix-status.away { color: light-dark(#8a5300, #e3b341); }
+.ix-status-emoji { width: 14px; height: 14px; }
+.ix-person.away > .ix-label { opacity: .6; }
 .sk.sk-face { width: 56px; height: 56px; border-radius: 50%; flex: none; }
 .sk-head { display: grid; gap: 8px; }
 .sk.sk-sum { width: 60%; height: 11px; margin: 16px 0 6px; }

@@ -241,6 +241,14 @@ async function call<T>(method: string, body?: any): Promise<T> {
   return d;
 }
 export const getSlackPeople = () => call<SlackPeople>('GET');
+// People's Slack statuses (by GitHub login, the ones mapped to Slack), for picking a reviewer (slackmsg.ts isAway).
+export type SlackPresence = { text: string; emoji: string; until: number };
+export async function slackPresence(logins: string[]): Promise<Record<string, SlackPresence>> {
+  if (!logins.length) return {};
+  if (isDesktop) return command<Record<string, SlackPresence>>('slack_presence', { logins });
+  const res = await fetch(`/slack-presence?logins=${encodeURIComponent(logins.join(','))}`);
+  return res.ok ? res.json() : {};
+}
 export const findSlackPeople = (people: { login: string; name: string | null; emails: string[]; query?: string }[]) => call<SlackMatch[]>('POST', { people });
 export const saveSlackPeople = (map: Record<string, string>) => call<SlackPeople>('PUT', map);
 

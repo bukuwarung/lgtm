@@ -137,6 +137,7 @@ pub fn run() {
             commands::slack_emoji,
             commands::jira_move,
             commands::jira_statuses,
+            commands::slack_presence,
             commands::slack_status,
             commands::slack_notify,
             commands::slack_people_get,
