@@ -1,9 +1,9 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
+import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -722,10 +722,17 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
       else setNotice({ ok: true, text: 'Your comments are already on GitHub: nothing more to send.' });
       return true;
     }
-    const head = (await getPR(repo, n)).head.sha;
-    const sha = drafts.length ? saved.sha : head;
-    if (sha !== head && !(await ask('New commits were pushed after you started this review. Submit your comments against the older commit?', 'Submit'))) return false;
-    await submitReview(pr.node_id, sha, event, body, drafts, pending?.id);
+    const now = await getPR(repo, n);
+    const head = now.head.sha;
+    let sha = drafts.length ? saved.sha : head;
+    let send = drafts;
+    if (sha !== head) {
+      // New commits since the drafts: they move with their lines; only ones whose lines changed need asking about.
+      const { moved, stuck } = await moveDrafts(repo, n, drafts, sha, pr, now);
+      if (!stuck) (send = moved), (sha = head);
+      else if (!(await ask(`New commits changed the lines under ${stuck === drafts.length ? (stuck === 1 ? 'your comment' : `your ${stuck} comments`) : `${stuck} of your ${drafts.length} comments`}. Submit ${drafts.length === 1 ? 'it' : 'them all'} on the older commit, where ${drafts.length === 1 ? 'it was' : 'they were'} written?`, 'Submit'))) return false;
+    }
+    await submitReview(pr.node_id, sha, event, body, send, pending?.id);
     setPending(null);
     // A Claude Code session sent this PR here: offer to send it the outcome (a message stays up past moving on).
     const from = linkedClaude(repo, n);
@@ -3593,4 +3600,33 @@ function Help({ onClose, ignoreWs, toggleWs }: { onClose: () => void; ignoreWs: 
       <p class="note">Change them in Settings → Keyboard shortcuts.</p>
     </div>
   );
+}
+
+// Drafts written on an older commit, moved onto the head where their lines are unchanged (diff.ts relocate). A
+// comment on the base side stays if the base didn't move and its lines are still in the diff. `stuck`: how many
+// couldn't move (then all of them go on the older commit, together).
+async function moveDrafts(repo: string, n: number, drafts: Draft[], from: string, was: PR, now: PR): Promise<{ moved: Draft[]; stuck: number }> {
+  const files = await getFiles(repo, n).catch(() => [] as PRFile[]);
+  const src = now.head.repo?.full_name ?? repo;
+  const text = new Map<string, Promise<string[] | null>>();
+  const lines = (sha: string, path: string) => {
+    if (!text.has(sha + path)) text.set(sha + path, getRaw(src, path, sha).then((t) => t?.split('\n') ?? null, () => null));
+    return text.get(sha + path)!;
+  };
+  const moved = await Promise.all(
+    drafts.map(async (d): Promise<Draft | null> => {
+      const f = files.find((f) => f.filename === d.path);
+      if (!f) return null;
+      if (!d.line) return d; // on the file
+      const hunks = parsePatch(f.patch ?? '');
+      if (d.side === 'LEFT') {
+        const old = new Set(hunks.flatMap((h) => h.lines.flatMap((l) => l.old ?? [])));
+        return was.base.sha === now.base.sha && old.has(d.line) && (!d.startLine || old.has(d.startLine)) ? d : null;
+      }
+      const [a, b] = await Promise.all([lines(from, d.path), lines(now.head.sha, d.path)]);
+      const at = a && b && relocate(a, b, hunks, d.startLine ?? d.line, d.line);
+      return at ? { ...d, line: at.line, startLine: at.startLine } : null;
+    }),
+  );
+  return { moved: moved.filter((d): d is Draft => !!d), stuck: moved.filter((d) => !d).length };
 }

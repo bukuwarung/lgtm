@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, commonIndent, dedentHtml, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
 import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
@@ -798,4 +798,14 @@ test('alignChanges: removed lines beside their most similar added ones, in order
   // More removed than added: the added ones find their matches.
   assert.deepEqual(alignChanges(['import x', 'fun go() {', 'log()'], ['fun go(fast: Boolean) {']), [[0, null], [1, 0], [2, null]]);
   assert.deepEqual(alignChanges([], ['a', 'b']), [[null, 0], [null, 1]]);
+});
+
+test('relocate moves a draft with its lines, or gives up', () => {
+  const old = ['a', 'b', 'c', 'd', 'e'];
+  const all = (n: number) => parsePatch(`@@ -1,1 +1,${n} @@\n` + Array.from({ length: n }, (_, i) => `+${i}`).join('\n'));
+  assert.deepEqual(relocate(old, old, all(5), 3, 3), { line: 3 }); // unchanged
+  assert.deepEqual(relocate(old, ['x', 'y', ...old], all(7), 2, 3), { startLine: 4, line: 5 }); // shifted down
+  assert.equal(relocate(old, ['a', 'b', 'C', 'd', 'e'], all(5), 3, 3), null); // the line changed
+  assert.equal(relocate(old, ['x', ...old, ...old], all(11), 3, 3), null); // moved, and twice: can't tell
+  assert.equal(relocate(old, ['x', 'y', ...old], all(3), 3, 3), null); // moved out of the diff
 });

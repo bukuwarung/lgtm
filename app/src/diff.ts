@@ -438,3 +438,19 @@ export function alignChanges(dels: string[], adds: string[]): [number | null, nu
   const of = new Map(at.map((j, i) => [j, i]));
   return long.map((_, j) => (swap ? [j, of.get(j) ?? null] : [of.get(j) ?? null, j]) as [number | null, number | null]);
 }
+
+// Where a comment on head lines start..end of `old` sits in `now`, for drafts written before new commits: the
+// same lines, with a line around them, found exactly once (where they were, or shifted), and still lines of the
+// diff (GitHub only takes comments there). null: they changed, went, or could be in more than one place.
+export function relocate(old: string[], now: string[], hunks: Hunk[], start: number, end: number): Anchor | null {
+  const from = Math.max(0, start - 2), to = Math.min(old.length, end + 1);
+  const block = old.slice(from, to);
+  const at = (i: number) => block.every((l, k) => now[i + k] === l);
+  let found = at(from) ? [from] : [];
+  if (!found.length) for (let i = 0; i + block.length <= now.length && found.length < 2; i++) if (at(i)) found.push(i);
+  if (found.length !== 1) return null;
+  const d = found[0] - from;
+  const want: Anchor = start === end ? { line: end + d } : { startLine: start + d, line: end + d };
+  const got = anchor(hunks, start + d, end + d);
+  return got && got.line === want.line && got.startLine === want.startLine ? want : null;
+}
