@@ -111,7 +111,9 @@ tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transpa
 .sx-tag { margin-left: 8px; }
 .sx-warn { margin-left: 8px; padding: 0 6px; border-radius: 999px; white-space: nowrap; font: calc(11px * var(--ts)) var(--sans); color: light-dark(#8a5300, #e3b341); background: color-mix(in srgb, #d29922 16%, transparent); }
 mark.sx-ch { color: inherit; border-radius: 2px; background: color-mix(in srgb, currentColor 22%, transparent); }
-.nav-hist { display: inline-flex; align-items: center; gap: 4px; }
+/* The title bar's buttons, all one size: icons centred in a 34×29 box (Back grows when it names where it goes). */
+.top :is(button, .nav-btn) { box-sizing: border-box; height: 29px; min-width: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; }
+.theme-btn { font-size: calc(15px * var(--ts)); line-height: 1; }
 .back-hint { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .spec-peek { position: fixed; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: 300px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); cursor: pointer; }
 .spec-peek-h { padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: calc(12px * var(--ts)); }

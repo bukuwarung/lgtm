@@ -298,7 +298,7 @@ function App() {
           {backTo && <span class="back-hint">{backTo}</span>}
         </button>
         <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}><Octicon name="arrow-right" /></button>
-        <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings"><Octicon name="gear" /> Settings</a>
+        <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
         <TopActions
           refreshing={refreshing}
           onRefresh={() => {
@@ -609,8 +609,8 @@ function ThemeToggle() {
   const i = THEMES.findIndex(([t]) => t === theme);
   const next = THEMES[(i + 1) % THEMES.length];
   return (
-    <button title={`Theme: ${THEMES[i][1]} (click for ${next[1]})`} onClick={() => setTheme(next[0])}>
-      {THEMES[i][2]} {THEMES[i][1]}
+    <button class="theme-btn" title={`Theme: ${THEMES[i][1]} (click for ${next[1]})`} aria-label={`Theme: ${THEMES[i][1]}`} onClick={() => setTheme(next[0])}>
+      {THEMES[i][2]}
     </button>
   );
 }
