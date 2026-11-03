@@ -293,11 +293,6 @@ function App() {
           </>
         ) : (<>
         <button title="Toggle pull request list" onClick={togglePRs}><Octicon name="three-bars" /></button>
-        <button class="nav-hist" title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)`} aria-label="Back" onClick={() => history.back()}>
-          <Octicon name="arrow-left" />
-          {backTo && <span class="back-hint">{backTo}</span>}
-        </button>
-        <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}><Octicon name="arrow-right" /></button>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
         <TopActions
           refreshing={refreshing}
@@ -310,7 +305,15 @@ function App() {
           }}
         />
         <span class="spacer" />
-        <CommandBar queue={() => queue.current} parse={parseRoute} />
+        {/* Back and forward beside the search box, as a browser has them by its address bar. */}
+        <span class="nav-go">
+          <button class="nav-hist" title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)`} aria-label="Back" onClick={() => history.back()}>
+            <Octicon name="arrow-left" />
+            {backTo && <span class="back-hint">{backTo}</span>}
+          </button>
+          <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}><Octicon name="arrow-right" /></button>
+          <CommandBar queue={() => queue.current} parse={parseRoute} />
+        </span>
         <span class="spacer" />
         {__DEV_BUILD__ && (
           <span class="nav-dev" title={`A development build, not a release${__COMMIT__ ? ` (commit ${__COMMIT__})` : ''}`}>

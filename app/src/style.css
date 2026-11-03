@@ -613,7 +613,8 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .scene-main { padding: 12px 0 0; }
 .scene .file-h { position: static; }
 /* The top bar's Go to / open-a-link box, centred in the bar; its results drop down below it. */
-.cmd { position: relative; flex: 0 1 600px; min-width: 180px; } /* between the spacers: centred when there's room, never over the buttons */
+.nav-go { display: flex; align-items: center; gap: 6px; flex: 0 1 680px; min-width: 260px; } /* back, forward and the search box, between the spacers: centred when there's room */
+.cmd { position: relative; flex: 1; min-width: 180px; }
 .top .cmd input { width: 100%; height: 32px; box-sizing: border-box; padding: 0 44px 0 32px; font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid color-mix(in srgb, var(--fg) 22%, var(--border)); border-radius: 8px; box-shadow: 0 1px 2px var(--shadow); }
 .top .cmd input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .cmd-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
@@ -692,7 +693,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .diff tr.doc.edited .code::before { content: "±"; }
 /* A dev build (not from scripts/release.sh), always visible in the top bar */
 .nav-dev { padding: 1px 8px; border-radius: 6px; font: 700 calc(11px * var(--ts))/calc(18px * var(--ts)) var(--mono); letter-spacing: .04em; color: #fff; background: light-dark(#d1242f, #b62324); white-space: nowrap; }
-.top > :not(.cmd):not(.spacer) { flex-shrink: 0; white-space: nowrap; } /* the box gives way first */
+.top > :not(.cmd):not(.nav-go):not(.spacer) { flex-shrink: 0; white-space: nowrap; } /* the box gives way first */
 /* ✳ Claude with a linked session: a dot */
 .claude-dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: var(--addfg); vertical-align: middle; }
 .claude-btn.linked { border-color: var(--addfg); }
