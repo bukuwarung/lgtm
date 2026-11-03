@@ -732,7 +732,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
       if (!stuck) (send = moved), (sha = head);
       else if (!(await ask(`New commits changed the lines under ${stuck === drafts.length ? (stuck === 1 ? 'your comment' : `your ${stuck} comments`) : `${stuck} of your ${drafts.length} comments`}. Submit ${drafts.length === 1 ? 'it' : 'them all'} on the older commit, where ${drafts.length === 1 ? 'it was' : 'they were'} written?`, 'Submit'))) return false;
     }
-    await submitReview(pr.node_id, sha, event, body, send, pending?.id);
+    await submitReview(pr.node_id, sha, event, body, send, pending?.id).catch((e) => {
+      // Comments that made it into the review on GitHub are there now: a retry sends only the rest.
+      if (e.sent?.length) saveDrafts(drafts.filter((d) => !e.sent.includes(d.id))), setPending((p) => p && { ...p, count: p.count + e.sent.length });
+      throw e;
+    });
     setPending(null);
     // A Claude Code session sent this PR here: offer to send it the outcome (a message stays up past moving on).
     const from = linkedClaude(repo, n);
@@ -1140,7 +1144,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -1300,6 +1304,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
 }
 
 type SubmitProps = {
+  saveAs: string; // where an unsent summary is kept
   count: number;
   myOpenThreads: number; // unresolved review threads I'm in
   slackTo: string[] | null;
@@ -1331,7 +1336,7 @@ const APPROVE_NOTE = 'Approved, but please address the comments';
 // The verdict to start from: pending comments → request changes; my earlier threads still open → comment; else approve.
 export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEvent => (pending ? 'REQUEST_CHANGES' : myOpenThreads ? 'COMMENT' : 'APPROVE');
 
-function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, onSubmit, repo, mentions, authored }: SubmitProps) {
+function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, onSubmit, saveAs, repo, mentions, authored }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
@@ -1349,11 +1354,19 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
     return () => removeEventListener('lgtm:finish', show);
   }, []);
   // Each time the panel opens, start from the verdict that fits the comments as they are now.
-  useEffect(() => void (open && setEvent(authored ? 'COMMENT' : defaultEvent(count, myOpenThreads))), [open, authored]);
+  // An unsent summary (and its verdict) is kept until it's sent: leaving, reloading or a failed send don't lose it.
+  const kept = useRef<{ body: string; event: ReviewEvent } | null>(null);
+  useEffect(() => {
+    kept.current = null;
+    void storage.get<{ body: string; event: ReviewEvent }>(saveAs).then((k) => k && ((kept.current = k), setBody(k.body), setEvent(k.event)));
+  }, [saveAs]);
+  const keep = (b: string, e: ReviewEvent) => void (b.trim() && b !== mySummary && b !== APPROVE_NOTE ? storage.set(saveAs, { body: b, event: e }) : storage.remove(saveAs));
+  useEffect(() => void (open && !kept.current && setEvent(authored ? 'COMMENT' : defaultEvent(count, myOpenThreads))), [open, authored]);
   // Approving with pending comments: say so, unless I've written my own summary.
   // Some verdicts start their summary: approving with comments pending says so; a change request, what my comments ask.
   const pick = (v: ReviewEvent) => {
     setEvent(v);
+    if (kept.current) keep(body, v);
     if (v === 'APPROVE' && count && !body.trim()) setBody(APPROVE_NOTE);
     else if (v === 'REQUEST_CHANGES' && !count && mySummary && (!body.trim() || body === APPROVE_NOTE)) setBody(mySummary);
     else if (v !== 'APPROVE' && body === APPROVE_NOTE) setBody('');
@@ -1367,6 +1380,8 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
       if (await onSubmit(event, body, notify, next && !authored)) {
         setOpen(false);
         setBody('');
+        kept.current = null;
+        void storage.remove(saveAs);
       }
     } catch (e: any) {
       setErr(e.message);
@@ -1384,7 +1399,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
         <div class="panel">
           <Editor
             value={body}
-            onInput={setBody}
+            onInput={(b: string) => (setBody(b), keep(b, event), (kept.current = b.trim() ? { body: b, event } : null))}
             onSubmit={() => !busy && go()}
             onCancel={() => setOpen(false)}
             repo={repo}

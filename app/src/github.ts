@@ -953,6 +953,7 @@ export async function submitReview(prId: string, commitOID: string, event: Revie
         { pr: prId, c: commitOID },
       )
     ).addPullRequestReview.pullRequestReview.id;
+  const sent: string[] = []; // on a review already on GitHub, these stay there if a later step fails
   try {
     for (const x of drafts) {
       await graphql(
@@ -969,6 +970,7 @@ export async function submitReview(prId: string, commitOID: string, event: Revie
           subject: x.line ? 'LINE' : 'FILE',
         },
       );
+      sent.push(x.id);
     }
     await graphql(
       `mutation($r:ID!,$e:PullRequestReviewEvent!,$b:String){submitPullRequestReview(input:{pullRequestReviewId:$r,event:$e,body:$b}){clientMutationId}}`,
@@ -977,6 +979,7 @@ export async function submitReview(prId: string, commitOID: string, event: Revie
   } catch (e) {
     // Don't leave a half-built pending review behind; it would block the retry. One started on GitHub stays.
     if (!pending) await discardReview(reviewId).catch(() => {});
+    else (e as { sent?: string[] }).sent = sent;
     throw e;
   }
 }
