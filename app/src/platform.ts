@@ -565,14 +565,14 @@ export async function backToClaude(id: string, message = ''): Promise<string> {
   if (message)
     note = await leaveForClaude(id, message).then(
       () => 'Left for the session: say “check lgtm” there',
-      async () => (await navigator.clipboard.writeText(message).catch(() => {}), 'Copied: paste it in the session (⌘V)'),
+      async () => (await copyText(message).catch(() => {}), 'Copied: paste it in the session (⌘V)'),
     );
   const local = id.startsWith('local_') ? id : (await claudeSessionState(id).catch(() => null))?.id;
   if (local) {
     await openClaude(`claude://code/continue?session=${encodeURIComponent(local)}`);
     return note;
   }
-  await navigator.clipboard.writeText(`claude --resume ${id}${message ? " 'check lgtm'" : ''}`).catch(() => {});
+  await copyText(`claude --resume ${id}${message ? " 'check lgtm'" : ''}`).catch(() => {});
   return 'A Terminal session: the command to resume it is copied; paste it in Terminal';
 }
 
@@ -623,6 +623,10 @@ if (typeof window !== 'undefined') {
   addEventListener('error', (e) => recordError(`error: ${e.message}`));
   addEventListener('unhandledrejection', (e) => recordError(`unhandled: ${e.reason?.message ?? e.reason}`));
 }
+
+// Copies text. The app's web view refuses clipboard writes made after an await (the click's permission is gone), so the
+// app copies it itself.
+export const copyText = (text: string): Promise<void> => (isDesktop ? command('copy_text', { text }) : navigator.clipboard.writeText(text));
 
 // Copies diagnostics. In a browser the clipboard write starts during the click and waits for the text (the sign-in
 // checks take a few seconds, longer than a click's permission lasts).

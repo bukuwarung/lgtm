@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getMyReviews, type MyReview } from './github.ts';
+import { copyText } from './platform.ts';
 import { Tg } from './tags.tsx';
 
 // While a page of PRs loads (this one, a person's): its shape, shimmering (style.css .sk). `face`: a picture by the title.
@@ -54,8 +55,7 @@ export function History() {
   ].filter(Boolean).join(' · ');
   const days = [...new Set(list.map((r) => day(r.at)))];
   const copy = () =>
-    navigator.clipboard
-      .writeText([`Reviews in the last 30 days: ${summary}`, ...list.map((r) => `- ${VERDICT[r.state][1]}: ${r.title} (${r.repo}#${r.number}) ${r.url}`)].join('\n'))
+    copyText([`Reviews in the last 30 days: ${summary}`, ...list.map((r) => `- ${VERDICT[r.state][1]}: ${r.title} (${r.repo}#${r.number}) ${r.url}`)].join('\n'))
       .then(() => setCopied(true), () => {});
   return (
     <div class="page history">

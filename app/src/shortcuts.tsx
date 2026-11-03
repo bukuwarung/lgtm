@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { fetchJobLog, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
+import { fetchJobLog, reportError, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName } from './files.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
@@ -176,7 +176,7 @@ function Replace({ login, replace }: { login: string; replace: (login: string) =
       class="link ix-pad ix-replace"
       disabled={!!state && state !== 'failed'}
       title={`@${login} is away: take them off and ask the next free reviewer on GitHub`}
-      onClick={() => (setState('asking'), replace(login).then((who) => setState(`asked @${who}`), (e) => (setState('failed'), alert(e.message))))}
+      onClick={() => (setState('asking'), replace(login).then((who) => setState(`asked @${who}`), (e) => (setState('failed'), reportError(e.message))))}
     >
       {state === 'asking' ? 'Asking…' : state && state !== 'failed' ? state : 'Ask someone else instead'}
     </button>

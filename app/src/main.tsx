@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -48,7 +48,7 @@ function ReviewLog({ log }: { log: { repo: string; n: number; title: string; how
   const [copied, setCopied] = useState(false);
   const url = (l: (typeof log)[number]) => `https://github.com/${l.repo}/pull/${l.n}`;
   const copy = () =>
-    navigator.clipboard.writeText(log.map((l) => `${VERB[l.how][1]}: ${l.title || `${l.repo}#${l.n}`} ${url(l)}`).join('\n')).then(() => setCopied(true), () => {});
+    copyText(log.map((l) => `${VERB[l.how][1]}: ${l.title || `${l.repo}#${l.n}`} ${url(l)}`).join('\n')).then(() => setCopied(true), () => {});
   return (
     <div class="review-log">
       {log.map((l) => (

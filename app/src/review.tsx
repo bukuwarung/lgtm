@@ -23,7 +23,7 @@ import { fillSlack, isAway, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
-import { slackPresence, type SlackPresence, reportError, ask, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -1923,7 +1923,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
         side === 'LEFT'
           ? `https://github.com/${ctx.repo}/blob/${ctx.pr.base.sha}/${file.previous_filename ?? path}#L${line}`
           : `https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${path}#L${line}`;
-      void navigator.clipboard.writeText(url).then(
+      void copyText(url).then(
         () => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Link to line ${line} copied`, ms: 2500 } })),
         () => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: "Couldn't copy the link", ms: 2500 } })),
       );
@@ -3396,7 +3396,7 @@ function CopyLink({ url }: { url: string }) {
     <button
       class="copy-link"
       title="Copy link to this comment"
-      onClick={() => navigator.clipboard.writeText(url).then(() => show('Copied'), () => show("Couldn't copy"))}
+      onClick={() => copyText(url).then(() => show('Copied'), () => show("Couldn't copy"))}
     >
       {done || '🔗'}
     </button>

@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import { emojiMap } from './emoji.ts';
 import { highlightCode, languageFor, splitLines } from './highlight.ts';
+import { copyText } from './platform.ts';
 
 // A fence's language; an unmarked one takes the caller's guess (the commented file's, or the PR's main language).
 // Comments and drafts get theirs afterwards from highlightBlocks, which knows which file they're on.
@@ -193,7 +194,7 @@ export function onDocClick(e: MouseEvent, root: HTMLElement | null, linkTo?: (sl
   if (hd && linkTo) {
     e.preventDefault();
     const slug = hd.closest<HTMLElement>('[data-slug]')!.dataset.slug!;
-    void navigator.clipboard.writeText(linkTo(slug)).then(() => {
+    void copyText(linkTo(slug)).then(() => {
       hd.textContent = 'Copied';
       setTimeout(() => (hd.textContent = '¶'), 1500);
     });
