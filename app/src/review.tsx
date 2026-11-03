@@ -2143,11 +2143,16 @@ type PeekAt = { path: string; line?: number; at: DOMRect; go: () => void };
 function useRefPeek(ix: CodeIndex) {
   const [peek, setPeek] = useState<PeekAt | null>(null);
   const timer = useRef(0);
-  // Scrolling away closes it, and cancels one about to open (links pass under the pointer while the page moves).
+  // Scrolling away closes it, and cancels one about to open (links pass under the pointer while the page moves); so do
+  // a click outside it and Esc.
   useEffect(() => {
     const away = () => (clearTimeout(timer.current), setPeek(null));
+    const click = (e: PointerEvent) => !(e.target as Element).closest?.('.spec-peek') && away();
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && away();
     addEventListener('scroll', away, { passive: true });
-    return () => (clearTimeout(timer.current), removeEventListener('scroll', away));
+    addEventListener('pointerdown', click);
+    addEventListener('keydown', esc);
+    return () => (clearTimeout(timer.current), removeEventListener('scroll', away), removeEventListener('pointerdown', click), removeEventListener('keydown', esc));
   }, []);
   const show = (p: Omit<PeekAt, 'at'>, el: Element) => {
     clearTimeout(timer.current);
