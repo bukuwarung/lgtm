@@ -36,6 +36,14 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   const [msg, setMsg] = useState({ title: '', body: '' });
   const [bypass, setBypass] = useState(false);
   const [dropBranch, toggleDropBranch] = useStoredFlag('deleteBranch', true);
+  // Its Jira tickets that aren't done, moved as it merges when ticked (Settings → Reviewing ticks it to start with).
+  const [moveOnMerge] = useStoredFlag('jiraOnMerge', false);
+  const [jiraTo] = useStoredValue('jiraAfterMerge', 'Ready for QA');
+  const [moveTickets, setMoveTickets] = useState(moveOnMerge);
+  const [openTickets, setOpenTickets] = useState<string[]>([]);
+  useEffect(() => {
+    Promise.all(tickets.map((k) => fetchJira(k).then((i) => (i.statusCategory === 'done' ? null : k), () => null))).then((l) => setOpenTickets(l.filter((k): k is string => !!k)));
+  }, [tickets.join()]);
   const [shown, setShown] = useState(false);
   useEffect(() => {
     const toggle = () => setShown((x) => !x);
@@ -161,12 +169,19 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
                 run('merge', async () => {
                   await mergePR(s, m, msg.title, msg.body, confirm === 'auto');
                   if (deleting) await deleteBranch(repo, s).catch((e) => setErr(`Merged, but ${e.message}`));
+                  if (confirm === 'merge' && moveTickets)
+                    for (const k of openTickets) await moveJira(k, jiraTo).catch((e) => setErr(`Merged, but ${k} didn't move to ${jiraTo}: ${e.message}`));
                 })
               }
             >
               {busy === 'merge' ? 'Working…' : confirm === 'auto' ? `Enable auto-merge (${VERB[m].toLowerCase()})` : `Confirm ${VERB[m].toLowerCase()}`}
             </button>
             <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
+            {confirm === 'merge' && openTickets.length > 0 && (
+              <label title="Settings → Reviewing: whether this starts ticked, and the status">
+                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> Move {openTickets.join(', ')} to {jiraTo}
+              </label>
+            )}
             {offerDelete && (
               <label title="GitHub doesn't delete this repo's merged branches by itself">
                 <input type="checkbox" checked={dropBranch} onChange={toggleDropBranch} /> Delete {s.headRefName}

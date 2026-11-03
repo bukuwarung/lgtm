@@ -313,6 +313,7 @@ export function Settings() {
         <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)} />
         <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation" />
+        <Flag k="jiraOnMerge" initial={false} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge." />
         <JiraAfterMerge />
         <Flag k="gradleModules" initial={true} label="Group files by module" hint="Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a PR touches two or more, the index groups its files by them and each file says its own; with one, a pill names it." />
         <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it." />
@@ -684,7 +685,7 @@ function JiraAfterMerge() {
     <label class="set-row">
       <span>
         After merging, move the Jira ticket to
-        <small>Offered under the merge box once your PR is merged; Jira's own status name.</small>
+        <small>As you merge (above), or offered under the merge box once your PR is merged; Jira's own status name.</small>
       </span>
       <input value={status} onInput={(e) => setStatus(e.currentTarget.value)} style={{ maxWidth: '220px' }} />
     </label>
