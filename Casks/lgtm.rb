@@ -1,6 +1,6 @@
 cask "lgtm" do
-  version "0.5.0"
-  sha256 "3203a8b93f6996964f45c8bbdf5d58e353b48b35f6131e4824aef92b8425e5d6"
+  version "0.6.0"
+  sha256 "23265b185ced280b5cceb0e8d530ad507bb912d6fd6d8a65c28ac172f13b25d3"
 
   url "https://github.com/bukuwarung/lgtm/releases/download/v#{version}/lgtm-#{version}.zip"
   name "lgtm"
