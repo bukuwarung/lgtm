@@ -699,6 +699,8 @@ test('specrefs: code spans in specs naming the PR\'s files, and where', () => {
   const patch = '@@ -1,6 +1,7 @@\n a\n b\n c\n d\n+fun go() {}\n e\n f';
   assert.deepEqual(peekLines(patch, 5, 3).map((l) => l.text), ['c', 'd', 'fun go() {}']);
   assert.deepEqual(peekLines(patch, undefined, 2).map((l) => l.text), ['c', 'd']);
+  const imports = '@@ -1,3 +1,4 @@\n import a\n+import b\n import c\n@@ -10,3 +11,4 @@\n class X {\n   val y = 1\n+  val z = 2\n }';
+  assert.deepEqual(peekLines(imports, undefined, 2).map((l) => l.text), ['class X {', '  val y = 1']); // past the added import
 });
 
 test('testPhase: Given-When-Then and Arrange-Act-Assert comments', async () => {

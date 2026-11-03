@@ -26,12 +26,16 @@ export function codeIndex(files: F[]): CodeIndex {
   return { files: code.map((f) => f.filename), symbols, patches: new Map(files.map((f) => [f.filename, f.patch ?? ''])) };
 }
 
-// What a link's preview shows: the diff around the declaration it names, else the file's first change.
+// What a link's preview shows: the diff around the declaration it names, else the file's first change that isn't an
+// import (an added import says little about the change).
+const IMPORT = /^\s*(?:import|package|using|#include|from\s+\S+\s+import)\b/;
+const telling = (l: Line) => l.kind !== ' ' && !!l.text.trim() && !IMPORT.test(l.text);
 export function peekLines(patch: string, line?: number, max = 14): Line[] {
   const hunks = parsePatch(patch);
-  const h = (line && hunks.find((x) => x.lines.some((l) => l.new === line))) || hunks.find((x) => x.lines.some((l) => l.kind !== ' ')) || hunks[0];
+  const h = (line && hunks.find((x) => x.lines.some((l) => l.new === line))) || hunks.find((x) => x.lines.some(telling)) || hunks.find((x) => x.lines.some((l) => l.kind !== ' ')) || hunks[0];
   if (!h) return [];
-  const at = line && h.lines.some((l) => l.new === line) ? h.lines.findIndex((l) => l.new === line) : Math.max(0, h.lines.findIndex((l) => l.kind !== ' '));
+  const first = h.lines.findIndex(telling);
+  const at = line && h.lines.some((l) => l.new === line) ? h.lines.findIndex((l) => l.new === line) : Math.max(0, first >= 0 ? first : h.lines.findIndex((l) => l.kind !== ' '));
   const from = Math.max(0, at - 2);
   return h.lines.slice(from, from + max);
 }
