@@ -75,14 +75,39 @@ function App() {
   // The PR list's latest items (to pick the next PR to review), and a message to show on the page we move to.
   const queue = useRef<QueueItem[]>([]);
   const [flash, setFlash] = useState<{ route: string; text: string; ok: boolean } | null>(null);
-  const goNext = async (from: { repo: string; n: number }, notice: { text: string; ok: boolean } | null) => {
+  // Review mode: the PRs that need my review one after another, with nothing else on screen. seen: the ones reviewed
+  // or skipped since it started (GitHub's search can list a reviewed one for a while).
+  const [rm, setRm] = useState<{ seen: string[]; done: number; skipped: number } | null>(null);
+  useEffect(() => void document.documentElement.classList.toggle('review-mode', !!rm), [rm]);
+  const needs = (items: QueueItem[], skip: string[]) => {
+    const l = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft && !skip.includes(`${i.repo}#${i.number}`));
+    return rm ? l.sort((a, b) => a.waitingSince.localeCompare(b.waitingSince)) : l; // review mode: longest-waiting first
+  };
+  const goNext = async (from: { repo: string; n: number } | null, notice: { text: string; ok: boolean } | null, skip = rm?.seen ?? []) => {
     // With the PR list hidden nothing has loaded it; fetch it now (without thread status, so no "comments resolved").
     const items = queue.current.length ? queue.current : await getReviewQueue().catch(() => []);
-    const next = items.find((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft && !(i.repo === from.repo && i.number === from.n));
+    const next = needs(items, from ? [...skip, `${from.repo}#${from.n}`] : skip)[0];
     const to = next ? `#/${next.repo}/pull/${next.number}` : '#/done';
     setFlash(notice && { route: to, ...notice });
     location.hash = to.slice(1);
   };
+  // Leaving one in review mode: reviewed (done) or skipped, then the next.
+  const moveOn = (from: { repo: string; n: number }, how: 'done' | 'skipped', notice: { text: string; ok: boolean } | null = null) => {
+    if (!rm) return goNext(from, notice);
+    const seen = [...rm.seen, `${from.repo}#${from.n}`];
+    setRm({ ...rm, seen, [how]: rm[how] + 1 });
+    return goNext(null, notice, seen);
+  };
+  const startReview = () => (setRm({ seen: [], done: 0, skipped: 0 }), goNext(null, null, []));
+  useEffect(() => {
+    if (!rm) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || (e.target as Element).closest('input, textarea, [contenteditable]') || document.querySelector('.help, .panel, dialog[open]')) return;
+      setRm(null);
+    };
+    addEventListener('keydown', esc);
+    return () => removeEventListener('keydown', esc);
+  }, [rm]);
 
   const signIn = () =>
     loadToken()
@@ -189,6 +214,18 @@ function App() {
     <>
       {/* In the app the window has no title bar: this bar holds the traffic lights (left) and drags the window. */}
       <nav class="top" data-tauri-drag-region>
+        {rm ? (
+          <>
+            <b class="rm-title">Review mode</b>
+            {r && (() => {
+              const left = needs(queue.current, rm.seen).length || 1; // this one, and what's after it
+              return <span class="rm-count">{rm.seen.length + 1} of {rm.seen.length + left}</span>;
+            })()}
+            <span class="spacer" />
+            {r && <button onClick={() => moveOn(r, 'skipped')} title="On to the next PR without reviewing this one">Skip <Octicon name="arrow-right" /></button>}
+            <button onClick={() => setRm(null)} title="Back to everything (Esc)">Exit</button>
+          </>
+        ) : (<>
         <button title="Toggle pull request list" onClick={togglePRs}><Octicon name="three-bars" /></button>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings"><Octicon name="gear" /> Settings</a>
         <TopActions
@@ -216,12 +253,17 @@ function App() {
         )}
         <ThemeToggle />
         <AccountMenu />
+        </>)}
       </nav>
       {isDesktop && <FindBar />}
-      <WhatsNew />
-      <SetupCheck />
-      <TrialBar look={look} />
-      {toast && (
+      {!rm && (
+        <>
+          <WhatsNew />
+          <SetupCheck />
+          <TrialBar look={look} />
+        </>
+      )}
+      {toast && !rm && (
         <div class="toast" role="status">
           {toast.text}
           {toast.action && (
@@ -232,9 +274,9 @@ function App() {
           <button title="Dismiss" onClick={() => setToast(null)}><Octicon name="x" /></button>
         </div>
       )}
-      <div class={showPRs ? 'shell' : 'shell no-prs'}>
+      <div class={showPRs && !rm ? 'shell' : 'shell no-prs'}>
         {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
-        <PRList hidden={!showPRs} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setRefreshing(false))} />
+        <PRList hidden={!showPRs || !!rm} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setRefreshing(false))} />
         {r ? (
           <Review
             key={route}
@@ -248,7 +290,8 @@ function App() {
               setAnsweredTick((t) => t + 1);
               setTimeout(() => setQueueVersion((v) => v + 1), 60_000);
             }}
-            onReviewed={(notice) => goNext(r, notice)}
+            onReviewed={(notice) => moveOn(r, 'done', notice)}
+            focus={!!rm}
             flash={flash?.route === route ? flash : null}
           />
         ) : route === '#/settings' ? (
@@ -256,8 +299,9 @@ function App() {
         ) : route === '#/done' ? (
           <div class="page done">
             <img src="/favicon.png" alt="" width="96" height="96" />
-            <h2>All caught up!</h2>
-            <p>No pull requests need your review right now.</p>
+            <h2>{rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
+            <p>{rm?.skipped ? `Reviewed ${rm.done}, skipped ${rm.skipped}: those still need your review.` : rm ? `Reviewed ${rm.done}. No pull requests need your review right now.` : 'No pull requests need your review right now.'}</p>
+            {rm && <button class="primary" onClick={() => setRm(null)}>Back to the list</button>}
             {flash?.route === route && (
               <p class={flash.ok ? 'notice' : 'warn'}>
                 <NoticeText text={flash.text} />
@@ -694,7 +738,7 @@ function Waiting({ i, nudge }: { i: QueueItem; nudge: boolean }) {
 
 const answered: Answered = new Map(); // reviews sent from here, until the list catches up
 
-function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: boolean; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
+function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
   const [loaded, setItems] = useState<QueueItem[] | null>(null);
   const items = useMemo(() => loaded && withAnswered(loaded, answered), [loaded, answeredTick]);
   const [err, setErr] = useState('');
@@ -997,6 +1041,11 @@ function PRList({ hidden, current, version, answeredTick, onItems }: { hidden: b
           ))}
         </div>
       )}
+      {tab === 'reviewing' && ((c) => c > 0 && (
+        <button class="primary review-all" onClick={onReview} title="The PRs that need your review, longest-waiting first, with nothing else on screen">
+          <Octicon name="play" /> Review {c} PR{c > 1 ? 's' : ''}
+        </button>
+      ))(shown?.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft).length ?? 0)}
       {(tab === 'reviewing' || tab === 'team') && ((c) => c > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
           {showDrafts ? `Hide ${c} draft PR${c > 1 ? 's' : ''}` : `${c} draft PR${c > 1 ? 's' : ''} hidden · show`}

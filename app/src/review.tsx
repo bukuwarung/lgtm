@@ -298,7 +298,8 @@ function pruneVisits() {
   for (const [k] of keys.map((k) => [k, when(k)] as const).sort((a, b) => a[1] - b[1]).slice(0, keys.length - 100)) localStorage.removeItem(k);
 }
 
-export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { repo: string; n: number; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null }) {
+// focus: review mode (main.tsx), where the index starts hidden and a review always moves on.
+export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focus }: { repo: string; n: number; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null; focus?: boolean }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
@@ -345,7 +346,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
   const [startSince] = useStoredFlag('sinceFirst', true);
   const [resumeOn] = useStoredFlag('resumePosition', false);
   const [dimMoved] = useStoredFlag('dimMoved', true);
-  const [showIndex, toggleIndex] = useStoredFlag('showIndex', true);
+  const index = useStoredFlag('showIndex', true);
+  const focusIndex = useStoredFlag('reviewModeIndex', false);
+  const [showIndex, toggleIndex] = focus ? focusIndex : index;
   useEffect(() => {
     const show = () => !showIndex && toggleIndex();
     addEventListener('lgtm:show-index', show);
@@ -678,7 +681,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
         result = { ok: false, text: `Review submitted, but Slack failed: ${e.message}` };
       }
     }
-    if (next) {
+    if (next || focus) {
       onReviewed(result);
       return true;
     }
@@ -1145,7 +1148,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash }: { 
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
-          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} />
+          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} />
           {visible.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
@@ -2929,7 +2932,8 @@ const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQU
 
 const botExcerpt = (html: string, max = 100) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
-function Conversation({ pr, items, lang, repo, me, mentions }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[] }) {
+// folded: review mode starts with it closed, the diff first.
+function Conversation({ pr, items, lang, repo, me, mentions, folded }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean }) {
   const [editing, setEditing] = useState(false);
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const [mdStyle] = useMdStyle();
@@ -2937,7 +2941,7 @@ function Conversation({ pr, items, lang, repo, me, mentions }: { pr: PR; items: 
   const desc = useRef<HTMLDivElement>(null);
   useEffect(() => tidyDoc(desc.current), [pr.body_html]);
   return (
-    <details class="conversation" id="conversation" open>
+    <details class="conversation" id="conversation" open={!folded}>
       <summary>
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>

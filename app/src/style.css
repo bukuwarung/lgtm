@@ -68,6 +68,10 @@ code, pre { font-family: var(--mono); }
 .side { position: sticky; top: var(--nav); height: calc(100vh - var(--nav)); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
 .side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
 .prs .side-scroll { padding: 8px; }
+.review-all { width: 100%; margin-bottom: 6px; }
+.rm-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Review mode: the PR's own Slack and Claude shortcuts go too. */
+.review-mode .bar-group:not(.bar-actions) { display: none; }
 .drafts-toggle { width: 100%; margin-bottom: 6px; padding: 2px 8px; border-style: dashed; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .resizer { position: absolute; top: 0; right: 0; width: 6px; height: 100%; z-index: 5; cursor: col-resize; }
 .resizer:hover, .resizer:focus-visible, body.resizing .resizer { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: none; }
