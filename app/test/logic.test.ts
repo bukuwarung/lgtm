@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, commonIndent, dedentHtml, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { codeIndex, refTo, specRefs } from '../src/specrefs.ts';
 import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
@@ -675,4 +676,23 @@ docs/**/*.md @org/docs
   assert.deepEqual(codeOwners(noStar, 'docs/c.md'), ['@org/docs']);
   assert.deepEqual(codeOwners(noStar, 'src/Main.kt'), []);
   assert.deepEqual(codeOwners('build/** @b', 'build/x/y.kts'), ['@b']);
+});
+
+test('specrefs: code spans in specs naming the PR\'s files, and where', () => {
+  const files = [
+    { filename: 'app/proguard-rules.pro', patch: '@@ -1 +1 @@\n-a\n+b' },
+    { filename: 'app/src/main/java/x/LegacySignalHandler.kt', patch: '@@ -1,2 +1,3 @@\n class LegacySignalHandler {\n+  fun initialiseBureau() {}\n }' },
+    { filename: 'openspec/changes/x/tasks.md', patch: '@@ -0,0 +1,3 @@\n+- [ ] 2.1 Tighten `proguard-rules.pro`\n+- [x] 2.2 Call `initialiseBureau()` from `LegacySignalHandler.start`\n+- [ ] 2.3 Mention `Unrelated` and `app/Other.kt`' },
+  ];
+  const ix = codeIndex(files);
+  assert.equal(refTo('proguard-rules.pro', ix), 'app/proguard-rules.pro');
+  assert.equal(refTo('app/proguard-rules.pro:12', ix), 'app/proguard-rules.pro');
+  assert.equal(refTo('initialiseBureau()', ix), 'app/src/main/java/x/LegacySignalHandler.kt');
+  assert.equal(refTo('LegacySignalHandler#start', ix), 'app/src/main/java/x/LegacySignalHandler.kt');
+  assert.equal(refTo('Unrelated', ix), null);
+  assert.equal(refTo('run the build', ix), null);
+  assert.equal(refTo('tasks.md', ix), null); // specs aren't code
+  const refs = specRefs(files, ix);
+  assert.deepEqual(refs.get('app/proguard-rules.pro'), [{ spec: 'openspec/changes/x/tasks.md', line: 1, label: 'tasks.md 2.1' }]);
+  assert.deepEqual(refs.get('app/src/main/java/x/LegacySignalHandler.kt'), [{ spec: 'openspec/changes/x/tasks.md', line: 2, label: 'tasks.md 2.2' }]);
 });

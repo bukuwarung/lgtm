@@ -69,6 +69,13 @@ code, pre { font-family: var(--mono); }
 .side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
 .prs .side-scroll { padding: 8px; }
 .review-all { width: 100%; margin-bottom: 6px; }
+/* Specs naming the PR's code: their code spans link to it, their tasks count it, and files link back. */
+.rich code.spec-ref { cursor: pointer; text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent); text-underline-offset: 3px; }
+.rich code.spec-ref:hover { color: var(--accent); }
+.spec-touch { margin-left: 8px; padding: 0 6px; border-radius: 999px; font: calc(11px * var(--ts)) var(--sans); color: var(--pill-ok); background: color-mix(in srgb, var(--pill-ok) 12%, transparent); }
+.spec-touch:empty { display: none; }
+.spec-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+.spec-chip:hover { color: var(--fg); }
 /* The jump between a PR's specs and its code: bottom right, clear of the scroll strip. */
 .doc-code-jump { position: fixed; right: 28px; bottom: 20px; z-index: 15; padding: 4px 12px; border-radius: 999px; box-shadow: 0 2px 8px var(--shadow); background: var(--bg); }
 .jira-pill { font-variant-numeric: tabular-nums; }

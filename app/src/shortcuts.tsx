@@ -36,9 +36,11 @@ export function jumpTo(id: string, near?: string) {
       return;
     }
     for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) d.open = true;
-    el.scrollIntoView({ block: 'center' });
+    // Centred, unless it's taller than about the window (a whole file): then its top, below the bars (scroll-margin).
+    const block = el.offsetHeight > innerHeight * 0.7 ? 'start' : 'center';
+    el.scrollIntoView({ block });
     // Files above may finish rendering and push it down; settle once more.
-    setTimeout(() => el.scrollIntoView({ block: 'center' }), 400);
+    setTimeout(() => el.scrollIntoView({ block }), 400);
     el.classList.remove('flash');
     void el.offsetWidth; // restart the animation
     el.classList.add('flash');

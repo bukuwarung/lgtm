@@ -25,6 +25,7 @@ import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lin
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
+import { codeIndex, isDoc, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { Resizer } from './resizer.tsx';
 import { below, jumpTo, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
@@ -61,6 +62,8 @@ type Ctx = {
   batch: Suggestion[]; // suggestions picked to commit together
   toggleBatch?: (s: Suggestion) => void; // unset where I can't commit suggestions (not my PR)
   applySuggestions: (list: Suggestion[]) => Promise<void>;
+  codeIx: CodeIndex; // the PR's changed code files and what they declare, for specs naming them (specrefs.ts)
+  specRefs: Map<string, SpecRef[]>; // where the specs name each changed file
 };
 type SinceComment = { kind: 'same' | 'gone' | 'unknown' } | { kind: 'changed'; lines: Line[] };
 type Saved = { sha: string; drafts: Draft[] };
@@ -704,7 +707,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   // them and files are tagged; with one, a pill names it.
   const [byModule] = useStoredFlag('gradleModules', true);
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
+  const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
+  const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
   const ctx: Ctx = {
+    codeIx,
+    specRefs: refs,
     untested: noTests,
     modules: undefined, // set below, once the shown files are known
     sinceComment,
@@ -1524,6 +1531,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         <span class="counts">
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
         </span>
+        <SpecChips refs={ctx.specRefs.get(path)} />
         {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <DiffMode rich={rich} set={setRich} />}
@@ -2012,6 +2020,67 @@ function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'j
 }
 
 const rawSeen = new Map<string, string>();
+// A spec's code spans naming a changed file become links to it (specrefs.ts); its tasks ("[ ] 2.1 …") say how many of
+// the PR's files they name (one naming none says nothing: "build it", "delete the X block" name no file). Run after
+// each draw (the blocks' HTML is set as is).
+function linkSpecRefs(root: HTMLElement | null, ix: CodeIndex) {
+  if (!root) return;
+  for (const c of root.querySelectorAll('code')) {
+    if (c.closest('pre, a') || c.hasAttribute('data-ref')) continue;
+    const to = refTo(c.textContent ?? '', ix);
+    c.setAttribute('data-ref', to ?? '');
+    if (to) {
+      c.setAttribute('data-jump', to);
+      c.classList.add('spec-ref');
+      c.title = `${to}: go to its changes`;
+    }
+  }
+  if (!root.querySelector('[data-jump]')) return; // a spec that names no code: its tasks aren't about this PR's files
+  for (const li of root.querySelectorAll('li')) {
+    if (!/^\s*\[[ xX]\]/.test(li.textContent ?? '')) continue;
+    const files = new Set([...li.querySelectorAll('[data-jump]')].filter((e) => e.closest('li') === li).map((e) => e.getAttribute('data-jump')));
+    let tag = li.querySelector<HTMLElement>(':scope > .spec-touch');
+    if (!tag) {
+      tag = document.createElement('span');
+      tag.className = 'spec-touch';
+      li.insertBefore(tag, li.querySelector(':scope > ul, :scope > ol'));
+    }
+    tag.textContent = files.size ? `${files.size} file${files.size > 1 ? 's' : ''} in this PR` : '';
+  }
+}
+
+// To where a spec names a file: its block holding that line, once drawn (else the spec).
+function jumpToSpec(r: SpecRef) {
+  const sec = document.getElementById('f-' + r.spec);
+  sec?.scrollIntoView();
+  let tries = 0;
+  const go = () => {
+    const el = [...(sec?.querySelectorAll('[data-src]') ?? [])].find((e) => {
+      const [s, end] = e.getAttribute('data-src')!.split('-').map(Number);
+      return s <= r.line && r.line <= end;
+    });
+    if (!el) return void (tries++ < 60 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + r.spec)); // it may still be loading
+    el.id ||= `sl-${r.spec}-${r.line}`;
+    jumpTo(el.id);
+  };
+  setTimeout(go, 50);
+}
+
+// A changed file's header: where the specs name it, a chip per spec (its first mention; all of them on hover).
+function SpecChips({ refs }: { refs?: SpecRef[] }) {
+  if (!refs?.length) return null;
+  const bySpec = [...new Map(refs.map((r) => [r.spec, refs.filter((x) => x.spec === r.spec)])).values()];
+  return (
+    <>
+      {bySpec.map((l) => (
+        <button class="spec-chip" title={`Named in ${l.map((r) => r.label).join(', ')}: go there`} onClick={() => jumpToSpec(l[0])}>
+          <Octicon name="file" /> {l[0].label}{l.length > 1 ? ` +${l.length - 1}` : ''}
+        </button>
+      ))}
+    </>
+  );
+}
+
 function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle); // Settings → Markdown files
@@ -2021,6 +2090,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   useEffect(() => {
     tidyDoc(root.current, linkTo);
     signRelativeImages(root.current, ctx.headRepo, ctx.pr.head.sha, dir(path)); // its images, by their path in the repo
+    linkSpecRefs(root.current, ctx.codeIx);
   });
   // The whole file at the PR's head (kept for the session, so a second look draws at once). It's drawn only once it's
   // here: drawing the diff's lines first and the rest later would make the page jump by thousands of pixels.
@@ -2101,7 +2171,16 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   };
 
   return (
-    <div class={`rich ${look.class}`} style={look.style} ref={root} onClick={(e) => onDocClick(e, root.current, linkTo)}>
+    <div
+      class={`rich ${look.class}`}
+      style={look.style}
+      ref={root}
+      onClick={(e) => {
+        const to = (e.target as Element).closest('[data-jump]')?.getAttribute('data-jump');
+        if (to) return void (e.preventDefault(), jumpTo('f-' + to));
+        onDocClick(e, root.current, linkTo);
+      }}
+    >
       <Notes ctx={ctx} threads={orphanT} drafts={orphanD} form={t?.side === 'LEFT' && !removed.some((r) => inRun(r, t.line))} />
       {chunks.map((c, i) => {
         if (hidden(i)) {
@@ -2292,9 +2371,7 @@ function HoldPlace() {
   return null;
 }
 
-// A PR with both specs (Markdown, or anything under openspec/ or docs/) and code: a button to jump from the one you're
-// reading to the other (g, too).
-const isDoc = (path: string) => /\.(md|mdx|markdown)$/i.test(path) || /(^|\/)(openspec|docs)\//.test(path);
+// A PR with both specs (isDoc) and code: a button to jump from the one you're reading to the other (g, too).
 function DocCodeJump({ files }: { files: File[] }) {
   const both = files.some((f) => isDoc(f.filename)) && files.some((f) => !isDoc(f.filename));
   const [at, setAt] = useState<{ doc: boolean; up: boolean } | null>(null);
