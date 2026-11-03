@@ -23,7 +23,7 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, isAway, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
-import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
+import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, untested, type BuildRoot, type PlanStep } from './files.ts';
 import { slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
@@ -696,6 +696,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
     main?.querySelectorAll<HTMLElement>('.md[data-lang]').forEach((el) => highlightBlocks(el, el.dataset.lang || undefined));
   });
 
+  const [planOrder, togglePlanOrder] = useStoredFlag('planOrder', true); // a big PR's files in its plan's order
   if (error) return <p class="error page">{error}</p>;
   if (!data) return <PRSkeleton pr={early} />;
   const { pr, headRepo } = data;
@@ -943,7 +944,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const wsOnly = files.filter((f) => wsOnlySet.has(f.filename));
   const importOnly = files.filter((f) => importsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
-  const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : [])];
+  // A big PR: a reading plan over the files on show, and (its switch) those files in its order.
+  const plan = visible.length >= PLAN_AT ? reviewPlan(visible.map((f) => f.filename)) : null;
+  const rank = plan && planOrder ? new Map(plan.flatMap((s) => s.paths).map((p, i) => [p, i])) : null;
+  const inOrder = rank ? [...visible].sort((a, b) => rank.get(a.filename)! - rank.get(b.filename)!) : visible;
+  const shown = [...inOrder, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : [])];
   // Centred, a changed line too wide for it: the PR fills the window instead (Settings → Diff); tabs count as 4.
   const tooWide = centered && (split || (fit && visible.some((f) => f.patch?.split('\n').some((l) => l[0] !== '@' && l.length > Number(cols) + 1 && l.replace(/\t/g, '    ').length > Number(cols) + 1))));
   // Modules as the files on show have them (not the ones waiting behind a row).
@@ -1252,8 +1257,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
             </div>
           )}
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
-            <p class="warn">New commits were pushed since you started this review. Your pending comments refer to the older commit.</p>
+            <p class="warn">New commits were pushed since you started this review. Your comments move to them with their lines when you submit; you'll be asked about any whose lines changed.</p>
           )}
+          {plan && <ReviewPlan plan={plan} viewed={viewed} ordered={planOrder} onOrdered={togglePlanOrder} />}
           {pending && (
             <p class="warn">
               You have a review in progress on GitHub ({pending.count} comment{pending.count === 1 ? '' : 's'}): Finish review sends it, with your comments here.{' '}
@@ -1813,6 +1819,46 @@ function BinaryInfo({ file, ctx }: { file: File; ctx: Ctx }) {
         </p>
       )}
     </div>
+  );
+}
+
+// A big PR's reading plan (files.ts reviewPlan): each step with how much of it is viewed, a click to its first file
+// not yet viewed; a switch puts the files in this order (review mode's next-file keys follow it too).
+function ReviewPlan({ plan, viewed, ordered, onOrdered }: { plan: PlanStep[]; viewed: Set<string>; ordered: boolean; onOrdered: () => void }) {
+  const [open, toggleOpen] = useStoredFlag('planOpen', true);
+  const total = plan.reduce((n, s) => n + s.paths.length, 0);
+  const done = plan.reduce((n, s) => n + s.paths.filter((p) => viewed.has(p)).length, 0);
+  return (
+    <details class="plan" open={open} onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open !== open && toggleOpen()}>
+      <summary>
+        <b>Review plan</b> · {total} files in {plan.length} steps · {done}/{total} viewed
+      </summary>
+      <ol>
+        {plan.map((s) => {
+          const left = s.paths.filter((p) => !viewed.has(p));
+          const seen = s.paths.length - left.length;
+          return (
+            <li class={left.length ? '' : 'done'}>
+              <span class="plan-t">
+                <b>{s.title}</b> <small>{s.why}</small>
+              </span>
+              <span class="plan-bar" title={`${seen} of ${s.paths.length} viewed`}>
+                <i style={{ width: `${(100 * seen) / s.paths.length}%` }} />
+              </span>
+              <small class="plan-n">{seen}/{s.paths.length}</small>
+              {left.length ? (
+                <button class="link" onClick={() => jumpTo('f-' + left[0])}>{seen ? 'Continue' : 'Start'}</button>
+              ) : (
+                <span class="plan-ok"><Octicon name="check" /></span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <label>
+        <input type="checkbox" checked={ordered} onChange={onOrdered} /> Files in this order
+      </label>
+    </details>
   );
 }
 

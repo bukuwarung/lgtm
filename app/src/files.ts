@@ -39,6 +39,25 @@ const QUIET = /^\s*(\/\/|\/?\*|#|import\b|package\b|@)/;
 export const addsLogic = (patch?: string) =>
   patch == null || patch.split('\n').some((l) => l[0] === '+' && !l.startsWith('+++') && !QUIET.test(l.slice(1)) && LOGIC.test(l.slice(1)));
 type Changed = { filename: string; status: string; additions: number; patch?: string };
+
+// A big PR's reading plan: what it means to do, what it needs (build, permissions), the shapes the rest builds on,
+// the change itself, what it promises (tests), then resources. Each path in its first matching step, in reviewOrder.
+export type PlanStep = { title: string; why: string; paths: string[] };
+export const PLAN_AT = 50; // files: below this a PR reads fine top to bottom
+const MODELS = /(^|\/)(api|apis|model|models|domain|dto|dtos|entity|entities|contract|contracts|types|interfaces?)\//i;
+const CONFIG = /\.(gradle|kts|toml|properties|ya?ml|json|pro|cfg|ini|xml|lock)$|(^|\/)(Dockerfile|Makefile|\.gitattributes|\.gitignore)$/;
+export function reviewPlan(paths: string[]): PlanStep[] {
+  const steps: (PlanStep & { has: (p: string) => boolean; at: number })[] = [
+    { title: 'Specs and docs', why: 'what the change is meant to do', has: (p) => isMarkdown(p) || /(^|\/)(openspec|docs)\//.test(p), at: 0, paths: [] },
+    { title: 'Tests', why: 'what it promises', has: inTests, at: 4, paths: [] },
+    { title: 'Build and config', why: 'dependencies, permissions, settings', has: (p) => CONFIG.test(p) && !/\/res\//.test(p), at: 1, paths: [] },
+    { title: 'Models and contracts', why: 'the shapes the rest builds on', has: (p) => CODE.test(p) && MODELS.test(p), at: 2, paths: [] },
+    { title: 'Implementation', why: 'the change itself', has: (p) => CODE.test(p), at: 3, paths: [] },
+    { title: 'Resources and assets', why: 'strings, layouts, images, binaries', has: () => true, at: 5, paths: [] },
+  ];
+  for (const p of paths) steps.find((s) => s.has(p))!.paths.push(p);
+  return steps.filter((s) => s.paths.length).sort((a, b) => a.at - b.at).map(({ title, why, paths }) => ({ title, why, paths }));
+}
 export function untested(files: Changed[]): string[] {
   const tested = new Set(files.filter((f) => isTest(f.filename) || /(^|\/)test_[^/]+$/.test(f.filename)).map((f) => base(subject(f.filename))));
   return files

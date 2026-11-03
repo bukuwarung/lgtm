@@ -825,3 +825,20 @@ test('lint baseline: new and cleared suppressions, moves ignored', async () => {
   assert.deepEqual(added.map((s) => [s.id, s.file, s.line, s.message]), [['MissingPermission', 'app/src/main/java/C.kt', 7, 'Call "x"']]);
   assert.deepEqual(removed.map((s) => s.id), ['Gone']);
 });
+
+test('reviewPlan: specs, build, models, code, tests, resources', async () => {
+  const { reviewPlan } = await import('../src/files.ts');
+  const plan = reviewPlan([
+    'openspec/changes/x/design.md',
+    'app/src/main/java/a/model/Card.kt',
+    'app/src/main/java/a/CardReader.kt',
+    'app/src/test/java/a/CardReaderTest.kt',
+    'app/build.gradle.kts',
+    'app/src/main/AndroidManifest.xml',
+    'app/src/main/res/values/strings.xml',
+    'app/src/main/assets/fw.bin',
+  ]);
+  assert.deepEqual(plan.map((s) => [s.title, s.paths.length]), [
+    ['Specs and docs', 1], ['Build and config', 2], ['Models and contracts', 1], ['Implementation', 1], ['Tests', 1], ['Resources and assets', 2],
+  ]);
+});
