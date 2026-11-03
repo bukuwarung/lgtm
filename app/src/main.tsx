@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
@@ -61,6 +61,37 @@ function ReviewLog({ log }: { log: { repo: string; n: number; title: string; how
   );
 }
 
+// Branches of my merged PRs still on GitHub: one click lists them, a second deletes them (github.ts deleteBranch keeps
+// one another open PR builds on).
+function StaleBranches() {
+  const [list, setList] = useState<StaleBranch[] | null>(null);
+  const [step, setStep] = useState<'' | 'confirm' | 'deleting' | string>('');
+  useEffect(() => void getStaleBranches().then(setList, () => setList([])), []);
+  if (!list?.length) return step && step !== 'confirm' && step !== 'deleting' ? <p class="note">{step}</p> : null;
+  const go = async () => {
+    setStep('deleting');
+    const kept: string[] = [];
+    for (const b of list) await deleteBranch(b.repo, b).catch((e) => kept.push(`${b.headRefName} (${e.message})`));
+    setStep(kept.length ? `Deleted ${list.length - kept.length}; kept ${kept.join(', ')}` : `Deleted ${list.length} merged branch${list.length > 1 ? 'es' : ''}`);
+    setList([]);
+  };
+  return (
+    <div class="stale">
+      {step === 'confirm' ? (
+        <>
+          <p>Delete these branches on GitHub? Their PRs are merged.</p>
+          <ul>{list.map((b) => <li><code>{b.headRefName}</code> <small>{b.repo}#{b.number}</small></li>)}</ul>
+          <button class="primary" onClick={go}>Delete {list.length} branch{list.length > 1 ? 'es' : ''}</button> <button onClick={() => setStep('')}>Cancel</button>
+        </>
+      ) : (
+        <button class="link" disabled={step === 'deleting'} onClick={() => setStep('confirm')}>
+          {step === 'deleting' ? 'Deleting…' : `${list.length} branch${list.length > 1 ? 'es' : ''} of your merged PRs still exist${list.length > 1 ? '' : 's'} · clean up`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // No PR open: the queue at a glance; each number opens its tab of the list.
 function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
   const [showDrafts] = useStoredFlag('showDrafts', false);
@@ -88,6 +119,7 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
       <p class="note">
         Pick a pull request from the list, or paste a PR link in the box at the top (⌘K). <a href="#/history">Your reviews this month →</a>
       </p>
+      <StaleBranches />
     </div>
   );
 }
@@ -1088,8 +1120,18 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   }, [items, settled]);
 
   // who: the person the list is already about (you on "Your PRs", the member on their PRs tab); their face is left out.
+  // Resting the pointer on a PR loads it ahead (once it changed since its saved copy), so opening it is instant.
+  const hoverTimer = useRef(0);
+  const preload = (i: QueueItem) => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(async () => {
+      const key = `${i.repo}#${i.number}`;
+      if (isCurrent(i) || (await prCache.get<LoadedPR>(key))?.v.pr.updated_at === i.updatedAt) return;
+      loadPR(i.repo, i.number).then((d) => prCache.set(key, d), () => {});
+    }, 350);
+  };
   const item = (kind: Kind, i: QueueItem, layer?: string, who?: string) => (
-    <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
+    <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
         {i.face !== who && <><span class="person-link" onClick={toPerson(i.face)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span> ·{' '}</>}

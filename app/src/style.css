@@ -91,6 +91,9 @@ code, pre { font-family: var(--mono); }
 .start-card b { font-size: calc(28px * var(--ts)); font-weight: 600; line-height: 1.1; }
 .start-card span { font-size: calc(12px * var(--ts)); color: var(--muted); }
 .start-card:hover { border-color: var(--accent); }
+.stale { display: grid; justify-items: center; gap: 6px; font-size: calc(13px * var(--ts)); }
+.stale ul { margin: 0; padding: 0; list-style: none; max-height: 200px; overflow: auto; text-align: left; }
+.stale small { color: var(--muted); }
 /* Your reviews this week (history.tsx). */
 .history { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
 .history h2 { margin: 0 0 4px; }

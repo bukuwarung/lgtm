@@ -1054,6 +1054,21 @@ export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' |
   if (above) throw new Error(`kept ${s.headRefName}: #${above.number} builds on it`);
   await graphql(`mutation($id:ID!){deleteRef(input:{refId:$id}){clientMutationId}}`, { id: s.headRef.id });
 }
+// My merged PRs of the last 90 days whose branch is still there and GitHub would let me delete (not protected, nothing
+// open built on it, not a fork's); never main, master, develop, release/… or hotfix/….
+export type StaleBranch = { repo: string; number: number; title: string; headRefName: string; headRef: { id: string } };
+const KEEP = /^(main|master|develop|dev|staging|production|release\/|hotfix\/)/;
+export async function getStaleBranches(): Promise<StaleBranch[]> {
+  const since = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
+  const d = await graphql(
+    `query($q:String!){s:search(query:$q,type:ISSUE,first:100){nodes{...on PullRequest{number title repository{nameWithOwner} isCrossRepository viewerCanDeleteHeadRef headRefName headRef{id}}}}}`,
+    { q: `is:pr is:merged author:@me merged:>=${since}` },
+  );
+  return (d.s.nodes as any[])
+    .filter((p) => p?.headRef && p.viewerCanDeleteHeadRef && !p.isCrossRepository && !KEEP.test(p.headRefName))
+    .map((p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, headRefName: p.headRefName, headRef: p.headRef }));
+}
+
 export const disableAutoMerge = (id: string) =>
   graphql(`mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 export const updateBranch = (s: { id: string; headRefOid?: string }) =>
