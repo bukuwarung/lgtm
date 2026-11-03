@@ -267,8 +267,11 @@ function ViewedToggle({ viewed, onToggle, title }: { viewed: boolean; onToggle: 
 // While a PR loads (one never opened before; others show their saved copy at once): its shape, shimmering, where the
 // index, title, pills and files will be.
 const SKEL_LINES = [62, 48, 71, 35, 80, 54, 66, 28];
-function PRSkeleton() {
+// `pr`: once the PR itself is here (its files still loading), its title and description show in place.
+function PRSkeleton({ pr }: { pr?: PR | null }) {
   const [showIndex] = useStoredFlag('showIndex', true);
+  const [mdStyle] = useMdStyle();
+  const look = mdStyleProps(mdStyle);
   return (
     <div class={showIndex ? 'review skel' : 'review no-index skel'} aria-busy="true" aria-label="Loading the pull request">
       <aside class="side">
@@ -277,7 +280,18 @@ function PRSkeleton() {
         ))}
       </aside>
       <main>
-        <span class="sk sk-title" />
+        {pr ? (
+          <h1 class="skel-h1">
+            <span class="pr-num">#{pr.number}</span> {pr.title}
+          </h1>
+        ) : (
+          <span class="sk sk-title" />
+        )}
+        {pr?.body_html && (
+          <div class={`rich pr-desc skel-desc ${look.class}`} style={look.style}>
+            <div class="md chunk" dangerouslySetInnerHTML={{ __html: pr.body_html }} />
+          </div>
+        )}
         <div class="skel-pills">
           {[70, 110, 60, 90].map((w) => (
             <span class="sk sk-pill" style={{ width: `${w}px` }} />
@@ -421,6 +435,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
   const [stale, setStale] = useState<number | null>(null); // showing the copy loaded at this time, while refreshing
+  const [early, setEarly] = useState<PR | null>(null); // the PR, before its files (PRSkeleton shows its title)
   const threadCursor = useRef(-1);
   useEffect(() => seenClaudePR(repo, n), []); // for the list's "✳ updated"
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -484,7 +499,10 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
       let pr: PR;
       let loaded: Loaded;
       try {
-        loaded = await loadPR(repo, n);
+        loaded = await loadPR(repo, n, (p) => {
+          if (!shownHead) setEarly(p); // nothing shown yet: its title and description, while the files load
+          extras(p);
+        });
         pr = loaded.pr;
       } catch (e: any) {
         if (first && !shownHead) throw e;
@@ -496,6 +514,12 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
       setStale(null);
       show(loaded);
       void prCache.set(`${repo}#${n}`, loaded);
+    })().catch((e) => setError(e.message));
+    // What needs only the PR (not its files), started as soon as it's here: who I am to it, its stack, my last review.
+    let started = false;
+    function extras(pr: PR) {
+      if (started) return;
+      started = true;
       getViewer().then((me) => {
         setMe(me);
         setMine([pr.user, ...pr.assignees].some((u) => u.login === me));
@@ -512,7 +536,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           if (first && startSince) setSince(true); // re-review: start with just what changed
         }
       }, () => {});
-    })().catch((e) => setError(e.message));
+    }
   }, [reloads]);
 
   // Slack, with the PR and on each reload; while it isn't reachable (lgtm just launched, or the Mac just woke: slackcli
@@ -671,7 +695,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   });
 
   if (error) return <p class="error page">{error}</p>;
-  if (!data) return <PRSkeleton />;
+  if (!data) return <PRSkeleton pr={early} />;
   const { pr, headRepo } = data;
   const files = since && sinceData ? sinceData.files : data.files;
   const { drafts } = saved;

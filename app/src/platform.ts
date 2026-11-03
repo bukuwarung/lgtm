@@ -6,11 +6,19 @@ import { useEffect, useState } from 'preact/hooks';
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
 const OWN = /^(drafts:|visit:|claudeFrom:|team$)/;
 let account = '';
+export const lastLogin = () => {
+  try {
+    return localStorage.getItem('lastLogin') ?? '';
+  } catch {
+    return '';
+  }
+};
 export const own = (key: string) => (account && OWN.test(key) ? `@${account}/${key}` : key);
 export function setAccount(login: string) {
   account = login;
   if (!login) return;
   try {
+    localStorage.setItem('lastLogin', login); // the next launch starts as it, before GitHub confirms (main.tsx)
     for (const k of Object.keys(localStorage)) {
       if (!OWN.test(k)) continue;
       localStorage.setItem(own(k), localStorage.getItem(k)!);

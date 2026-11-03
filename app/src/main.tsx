@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -214,9 +214,21 @@ function App() {
     return () => (removeEventListener('keydown', esc), removeEventListener('lgtm:skip', skip));
   }, [rm, route]);
 
+  // Signed in as the account of last time at once (its saved list and drafts show without waiting for GitHub); GitHub's
+  // answer confirms it, or (gh switched accounts) everything draws again as the right one.
+  const [accountKey, setAccountKey] = useState(0);
   const signIn = () =>
     loadToken()
-      .then(() => getViewer().then(setAccount, () => {})) // this account's drafts and the like (platform.ts own)
+      .then(async () => {
+        const last = lastLogin();
+        const check = getViewer().then((me) => {
+          if (me === last) return;
+          setAccount(me); // this account's drafts and the like (platform.ts own)
+          setAccountKey((k) => k + 1);
+        }, () => {});
+        if (last) setAccount(last);
+        else await check;
+      })
       .then(() => setState('in'), (e) => setState({ error: e.message }));
   useEffect(() => {
     const onHash = () => (takeClaudeLink(), setRoute(location.hash));
@@ -428,7 +440,7 @@ function App() {
           <button title="Dismiss" onClick={() => setToast(null)}><Octicon name="x" /></button>
         </div>
       )}
-      <div class={showPRs && !rm ? 'shell' : 'shell no-prs'}>
+      <div class={showPRs && !rm ? 'shell' : 'shell no-prs'} key={accountKey}>{/* another account: everything again, as it */}
         {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
         <PRList hidden={!showPRs || !!rm} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setQueueItems(items), setRefreshing(false), void moveMerged(items))} />
         {r ? (

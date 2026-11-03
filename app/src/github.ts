@@ -594,15 +594,17 @@ export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${
 
 // Everything a PR page shows first, as one bundle (also cached, and loaded ahead for the list's top PRs).
 export type LoadedPR = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null; pending?: PendingReview | null };
-export async function loadPR(repo: string, n: number): Promise<LoadedPR> {
-  const pr = await getPR(repo, n);
-  const [files, threads, conversation, attrs, pending] = await Promise.all([
-    getFiles(repo, n),
-    getThreads(repo, n),
-    getConversation(repo, n),
-    getRaw(pr.head.repo?.full_name ?? repo, '.gitattributes', pr.head.sha),
-    getPendingReview(repo, n),
-  ]);
+// Everything asked at once; only .gitattributes (at the head commit) waits for the PR. `onPR`: the PR as soon as it's
+// here, for what can start or show before the rest (the page's header, its stack).
+export async function loadPR(repo: string, n: number, onPR?: (pr: PR) => void): Promise<LoadedPR> {
+  const prP = getPR(repo, n);
+  const attrsP = prP.then((pr) => {
+    try {
+      onPR?.(pr);
+    } catch {}
+    return getRaw(pr.head.repo?.full_name ?? repo, '.gitattributes', pr.head.sha);
+  });
+  const [pr, files, threads, conversation, attrs, pending] = await Promise.all([prP, getFiles(repo, n), getThreads(repo, n), getConversation(repo, n), attrsP, getPendingReview(repo, n)]);
   return { pr, files, threads, conversation, attrs, pending };
 }
 

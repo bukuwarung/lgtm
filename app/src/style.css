@@ -893,6 +893,9 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .skel main { display: grid; gap: 12px; align-content: start; padding-top: 14px; }
 .sk { display: block; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--soft) 30%, color-mix(in srgb, var(--soft) 40%, var(--bg)) 50%, var(--soft) 70%) 0 0 / 300% 100%; animation: sk-sweep 1.4s linear infinite; }
 .sk-title { width: 55%; height: 20px; }
+.skel-h1 { margin: 0; font-size: calc(18px * var(--ts)); }
+.skel-h1 .pr-num { color: var(--muted); font-weight: 400; }
+.skel-desc { max-height: 320px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; -webkit-mask: linear-gradient(#000 70%, transparent); mask: linear-gradient(#000 70%, transparent); }
 .skel-pills { display: flex; gap: 6px; }
 .sk-pill { height: 18px; border-radius: 999px; }
 /* The PR list loading: tabs, a group's header, then cards shaped like its PRs. */
