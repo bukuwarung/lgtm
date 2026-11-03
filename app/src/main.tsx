@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -1056,6 +1056,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     return () => clearInterval(t);
   }, []);
   const [notify] = useStoredFlag('notifyRequests', false);
+  const [menuBar] = useStoredFlag('menuBar', true);
   const [notifyReplies] = useStoredFlag('notifyReplies', true);
   const [notifyVerdicts] = useStoredFlag('notifyVerdicts', true);
   const [notifyCI] = useStoredFlag('notifyCI', true);
@@ -1088,6 +1089,8 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length;
     document.title = count ? `(${count}) lgtm` : 'lgtm';
     void setBadge(count); // the app's Dock icon
+    const mine = [...waiting, ...items.filter((i) => !waiting.includes(i) && claudeWaiting(i))];
+    void setTray(menuBar ? mine.map((i) => ({ title: `${i.title} · ${i.repo.split('/')[1]}#${i.number}`, route: `/${i.repo}/pull/${i.number}` })) : null);
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
     if (seen.current && notify) {
@@ -1104,7 +1107,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     }
     seen.current = new Set(waiting.map((i) => i.id));
     before.current = new Map(items.map((i) => [i.id, i]));
-  }, [items, settled, claude]);
+  }, [items, settled, claude, menuBar]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;

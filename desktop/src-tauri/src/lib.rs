@@ -147,6 +147,7 @@ pub fn run() {
             commands::claude_sessions,
             commands::clipboard_pr,
             commands::copy_text,
+            commands::set_tray,
             commands::self_update,
             commands::claude_text,
             commands::claude_skill,

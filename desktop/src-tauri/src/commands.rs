@@ -957,3 +957,60 @@ pub fn notify(app: tauri::AppHandle, title: String, body: String, sound: bool, r
         }
     });
 }
+
+// --- Menu bar: the PRs waiting on me, a click away ---
+
+#[derive(Deserialize)]
+pub struct TrayItem {
+    title: String,
+    route: String, // "/owner/repo/pull/n"
+}
+
+/// The menu bar item: how many PRs wait on me, and a menu of them. None: no menu bar item (Settings turned it off).
+#[tauri::command]
+pub fn set_tray(app: tauri::AppHandle, items: Option<Vec<TrayItem>>) -> Result<(), String> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::TrayIconBuilder;
+    use tauri::{Emitter, Manager};
+    let Some(items) = items else {
+        app.remove_tray_by_id("lgtm");
+        return Ok(());
+    };
+    let e = |e: tauri::Error| e.to_string();
+    let menu = Menu::new(&app).map_err(e)?;
+    let head = if items.is_empty() { "Nothing waits on you".to_string() } else { format!("Waiting on you ({})", items.len()) };
+    menu.append(&MenuItem::with_id(&app, "head", head, false, None::<&str>).map_err(e)?).map_err(e)?;
+    for i in &items {
+        let title: String = if i.title.chars().count() > 60 { i.title.chars().take(59).collect::<String>() + "…" } else { i.title.clone() };
+        menu.append(&MenuItem::with_id(&app, format!("pr:{}", i.route), title, true, None::<&str>).map_err(e)?).map_err(e)?;
+    }
+    menu.append(&PredefinedMenuItem::separator(&app).map_err(e)?).map_err(e)?;
+    menu.append(&MenuItem::with_id(&app, "open", "Open lgtm", true, None::<&str>).map_err(e)?).map_err(e)?;
+    let title = if items.is_empty() { None } else { Some(items.len().to_string()) };
+    if let Some(tray) = app.tray_by_id("lgtm") {
+        tray.set_menu(Some(menu)).map_err(e)?;
+        tray.set_title(title).map_err(e)?;
+        return Ok(());
+    }
+    let mut b = TrayIconBuilder::with_id("lgtm").menu(&menu).show_menu_on_left_click(true).tooltip("lgtm");
+    if let Some(icon) = app.default_window_icon() {
+        b = b.icon(icon.clone());
+    }
+    if let Some(t) = title {
+        b = b.title(t);
+    }
+    b.on_menu_event(|app, ev| {
+        let id = ev.id().as_ref();
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+        if let Some(route) = id.strip_prefix("pr:") {
+            let _ = app.emit("open-route", route.to_string());
+        }
+    })
+    .build(&app)
+    .map_err(e)?;
+    Ok(())
+}

@@ -1269,6 +1269,7 @@ function SlackPeople({ team }: { team: string }) {
 // The app only: start lgtm when you log in to your Mac.
 function LaunchAtLogin() {
   const [on, setOn] = useState<boolean | null>(null);
+  const [menuBar, toggleMenuBar] = useStoredFlag('menuBar', true);
   useEffect(() => void launchAtLogin().then(setOn, () => setOn(false)), []);
   return (
     <section>
@@ -1286,6 +1287,13 @@ function LaunchAtLogin() {
         <span>
           Launch at login
           <small>Start lgtm when you log in to your Mac, so the Dock badge and notifications are there from the start.</small>
+        </span>
+      </label>
+      <label class="set-row">
+        <input type="checkbox" checked={menuBar} onChange={toggleMenuBar} />
+        <span>
+          Show in the menu bar
+          <small>How many PRs wait on you, and a menu of them to open one.</small>
         </span>
       </label>
     </section>

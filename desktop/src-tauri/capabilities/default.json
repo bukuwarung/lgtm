@@ -26,6 +26,7 @@
     "allow-claude-sessions",
     "allow-clipboard-pr",
     "allow-copy-text",
+    "allow-set-tray",
     "allow-self-update",
     "allow-claude-text",
     "allow-claude-skill",
