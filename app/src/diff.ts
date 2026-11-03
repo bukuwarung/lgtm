@@ -413,3 +413,28 @@ export function rangeChange(patch: string, start: number, end: number): Line[] |
   return null;
 }
 
+
+// Side by side: a block of removed lines against the added ones, as rows [removed, added] (null: that side blank).
+// Each line of the shorter side goes beside its most similar line of the longer one, in order (so the rows stay as
+// many as the longer side has); a pair too unlike to be the same line still shares a row, as most review tools do.
+export function alignChanges(dels: string[], adds: string[]): [number | null, number | null][] {
+  const words = (s: string) => new Set(s.toLowerCase().match(/[a-z0-9_]+|[^\sa-z0-9_]/g) ?? []);
+  const sim = (a: Set<string>, b: Set<string>) => {
+    if (!a.size && !b.size) return 1;
+    let n = 0;
+    for (const w of a) if (b.has(w)) n++;
+    return (2 * n) / (a.size + b.size);
+  };
+  const swap = dels.length > adds.length;
+  const short = (swap ? adds : dels).map(words), long = (swap ? dels : adds).map(words);
+  const S = short.length, L = long.length;
+  if (!S || S * L > 40_000) return Array.from({ length: Math.max(dels.length, adds.length) }, (_, k) => [k < dels.length ? k : null, k < adds.length ? k : null]);
+  // best[i][j]: the most similarity placing short[i..] into long[j..], each short line on its own long line, in order.
+  const best = Array.from({ length: S + 1 }, () => new Float64Array(L + 1));
+  for (let i = S - 1; i >= 0; i--)
+    for (let j = L - (S - i); j >= 0; j--) best[i][j] = Math.max(sim(short[i], long[j]) + best[i + 1][j + 1], j + 1 <= L - (S - i) ? best[i][j + 1] : -1);
+  const at: number[] = [];
+  for (let i = 0, j = 0; i < S; j++) if (j === L - (S - i) || sim(short[i], long[j]) + best[i + 1][j + 1] >= best[i][j + 1]) at[i++] = j;
+  const of = new Map(at.map((j, i) => [j, i]));
+  return long.map((_, j) => (swap ? [j, of.get(j) ?? null] : [of.get(j) ?? null, j]) as [number | null, number | null]);
+}

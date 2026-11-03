@@ -1,6 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { addedLines, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
+import { addedLines, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -2026,21 +2026,22 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   // Side by side (Settings → Diff, or the bar's button): old and new as two halves of each row, removed lines paired
   // with the added ones after them. Doc comments stay as source there.
   const [split] = useStoredFlag('splitDiff', false);
+  // Each run of changed lines (removed and added, in any order) drawn at its first line, its removed and added lines
+  // lined up by likeness (diff.ts alignChanges); an unchanged line, a row of its own.
   const splitPlan = useMemo(
     () =>
       split
         ? hunks.map((h) => {
-            const at = new Map<number, [number | null, number | null]>();
+            const at = new Map<number, [number | null, number | null][]>();
             for (let i = 0; i < h.lines.length; ) {
               if (h.lines[i].kind === ' ') {
-                at.set(i, [i, i]);
+                at.set(i, [[i, i]]);
                 i++;
                 continue;
               }
-              const dels: number[] = [], adds: number[] = [];
-              while (i < h.lines.length && h.lines[i].kind === '-') dels.push(i++);
-              while (i < h.lines.length && h.lines[i].kind === '+') adds.push(i++);
-              for (let k = 0; k < Math.max(dels.length, adds.length); k++) at.set(dels[k] ?? adds[k], [dels[k] ?? null, adds[k] ?? null]);
+              const start = i, dels: number[] = [], adds: number[] = [];
+              for (; i < h.lines.length && h.lines[i].kind !== ' '; i++) (h.lines[i].kind === '-' ? dels : adds).push(i);
+              at.set(start, alignChanges(dels.map((k) => h.lines[k].text), adds.map((k) => h.lines[k].text)).map(([d, a]) => [d == null ? null : dels[d], a == null ? null : adds[a]]));
             }
             return at;
           })
@@ -2128,9 +2129,8 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                 );
               }
               if (splitPlan) {
-                const row = splitPlan[hi].get(li);
-                if (!row) return null; // drawn as the right half of its removed line's row
-                const L = row[0] != null ? h.lines[row[0]] : null, R = row[1] != null ? h.lines[row[1]] : null;
+                const rows = splitPlan[hi].get(li);
+                if (!rows) return null; // drawn with its run, at the run's first line
                 const half = (x: Line | null, i: number | null, right: boolean) => {
                   const s: Side = x?.kind === '-' ? 'LEFT' : 'RIGHT';
                   const n = x ? (right ? x.new! : x.old!) : 0;
@@ -2143,20 +2143,23 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                     </>
                   );
                 };
-                return (
-                  <>
-                    <tr class="ln split" data-k={`${hi}-${li}`}>
-                      <td colSpan={3} class="split-cell">
-                        <div class="split-row">
-                          {half(L?.kind === '+' ? null : L, row[0], false)}
-                          {half(R?.kind === '-' ? null : R, row[1], true)}
-                        </div>
-                      </td>
-                    </tr>
-                    {L && L.kind !== '+' && notes('LEFT', L.old!)}
-                    {R && R.kind !== '-' && notes('RIGHT', R.new!)}
-                  </>
-                );
+                return rows.map((row) => {
+                  const L = row[0] != null ? h.lines[row[0]] : null, R = row[1] != null ? h.lines[row[1]] : null;
+                  return (
+                    <>
+                      <tr class="ln split" data-k={`${hi}-${row[0] ?? row[1]}`}>
+                        <td colSpan={3} class="split-cell">
+                          <div class="split-row">
+                            {half(L, row[0], false)}
+                            {half(R, row[1], true)}
+                          </div>
+                        </td>
+                      </tr>
+                      {L && notes('LEFT', L.old!)}
+                      {R && notes('RIGHT', R.new!)}
+                    </>
+                  );
+                });
               }
               const side: Side = l.kind === '-' ? 'LEFT' : 'RIGHT';
               const num = side === 'LEFT' ? l.old! : l.new!;

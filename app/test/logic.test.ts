@@ -785,3 +785,17 @@ test('isAway: Slack statuses that mean someone is out today', async () => {
   assert.ok(!isAway(s('Vacation', '', 1000)), 'expired');
   assert.ok(!isAway(null));
 });
+
+test('alignChanges: removed lines beside their most similar added ones, in order, rows as many as the longer side', async () => {
+  const { alignChanges } = await import('../src/diff.ts');
+  // One line became several: it sits beside the one most like it, not the first.
+  assert.deepEqual(
+    alignChanges(['viewModel.onAction(DeviceChangeAction.FaceCaptureFailed(it)) }'], ['.onFailure {', 'if (cancelled) {', 'endAndReload()', '} else {', 'viewModel.onAction(DeviceChangeAction.FaceCaptureFailed(it))', '}']),
+    [[null, 0], [null, 1], [null, 2], [null, 3], [0, 4], [null, 5]],
+  );
+  // Edited lines stay paired one to one.
+  assert.deepEqual(alignChanges(['val a = 1', 'val b = 2'], ['val a = 10', 'val b = 20']), [[0, 0], [1, 1]]);
+  // More removed than added: the added ones find their matches.
+  assert.deepEqual(alignChanges(['import x', 'fun go() {', 'log()'], ['fun go(fast: Boolean) {']), [[0, null], [1, 0], [2, null]]);
+  assert.deepEqual(alignChanges([], ['a', 'b']), [[null, 0], [null, 1]]);
+});
