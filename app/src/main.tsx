@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
@@ -792,6 +792,8 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   const items = useMemo(() => loaded && withAnswered(loaded, answered), [loaded, answeredTick]);
   const [err, setErr] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
+  const showDraftsRef = useRef(showDrafts); // the refresh timer closes over the first render
+  showDraftsRef.current = showDrafts;
   const [paceRaw] = useStoredValue('reviewPace', '100'); // Settings → Time to review: estimates ÷ your pace
   const pace = (Number(paceRaw) || 100) / 100;
   const [tabValue, setTab] = useStoredValue('prTab', 'reviewing'); // which tab, remembered
@@ -837,8 +839,11 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     lastLoad.current = Date.now();
     setErr('');
     if (tabRef.current === 'team') loadTeam();
-    getReviewQueue().then(async (items) => {
+    getReviewQueue().then(async (queue) => {
       setSettled(false);
+      // Drafts showing: also the ones changing files I own, before GitHub asks me (it does once they're ready).
+      const owned = showDraftsRef.current ? await getOwnedDrafts([...new Set(queue.map((i) => i.repo))], new Set(queue.map((i) => i.id))).catch(() => []) : [];
+      const items = [...queue, ...owned];
       setItems(items);
       // Secondary: the list works without them.
       const [st, est] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items.map((i) => i.id)).catch(() => null)]);
@@ -861,6 +866,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     }
   };
   const [again, setAgain] = useState(0); // a pill's action asks for the list again
+  useEffect(() => void (showDrafts && setAgain((n) => n + 1)), [showDrafts]); // drafts on: the ones I own come in now
   useEffect(load, [version, again]);
   useEffect(() => {
     const more = () => setAgain((n) => n + 1);
@@ -997,6 +1003,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
         )}
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
+        {i.codeOwner && <span class="pill" title="It changes files you own (CODEOWNERS). GitHub asks code owners once it's marked ready for review"><Tg i="assigned" t="code owner" /></span>}
         {kind === MINE && jiraKeys(i.title, i.head).map((k) => jira[k]?.status && (
           <span class={`pill jira-pill jc-${jira[k].category}`} title={`Jira: ${k} is ${jira[k].status}`}>{k} · {jira[k].status}</span>
         ))}

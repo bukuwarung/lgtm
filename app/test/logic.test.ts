@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, commonIndent, dedentHtml, anchor, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
-import { applySuggestions, awaitsMe, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
+import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -650,4 +650,29 @@ test('commonIndent and dedentHtml leave out the shared indentation', () => {
   assert.equal(dedentHtml('<span class="x">    </span><span>fun</span>', 4), '<span class="x"></span><span>fun</span>');
   assert.equal(dedentHtml('  <span>  a</span>', 3), '<span> a</span>');
   assert.equal(dedentHtml(' x', 4), 'x');
+});
+
+test('codeOwners: CODEOWNERS patterns, the last match deciding', () => {
+  const co = `# build
+*.gradle @me
+gradle/ @me
+.github/ @me
+/module-list.yaml @me
+app/src/main/java/com/x/payments/ @bhargav
+docs/**/*.md @org/docs
+*  @fallback
+/app/build.gradle @other`;
+  assert.deepEqual(codeOwners(co, '.github/workflows/lint.yml'), ['@fallback']); // * comes later and wins
+  const noStar = co.replace('*  @fallback\n', '');
+  assert.deepEqual(codeOwners(noStar, '.github/workflows/lint.yml'), ['@me']);
+  assert.deepEqual(codeOwners(noStar, 'feature/build.gradle'), ['@me']); // unanchored: any folder
+  assert.deepEqual(codeOwners(noStar, 'app/build.gradle'), ['@other']); // a later, anchored line wins
+  assert.deepEqual(codeOwners(noStar, 'module-list.yaml'), ['@me']);
+  assert.deepEqual(codeOwners(noStar, 'sub/module-list.yaml'), []); // anchored to the root
+  assert.deepEqual(codeOwners(noStar, 'lib/gradle/wrapper.jar'), ['@me']); // a folder name, anywhere
+  assert.deepEqual(codeOwners(noStar, 'app/src/main/java/com/x/payments/Pay.kt'), ['@bhargav']);
+  assert.deepEqual(codeOwners(noStar, 'docs/a/b/c.md'), ['@org/docs']);
+  assert.deepEqual(codeOwners(noStar, 'docs/c.md'), ['@org/docs']);
+  assert.deepEqual(codeOwners(noStar, 'src/Main.kt'), []);
+  assert.deepEqual(codeOwners('build/** @b', 'build/x/y.kts'), ['@b']);
 });

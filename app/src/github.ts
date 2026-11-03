@@ -81,6 +81,7 @@ export type QueueItem = {
   mine: boolean; // I opened it, or it's assigned to me and not in my review queue
   assigned: boolean; // assigned to me
   authored: boolean; // I opened it
+  codeOwner?: boolean; // a draft changing files I (or a team of mine) own: GitHub asks code owners only once it's ready
   thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
@@ -225,6 +226,24 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
 }
 
 // The PR fields every list shows (fragment F); the my-relation flags default to "none".
+// CODEOWNERS, as GitHub reads it: gitignore-style patterns, the last line that matches a path decides its owners.
+export function codeOwners(text: string, path: string): string[] {
+  let owners: string[] = [];
+  for (const line of text.split('\n')) {
+    const [pattern, ...who] = line.replace(/#.*/, '').trim().split(/\s+/);
+    if (pattern && ownsPath(pattern, path)) owners = who;
+  }
+  return owners;
+}
+function ownsPath(pattern: string, path: string) {
+  const dir = pattern.endsWith('/');
+  const p = pattern.replace(/^\//, '').replace(/\/$/, '');
+  const anchored = pattern.startsWith('/') || p.includes('/'); // a slash before the end ties it to the repo's root
+  const glob = p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\//g, '\u0000').replace(/\*\*/g, '\u0001').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]').replace(/\u0000/g, '(?:.*/)?').replace(/\u0001/g, '.*');
+  const end = dir ? '/' : '(?:/|$)'; // a folder: everything in it; else the file, or a folder of that name
+  return new RegExp((anchored ? '^' : '(?:^|/)') + (p === '*' ? '[^/]+' : glob) + end).test(path);
+}
+
 const toItem = (p: any): QueueItem => ({
       id: p.id,
       number: p.number,
@@ -300,6 +319,48 @@ export async function getTeamPRs(team: string): Promise<{ members: string[]; ite
   const load = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].issueCount as number]));
   return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load };
 }
+// Drafts in these repos changing files I own (CODEOWNERS, by name or through a team), for the review list while drafts
+// show: GitHub asks code owners only once a PR is ready. Each repo's CODEOWNERS and my teams are kept a day.
+const dayCache = async <T>(key: string, load: () => Promise<T>): Promise<T> => {
+  try {
+    const c = JSON.parse(localStorage.getItem(key) ?? 'null');
+    if (c && Date.now() - c.at < 86_400_000) return c.v;
+  } catch {}
+  const v = await load();
+  try {
+    localStorage.setItem(key, JSON.stringify({ at: Date.now(), v }));
+  } catch {}
+  return v;
+};
+export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
+  const me = await getViewer();
+  const teams = await dayCache('myTeams', async () =>
+    ((await graphql(`query($me:[String!]){viewer{organizations(first:20){nodes{login teams(first:100,userLogins:$me){nodes{slug}}}}}}`, { me: [me] })).viewer.organizations.nodes as any[]).flatMap(
+      (o) => o.teams.nodes.map((t: any) => `@${o.login}/${t.slug}`.toLowerCase()),
+    ),
+  );
+  const mine = new Set([`@${me}`.toLowerCase(), ...teams]);
+  const owners = new Map<string, string>();
+  for (const repo of repos) {
+    const text = await dayCache(`codeowners:${repo}`, async () => {
+      for (const at of ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS']) {
+        const r = await gh(`/repos/${repo}/contents/${at}`, {}, 'application/vnd.github.raw+json');
+        if (r.ok) return r.text();
+      }
+      return '';
+    });
+    if (text.split(/\s+/).some((w) => mine.has(w.toLowerCase()))) owners.set(repo, text);
+  }
+  if (!owners.size) return [];
+  const d = await graphql(
+    `query($q:String!){s:search(query:$q,type:ISSUE,first:50){nodes{...F ...on PullRequest{files(first:100){nodes{path}}}}}} ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+    { q: `is:open is:pr is:draft archived:false -author:@me ${[...owners.keys()].map((r) => 'repo:' + r).join(' ')}` },
+  );
+  return (d.s.nodes as any[])
+    .filter((p) => !skip.has(p.id) && p.files.nodes.some((f: any) => codeOwners(owners.get(p.repository.nameWithOwner)!, f.path).some((o) => mine.has(o.toLowerCase()))))
+    .map((p) => ({ ...toItem(p), requested: true, reviewing: true, codeOwner: true, myState: null, newSinceApproval: 0, reviewedBefore: false, mine: false, assigned: false, authored: false, mentioned: false }));
+}
+
 // The open PRs in an org asking someone, by name, for a review (up to 50), the longest-waiting first.
 export async function getAskedPRs(org: string, login: string): Promise<QueueItem[]> {
   const d = await graphql(
