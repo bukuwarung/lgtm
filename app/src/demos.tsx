@@ -3,7 +3,7 @@ import { highlightCode, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
 import { FileIcon, ModuleIcon } from './shortcuts.tsx';
 import { folderIcon } from './fileicons.ts';
-import { CheckMark, Tg } from './tags.tsx';
+import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
@@ -669,23 +669,28 @@ SCENES.app = {
     body: (
       <div class="scene-app">
         <nav class="top">
-          <button>☰</button>
-          <a class="nav-btn">⚙ Settings</a>
+          <button><Octicon name="three-bars" /></button>
+          <a class="nav-btn"><Octicon name="gear" /></a>
           <div class="top-actions">
-            <button><span>↻</span></button>
-            <button>🔔</button>
+            <button><span><Octicon name="sync" /></span></button>
+            <button><Octicon name="bell" /></button>
           </div>
           <span class="spacer" />
-          <div class="cmd">
-            <svg class="cmd-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-              <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
-              <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-            </svg>
-            <kbd class="cmd-kbd">⌘K</kbd>
-            <input placeholder="Go to a PR, file or thread, or paste a PR link" />
-          </div>
+          <span class="nav-go">
+            <button class="nav-hist"><Octicon name="arrow-left" /></button>
+            <button class="nav-hist"><Octicon name="arrow-right" /></button>
+            <div class="cmd">
+              <svg class="cmd-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+              <kbd class="cmd-kbd">⌘K</kbd>
+              <input placeholder="Go to a PR, file or thread, or paste a PR link" />
+            </div>
+          </span>
           <span class="spacer" />
-          <button>◐ Auto</button>
+          <button>?</button>
+          <button class="theme-btn">◐</button>
           <span class="scene-avatar">Y</span>
         </nav>
         <div class="scene-app-body">
