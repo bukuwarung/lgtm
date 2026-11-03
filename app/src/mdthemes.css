@@ -31,7 +31,7 @@
 
   box-sizing: border-box;
   font-family: var(--doc-font-body);
-  font-size: var(--doc-size);
+  font-size: calc(var(--doc-size) * var(--ts, 1)); /* the app's text size (⌘+ / ⌘−) scales it too */
   line-height: var(--doc-leading);
   color: var(--doc-fg);
   background: var(--doc-bg);
