@@ -632,6 +632,16 @@ export const discardReview = (id: string) =>
 export const listDir = (repo: string, path: string, ref?: string): Promise<{ name: string; path: string; type: string }[]> =>
   json(`/repos/${repo}/contents/${path}${ref ? `?ref=${ref}` : ''}`);
 
+// A file's size at a commit. A file in Git LFS is, in Git, a small pointer naming its real size: that size, lfs set.
+export async function getBlobInfo(repo: string, path: string, ref: string): Promise<{ size: number; lfs: boolean } | null> {
+  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`);
+  if (res.status === 404) return null;
+  const j = (await (await ok(res)).json()) as { size: number; encoding?: string; content?: string };
+  const text = j.size < 400 && j.encoding === 'base64' ? atob((j.content ?? '').replace(/\n/g, '')) : '';
+  const lfs = text.startsWith('version https://git-lfs');
+  return { size: lfs ? Number(text.match(/\nsize (\d+)/)?.[1] ?? j.size) : j.size, lfs };
+}
+
 export async function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
   const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, {}, 'application/vnd.github.raw');
   if (res.status === 404) return null;

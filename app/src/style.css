@@ -1147,3 +1147,7 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 .lint-sum li { margin: 2px 0; }
 .lint-sum .lint-msg { color: var(--muted); }
 .lint-sum summary { cursor: pointer; color: var(--muted); }
+/* A binary file: what it is and its size */
+.bin-info { padding: 10px 16px; font-size: calc(13px * var(--ts)); }
+.bin-info p { margin: 2px 0; }
+.bin-info .bin-warn { color: var(--attn, light-dark(#9a6700, #d29922)); }

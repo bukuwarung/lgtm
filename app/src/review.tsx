@@ -4,7 +4,7 @@ import { baselineChanges, isLintBaseline, type Suppression } from './lintbaselin
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -1717,6 +1717,8 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
       />
       {canPreview && preview && (near || ctx.renderAll) ? (
         <ImagePreview file={file} ctx={ctx} onFail={() => (setCanPreview(false), setPreview(false))} />
+      ) : !file.patch && !file.additions && !file.deletions && file.status !== 'renamed' && (near || ctx.renderAll) ? (
+        <BinaryInfo file={file} ctx={ctx} />
       ) : !file.patch ? (
         <p class="note pad">
           {!file.additions && !file.deletions && ['added', 'removed'].includes(file.status) && !!languageFor(file.filename) ? `An empty file, ${file.status === 'added' ? 'added' : 'deleted'}.` : 'No diff to show (binary, too large, or renamed without changes).'}{' '}
@@ -1754,6 +1756,63 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         </>
       )}
     </section>
+  );
+}
+
+// A file Git can't diff (a binary): what it is, its size before and after, where it ends up, and a word when it's
+// big and not in Git LFS (every clone downloads every version of it, for good).
+const BINARY_KINDS: [RegExp, string][] = [
+  [/\.(bin|hex|img|fw|ota)$/i, 'Firmware or raw binary'],
+  [/\.(so|a|dylib|dll)$/i, 'Native library'],
+  [/\.(jar|aar)$/i, 'Java library'],
+  [/\.(apk|aab|ipa)$/i, 'App package'],
+  [/\.(zip|gz|tgz|tar|7z|rar)$/i, 'Archive'],
+  [/\.(ttf|otf|woff2?)$/i, 'Font'],
+  [/\.(mp3|wav|ogg|m4a|aac)$/i, 'Audio'],
+  [/\.(mp4|mov|webm)$/i, 'Video'],
+  [/\.pdf$/i, 'PDF'],
+  [/\.(db|sqlite|realm)$/i, 'Database'],
+  [/\.(jks|keystore|p12|pfx|pem|key)$/i, 'Key store or key: check it holds no secret'],
+];
+const BIG = 1024 * 1024;
+const bytes = (n: number) => (n < 1024 ? `${n} B` : n < BIG ? `${(n / 1024).toFixed(1)} KB` : `${(n / BIG).toFixed(1)} MB`);
+function BinaryInfo({ file, ctx }: { file: File; ctx: Ctx }) {
+  const path = file.filename;
+  const [info, setInfo] = useState<{ was?: { size: number; lfs: boolean } | null; now?: { size: number; lfs: boolean } | null } | null>(null);
+  useEffect(() => {
+    const repo = ctx.repo;
+    Promise.all([
+      file.status === 'added' ? null : getBlobInfo(repo, file.previous_filename ?? path, ctx.pr.base.sha).catch(() => null),
+      file.status === 'removed' ? null : getBlobInfo(ctx.headRepo, path, ctx.pr.head.sha).catch(() => null),
+    ]).then(([was, now]) => setInfo({ was, now }));
+  }, [file.sha]);
+  const kind = BINARY_KINDS.find(([re]) => re.test(path))?.[1];
+  const ships = path.match(/(?:^|\/)src\/(\w+)\/(?:assets|res\/raw)\//)?.[1]; // Android: packed into the app as is
+  const { was, now } = info ?? {};
+  if (info && !was?.size && !now?.size)
+    return <p class="note pad">{file.status === 'removed' ? 'An empty file, deleted.' : file.status === 'added' ? 'An empty file, added.' : 'No diff to show.'} <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a></p>;
+  return (
+    <div class="bin-info">
+      <p>
+        <Octicon name="file" /> {kind ?? 'Binary file'}
+        {info ? (
+          <>
+            {' · '}
+            {was && now ? <>{bytes(was.size)} → <b>{bytes(now.size)}</b></> : now ? <b>{bytes(now.size)}</b> : was ? <>{bytes(was.size)}, deleted</> : null}
+            {(now ?? was)?.lfs && ' · in Git LFS'}
+          </>
+        ) : (
+          ' · …'
+        )}
+        {ships && file.status !== 'removed' && <> · packed into the app{ships === 'main' ? '' : ` (${ships} builds)`}</>}{' '}
+        <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a>
+      </p>
+      {now && !now.lfs && now.size > BIG && (
+        <p class="bin-warn">
+          <Octicon name="alert" /> Over 1 MB, straight in Git: every clone downloads it, and every version of it, for good. Git LFS keeps big files out of the history.
+        </p>
+      )}
+    </div>
   );
 }
 
