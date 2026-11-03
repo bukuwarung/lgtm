@@ -845,6 +845,12 @@ html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
 .icon-btn { display: inline-grid; place-items: center; padding: 3px 7px; color: var(--muted); }
 .icon-btn:hover { color: var(--fg); }
 .icon-btn.failed { color: var(--delfg); }
+/* GitHub's source / rich diff pair: one control, the view on show pressed. */
+.diff-mode { display: inline-flex; }
+.diff-mode .icon-btn { border-radius: 0; }
+.diff-mode .icon-btn:first-child { border-radius: 6px 0 0 6px; }
+.diff-mode .icon-btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.diff-mode .icon-btn[aria-pressed="true"] { color: var(--fg); background: var(--soft); }
 .edit-desc { display: grid; gap: 8px; margin-top: 8px; }
 .edit-desc > input { width: 100%; font: inherit; font-weight: 600; }
 /* Rainbow brackets (Settings → Diff): three colours by nesting depth, as in IntelliJ. */

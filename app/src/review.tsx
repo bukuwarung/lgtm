@@ -1288,6 +1288,16 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
   );
 }
 
+// Source or rich diff, as GitHub's pair of buttons: <> the source, the file icon it rendered (Markdown, images).
+function DiffMode({ rich, set }: { rich: boolean; set: (rich: boolean) => void }) {
+  return (
+    <span class="diff-mode" role="group" aria-label="Diff view">
+      <button class="icon-btn" aria-pressed={!rich} title="Display the source diff" aria-label="Display the source diff" onClick={() => set(false)}><Octicon name="code" /></button>
+      <button class="icon-btn" aria-pressed={rich} title="Display the rich diff" aria-label="Display the rich diff" onClick={() => set(true)}><Octicon name="file" /></button>
+    </span>
+  );
+}
+
 // A file on github.dev (VS Code in the browser, with the whole repo) at the PR's commit; the . key too.
 const githubDev = (headRepo: string, sha: string, path: string, line?: number) =>
   `https://github.dev/${headRepo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}${line ? `#L${line}` : ''}`;
@@ -1298,7 +1308,7 @@ function OpenInEditor({ headRepo, sha, path, line }: { headRepo: string; sha: st
       title={`Open on github.dev, at the PR's commit${line ? `, line ${line}` : ''} (.)`}
       onClick={() => openExternal(githubDev(headRepo, sha, path, line))}
     >
-      <Octicon name="code" />
+      <Octicon name="link-external" />
     </button>
   );
 }
@@ -1512,16 +1522,8 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         </span>
         {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
-        {canRich && (
-          <button class="icon-btn" title={rich ? 'Show the source' : 'Show it rendered'} aria-label={rich ? 'Show the source' : 'Show it rendered'} onClick={() => setRich(!rich)}>
-            <Octicon name={rich ? 'file-diff' : 'markdown'} />
-          </button>
-        )}
-        {canPreview && (
-          <button class="icon-btn" title={preview ? 'Show the source' : 'Show the image'} aria-label={preview ? 'Show the source' : 'Show the image'} onClick={() => setPreview(!preview)}>
-            <Octicon name={preview ? 'file-diff' : 'image'} />
-          </button>
-        )}
+        {canRich && <DiffMode rich={rich} set={setRich} />}
+        {canPreview && <DiffMode rich={preview} set={setPreview} />}
         {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
         <button class="icon-btn" title={`Comment on this file${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fileComment)}`} aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>
           <Octicon name="comment" />
@@ -2030,7 +2032,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
   if (src === undefined) return <p class="note pad" style={{ minHeight: stand }}>Loading…</p>;
-  if (src === null) return <p class="note pad">Couldn't load this file. The icon in its header switches to the source.</p>;
+  if (src === null) return <p class="note pad">Couldn't load this file. The {'<>'} button in its header shows the source diff.</p>;
 
   const t = ctx.target?.path === path ? ctx.target : null;
   // Threads, drafts and removals attach to the first top-level block ending at or after their line.

@@ -349,7 +349,7 @@ export function Settings() {
             <Flag k="renderSingleComments" initial={false} label="Single comment lines too" hint="A lone comment line, lighter. Comments after code on the same line stay as they are." />
           </Flag>
         </Flag>
-        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. The source is a click away per file. Their look: Markdown files, below." demo>
+        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Per file, <> beside it shows the source, as on GitHub. Their look: Markdown files, below." demo>
           <Flag k="strikeRemoved" initial={false} label="Strike through removed text" hint="Removed passages show in a red box, as their source." />
         </Flag>
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
