@@ -100,7 +100,14 @@ export async function loadToken() {
 
 // --- API ---
 
+// Review mode's practice run (main.tsx): nothing is written to GitHub, every change refused here, reads go through.
+let practice = false;
+export const setPractice = (on: boolean) => void (practice = on);
+const writes = (path: string, init: RequestInit) =>
+  !!init.method && init.method !== 'GET' && path !== '/markdown' && (path !== '/graphql' || /"query":"(?:\\[nt]|\s)*mutation/.test(String(init.body)));
+
 async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') {
+  if (practice && writes(path, init)) throw new Error('Practice run: nothing is sent to GitHub');
   const res = await fetch(path.startsWith('https://') ? path : `https://api.github.com${path}`, {
     // GitHub lets the browser keep a response for 60 seconds: always check it's current (an unchanged one is a cheap
     // 304), or a refresh, or the page after asking a reviewer, shows the copy from before.

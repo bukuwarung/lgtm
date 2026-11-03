@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
@@ -17,6 +17,7 @@ import { CODE_SIZE, TEXT_SIZE, saveTheme, setTrial, useCodeLook, useTrial } from
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 import { keyLabel, useBindings, type Action } from './keys.ts';
+import { movePending } from './merge.tsx';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
 export function parseRoute(s: string) {
@@ -103,17 +104,18 @@ function App() {
   const [flash, setFlash] = useState<{ route: string; text: string; ok: boolean } | null>(null);
   // Review mode: the PRs that need my review one after another, with nothing else on screen. seen: the ones reviewed
   // or skipped since it started (GitHub's search can list a reviewed one for a while).
-  const [rm, setRm] = useState<{ seen: string[]; done: number; skipped: number; log: { repo: string; n: number; title: string; how: ReviewEvent | 'skipped' }[] } | null>(null);
+  const [rm, setRm] = useState<{ practice?: boolean; seen: string[]; done: number; skipped: number; log: { repo: string; n: number; title: string; how: ReviewEvent | 'skipped' }[] } | null>(null);
   const lastEvent = useRef<ReviewEvent>('COMMENT'); // the review just submitted, for review mode's summary
-  useEffect(() => void document.documentElement.classList.toggle('review-mode', !!rm), [rm]);
-  const needs = (items: QueueItem[], skip: string[]) => {
-    const l = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft && !skip.includes(`${i.repo}#${i.number}`));
-    return rm ? l.sort((a, b) => a.waitingSince.localeCompare(b.waitingSince)) : l; // review mode: longest-waiting first
+  useEffect(() => (document.documentElement.classList.toggle('review-mode', !!rm), setPractice(!!rm?.practice)), [rm]);
+  // The PRs to review: the ones that need my review, or (a practice run) my own, not drafts.
+  const needs = (items: QueueItem[], skip: string[], practice = rm?.practice) => {
+    const l = items.filter((i) => (practice ? i.mine : i.reviewing && groupOf(i) === 'needs') && !i.isDraft && !skip.includes(`${i.repo}#${i.number}`));
+    return rm || practice ? l.sort((a, b) => a.waitingSince.localeCompare(b.waitingSince)) : l; // review mode: longest-waiting first
   };
-  const goNext = async (from: { repo: string; n: number } | null, notice: { text: string; ok: boolean } | null, skip = rm?.seen ?? []) => {
+  const goNext = async (from: { repo: string; n: number } | null, notice: { text: string; ok: boolean } | null, skip = rm?.seen ?? [], practice = rm?.practice) => {
     // With the PR list hidden nothing has loaded it; fetch it now (without thread status, so no "comments resolved").
     const items = queue.current.length ? queue.current : await getReviewQueue().catch(() => []);
-    const next = needs(items, from ? [...skip, `${from.repo}#${from.n}`] : skip)[0];
+    const next = needs(items, from ? [...skip, `${from.repo}#${from.n}`] : skip, practice)[0];
     const to = next ? `#/${next.repo}/pull/${next.number}` : '#/done';
     setFlash(notice && { route: to, ...notice });
     location.hash = to.slice(1);
@@ -126,7 +128,12 @@ function App() {
     setRm({ ...rm, seen, [how]: rm[how] + 1, log: [...rm.log, { ...from, title, how: how === 'done' ? lastEvent.current : 'skipped' }] });
     return goNext(null, notice, seen);
   };
-  const startReview = () => (setRm({ seen: [], done: 0, skipped: 0, log: [] }), goNext(null, null, []));
+  // Auto-merge's ticket moves (merge.tsx), once the PR has merged and left the list: a notification says how it went.
+  const moveMerged = (items: QueueItem[]) =>
+    movePending(new Set(items.map((i) => `${i.repo}#${i.number}`))).then((done) =>
+      done.forEach((d) => (say({ text: d.text }), void notifyNative(d.ok ? 'Jira ticket moved' : "Jira ticket didn't move", d.text, `/${d.pr.replace('#', '/pull/')}`))),
+    );
+  const startReview = (practice = false) => (setRm({ practice, seen: [], done: 0, skipped: 0, log: [] }), goNext(null, null, [], practice));
   useEffect(() => {
     if (!rm) return;
     const esc = (e: KeyboardEvent) => {
@@ -195,6 +202,7 @@ function App() {
     else if (id === 'back') history.back();
     else if (id === 'forward') history.forward();
     else if (id === 'toggle-prs') togglePRs();
+    else if (id === 'review-mode') needs(queue.current, [], false).length ? startReview() : say({ text: 'No pull requests need your review right now.', action: ['Practice run', () => startReview(true)] });
     else if (id === 'text-bigger') textStep(1);
     else if (id === 'text-smaller') textStep(-1);
     else if (id === 'text-reset') textStep(0);
@@ -247,6 +255,7 @@ function App() {
         {rm ? (
           <>
             <b class="rm-title">Review mode</b>
+            {rm.practice && <span class="pill p-warn" title="Your own PRs; finishing a review only moves on, and nothing is sent to GitHub">practice</span>}
             {r && (() => {
               const left = needs(queue.current, rm.seen).length || 1; // this one, and what's after it
               return <span class="rm-count">{rm.seen.length + 1} of {rm.seen.length + left}</span>;
@@ -306,7 +315,7 @@ function App() {
       )}
       <div class={showPRs && !rm ? 'shell' : 'shell no-prs'}>
         {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
-        <PRList hidden={!showPRs || !!rm} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setRefreshing(false))} />
+        <PRList hidden={!showPRs || !!rm} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setRefreshing(false), void moveMerged(items))} />
         {r ? (
           <Review
             key={route}
@@ -316,6 +325,7 @@ function App() {
             onSubmitted={(event?: ReviewEvent) => {
               if (!event) return setQueueVersion((v) => v + 1); // the merge box changed something: reload now
               lastEvent.current = event;
+              if (rm?.practice) return; // nothing was sent
               // A review: shown in the list at once, reloaded once GitHub's search has caught up with it.
               answered.set(`${r.repo}#${r.n}`, { event, at: Date.now() });
               setAnsweredTick((t) => t + 1);
@@ -323,6 +333,7 @@ function App() {
             }}
             onReviewed={(notice) => moveOn(r, 'done', notice)}
             focus={!!rm}
+            practice={rm?.practice}
             flash={flash?.route === route ? flash : null}
           />
         ) : route === '#/settings' ? (
@@ -330,8 +341,13 @@ function App() {
         ) : route === '#/done' ? (
           <div class="page done">
             <img src="/favicon.png" alt="" width="96" height="96" />
-            <h2>{rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
-            <p>{rm?.skipped ? `Reviewed ${rm.done}, skipped ${rm.skipped}: those still need your review.` : rm ? `Reviewed ${rm.done}. No pull requests need your review right now.` : 'No pull requests need your review right now.'}</p>
+            <h2>{rm?.practice ? 'Practice run done' : rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
+            <p>
+              {rm?.practice ? "Nothing was sent to GitHub. When PRs need your review, it's the button at the top of the Reviewing tab."
+                : rm?.skipped ? `Reviewed ${rm.done}, skipped ${rm.skipped}: those still need your review.`
+                : rm ? `Reviewed ${rm.done}. No pull requests need your review right now.`
+                : 'No pull requests need your review right now.'}
+            </p>
             {rm && rm.log.length > 0 && <ReviewLog log={rm.log} />}
             {rm && <button class="primary" onClick={() => setRm(null)}>Back to the list</button>}
             {flash?.route === route && (
@@ -770,7 +786,7 @@ function Waiting({ i, nudge }: { i: QueueItem; nudge: boolean }) {
 
 const answered: Answered = new Map(); // reviews sent from here, until the list catches up
 
-function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
+function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: (practice?: boolean) => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
   const [loaded, setItems] = useState<QueueItem[] | null>(null);
   const items = useMemo(() => loaded && withAnswered(loaded, answered), [loaded, answeredTick]);
   const [err, setErr] = useState('');
@@ -1073,11 +1089,15 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           ))}
         </div>
       )}
-      {tab === 'reviewing' && ((c) => c > 0 && (
-        <button class="primary review-all" onClick={onReview} title="The PRs that need your review, longest-waiting first, with nothing else on screen">
+      {tab === 'reviewing' && shown && ((c) => c > 0 ? (
+        <button class="primary review-all" onClick={() => onReview()} title="The PRs that need your review, longest-waiting first, with nothing else on screen (⇧⌘R in the app)">
           <Octicon name="play" /> Review {c} PR{c > 1 ? 's' : ''}
         </button>
-      ))(shown?.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft).length ?? 0)}
+      ) : shown.some((i) => i.mine && !i.isDraft) && (
+        <button class="link try-review" onClick={() => onReview(true)} title="Review mode on your own PRs: finishing a review only moves on, and nothing is sent to GitHub">
+          Try review mode on your own PRs
+        </button>
+      ))(shown.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft).length)}
       {(tab === 'reviewing' || tab === 'team') && ((c) => c > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
           {showDrafts ? `Hide ${c} draft PR${c > 1 ? 's' : ''}` : `${c} draft PR${c > 1 ? 's' : ''} hidden · show`}

@@ -440,11 +440,11 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .done { display: grid; justify-items: center; align-content: start; gap: 4px; padding-top: 15vh; text-align: center; }
 .done h2 { margin: 12px 0 0; }
 .done p { color: var(--muted); }
-.review-log { display: grid; gap: 2px; margin: 8px 0 12px; min-width: min(560px, 90vw); text-align: left; }
+.review-log { display: grid; gap: 2px; box-sizing: border-box; width: min(640px, 100%); margin: 8px 0 12px; padding: 0 16px; text-align: left; }
 .review-log a { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--fg); }
 .review-log a:hover { background: var(--soft); }
-.review-log b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.review-log small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+.review-log b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.review-log small { color: var(--muted); white-space: nowrap; }
 .review-log .rl-approve .ti { color: var(--pill-ok); }
 .review-log .rl-request_changes .ti { color: var(--delfg); }
 .review-log .rl-skipped { color: var(--muted); }

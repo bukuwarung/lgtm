@@ -299,7 +299,8 @@ function pruneVisits() {
 }
 
 // focus: review mode (main.tsx), where the index starts hidden and a review always moves on.
-export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focus }: { repo: string; n: number; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null; focus?: boolean }) {
+// practice: review mode's practice run, where finishing a review only moves on (github.ts refuses every write).
+export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focus, practice }: { repo: string; n: number; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null; focus?: boolean; practice?: boolean }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
@@ -646,6 +647,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   }
 
   async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean) {
+    if (practice) return onSubmitted(event), onReviewed(null), true;
     const head = (await getPR(repo, n)).head.sha;
     const sha = drafts.length ? saved.sha : head;
     if (sha !== head && !confirm('New commits were pushed after you started this review. Submit your comments against the older commit?')) return false;

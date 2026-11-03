@@ -64,6 +64,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 &[
                     &item("open-url", "Open PR Link…", Some("CmdOrCtrl+L"))?,
                     &item("palette", "Go to…", Some("CmdOrCtrl+K"))?,
+                    &item("review-mode", "Start Review Mode", Some("CmdOrCtrl+Shift+R"))?,
                     &sep()?,
                     &item("reload", "Reload", Some("CmdOrCtrl+R"))?,
                     &P::close_window(app, None)?,

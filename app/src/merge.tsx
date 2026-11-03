@@ -50,16 +50,15 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   const pendingKey = `jiraOnMerge:${repo}#${n}`;
   const [moved, setMoved] = useState('');
   useEffect(() => {
-    const to = localStorage.getItem(pendingKey);
     if (s?.state === 'CLOSED') localStorage.removeItem(pendingKey);
-    if (s?.state !== 'MERGED' || !to || !openTickets.length) return;
+    const p = s?.state === 'MERGED' && pendingMove(pendingKey);
+    if (!p) return;
     localStorage.removeItem(pendingKey);
-    Promise.all(openTickets.map((k) => moveJira(k, to).then(() => '', (e) => `${k} didn't move to ${to}: ${e.message}`))).then((errs) => {
-      const failed = errs.filter(Boolean);
-      failed.length ? setErr(`Merged, but ${failed.join('; ')}`) : setMoved(`Merged: moved ${openTickets.join(', ')} to ${to}`);
+    movePendingTickets(p).then((failed) => {
+      failed.length ? setErr(`Merged, but ${failed.join('; ')}`) : setMoved(`Merged: moved ${p.tickets.join(', ')} to ${p.to}`);
       setShown(true);
     });
-  }, [s?.state, openTickets.join()]);
+  }, [s?.state]);
   const [shown, setShown] = useState(false);
   useEffect(() => {
     const toggle = () => setShown((x) => !x);
@@ -188,7 +187,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
                   if (deleting) await deleteBranch(repo, s).catch((e) => setErr(`Merged, but ${e.message}`));
                   if (confirm === 'merge' && moveTickets)
                     for (const k of openTickets) await moveJira(k, to).catch((e) => setErr(`Merged, but ${k} didn't move to ${to}: ${e.message}`));
-                  if (confirm === 'auto') moveTickets ? localStorage.setItem(pendingKey, to) : localStorage.removeItem(pendingKey);
+                  if (confirm === 'auto') moveTickets && openTickets.length ? localStorage.setItem(pendingKey, JSON.stringify({ to, tickets: openTickets })) : localStorage.removeItem(pendingKey);
                 })
               }
             >
@@ -218,6 +217,34 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
 }
 
 const project = (key: string) => key.split('-')[0];
+
+// Auto-merge's ticket moves, saved per PR (jiraOnMerge:<repo>#<n>) until it merged: done by the merge box when the PR
+// is open, or by the PR list (main.tsx) once the PR has left it. Gives the ones that failed.
+type Pending = { to: string; tickets: string[] };
+const pendingMove = (key: string): Pending | null => {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? 'null');
+  } catch {
+    return null;
+  }
+};
+const movePendingTickets = (p: Pending) => Promise.all(p.tickets.map((k) => moveJira(k, p.to).then(() => '', (e) => `${k} didn't move to ${p.to}: ${e.message}`))).then((l) => l.filter(Boolean));
+export async function movePending(open: Set<string>): Promise<{ pr: string; text: string; ok: boolean }[]> {
+  const out = [];
+  for (const key of Object.keys(localStorage).filter((k) => k.startsWith('jiraOnMerge:'))) {
+    const pr = key.slice('jiraOnMerge:'.length);
+    if (open.has(pr)) continue;
+    const [repo, n] = pr.split('#');
+    const s = await getMergeState(repo, Number(n)).catch(() => null);
+    if (!s || s.state === 'OPEN') continue;
+    const p = pendingMove(key);
+    localStorage.removeItem(key);
+    if (s.state !== 'MERGED' || !p) continue;
+    const failed = await movePendingTickets(p);
+    out.push({ pr, ok: !failed.length, text: failed.length ? `${pr} merged, but ${failed.join('; ')}` : `${pr} merged: moved ${p.tickets.join(', ')} to ${p.to}` });
+  }
+  return out;
+}
 
 // A Jira status to move to: the project's own (listed once a day, which takes a while: meanwhile the one picked), by
 // category. One that isn't among them (a name from before) stays, marked.
