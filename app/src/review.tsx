@@ -1867,19 +1867,26 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   const [head, setHead] = useState<string[] | null>(null);
   const [openGaps, setOpenGaps] = useState<Set<number>>(new Set());
   const [gapErr, setGapErr] = useState('');
-  const expand = async (g: Gap) => {
+  const headLoad = useRef<Promise<string[]> | null>(null); // fetched once, however many gaps open
+  const expand = async (...gs: Gap[]) => {
     setGapErr('');
     try {
-      if (!head) {
-        const src = await getRaw(ctx.headRepo, path, ctx.pr.head.sha);
+      headLoad.current ??= getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((src) => {
         if (src == null) throw new Error('file not found at the head commit');
-        setHead(src.replace(/\n$/, '').split('\n'));
-      }
-      setOpenGaps((s) => new Set(s).add(g.before));
+        return src.replace(/\n$/, '').split('\n');
+      });
+      setHead(await headLoad.current);
+      setOpenGaps((s) => new Set([...s, ...gs.map((g) => g.before)]));
     } catch (e: any) {
+      headLoad.current = null;
       setGapErr(e.message);
     }
   };
+  // A gap of a few lines takes about the room of its button: its lines show instead.
+  useEffect(() => {
+    const small = gapList.filter((g) => g.to !== null && g.to - g.from + 1 <= 3);
+    if (small.length) void expand(...small);
+  }, [gapList]);
   const gapRows = (g: Gap) => {
     if (!openGaps.has(g.before) || !head) {
       if (g.to === null && head && g.from > head.length) return null; // nothing after the last hunk
