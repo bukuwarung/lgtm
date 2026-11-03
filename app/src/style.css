@@ -112,6 +112,7 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .ix-status.away { color: light-dark(#8a5300, #e3b341); }
 .ix-status-emoji { width: 14px; height: 14px; }
 .ix-person.away > .ix-label { opacity: .6; }
+.g-away { margin-left: 6px; font-size: calc(11px * var(--ts)); font-weight: 400; color: light-dark(#8a5300, #e3b341); }
 .sk.sk-face { width: 56px; height: 56px; border-radius: 50%; flex: none; }
 .sk-head { display: grid; gap: 8px; }
 .sk.sk-sum { width: 60%; height: 11px; margin: 16px 0 6px; }

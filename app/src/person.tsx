@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem } from './github.ts';
-import { ago } from './platform.ts';
+import { ago, usePresence } from './platform.ts';
+import { isAway, statusText } from './slackmsg.ts';
 import { Tg } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
 
@@ -39,6 +40,7 @@ function Row({ i, waiting }: { i: QueueItem; waiting?: boolean }) {
 
 export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
   const [p, setP] = useState<Person | string | null>(null);
+  const presence = usePresence([login])[login];
   useEffect(() => void (setP(null), getPerson(login, orgs).then(setP, (e) => setP(e.message))), [login, orgs.join()]);
   if (p === null) return <PageSkeleton title={`@${login}`} face />;
   if (typeof p === 'string') return <div class="page history person"><h2>@{login}</h2><p class="error">{p}</p></div>;
@@ -55,6 +57,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
             <a href={`https://github.com/${encodeURIComponent(p.login)}`} target="_blank" rel="noopener">@{p.login}</a>
             {p.bio && ` · ${p.bio}`}
           </p>
+          {presence && <p class={isAway(presence) ? 'ix-status away' : 'ix-status'}>{isAway(presence) && '🌴 '}{statusText(presence)}</p>}
         </div>
       </header>
       <p class="history-sum">

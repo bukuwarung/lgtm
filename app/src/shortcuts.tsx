@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { fetchJobLog, useFoldBots, useStoredFlag } from './platform.ts';
+import { fetchJobLog, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
+import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName } from './files.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
@@ -167,6 +168,21 @@ function AddMe({ add }: { add: () => Promise<unknown> }) {
 
 // Ask a reviewer who's reviewed to look again (after you've pushed fixes): a re-request on GitHub, and on Slack your
 // "look again" message in your thread with them. ✓ once asked.
+// A reviewer waited on who's away: ask the next free person instead (they're taken off the PR).
+function Replace({ login, replace }: { login: string; replace: (login: string) => Promise<string> }) {
+  const [state, setState] = useState('');
+  return (
+    <button
+      class="link ix-pad ix-replace"
+      disabled={!!state && state !== 'failed'}
+      title={`@${login} is away: take them off and ask the next free reviewer on GitHub`}
+      onClick={() => (setState('asking'), replace(login).then((who) => setState(`asked @${who}`), (e) => (setState('failed'), alert(e.message))))}
+    >
+      {state === 'asking' ? 'Asking…' : state && state !== 'failed' ? state : 'Ask someone else instead'}
+    </button>
+  );
+}
+
 function ReRequest({ login, again }: { login: string; again: (login: string) => Promise<boolean> }) {
   const [state, setState] = useState<'' | 'asking' | 'done' | 'failed'>('');
   return (
@@ -277,11 +293,12 @@ type IndexProps = {
   slackWith?: Set<string>; // reviewers I already have a Slack thread with about this PR
   reRequest?: (login: string) => Promise<boolean>; // on my own PR: ask a reviewer who's reviewed to look again
   addMe?: () => Promise<unknown>; // on someone else's PR: ask myself for a review (it joins my queue)
+  replace?: (login: string) => Promise<string>; // on my own PR: ask someone free instead of a reviewer who's away; says who
   onViewed: OnViewed;
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest, addMe }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -321,6 +338,8 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
   for (const r of pr.requested_reviewers ?? [])
     if (r.type !== 'Bot') reviewers.set(r.login, { meta: reviewers.has(r.login) ? 'asked again' : 'waiting', icon: 'waiting', tone: 'WAITING', id: reviewers.get(r.login)?.id });
   for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting', icon: 'waiting', tone: 'WAITING' });
+  // Their Slack statuses: one waited on who's away (sick, vacation, leave) says so, and on my PR can be swapped.
+  const presence = usePresence([...reviewers.keys()].filter((w) => !w.startsWith('team ')));
 
   return (
     <div class="index">
@@ -354,7 +373,9 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
                 {!who.startsWith('team ') && <img src={`https://github.com/${encodeURIComponent(who)}.png?size=40`} alt="" />}
                 {who} <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
               </span>
+              {presence[who] && <span class={isAway(presence[who]) ? 'ix-status away' : 'ix-status'}>{isAway(presence[who]) && '🌴 '}{statusText(presence[who])}</span>}
             </button>
+            {replace && r.tone === 'WAITING' && isAway(presence[who]) && <Replace login={who} replace={replace} />}
             {reRequest && r.id && r.tone !== 'WAITING' && <ReRequest login={who} again={reRequest} />}
             {slackAsk && !who.startsWith('team ') && !slackWith?.has(who) && <SlackAsk login={who} ask={slackAsk} />}
           </div>

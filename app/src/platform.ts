@@ -243,6 +243,27 @@ async function call<T>(method: string, body?: any): Promise<T> {
 export const getSlackPeople = () => call<SlackPeople>('GET');
 // People's Slack statuses (by GitHub login, the ones mapped to Slack), for picking a reviewer (slackmsg.ts isAway).
 export type SlackPresence = { text: string; emoji: string; until: number };
+// The same, for any part of lgtm: kept 10 minutes per person, asked once for everyone missing; every user of it
+// redraws when new statuses arrive.
+const presenceSeen = new Map<string, { at: number; v: SlackPresence | null }>();
+export function usePresence(logins: string[]): Record<string, SlackPresence> {
+  const key = [...new Set(logins.filter(Boolean))].sort().join();
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const redraw = () => tick((t) => t + 1);
+    addEventListener('lgtm:presence', redraw);
+    const stale = key ? key.split(',').filter((l) => (presenceSeen.get(l)?.at ?? 0) < Date.now() - 10 * 60_000) : [];
+    if (stale.length) {
+      for (const l of stale) presenceSeen.set(l, { at: Date.now(), v: presenceSeen.get(l)?.v ?? null }); // asking: no one else asks
+      slackPresence(stale).then((r) => {
+        for (const l of stale) presenceSeen.set(l, { at: Date.now(), v: r[l] ?? null });
+        dispatchEvent(new Event('lgtm:presence'));
+      }, () => {});
+    }
+    return () => removeEventListener('lgtm:presence', redraw);
+  }, [key]);
+  return Object.fromEntries((key ? key.split(',') : []).flatMap((l) => (presenceSeen.get(l)?.v ? [[l, presenceSeen.get(l)!.v!]] : [])));
+}
 export async function slackPresence(logins: string[]): Promise<Record<string, SlackPresence>> {
   if (!logins.length) return {};
   if (isDesktop) return command<Record<string, SlackPresence>>('slack_presence', { logins });

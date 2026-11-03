@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
+import { isAway, statusText } from './slackmsg.ts';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -832,12 +833,14 @@ const idleDays = (i: QueueItem) => (Date.now() - Date.parse(i.updatedAt)) / DAY;
 // the first says who gets it, the second sends.
 // How long a ready PR has waited for review (asked for, opened or marked ready), amber after 2 days and red after 2
 // weeks; on my own, a nudge to its reviewers.
-function Waiting({ i, nudge }: { i: QueueItem; nudge: boolean }) {
+function Waiting({ i, nudge, presence }: { i: QueueItem; nudge: boolean; presence: Record<string, { text: string; emoji: string; until: number }> }) {
   const [step, setStep] = useState<'idle' | 'confirm' | 'sending' | string>('idle');
   const days = Math.floor((Date.now() - Date.parse(i.waitingSince)) / DAY);
   if (!(days >= 1) || i.isDraft || i.reviewDecision === 'APPROVED') return null;
   const bots = readBots();
-  const to = i.pendingReviewers.filter((r) => !bots.has(r));
+  // Reviewers away (Slack: sick, vacation, leave) aren't nudged.
+  const away = i.pendingReviewers.filter((r) => isAway(presence[r]));
+  const to = i.pendingReviewers.filter((r) => !bots.has(r) && !away.includes(r));
   const stop = (e: Event) => (e.preventDefault(), e.stopPropagation());
   const send = async () => {
     setStep('sending');
@@ -863,7 +866,9 @@ function Waiting({ i, nudge }: { i: QueueItem; nudge: boolean }) {
             <Tg i="🔔" t="nudge" />
           </button>
         ) : step === 'confirm' ? (
-          <button class="pill pill-btn p-strong" onClick={(e) => (stop(e), void send())}>Send to {to.map((r) => '@' + r).join(', ')}?</button>
+          <button class="pill pill-btn p-strong" onClick={(e) => (stop(e), void send())}>
+            Send to {to.map((r) => '@' + r).join(', ')}?{away.length > 0 && ` (not ${away.map((r) => '@' + r).join(', ')}: away)`}
+          </button>
         ) : (
           <span class="pill" onClick={stop}>{step === 'sending' ? 'Sending…' : step}</span>
         ))}
@@ -1062,6 +1067,8 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   const shown = items?.filter((i) => i.mine || showDrafts || !i.isDraft || isCurrent(i));
   const teamDrafts = teamData?.items.filter((i) => i.isDraft && !isCurrent(i)).length ?? 0;
   const teamItems = teamData?.items.filter((i) => showDrafts || !i.isDraft || isCurrent(i)) ?? [];
+  // Slack statuses (slackmsg.ts isAway) of the reviewers my PRs wait on, and of the team's members on its tab.
+  const presence = usePresence([...(items ?? []).filter((i) => i.authored).flatMap((i) => i.pendingReviewers), ...(tab === 'team' ? teamData?.members ?? [] : [])]);
   const listed = (i: QueueItem) => inReviewing(i) || (!!i.mentioned && !i.reviewing && !i.authored && isCurrent(i)); // the one you're on stays
   // The top PRs waiting on me load ahead, a few at a time, so opening one is instant; only ones that changed since
   // their cached copy, and not while lgtm is in the background.
@@ -1099,6 +1106,9 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
         )}
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
+        {kind === MINE && i.pendingReviewers.filter((r) => isAway(presence[r])).map((r) => (
+          <span class="pill p-warn" title={`Waiting on @${r}, away on Slack: ${statusText(presence[r])}`}>🌴 @{r} away</span>
+        ))}
         {i.codeOwner && <span class="pill" title="It changes files you own (CODEOWNERS). GitHub asks code owners once it's marked ready for review"><Tg i="assigned" t="code owner" /></span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&
           (kind === MINE ? (
@@ -1153,7 +1163,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         )}
         {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>}
-        {(kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} /> : null}
+        {(kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} presence={presence} /> : null}
         {i.estimate && <span
           class="pill p-time"
           title={`Rough time to review: the description (${i.estimate.words} words), then ${Math.round(i.estimate.code)} lines of code, ${Math.round(i.estimate.tests)} of tests and ${Math.round(i.estimate.docs)} of docs (deleted lines count a third; generated files and lockfiles are skipped)${pace !== 1 ? `, at your ${Math.round(pace * 100)}% pace` : ''}${i.files > 100 ? '. Only the first 100 files are counted' : ''}. See Settings → Time to review`}
@@ -1182,6 +1192,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
             <details key={g} open={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
                 {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
+                {kind.people && isAway(presence[g]) && <span class="g-away" title={`Away on Slack: ${statusText(presence[g])}`}>🌴 away</span>}
                 {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review; how long their oldest PR has waited for one">{kind.note(g)}</span>}
               </summary>
               {!!kind.asked?.(g) && (

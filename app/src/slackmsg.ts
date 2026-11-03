@@ -35,6 +35,14 @@ export function isAway(s: { text: string; emoji: string; until: number } | null 
   return AWAY.test(s.text) || AWAY_EMOJI.has(s.emoji.replace(/:/g, ''));
 }
 
+// A status as words: "Vacation · until Thu, 6 Nov" (a time when it ends today).
+export function statusText(s: { text: string; emoji: string; until: number }) {
+  if (!s.until) return s.text || s.emoji;
+  const d = new Date(s.until * 1000);
+  const when = d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  return `${s.text || s.emoji} · until ${when}`;
+}
+
 export const COMMON_FIELDS = '{pr} the PR, linked · {title} · {url} · {repo} · {number} · {author} · {@recipient} tags who gets it · {@author} tags the author · {@login} tags anyone';
 
 // Your wording, else lgtm's. Emptied, "again" sends nothing; the others fall back to lgtm's.

@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { addedLines, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, requestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getConversation, getEmails, getEmojis, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -933,6 +933,18 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const waitingOnMe = me ? allThreads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
   const myOpenThreads = me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).length : 0;
   const mySummary = me ? changesSummary(allThreads, me) : '';
+  // On my PR: a reviewer who's away swapped for the first suggested one who isn't (Slack status), on GitHub.
+  const replaceReviewer = async (login: string) => {
+    const asked = (pr.requested_reviewers ?? []).map((u) => u.login);
+    const picks = await suggestReviewers(repo, new Set([me, login, ...bots, ...asked, ...conversation.filter((c) => c.state).map((c) => c.author)]), localStorage.getItem(own('team')) ?? ''); // the team watched (Settings)
+    const status = await slackPresence(picks.slice(0, 8).map((p) => p.login));
+    const next = picks.slice(0, 8).find((p) => !isAway(status[p.login]));
+    if (!next) throw new Error('No one free to ask: everyone suggested is away or already asked.');
+    await requestReview(repo, n, next.login);
+    await unrequestReview(repo, n, login);
+    dispatchEvent(new Event('lgtm:refresh'));
+    return next.login;
+  };
   const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
 
   // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.
@@ -1042,6 +1054,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
               slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
               slackWith={new Set(slackThreads.map((t) => t.login))}
               reRequest={!!me && pr.user.login === me ? reRequest : undefined}
+              replace={!!me && pr.user.login === me ? replaceReviewer : undefined}
               addMe={!!me && pr.user.login !== me ? () => requestReview(repo, n, me).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
               me={me}
               modules={view === 'all' ? shownModules : undefined}

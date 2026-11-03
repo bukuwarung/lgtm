@@ -492,6 +492,8 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
 
 export const requestReview = (repo: string, n: number, login: string) =>
   json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'POST', body: JSON.stringify({ reviewers: [login] }) });
+export const unrequestReview = (repo: string, n: number, login: string) =>
+  json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'DELETE', body: JSON.stringify({ reviewers: [login] }) });
 
 let viewer: Promise<string> | undefined;
 export const getViewer = () => (viewer ??= json('/user').then((u) => u.login as string));
