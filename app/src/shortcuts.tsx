@@ -276,6 +276,10 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
   const failing = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const rerunnable = checks?.filter((c) => c.state === 'failure' && c.jobId && runOf(c)) ?? [];
   const bots = conversation.filter((c) => c.bot);
+  // Mine first, grouped; on someone else's PR the rest of the people fold away (on mine, they're what I'm reading).
+  const minePR = !!me && pr.user.login === me;
+  const myConv = conversation.filter((c) => !c.bot && !!me && c.author === me).length;
+  const othersConv = conversation.filter((c) => !c.bot && c.author !== me).length;
   const convEntry = (c: ConversationItem, i: number) => (
     <Entry key={c.id} label={c.author} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
   );
@@ -309,7 +313,18 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
     <div class="index">
       <Section title="Conversation" count={conversation.length + 1}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
-        {conversation.map((c, i) => !c.bot && convEntry(c, i))}
+        {myConv > 0 && (
+          <details class="ix-ckgroup" open>
+            <summary><Octicon name="person" /> {myConv} yours</summary>
+            {conversation.map((c, i) => !c.bot && c.author === me && convEntry(c, i))}
+          </details>
+        )}
+        {othersConv > 0 && (
+          <details class="ix-ckgroup" open={minePR}>
+            <summary><Octicon name="comment-discussion" /> {othersConv} from others</summary>
+            {conversation.map((c, i) => !c.bot && c.author !== me && convEntry(c, i))}
+          </details>
+        )}
         {bots.length > 0 && (
           <details class="ix-ckgroup" open={!foldBots}>
             <summary><Octicon name="dependabot" /> {bots.length} from bots</summary>
@@ -391,17 +406,28 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
       </Section>
 
       <Section title="Review threads" count={threads.length + drafts.length}>
-        {drafts.map((d) => (
-          <Entry
-            key={d.id}
-            label={`${base(d.path)}${d.line ? ':' + d.line : ''}`}
-            meta="pending"
-            sub={oneLine(d.body)}
-            inline
-            onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
-          />
-        ))}
-        {[...tiers.mine, ...tiers.human].map((t) => threadEntry(t))}
+        {drafts.length + tiers.mine.length > 0 && (
+          <details class="ix-ckgroup" open>
+            <summary><Octicon name="person" /> {drafts.length + tiers.mine.length} yours</summary>
+            {drafts.map((d) => (
+              <Entry
+                key={d.id}
+                label={`${base(d.path)}${d.line ? ':' + d.line : ''}`}
+                meta="pending"
+                sub={oneLine(d.body)}
+                inline
+                onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
+              />
+            ))}
+            {tiers.mine.map((t) => threadEntry(t))}
+          </details>
+        )}
+        {tiers.human.length > 0 && (
+          <details class="ix-ckgroup" open={minePR}>
+            <summary><Octicon name="comment-discussion" /> {tiers.human.length} from others</summary>
+            {tiers.human.map((t) => threadEntry(t))}
+          </details>
+        )}
         {tiers.bot.length > 0 && (
           <details class="ix-ckgroup" open>
             <summary><Octicon name="dependabot" /> {tiers.bot.length} from bots</summary>
