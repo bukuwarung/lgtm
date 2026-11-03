@@ -1127,3 +1127,8 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .file-h:hover .file-dir { opacity: 1; }
 /* Without + / − signs (Settings → Diff, off by default) the colour marks changed lines, and the code gets that column. */
 html.no-signs .diff .code::before { content: none; }
+/* ask(): lgtm's own confirm */
+dialog.ask { max-width: min(440px, calc(100vw - 32px)); padding: 16px 20px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
+dialog.ask::backdrop { background: rgb(0 0 0 / .3); }
+dialog.ask p { margin: 0 0 14px; line-height: 1.45; }
+dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }

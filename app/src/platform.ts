@@ -602,6 +602,19 @@ const errors: string[] = [];
 // bar until dismissed, review mode too.
 export const reportError = (text: string) => dispatchEvent(new CustomEvent('lgtm:error', { detail: text }));
 
+// confirm() in the Mac app's web view says no without asking (wry doesn't show it), so lgtm asks in its own dialog.
+export function ask(text: string, yes = 'OK'): Promise<boolean> {
+  const d = document.createElement('dialog');
+  d.className = 'ask';
+  d.innerHTML = '<p></p><form method="dialog"><button value="">Cancel</button><button class="primary" value="y"></button></form>';
+  d.querySelector('p')!.textContent = text;
+  d.querySelector('.primary')!.textContent = yes;
+  document.body.append(d);
+  d.showModal();
+  (d.querySelector('.primary') as HTMLButtonElement).focus();
+  return new Promise((done) => d.addEventListener('close', () => (done(d.returnValue === 'y'), d.remove())));
+}
+
 export function recordError(text: string) {
   errors.push(`${new Date().toISOString().slice(0, 19)} ${text.slice(0, 300)}`);
   if (errors.length > 20) errors.shift();

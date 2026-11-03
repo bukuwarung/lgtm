@@ -23,7 +23,7 @@ import { fillSlack, isAway, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
-import { slackPresence, type SlackPresence, reportError, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { slackPresence, type SlackPresence, reportError, ask, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -724,7 +724,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
     }
     const head = (await getPR(repo, n)).head.sha;
     const sha = drafts.length ? saved.sha : head;
-    if (sha !== head && !confirm('New commits were pushed after you started this review. Submit your comments against the older commit?')) return false;
+    if (sha !== head && !(await ask('New commits were pushed after you started this review. Submit your comments against the older commit?', 'Submit'))) return false;
     await submitReview(pr.node_id, sha, event, body, drafts, pending?.id);
     setPending(null);
     // A Claude Code session sent this PR here: offer to send it the outcome (a message stays up past moving on).
@@ -1248,7 +1248,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
               <button
                 class="link"
                 onClick={async () => {
-                  if (!confirm(`Discard your review in progress on GitHub${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`)) return;
+                  if (!(await ask(`Discard your review in progress on GitHub${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`, 'Discard'))) return;
                   await discardReview(pending.id).catch((e) => setError(e.message));
                   setPending(null);
                   setThreads(await getThreads(repo, n));
