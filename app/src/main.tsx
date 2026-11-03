@@ -85,7 +85,7 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
         ))}
       </div>
       <p class="note">
-        Pick a pull request from the list, or paste a PR link in the box at the top (⌘K). <a href="#/history">Your reviews this week →</a>
+        Pick a pull request from the list, or paste a PR link in the box at the top (⌘K). <a href="#/history">Your reviews this month →</a>
       </p>
     </div>
   );

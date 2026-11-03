@@ -5,7 +5,7 @@ import { Tg } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
 
 // Someone's page (#/person/<login>), from their picture or name anywhere: their open PRs, the PRs waiting on their
-// review, and their reviews of the last week.
+// review, and their reviews of the last 30 days.
 export const isPerson = (login?: string | null) => !!login && !/\[bot\]$|^ghost$/.test(login);
 // A click on someone that opens their page (inside a link or a fold, it doesn't open those too).
 export const toPerson = (login: string) => (e: Event) => {
@@ -61,7 +61,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
         {[
           `${p.mine.length} open PR${p.mine.length === 1 ? '' : 's'}`,
           `${p.asked.length} waiting on their review`,
-          `${p.reviews.length} review${p.reviews.length === 1 ? '' : 's'} this week`,
+          `${p.reviews.length} review${p.reviews.length === 1 ? '' : 's'} this month`,
           count('APPROVED') && `${count('APPROVED')} approved`,
           count('CHANGES_REQUESTED') && `${count('CHANGES_REQUESTED')} with changes requested`,
           median != null && `typically ${hours(median)} after being asked`,
@@ -76,7 +76,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
         {p.mine.length ? p.mine.map((i) => <Row i={i} />) : <p class="note">None.</p>}
       </section>
       <section>
-        <h4>Reviewed this week</h4>
+        <h4>Reviewed in the last 30 days</h4>
         {p.reviews.length ? (
           p.reviews.map((r) => (
             <a class="history-row" href={`#/${r.repo}/pull/${r.number}`}>

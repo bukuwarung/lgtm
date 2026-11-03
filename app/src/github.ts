@@ -365,48 +365,28 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
 // last time I was asked, if I was). Comments posted one by one within 10 minutes count as one review, its strongest
 // verdict kept.
 export type MyReview = { repo: string; number: number; title: string; url: string; author: string; state: ReviewState; at: string; waited?: number };
-export async function getMyReviews(days = 7): Promise<MyReview[]> {
+export async function getMyReviews(days = 30): Promise<MyReview[]> {
   const me = await getViewer();
-  const since = new Date(Date.now() - days * 86_400_000).toISOString();
-  const d = await graphql(
-    `query($q:String!,$me:String!){s:search(query:$q,type:ISSUE,first:100){nodes{...on PullRequest{number title url repository{nameWithOwner} author{login}
-      reviews(author:$me,last:30){nodes{state submittedAt}}
-      timelineItems(itemTypes:[REVIEW_REQUESTED_EVENT],last:20){nodes{...on ReviewRequestedEvent{createdAt requestedReviewer{...on User{login}}}}}}}}}`,
-    { q: `is:pr reviewed-by:@me -author:@me updated:>=${since.slice(0, 10)}`, me },
-  );
-  return (d.s.nodes as any[])
-    .filter((p) => p?.reviews)
-    .flatMap((p) =>
-      collapseReviews(
-        p.reviews.nodes,
-        (p.timelineItems.nodes as any[]).filter((e) => e.requestedReviewer?.login === me).map((e) => e.createdAt),
-        since,
-      ).map((r) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, url: p.url, author: p.author?.login ?? 'ghost', ...r })),
-    )
-    .sort((a, b) => b.at.localeCompare(a.at));
+  return reviewsBy(me, `reviewed-by:@me -author:@me`, days);
 }
-// Someone at a glance (the person page): who they are, their open PRs, the open PRs waiting on their review (longest
-// first), and their reviews of the last 7 days. In the given orgs (the ones in my list); one query.
-export type Person = { login: string; name: string | null; avatar: string; bio: string | null; mine: QueueItem[]; asked: QueueItem[]; reviews: (MyReview & {})[] };
-export async function getPerson(login: string, orgs: string[]): Promise<Person> {
-  const where = orgs.map((o) => 'org:' + o).join(' ');
-  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
-  const d = await graphql(
-    `query($login:String!,$mine:String!,$asked:String!,$reviewed:String!){u:user(login:$login){login name avatarUrl(size:96) bio}
-      mine:search(query:$mine,type:ISSUE,first:30){nodes{...F}}
-      asked:search(query:$asked,type:ISSUE,first:30){nodes{...F}}
-      reviewed:search(query:$reviewed,type:ISSUE,first:50){nodes{...on PullRequest{number title url repository{nameWithOwner} author{login}
+// Someone's reviews of the last `days` days, newest first: the PRs they reviewed (not their own), up to 300, a page of
+// 100 at a time; each PR's reviews collapsed (collapseReviews).
+async function reviewsBy(login: string, query: string, days: number): Promise<MyReview[]> {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const nodes: any[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 3; page++) {
+    const d: any = await graphql(
+      `query($q:String!,$login:String!,$after:String){s:search(query:$q,type:ISSUE,first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{...on PullRequest{number title url repository{nameWithOwner} author{login}
         reviews(author:$login,last:30){nodes{state submittedAt}}
-        timelineItems(itemTypes:[REVIEW_REQUESTED_EVENT],last:20){nodes{...on ReviewRequestedEvent{createdAt requestedReviewer{...on User{login}}}}}}}}}
-    ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
-    {
-      login,
-      mine: `is:open is:pr archived:false author:${login} ${where}`,
-      asked: `is:open is:pr archived:false user-review-requested:${login} ${where}`,
-      reviewed: `is:pr reviewed-by:${login} -author:${login} updated:>=${since.slice(0, 10)} ${where}`,
-    },
-  );
-  const reviews = (d.reviewed.nodes as any[])
+        timelineItems(itemTypes:[REVIEW_REQUESTED_EVENT],last:20){nodes{...on ReviewRequestedEvent{createdAt requestedReviewer{...on User{login}}}}}}}}}`,
+      { q: `is:pr ${query} updated:>=${since.slice(0, 10)}`, login, after },
+    );
+    nodes.push(...d.s.nodes);
+    if (!d.s.pageInfo.hasNextPage) break;
+    after = d.s.pageInfo.endCursor;
+  }
+  return nodes
     .filter((p) => p?.reviews)
     .flatMap((p) =>
       collapseReviews(p.reviews.nodes, (p.timelineItems.nodes as any[]).filter((e) => e.requestedReviewer?.login === login).map((e) => e.createdAt), since).map((r) => ({
@@ -414,6 +394,26 @@ export async function getPerson(login: string, orgs: string[]): Promise<Person> 
       })),
     )
     .sort((a, b) => b.at.localeCompare(a.at));
+}
+// Someone at a glance (the person page): who they are, their open PRs, the open PRs waiting on their review (longest
+// first), and their reviews of the last 30 days. In the given orgs (the ones in my list).
+export type Person = { login: string; name: string | null; avatar: string; bio: string | null; mine: QueueItem[]; asked: QueueItem[]; reviews: (MyReview & {})[] };
+export async function getPerson(login: string, orgs: string[], days = 30): Promise<Person> {
+  const where = orgs.map((o) => 'org:' + o).join(' ');
+  const [d, reviews] = await Promise.all([
+    graphql(
+      `query($login:String!,$mine:String!,$asked:String!){u:user(login:$login){login name avatarUrl(size:96) bio}
+        mine:search(query:$mine,type:ISSUE,first:30){nodes{...F}}
+        asked:search(query:$asked,type:ISSUE,first:30){nodes{...F}}}
+      ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+      {
+        login,
+        mine: `is:open is:pr archived:false author:${login} ${where}`,
+        asked: `is:open is:pr archived:false user-review-requested:${login} ${where}`,
+      },
+    ),
+    reviewsBy(login, `reviewed-by:${login} -author:${login} ${where}`, days),
+  ]);
   return {
     login: d.u?.login ?? login,
     name: d.u?.name ?? null,
