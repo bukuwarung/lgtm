@@ -28,7 +28,7 @@ import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { codeIndex, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
-import { below, jumpTo, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
+import { below, jumpTo, noteJump, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -710,6 +710,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
+  const [specCover] = useStoredFlag('specCoverage', true); // Settings → Reviewing: which code files no spec names
   const ctx: Ctx = {
     codeIx,
     specRefs: refs,
@@ -989,7 +990,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
               drafts={drafts}
               checks={checks}
               onRefreshChecks={loadChecks}
-              files={noTests.size ? shown.map((f) => (noTests.has(f.filename) ? { ...f, untested: true } : f)) : shown}
+              files={((cover) => (noTests.size || cover ? shown.map((f) => ({ ...f, untested: noTests.has(f.filename) || undefined, unspecced: cover && !isDoc(f.filename) ? !refs.has(f.filename) : undefined })) : shown))(
+                specCover && shown.some((f) => isDoc(f.filename)) && shown.some((f) => !isDoc(f.filename)),
+              )}
               viewed={viewed}
               onViewed={markViewed}
               slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
@@ -1169,7 +1172,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
-          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} />
+          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} />
           {visible.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
@@ -1532,7 +1535,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         <span class="counts">
           <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
         </span>
-        <SpecChips refs={ctx.specRefs.get(path)} />
+        <SpecChips refs={ctx.specRefs.get(path)} ix={ctx.codeIx} />
         {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <DiffMode rich={rich} set={setRich} />}
@@ -2053,6 +2056,7 @@ function linkSpecRefs(root: HTMLElement | null, ix: CodeIndex) {
 
 // To where a spec names a file: its block holding that line, once drawn (else the spec).
 function jumpToSpec(r: SpecRef) {
+  noteJump();
   const sec = document.getElementById('f-' + r.spec);
   sec?.scrollIntoView();
   let tries = 0;
@@ -2061,9 +2065,9 @@ function jumpToSpec(r: SpecRef) {
       const [s, end] = e.getAttribute('data-src')!.split('-').map(Number);
       return s <= r.line && r.line <= end;
     });
-    if (!el) return void (tries++ < 60 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + r.spec)); // it may still be loading
+    if (!el) return void (tries++ < 60 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + r.spec, undefined, true)); // it may still be loading
     el.id ||= `sl-${r.spec}-${r.line}`;
-    jumpTo(el.id);
+    jumpTo(el.id, undefined, true);
   };
   setTimeout(go, 50);
 }
@@ -2071,28 +2075,71 @@ function jumpToSpec(r: SpecRef) {
 // To a changed file, at its new-side line when that's on show (not folded away), else its top.
 function jumpToLine(path: string, line?: number) {
   if (!line) return jumpTo('f-' + path);
+  noteJump();
   const sec = document.getElementById('f-' + path);
   sec?.scrollIntoView();
   let tries = 0;
   const go = () => {
     const row = [...(sec?.querySelectorAll('tr.ln') ?? [])].find((r) => r.children[1]?.textContent === String(line));
-    if (!row) return void (tries++ < 30 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + path)); // drawing, or not on show
+    if (!row) return void (tries++ < 30 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + path, undefined, true)); // drawing, or not on show
     row.id ||= `ln-${path}-${line}`;
-    jumpTo(row.id);
+    jumpTo(row.id, undefined, true);
   };
   setTimeout(go, 50);
 }
 
+// Hovering a link to the code (linkSpecRefs) or a spec chip previews what it names, after a moment; the preview stays
+// while the mouse is on it, and a click on it goes there.
+type PeekAt = { path: string; line?: number; at: DOMRect; go: () => void };
+function useRefPeek(ix: CodeIndex) {
+  const [peek, setPeek] = useState<PeekAt | null>(null);
+  const timer = useRef(0);
+  const show = (p: Omit<PeekAt, 'at'>, el: Element) => {
+    clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setPeek({ ...p, at: el.getBoundingClientRect() }), 250);
+  };
+  const out = () => {
+    clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setPeek(null), 200);
+  };
+  const refOf = (e: Event) => (e.target as Element).closest('[data-jump]');
+  const target = (ref: Element) => ({ path: ref.getAttribute('data-jump')!, line: Number(ref.getAttribute('data-line')) || undefined });
+  return {
+    show,
+    out,
+    over: (e: MouseEvent) => {
+      const ref = refOf(e);
+      if (!ref) return clearTimeout(timer.current);
+      const t = target(ref);
+      show({ ...t, go: () => jumpToLine(t.path, t.line) }, ref);
+    },
+    // A click on a link goes there; true when it was one.
+    click: (e: MouseEvent) => {
+      const ref = refOf(e);
+      if (!ref) return false;
+      e.preventDefault();
+      setPeek(null);
+      const t = target(ref);
+      jumpToLine(t.path, t.line);
+      return true;
+    },
+    node:
+      peek &&
+      createPortal(<SpecPeek p={peek} ix={ix} onEnter={() => clearTimeout(timer.current)} onLeave={out} onGo={() => (setPeek(null), peek.go())} />, document.body),
+  };
+}
+
 // A link's preview: the lines of the change it names, highlighted, below the link (above it near the window's bottom).
-function SpecPeek({ p, ix, onEnter, onLeave, onGo }: { p: { path: string; line?: number; at: DOMRect }; ix: CodeIndex; onEnter: () => void; onLeave: () => void; onGo: () => void }) {
-  const lines = peekLines(ix.patches.get(p.path) ?? '', p.line);
+function SpecPeek({ p, ix, onEnter, onLeave, onGo }: { p: PeekAt; ix: CodeIndex; onEnter: () => void; onLeave: () => void; onGo: () => void }) {
+  const doc = isDoc(p.path); // a spec's lines are prose: wrapped, and fewer of them
+  const lines = peekLines(ix.patches.get(p.path) ?? '', p.line, doc ? 8 : 14);
   const lang = languageFor(p.path);
   const text = lines.map((l) => l.text).join('\n');
   const html = lang ? splitLines(highlightCode(text, lang)) : text.split('\n').map((l) => l.replace(/[&<>]/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt' }[c]};`));
   const below = p.at.bottom + 320 < innerHeight;
   const style = { left: `${Math.min(p.at.left, innerWidth - 580)}px`, ...(below ? { top: `${p.at.bottom + 6}px` } : { bottom: `${innerHeight - p.at.top + 6}px` }) };
   return (
-    <div class="spec-peek" style={style} onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={onGo} title="Go there">
+    <div class={doc ? 'spec-peek doc' : 'spec-peek'} style={style} onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={onGo} title="Go there">
       <div class="spec-peek-h">
         <b>{base(p.path)}</b>
         {p.line ? `:${p.line}` : ''} <small>{dir(p.path)}</small>
@@ -2114,16 +2161,24 @@ function SpecPeek({ p, ix, onEnter, onLeave, onGo }: { p: { path: string; line?:
 }
 
 // A changed file's header: where the specs name it, a chip per spec (its first mention; all of them on hover).
-function SpecChips({ refs }: { refs?: SpecRef[] }) {
+function SpecChips({ refs, ix }: { refs?: SpecRef[]; ix: CodeIndex }) {
+  const peek = useRefPeek(ix);
   if (!refs?.length) return null;
   const bySpec = [...new Map(refs.map((r) => [r.spec, refs.filter((x) => x.spec === r.spec)])).values()];
   return (
     <>
       {bySpec.map((l) => (
-        <button class="spec-chip" title={`Named in ${l.map((r) => r.label).join(', ')}: go there`} onClick={() => jumpToSpec(l[0])}>
+        <button
+          class="spec-chip"
+          title={`Named in ${l.map((r) => r.label).join(', ')}: go there`}
+          onClick={() => jumpToSpec(l[0])}
+          onMouseEnter={(e) => peek.show({ path: l[0].spec, line: l[0].line, go: () => jumpToSpec(l[0]) }, e.currentTarget)}
+          onMouseLeave={peek.out}
+        >
           <Octicon name="file" /> {l[0].label}{l.length > 1 ? ` +${l.length - 1}` : ''}
         </button>
       ))}
+      {peek.node}
     </>
   );
 }
@@ -2134,23 +2189,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const path = file.filename;
   const root = useRef<HTMLDivElement>(null);
   const linkTo = (slug: string) => `https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${path}#${slug}`;
-  // Hovering a link to the code (linkSpecRefs) previews the change it names, after a moment; the preview stays while
-  // the mouse is on it, and a click on it goes there.
-  const [peek, setPeek] = useState<{ path: string; line?: number; at: DOMRect } | null>(null);
-  const peekTimer = useRef(0);
-  const peekOver = (e: MouseEvent) => {
-    const ref = (e.target as Element).closest('[data-jump]');
-    clearTimeout(peekTimer.current);
-    if (!ref) return;
-    peekTimer.current = window.setTimeout(
-      () => setPeek({ path: ref.getAttribute('data-jump')!, line: Number(ref.getAttribute('data-line')) || undefined, at: ref.getBoundingClientRect() }),
-      250,
-    );
-  };
-  const peekOut = () => {
-    clearTimeout(peekTimer.current);
-    peekTimer.current = window.setTimeout(() => setPeek(null), 200);
-  };
+  const peek = useRefPeek(ctx.codeIx);
   useEffect(() => {
     tidyDoc(root.current, linkTo);
     signRelativeImages(root.current, ctx.headRepo, ctx.pr.head.sha, dir(path)); // its images, by their path in the repo
@@ -2239,25 +2278,11 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
       class={`rich ${look.class}`}
       style={look.style}
       ref={root}
-      onMouseOver={peekOver}
-      onMouseOut={peekOut}
-      onClick={(e) => {
-        const ref = (e.target as Element).closest('[data-jump]');
-        if (ref) return void (e.preventDefault(), jumpToLine(ref.getAttribute('data-jump')!, Number(ref.getAttribute('data-line')) || undefined));
-        onDocClick(e, root.current, linkTo);
-      }}
+      onMouseOver={peek.over}
+      onMouseOut={peek.out}
+      onClick={(e) => peek.click(e) || onDocClick(e, root.current, linkTo)}
     >
-      {peek &&
-        createPortal(
-          <SpecPeek
-            p={peek}
-            ix={ctx.codeIx}
-            onEnter={() => clearTimeout(peekTimer.current)}
-            onLeave={peekOut}
-            onGo={() => (setPeek(null), jumpToLine(peek.path, peek.line))}
-          />,
-          document.body,
-        )}
+      {peek.node}
       <Notes ctx={ctx} threads={orphanT} drafts={orphanD} form={t?.side === 'LEFT' && !removed.some((r) => inRun(r, t.line))} />
       {chunks.map((c, i) => {
         if (hidden(i)) {
@@ -3148,13 +3173,14 @@ const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQU
 const botExcerpt = (html: string, max = 100) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 // folded: review mode starts with it closed, the diff first.
-function Conversation({ pr, items, lang, repo, me, mentions, folded }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean }) {
+function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean; ix: CodeIndex }) {
   const [editing, setEditing] = useState(false);
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle); // the description reads like a markdown file (Settings → Markdown files)
   const desc = useRef<HTMLDivElement>(null);
-  useEffect(() => tidyDoc(desc.current), [pr.body_html]);
+  useEffect(() => (tidyDoc(desc.current), linkSpecRefs(desc.current, ix)), [pr.body_html, ix]); // links to the code too, as specs have
+  const peek = useRefPeek(ix);
   return (
     <details class="conversation" id="conversation" open={!folded}>
       <summary>
@@ -3170,8 +3196,9 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded }: { pr: PR;
         {editing ? (
           <EditDescription pr={pr} repo={repo} mentions={mentions} onDone={() => setEditing(false)} />
         ) : pr.body_html ? (
-          <div class={`rich pr-desc ${look.class}`} style={look.style} ref={desc} onClick={(e) => onDocClick(e, desc.current)}>
+          <div class={`rich pr-desc ${look.class}`} style={look.style} ref={desc} onMouseOver={peek.over} onMouseOut={peek.out} onClick={(e) => peek.click(e) || onDocClick(e, desc.current)}>
             <div class="md chunk" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: pr.body_html }} />
+            {peek.node}
           </div>
         ) : (
           <p class="note">No description.</p>

@@ -160,6 +160,24 @@ function App() {
     return () => removeEventListener('hashchange', onHash);
   }, []);
 
+  // Back and forward (the title bar, ⌘[ ⌘]) go through PRs and the jumps within one (shortcuts.tsx noteJump): a step
+  // within the same page scrolls back to where it was. After a jump, Back says for a moment where it goes.
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const [backTo, setBackTo] = useState('');
+  useEffect(() => {
+    let t = 0;
+    const jumped = (e: Event) => (setBackTo((e as CustomEvent<string>).detail), clearTimeout(t), (t = window.setTimeout(() => setBackTo(''), 6000)));
+    const pop = (e: PopStateEvent) => {
+      setBackTo('');
+      const y = e.state?.y;
+      if (y != null && location.hash === routeRef.current) scrollTo({ top: y });
+    };
+    addEventListener('lgtm:jumped', jumped);
+    addEventListener('popstate', pop);
+    return () => (removeEventListener('lgtm:jumped', jumped), removeEventListener('popstate', pop));
+  }, []);
+
   // A short message at the bottom (copied diagnostics, a PR link on the clipboard), with an optional action.
   const [toast, setToast] = useState<{ text: string; action?: [string, () => void] } | null>(null);
   const toastTimer = useRef(0);
@@ -269,6 +287,11 @@ function App() {
           </>
         ) : (<>
         <button title="Toggle pull request list" onClick={togglePRs}><Octicon name="three-bars" /></button>
+        <button class="nav-hist" title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)`} aria-label="Back" onClick={() => history.back()}>
+          <Octicon name="arrow-left" />
+          {backTo && <span class="back-hint">{backTo}</span>}
+        </button>
+        <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}><Octicon name="arrow-right" /></button>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings"><Octicon name="gear" /> Settings</a>
         <TopActions
           refreshing={refreshing}

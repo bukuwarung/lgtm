@@ -7,7 +7,7 @@ import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
-export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean };
+export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; unspecced?: boolean }; // unspecced: set (true/false) for code files when the PR has specs
 
 // Scroll to an element by id, opening any collapsed <details> around it and flashing it. `near` is scrolled to
 // first when the target isn't in the DOM yet (file bodies render lazily), then we wait for it to appear.
@@ -26,7 +26,18 @@ export function reviewersShown() {
   return true;
 }
 
-export function jumpTo(id: string, near?: string) {
+// Each jump is a step in the history (the title bar's back and forward, ⌘[ ⌘]): this entry keeps where you were, and a
+// new one (same address) where you land. main.tsx scrolls back to it on the way back.
+export function noteJump() {
+  const from = [...document.querySelectorAll('main > section.file')].find((s) => s.getBoundingClientRect().bottom > 120)?.id.slice(2).split('/').pop();
+  history.replaceState({ ...history.state, y: scrollY }, '');
+  history.pushState({ y: null, from: from ?? 'the top' }, '');
+  dispatchEvent(new CustomEvent('lgtm:jumped', { detail: from ?? 'the top' }));
+}
+
+// noted: the caller already made it a history step (it scrolled on the way).
+export function jumpTo(id: string, near?: string, noted = false) {
+  if (!noted) noteJump();
   if (near && !document.getElementById(id)) document.getElementById(near)?.scrollIntoView();
   let tries = 0;
   const go = () => {
@@ -40,7 +51,7 @@ export function jumpTo(id: string, near?: string) {
     const block = el.offsetHeight > innerHeight * 0.7 ? 'start' : 'center';
     el.scrollIntoView({ block });
     // Files above may finish rendering and push it down; settle once more.
-    setTimeout(() => el.scrollIntoView({ block }), 400);
+    setTimeout(() => (el.scrollIntoView({ block }), history.replaceState({ ...history.state, y: scrollY }, '')), 400);
     el.classList.remove('flash');
     void el.offsetWidth; // restart the animation
     el.classList.add('flash');
@@ -450,7 +461,16 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
         )}
       </Section>
 
-      <Section title="Files" count={files.length} extra={viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>
+      <Section
+        title="Files"
+        count={files.length}
+        extra={
+          <>
+            {((code) => code.length > 0 && <span class="ck-sum" title="Code files a spec in this PR names (Settings → Reviewing)">specs name {code.filter((f) => !f.unspecced).length}/{code.length}</span>)(files.filter((f) => f.unspecced !== undefined))}
+            {viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}
+          </>
+        }
+      >
         {modules?.size ? (
           <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} onViewed={onViewed} />
         ) : (
@@ -570,6 +590,7 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
             >
               <FileIcon path={f.filename} status={f.status} untested={f.untested} />
               <span class="tree-name">{f.filename.split('/').pop()}</span>
+              {f.unspecced && <span class="no-spec" title="No spec in this PR names this file">no spec</span>}
               {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
             </button>
             <ViewedMark paths={[f.filename]} viewed={viewed} onViewed={onViewed} what="this file" />

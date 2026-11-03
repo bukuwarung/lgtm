@@ -8,7 +8,7 @@ export const isDoc = (path: string) => /\.(md|mdx|markdown)$/i.test(path) || /(^
 
 const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 export type Ref = { path: string; line?: number }; // a changed file, and the line declaring what's named (new side)
-export type CodeIndex = { files: string[]; symbols: Map<string, Ref>; patches: Map<string, string> };
+export type CodeIndex = { files: string[]; symbols: Map<string, Ref>; patches: Map<string, string> }; // patches: every file's, specs' too (previews)
 type F = { filename: string; patch?: string };
 
 // Declarations in the diff's added and unchanged lines; a file named like a class stands for it (Kotlin, Java, Swift).
@@ -23,7 +23,7 @@ export function codeIndex(files: F[]): CodeIndex {
     const name = base(f.filename).replace(/\.\w+$/, '');
     if (/^[A-Z]\w{2,}$/.test(name) && !symbols.has(name)) symbols.set(name, { path: f.filename });
   }
-  return { files: code.map((f) => f.filename), symbols, patches: new Map(code.map((f) => [f.filename, f.patch ?? ''])) };
+  return { files: code.map((f) => f.filename), symbols, patches: new Map(files.map((f) => [f.filename, f.patch ?? ''])) };
 }
 
 // What a link's preview shows: the diff around the declaration it names, else the file's first change.
