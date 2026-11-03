@@ -13,6 +13,7 @@ import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { History } from './history.tsx';
+import { PersonPage, toPerson } from './person.tsx';
 import { DemoPage } from './demos.tsx';
 import { CODE_SIZE, TEXT_SIZE, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
@@ -419,6 +420,8 @@ function App() {
           />
         ) : route === '#/history' ? (
           <History />
+        ) : route.startsWith('#/person/') ? (
+          <PersonPage login={decodeURIComponent(route.slice('#/person/'.length))} orgs={[...new Set((queueItems ?? []).map((i) => i.repo.split('/')[0]))]} />
         ) : route === '#/settings' ? (
           <Settings />
         ) : route === '#/done' ? (
@@ -1082,7 +1085,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
-        {i.face !== who && <><img class="pr-face" src={avatar(i.face)} alt="" title={i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`} /> {i.face} ·{' '}</>}
+        {i.face !== who && <><span class="person-link" onClick={toPerson(i.face)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span> ·{' '}</>}
         {layer && <b class="layer">{layer} </b>}
         {i.repo}#{i.number} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>
@@ -1178,7 +1181,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           return (
             <details key={g} open={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
-                {kind.people ? <img class="g-face" src={avatar(g)} alt="" /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
+                {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
                 {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review; how long their oldest PR has waited for one">{kind.note(g)}</span>}
               </summary>
               {!!kind.asked?.(g) && (

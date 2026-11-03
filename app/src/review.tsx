@@ -26,6 +26,7 @@ import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, u
 import { reportError, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
+import { toPerson } from './person.tsx';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
@@ -2832,7 +2833,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}
         {first?.state === 'PENDING' && <span class="badge">Pending, started on GitHub · </span>}
-        <span class="t-preview"><Avatar login={first?.author?.login ?? 'ghost'} src={first?.author?.avatarUrl} /> <b>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
+        <span class="t-preview"><Avatar login={first?.author?.login ?? 'ghost'} src={first?.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(first?.author?.login ?? 'ghost')}>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
         {t.isResolved && <span class="badge"> · resolved</span>}
         {t.isOutdated && <span class="badge"> · outdated</span>}
         {ctx.sinceComment.get(t.id)?.kind === 'changed' && <span class="badge"> · code changed since</span>}
@@ -2841,7 +2842,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
-          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
+          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost')}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
           {c.state === 'PENDING' && c.id ? (
@@ -3390,7 +3391,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr:
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="comment" id="pr-description">
-        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b>{pr.user.login}</b> <CopyLink url={pr.html_url} />
+        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b class="person-link" onClick={toPerson(pr.user.login)}>{pr.user.login}</b> <CopyLink url={pr.html_url} />
         {me === pr.user.login && !editing && (
           <button class="icon-btn" title="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />
@@ -3416,7 +3417,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr:
       {items.map((c) => {
         const head = (
           <>
-            <Avatar login={c.author} src={c.avatar} /> <b>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
+            <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
             {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
           </>

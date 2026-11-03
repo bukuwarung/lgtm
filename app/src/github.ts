@@ -385,6 +385,46 @@ export async function getMyReviews(days = 7): Promise<MyReview[]> {
     )
     .sort((a, b) => b.at.localeCompare(a.at));
 }
+// Someone at a glance (the person page): who they are, their open PRs, the open PRs waiting on their review (longest
+// first), and their reviews of the last 7 days. In the given orgs (the ones in my list); one query.
+export type Person = { login: string; name: string | null; avatar: string; bio: string | null; mine: QueueItem[]; asked: QueueItem[]; reviews: (MyReview & {})[] };
+export async function getPerson(login: string, orgs: string[]): Promise<Person> {
+  const where = orgs.map((o) => 'org:' + o).join(' ');
+  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const d = await graphql(
+    `query($login:String!,$mine:String!,$asked:String!,$reviewed:String!){u:user(login:$login){login name avatarUrl(size:96) bio}
+      mine:search(query:$mine,type:ISSUE,first:30){nodes{...F}}
+      asked:search(query:$asked,type:ISSUE,first:30){nodes{...F}}
+      reviewed:search(query:$reviewed,type:ISSUE,first:50){nodes{...on PullRequest{number title url repository{nameWithOwner} author{login}
+        reviews(author:$login,last:30){nodes{state submittedAt}}
+        timelineItems(itemTypes:[REVIEW_REQUESTED_EVENT],last:20){nodes{...on ReviewRequestedEvent{createdAt requestedReviewer{...on User{login}}}}}}}}}
+    ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+    {
+      login,
+      mine: `is:open is:pr archived:false author:${login} ${where}`,
+      asked: `is:open is:pr archived:false user-review-requested:${login} ${where}`,
+      reviewed: `is:pr reviewed-by:${login} -author:${login} updated:>=${since.slice(0, 10)} ${where}`,
+    },
+  );
+  const reviews = (d.reviewed.nodes as any[])
+    .filter((p) => p?.reviews)
+    .flatMap((p) =>
+      collapseReviews(p.reviews.nodes, (p.timelineItems.nodes as any[]).filter((e) => e.requestedReviewer?.login === login).map((e) => e.createdAt), since).map((r) => ({
+        repo: p.repository.nameWithOwner, number: p.number, title: p.title, url: p.url, author: p.author?.login ?? 'ghost', ...r,
+      })),
+    )
+    .sort((a, b) => b.at.localeCompare(a.at));
+  return {
+    login: d.u?.login ?? login,
+    name: d.u?.name ?? null,
+    avatar: d.u?.avatarUrl ?? `https://github.com/${encodeURIComponent(login)}.png?size=96`,
+    bio: d.u?.bio ?? null,
+    mine: (d.mine.nodes as any[]).map(toItem),
+    asked: (d.asked.nodes as any[]).map(toItem).sort((a, b) => a.waitingSince.localeCompare(b.waitingSince)),
+    reviews,
+  };
+}
+
 // One PR's reviews of mine since `since` as the reviews I meant: ones within 10 minutes of the last count as it (its
 // strongest verdict kept), and each says how long it came after I was last asked (`asks`, oldest first).
 export function collapseReviews(reviews: { state: string; submittedAt: string | null }[], asks: string[], since: string) {

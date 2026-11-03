@@ -99,6 +99,14 @@ code, pre { font-family: var(--mono); }
 .history-row { display: grid; grid-template-columns: 160px 1fr; column-gap: 12px; padding: 6px 8px; border-radius: 6px; color: var(--fg); }
 .history-row:hover { background: var(--soft); text-decoration: none; }
 .history-row small { grid-column: 2; color: var(--muted); }
+/* People open their page (person.tsx). */
+.person-link { cursor: pointer; }
+b.person-link:hover, span.person-link:hover { text-decoration: underline; }
+.person-h { display: flex; gap: 14px; align-items: center; }
+.person-h img { width: 56px; height: 56px; border-radius: 50%; }
+.person-h h2 { margin: 0; }
+.person-h .note { margin: 2px 0 0; }
+.person-pills { display: flex; gap: 4px; flex-wrap: wrap; align-items: start; }
 /* A description's before / after screenshots, compared. */
 .shots { margin-top: 12px; display: grid; gap: 14px; }
 .shots-h { margin: 0; font-size: calc(12px * var(--ts)); color: var(--muted); }
