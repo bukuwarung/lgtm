@@ -25,6 +25,7 @@ import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lin
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
+import { changedRange, isStringsXml, parseString, stringHtml } from './strings.ts';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
@@ -1431,7 +1432,7 @@ function useNear<T extends Element>() {
 }
 
 // stand: the file's expected height (CSS) for a view that draws only once it has loaded, to hold its place till then.
-type BodyProps = { file: File; hunks: Hunk[]; ctx: Ctx; threads: Thread[]; drafts: Draft[]; stand?: string };
+type BodyProps = { file: File; hunks: Hunk[]; ctx: Ctx; threads: Thread[]; drafts: Draft[]; stand?: string; strings?: boolean }; // strings: an Android strings file, read as texts
 
 type SectionProps = {
   file: File;
@@ -1447,6 +1448,8 @@ type SectionProps = {
 
 function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand, changed }: SectionProps) {
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
+  const canStrings = isStringsXml(file.filename) && !!file.patch;
+  const [strings, setStrings] = useState(canStrings); // its names and texts; the pair of buttons switches to the XML
   const [richFirst] = useStoredFlag('richMarkdown', true);
   const [previewFirst] = useStoredFlag('previewImages', true);
   const [collapseDeleted] = useStoredFlag('collapseDeleted', true);
@@ -1539,6 +1542,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <DiffMode rich={rich} set={setRich} />}
+        {canStrings && <DiffMode rich={strings} set={setStrings} />}
         {canPreview && <DiffMode rich={preview} set={setPreview} />}
         {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
         <button class="icon-btn" title={`Comment on this file${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fileComment)}`} aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>
@@ -1574,7 +1578,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
       ) : rich ? (
         <RichView {...body} />
       ) : (
-        <DiffView {...body} />
+        <DiffView {...body} strings={strings} />
       )}
           <Notes ctx={ctx} threads={[]} drafts={[]} form={t?.path === path && !!t.atEnd} />
           {!hideDeleted && <footer class="file-f">
@@ -1695,7 +1699,7 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
   );
 }
 
-function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
+function DiffView({ file, hunks, ctx, threads, drafts, strings }: BodyProps) {
   // One line number, the new one (a removed line shows its old one, faint), unless Settings asks for both.
   const [oldNums] = useStoredFlag('oldLineNumbers', false);
   const path = file.filename;
@@ -1791,8 +1795,17 @@ function DiffView({ file, hunks, ctx, threads, drafts }: BodyProps) {
     const lead = text.match(/^\s*/)![0].slice(indent);
     return `${lead}<span class="ph ph-${p.kind}">${p.word}</span>${p.rest ? ` <span class="ph-rest">${md.utils.escapeHtml(p.rest)}</span>` : ''}`;
   };
+  // An Android string: its name and text; changed, the part that changed (against the same name's other side).
+  const stringRow = (hi: number, li: number, s: NonNullable<ReturnType<typeof parseString>>) => {
+    const l = hunks[hi].lines[li];
+    const other = l.kind === ' ' ? null : hunks[hi].lines.map((x) => parseString(x.text)).find((o, i) => o && o.name === s.name && hunks[hi].lines[i].kind === (l.kind === '+' ? '-' : '+'));
+    const r = other && changedRange(l.kind === '-' ? s.value : other.value, l.kind === '-' ? other.value : s.value);
+    return stringHtml({ ...s, lead: s.lead.slice(indent) }, r ? (l.kind === '-' ? r[0] : r[1]) : undefined);
+  };
   const codeHtml = (hi: number, li: number, text: string) => {
     if (testFile && testPhase(text)) return phaseHtml(text);
+    const sx = strings ? parseString(text) : null;
+    if (sx) return stringRow(hi, li, sx);
     const html = hl ? hl[hi][li] : md.utils.escapeHtml(text);
     const w = words.get(`${hi}-${li}`);
     return dedentHtml(w ? markText(html, w[1], w[2], w[0]) : html, indent);

@@ -84,6 +84,15 @@ tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transpa
 .ph-then { color: light-dark(#1a7f37, #56d364); background: color-mix(in srgb, #2ea043 16%, transparent); }
 .ph-and { color: var(--muted); background: var(--soft); }
 .ph-rest { color: var(--muted); font-style: italic; }
+/* Android strings, read as texts: the name in a column, then the text as the app shows it. */
+.sx { display: flex; gap: 1.5ch; }
+.sx-key { flex: 0 0 min(34ch, 40%); overflow-wrap: anywhere; color: var(--muted); }
+.sx-val { flex: 1; min-width: 0; font-family: var(--sans); white-space: pre-wrap; }
+.sx-arg { padding: 0 2px; border-radius: 3px; font-family: var(--mono); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.sx-nl { color: var(--muted); }
+.sx-empty, .sx-tag { font: italic calc(11px * var(--ts)) var(--sans); color: var(--muted); }
+.sx-tag { margin-left: 8px; }
+mark.sx-ch { color: inherit; border-radius: 2px; background: color-mix(in srgb, currentColor 22%, transparent); }
 .no-spec { margin-left: auto; padding: 0 5px; border-radius: 999px; font-size: calc(10px * var(--ts)); color: var(--muted); border: 1px dashed var(--border); white-space: nowrap; }
 .nav-hist { display: inline-flex; align-items: center; gap: 4px; }
 .back-hint { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12px * var(--ts)); color: var(--muted); }

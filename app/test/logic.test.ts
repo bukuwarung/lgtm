@@ -718,3 +718,18 @@ test('testPhase: Given-When-Then and Arrange-Act-Assert comments', async () => {
   assert.equal(testPhase('val given = 1 // Given'), null); // a comment after code isn't a phase
   assert.equal(testPhase('// assertion helper'), null);
 });
+
+test('strings.xml: names and readable texts, the changed part', async () => {
+  const { parseString, changedRange, stringHtml, isStringsXml } = await import('../src/strings.ts');
+  assert.ok(isStringsXml('app/src/main/res/values-in/strings.xml'));
+  assert.ok(!isStringsXml('app/src/main/res/layout/main.xml'));
+  assert.deepEqual(parseString(`    <string name="otp_sent">We\\'ve sent a code to %1$s.\\nCheck &amp; enter it.</string>`), {
+    lead: '    ', name: 'otp_sent', value: "We've sent a code to %1$s.\nCheck & enter it.", untranslated: false,
+  });
+  assert.equal(parseString('<string name="k" translatable="false">"  spaced "</string>')!.value, '  spaced ');
+  assert.equal(parseString('<item quantity="one">%d day</item>')!.name, 'one');
+  assert.equal(parseString('<string name="multi">'), null); // spans lines: left as XML
+  assert.deepEqual(changedRange('Send code', 'Resend code'), [[0, 1], [0, 3]]); // S → Res
+  assert.deepEqual(changedRange('Code sent to %1$s', 'Code sent again to %1$s'), [[10, 10], [10, 16]]);
+  assert.match(stringHtml(parseString('<string name="a">Hi %1$s</string>')!), /sx-key">a<.*sx-arg">%1\$s</);
+});
