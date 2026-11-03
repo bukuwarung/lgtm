@@ -787,7 +787,7 @@ function Waiting({ i, nudge }: { i: QueueItem; nudge: boolean }) {
 
 const answered: Answered = new Map(); // reviews sent from here, until the list catches up
 
-function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: (practice?: boolean) => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
+function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
   const [loaded, setItems] = useState<QueueItem[] | null>(null);
   const items = useMemo(() => loaded && withAnswered(loaded, answered), [loaded, answeredTick]);
   const [err, setErr] = useState('');
@@ -1131,13 +1131,9 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           ))}
         </div>
       )}
-      {tab === 'reviewing' && shown && ((c) => c > 0 ? (
+      {tab === 'reviewing' && shown && ((c) => c > 0 && (
         <button class="primary review-all" onClick={() => onReview()} title="The PRs that need your review, longest-waiting first, with nothing else on screen (⇧⌘R in the app)">
           <Octicon name="play" /> Review {c} PR{c > 1 ? 's' : ''}
-        </button>
-      ) : shown.some((i) => i.mine && !i.isDraft) && (
-        <button class="link try-review" onClick={() => onReview(true)} title="Review mode on your own PRs: finishing a review only moves on, and nothing is sent to GitHub">
-          Try review mode on your own PRs
         </button>
       ))(shown.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft).length)}
       {(tab === 'reviewing' || tab === 'team') && ((c) => c > 0 && (
