@@ -655,8 +655,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
     if (practice) return onSubmitted(event), onReviewed(null), true;
     // GitHub won't take a comment or a change request with nothing in it. A comment with nothing new (my comments
     // already posted one by one) has nothing to send: it's done, move on. A change request needs to say what.
+    if (event === 'REQUEST_CHANGES' && !body.trim() && !drafts.length && !pending?.count) body = mySummary || 'Please see the comments.';
     if (event !== 'APPROVE' && !body.trim() && !drafts.length && !pending?.count) {
-      if (event === 'REQUEST_CHANGES') throw new Error('Say what to change: a change request needs a summary, or comments on lines.');
       onSubmitted(event);
       if (next || focus) onReviewed(null);
       else setNotice({ ok: true, text: 'Your comments are already on GitHub: nothing more to send.' });
@@ -897,6 +897,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const failingChecks = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const waitingOnMe = me ? allThreads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
   const myOpenThreads = me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).length : 0;
+  const mySummary = me ? changesSummary(allThreads, me) : '';
   const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
 
   // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.
@@ -1055,7 +1056,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -1223,14 +1224,29 @@ type SubmitProps = {
   repo: string;
   mentions: string[];
   authored: boolean; // my own PR: GitHub only takes comments there
+  mySummary: string; // what my open comments ask for, to start a change request's summary from
 };
+
+// A change request's summary from my open threads: what I asked, once per text, with where.
+function changesSummary(threads: Thread[], me: string): string {
+  const asks = new Map<string, string[]>();
+  for (const t of threads) {
+    if (t.isResolved) continue;
+    const mine = t.comments.nodes.filter((c) => c.author?.login === me && c.state !== 'PENDING').at(-1);
+    if (!mine?.bodyText.trim()) continue;
+    const text = mine.bodyText.trim().split('\n')[0];
+    asks.set(text, [...(asks.get(text) ?? []), `[${base(t.path)}${t.line ? ':' + t.line : ''}](${mine.url})`]);
+  }
+  if (!asks.size) return '';
+  return ['Please address my comments:', '', ...[...asks].map(([text, at]) => `- ${text} (${at.join(', ')})`)].join('\n');
+}
 
 const APPROVE_NOTE = 'Approved, but please address the comments';
 
 // The verdict to start from: pending comments → request changes; my earlier threads still open → comment; else approve.
 export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEvent => (pending ? 'REQUEST_CHANGES' : myOpenThreads ? 'COMMENT' : 'APPROVE');
 
-function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo, mentions, authored }: SubmitProps) {
+function SubmitPanel({ count, myOpenThreads, mySummary, slackTo, slackNote, onSubmit, repo, mentions, authored }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
@@ -1250,10 +1266,13 @@ function SubmitPanel({ count, myOpenThreads, slackTo, slackNote, onSubmit, repo,
   // Each time the panel opens, start from the verdict that fits the comments as they are now.
   useEffect(() => void (open && setEvent(authored ? 'COMMENT' : defaultEvent(count, myOpenThreads))), [open, authored]);
   // Approving with pending comments: say so, unless I've written my own summary.
+  // Some verdicts start their summary: approving with comments pending says so; a change request, what my comments ask.
   const pick = (v: ReviewEvent) => {
     setEvent(v);
     if (v === 'APPROVE' && count && !body.trim()) setBody(APPROVE_NOTE);
+    else if (v === 'REQUEST_CHANGES' && !count && mySummary && (!body.trim() || body === APPROVE_NOTE)) setBody(mySummary);
     else if (v !== 'APPROVE' && body === APPROVE_NOTE) setBody('');
+    else if (v !== 'REQUEST_CHANGES' && body === mySummary) setBody('');
   };
 
   async function go() {
