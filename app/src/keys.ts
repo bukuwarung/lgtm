@@ -19,6 +19,7 @@ export const ACTIONS = [
   ['merge', 'Open / close the merge box (your PRs)', 'm'],
   ['stack', "Open / close the stack's overview", 's'],
   ['githubDev', 'Open the file in view on github.dev', '.'],
+  ['docCode', 'Jump between the specs (Markdown) and the code', 'g'],
   ['skip', 'Skip to the next PR (review mode)', 'N'],
   ['help', 'Keyboard shortcuts', '?'],
 ] as const;

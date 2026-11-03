@@ -939,6 +939,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
       stackNext: () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
       help: () => setHelp(!help),
       skip: () => dispatchEvent(new Event('lgtm:skip')), // review mode (main.tsx) moves on
+      docCode: () => dispatchEvent(new Event('lgtm:doc-code')), // DocCodeJump
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
       // The file in view on github.dev, at the first line showing below the bars.
@@ -1038,6 +1039,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
         <ScrollMarks files={shown} />
+        <DocCodeJump files={shown} />
         <HoldPlace />
         <main>
           <div class="pills pr-status">
@@ -2288,6 +2290,50 @@ function HoldPlace() {
     return () => (ro.disconnect(), mo.disconnect(), removeEventListener('scroll', note));
   }, []);
   return null;
+}
+
+// A PR with both specs (Markdown, or anything under openspec/ or docs/) and code: a button to jump from the one you're
+// reading to the other (g, too).
+const isDoc = (path: string) => /\.(md|mdx|markdown)$/i.test(path) || /(^|\/)(openspec|docs)\//.test(path);
+function DocCodeJump({ files }: { files: File[] }) {
+  const both = files.some((f) => isDoc(f.filename)) && files.some((f) => !isDoc(f.filename));
+  const [at, setAt] = useState<{ doc: boolean; up: boolean } | null>(null);
+  const sections = () => [...document.querySelectorAll<HTMLElement>('main > section.file')];
+  // The file under the bars, and whether the first file of the other kind is above it or below.
+  const where = () => {
+    const y = barsHeight() + 40;
+    const all = sections();
+    const cur = all.findIndex((s) => s.getBoundingClientRect().bottom > y);
+    if (cur < 0) return null;
+    const doc = isDoc(all[cur].id.slice(2));
+    const to = all.findIndex((s) => isDoc(s.id.slice(2)) !== doc);
+    return to < 0 ? null : { doc, up: to < cur, to: all[to] };
+  };
+  useEffect(() => {
+    if (!both) return setAt(null);
+    let raf = 0;
+    const look = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const w = where();
+        setAt(w && { doc: w.doc, up: w.up });
+      });
+    };
+    const go = () => {
+      const w = where();
+      if (w) jumpTo(w.to.id);
+    };
+    look();
+    addEventListener('scroll', look, { passive: true });
+    addEventListener('lgtm:doc-code', go);
+    return () => (cancelAnimationFrame(raf), removeEventListener('scroll', look), removeEventListener('lgtm:doc-code', go));
+  }, [both, files.length]);
+  if (!at) return null;
+  return (
+    <button class="doc-code-jump" title="Jump between the specs and the code (g)" onClick={() => dispatchEvent(new Event('lgtm:doc-code'))}>
+      {at.doc ? 'Code' : 'Specs'} {at.up ? '↑' : '↓'}
+    </button>
+  );
 }
 
 // The strip's layout now: a page position (document y) to a place on it (0–1), and back.

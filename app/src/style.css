@@ -69,6 +69,8 @@ code, pre { font-family: var(--mono); }
 .side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
 .prs .side-scroll { padding: 8px; }
 .review-all { width: 100%; margin-bottom: 6px; }
+/* The jump between a PR's specs and its code: bottom right, clear of the scroll strip. */
+.doc-code-jump { position: fixed; right: 28px; bottom: 20px; z-index: 15; padding: 4px 12px; border-radius: 999px; box-shadow: 0 2px 8px var(--shadow); background: var(--bg); }
 .jira-pill { font-variant-numeric: tabular-nums; }
 .jira-pill.jc-indeterminate { color: var(--accent); }
 .jira-pill.jc-done { color: var(--pill-ok); }
