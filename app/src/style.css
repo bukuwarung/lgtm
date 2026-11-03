@@ -99,7 +99,6 @@ tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transpa
 .sx-tag { margin-left: 8px; }
 .sx-warn { margin-left: 8px; padding: 0 6px; border-radius: 999px; white-space: nowrap; font: calc(11px * var(--ts)) var(--sans); color: light-dark(#8a5300, #e3b341); background: color-mix(in srgb, #d29922 16%, transparent); }
 mark.sx-ch { color: inherit; border-radius: 2px; background: color-mix(in srgb, currentColor 22%, transparent); }
-.no-spec { margin-left: auto; padding: 0 5px; border-radius: 999px; font-size: calc(10px * var(--ts)); color: var(--muted); border: 1px dashed var(--border); white-space: nowrap; }
 .nav-hist { display: inline-flex; align-items: center; gap: 4px; }
 .back-hint { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .spec-peek { position: fixed; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: 300px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); cursor: pointer; }

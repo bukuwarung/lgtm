@@ -7,7 +7,7 @@ import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
-export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; unspecced?: boolean }; // unspecced: set (true/false) for code files when the PR has specs
+export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean };
 
 // Scroll to an element by id, opening any collapsed <details> around it and flashing it. `near` is scrolled to
 // first when the target isn't in the DOM yet (file bodies render lazily), then we wait for it to appear.
@@ -461,16 +461,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
         )}
       </Section>
 
-      <Section
-        title="Files"
-        count={files.length}
-        extra={
-          <>
-            {((code) => code.length > 0 && <span class="ck-sum" title="Of this PR's code files, how many its specs (Markdown, openspec) mention by name; the others are marked “no spec” below. Settings → Reviewing turns this off.">{code.filter((f) => !f.unspecced).length}/{code.length} named in specs</span>)(files.filter((f) => f.unspecced !== undefined))}
-            {viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}
-          </>
-        }
-      >
+      <Section title="Files" count={files.length} extra={viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>
         {modules?.size ? (
           <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} onViewed={onViewed} />
         ) : (
@@ -590,7 +581,6 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
             >
               <FileIcon path={f.filename} status={f.status} untested={f.untested} />
               <span class="tree-name">{f.filename.split('/').pop()}</span>
-              {f.unspecced && <span class="no-spec" title="No spec in this PR names this file">no spec</span>}
               {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
             </button>
             <ViewedMark paths={[f.filename]} viewed={viewed} onViewed={onViewed} what="this file" />

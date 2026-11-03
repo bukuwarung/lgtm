@@ -724,7 +724,6 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
-  const [specCover] = useStoredFlag('specCoverage', true); // Settings → Reviewing: which code files no spec names
   const ctx: Ctx = {
     codeIx,
     specRefs: refs,
@@ -1005,9 +1004,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
               drafts={drafts}
               checks={checks}
               onRefreshChecks={loadChecks}
-              files={((cover) => (noTests.size || cover ? shown.map((f) => ({ ...f, untested: noTests.has(f.filename) || undefined, unspecced: cover && !isDoc(f.filename) ? !refs.has(f.filename) : undefined })) : shown))(
-                specCover && shown.some((f) => isDoc(f.filename)) && shown.some((f) => !isDoc(f.filename)),
-              )}
+              files={noTests.size ? shown.map((f) => (noTests.has(f.filename) ? { ...f, untested: true } : f)) : shown}
               viewed={viewed}
               onViewed={markViewed}
               slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
