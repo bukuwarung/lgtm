@@ -156,8 +156,16 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* Jump targets land below the sticky bars, and flash briefly. */
 .file { scroll-margin-top: calc(var(--nav) + var(--bar)); }
 .thread, .draft, .comment { scroll-margin-top: calc(var(--nav) + var(--bar) + 48px); }
-@keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
-.flash { animation: flash 1.6s ease-out; }
+/* Lit for a moment, then fading, so the eye finds it: a block gets a ring and a tint, a diff row its cells tinted (a
+   row can't draw a ring), a whole file its header lit. */
+@keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px var(--accent); background-color: color-mix(in srgb, var(--accent) 14%, transparent); } to { box-shadow: 0 0 0 3px transparent; background-color: transparent; } }
+@keyframes flash-ring { 0%, 30% { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
+@keyframes flash-bg { 0%, 30% { background-color: color-mix(in srgb, var(--accent) 28%, transparent); } to { background-color: transparent; } }
+.flash { animation: flash 2.2s ease-out; }
+tr.flash { animation: none; }
+tr.flash > td { animation: flash-bg 2.2s ease-out; }
+section.file.flash { animation: flash-ring 2.2s ease-out; }
+section.file.flash > .file-h { animation: flash-bg 2.2s ease-out; }
 .viewed-box { position: relative; display: inline-grid; place-items: center; padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); color: var(--muted); cursor: pointer; }
 .viewed-box:hover { color: var(--fg); }
 .viewed-box.on { color: var(--addfg); border-color: currentColor; }
