@@ -349,6 +349,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const index = useStoredFlag('showIndex', true);
   const focusIndex = useStoredFlag('reviewModeIndex', false);
   const [showIndex, toggleIndex] = focus ? focusIndex : index;
+  const [centered, toggleCentered] = useStoredFlag('centerDiff', false);
   useEffect(() => {
     const show = () => !showIndex && toggleIndex();
     addEventListener('lgtm:show-index', show);
@@ -1004,6 +1005,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
         <div class="bar">
           <button class="bar-index" title={showIndex ? 'Hide the PR index' : 'Show the PR index'} aria-label={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
             <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
+          </button>
+          <button class="bar-index" title={centered ? 'Fill the window' : 'Centre at a comfortable width'} aria-label={centered ? 'Fill the window' : 'Centre at a comfortable width'} onClick={toggleCentered}>
+            <Octicon name={centered ? 'screen-full' : 'screen-normal'} />
           </button>
           {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
           <h1>

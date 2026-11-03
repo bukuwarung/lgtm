@@ -186,6 +186,8 @@ kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: va
 .submit { position: relative; }
 .panel { position: absolute; right: 0; top: calc(100% + 6px); width: 420px; display: grid; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
 main { padding: 16px; }
+/* Settings → Diff: the PR at a reading width (about 120 columns of code), centred; it grows with the code size. */
+.center-diff .review main { max-width: calc(1080px * var(--cs)); margin-inline: auto; }
 .conversation { margin-bottom: 16px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; }
 .conversation > summary { cursor: pointer; font-weight: 600; }
 .rstate { font-size: calc(12px * var(--ts)); padding: 0 6px; border-radius: 10px; border: 1px solid currentColor; color: var(--muted); }
