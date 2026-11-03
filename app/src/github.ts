@@ -106,8 +106,17 @@ export const setPractice = (on: boolean) => void (practice = on);
 const writes = (path: string, init: RequestInit) =>
   !!init.method && init.method !== 'GET' && path !== '/markdown' && (path !== '/graphql' || /"query":"(?:\\[nt]|\s)*mutation/.test(String(init.body)));
 
+// GitHub's hourly limit used up: no more asking until it resets (asking anyway only fails, and slows the reset).
+let limitedUntil = 0;
+const limitError = () => new Error(`GitHub's hourly API limit is used up until ${new Date(limitedUntil).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}: lgtm waits until then`);
+const noteLimit = (res: Response) => {
+  const reset = Number(res.headers.get('x-ratelimit-reset'));
+  if (res.headers.get('x-ratelimit-remaining') === '0' && reset) limitedUntil = reset * 1000;
+};
+
 async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') {
   if (practice && writes(path, init)) throw new Error('Practice run: nothing is sent to GitHub');
+  if (Date.now() < limitedUntil) throw limitError();
   const res = await fetch(path.startsWith('https://') ? path : `https://api.github.com${path}`, {
     // GitHub lets the browser keep a response for 60 seconds: always check it's current (an unchanged one is a cheap
     // 304), or a refresh, or the page after asking a reviewer, shows the copy from before.
@@ -121,6 +130,7 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
     },
   });
   if (res.status === 401) throw new Error('GitHub rejected the gh token. Run `gh auth login`, then reload.');
+  noteLimit(res);
   return res;
 }
 
@@ -160,6 +170,7 @@ async function paginate<T>(path: string, accept?: string): Promise<T[]> {
 // partial: return what resolved even if some fields errored (they come back null).
 async function graphql<T = any>(query: string, variables: Record<string, unknown>, partial = false): Promise<T> {
   const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query, variables }) });
+  if (r.errors?.some((e: { type?: string }) => e.type === 'RATE_LIMITED') && limitedUntil > Date.now()) throw limitError();
   if (r.errors?.length) recordError(`GitHub GraphQL: ${r.errors[0].message}`);
   if (r.errors?.length && !(partial && r.data)) throw new Error(r.errors[0].message);
   return r.data;

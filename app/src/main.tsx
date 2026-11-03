@@ -796,6 +796,8 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   const pace = (Number(paceRaw) || 100) / 100;
   const [tabValue, setTab] = useStoredValue('prTab', 'reviewing'); // which tab, remembered
   const tab = tabValue as Tab;
+  const tabRef = useRef(tab); // the refresh timer closes over the first render
+  tabRef.current = tab;
   // Team tab: a GitHub team ("org/slug") and its members' open PRs. Settings can change it too.
   const [team, setTeam] = useStoredValue('team', '');
   const [teams, setTeams] = useState<string[] | null>(null);
@@ -828,9 +830,13 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   // The list shows as soon as it loads; thread status (replies awaiting me, my comments resolved) follows. `settled`
   // marks the second step done, so notifications compare complete lists.
   const [settled, setSettled] = useState(false);
+  // GitHub's hourly allowance is shared by every lgtm you have open: the team's PRs only while their tab is open, and
+  // in the background the list refreshes every 10 minutes instead of 3 (notifications come a little later).
+  const lastLoad = useRef(0);
   const load = () => {
+    lastLoad.current = Date.now();
     setErr('');
-    loadTeam();
+    if (tabRef.current === 'team') loadTeam();
     getReviewQueue().then(async (items) => {
       setSettled(false);
       setItems(items);
@@ -863,10 +869,10 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     return () => (removeEventListener('lgtm:list-refresh', more), removeEventListener('online', more));
   }, []);
   useEffect(() => {
-    if (requested.current !== team) loadTeam(team);
-  }, [team]);
+    if (tab === 'team' && (requested.current !== team || !teamData)) loadTeam(team);
+  }, [team, tab]);
   useEffect(() => {
-    const t = setInterval(load, 3 * 60 * 1000);
+    const t = setInterval(() => (!document.hidden || Date.now() - lastLoad.current > 9.5 * 60_000) && load(), 3 * 60 * 1000);
     return () => clearInterval(t);
   }, []);
   const [notify] = useStoredFlag('notifyRequests', false);
