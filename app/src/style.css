@@ -81,6 +81,16 @@ code, pre { font-family: var(--mono); }
 .side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
 .prs .side-scroll { padding: 8px; }
 .review-all { width: 100%; margin-bottom: 6px; }
+.list-updating { display: flex; align-items: center; gap: 6px; margin: 0 4px 6px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+.sk-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: sk-pulse 1s ease-in-out infinite alternate; }
+@keyframes sk-pulse { from { opacity: .3; } to { opacity: 1; } }
+/* The start page: the queue at a glance. */
+.start { display: grid; justify-items: center; align-content: start; gap: 18px; padding-top: 12vh; }
+.start-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; width: min(820px, 92%); }
+.start-card { display: grid; gap: 4px; justify-items: start; padding: 16px; text-align: left; border-radius: 10px; box-shadow: 0 1px 2px var(--shadow); }
+.start-card b { font-size: calc(28px * var(--ts)); font-weight: 600; line-height: 1.1; }
+.start-card span { font-size: calc(12px * var(--ts)); color: var(--muted); }
+.start-card:hover { border-color: var(--accent); }
 .fail-bar { position: sticky; top: var(--nav); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 12px; color: #fff; background: light-dark(#cf222e, #b62324); font-size: calc(13px * var(--ts)); }
 .fail-bar span { flex: 1; }
 .fail-bar .icon-btn { color: #fff; }
@@ -859,7 +869,11 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .pill-menu > summary { list-style: none; cursor: pointer; }
 .pill-menu > summary::-webkit-details-marker { display: none; }
 .pill-menu > summary:hover, .pill-menu[open] > summary { filter: brightness(1.15); border-color: currentColor; }
-.pill-caret { font-size: .85em; opacity: .7; }
+/* A menu's chevron, drawn (the ▾ character sat low and thin), in the button's own colour. */
+.caret { display: inline-block; width: 12px; height: 12px; margin: 0 -2px 0 1px; vertical-align: -1px; background: currentColor; opacity: .75; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.43 6.18a.75.75 0 0 1 1.06.02L8 8.85l2.51-2.65a.75.75 0 1 1 1.09 1.03l-3.06 3.23a.75.75 0 0 1-1.09 0L4.4 7.23a.75.75 0 0 1 .03-1.05Z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.43 6.18a.75.75 0 0 1 1.06.02L8 8.85l2.51-2.65a.75.75 0 1 1 1.09 1.03l-3.06 3.23a.75.75 0 0 1-1.09 0L4.4 7.23a.75.75 0 0 1 .03-1.05Z'/%3E%3C/svg%3E") center / contain no-repeat; }
+[aria-expanded="true"] > .caret, details[open] > summary > .caret { transform: rotate(180deg); }
+/* Buttons that open a menu or panel: a little depth, like the dropdowns. */
+:is(.merge-bar, .submit, .stack-nav) > button { box-shadow: 0 1px 2px var(--shadow), inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent); }
 .pill-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; display: grid; min-width: 340px; max-width: min(520px, 90vw); max-height: 360px; overflow: auto; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
 .pill-head { margin: 2px 8px 6px; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .pill-pop > :is(a, button) { display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; text-decoration: none; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

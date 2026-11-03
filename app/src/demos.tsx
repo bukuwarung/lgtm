@@ -474,7 +474,7 @@ const ReviewScene = ({ thread }: { thread?: ComponentChildren }) => (
           </details>
           <div class="pills pr-status">
             <span class="pill"><Tg i="waiting" t="awaiting review" /></span>
-            <span class="pill p-warn"><Tg i="notest" n={1} t="file without test changes" /> <span class="pill-caret">▾</span></span>
+            <span class="pill p-warn"><Tg i="notest" n={1} t="file without test changes" /> <span class="caret" aria-hidden="true" /></span>
             {(([c, t]) => <span class={`pill ${c}`}>{t}</span>)(size(84, 12, 4))}
           </div>
           <div class="since on">
@@ -503,9 +503,9 @@ const Showcase = () => (
     <Bar />
     <div class="pills pr-status">
       <span class="pill p-ok"><Tg i="approved" t="approved" /></span>
-      <span class="pill p-warn"><Tg i="notest" n={1} t="file without test changes" /> <span class="pill-caret">▾</span></span>
+      <span class="pill p-warn"><Tg i="notest" n={1} t="file without test changes" /> <span class="caret" aria-hidden="true" /></span>
       <span class="pill">
-        <Tg i={<ModuleIcon />} n={2} t="modules" /> <span class="pill-caret">▾</span>
+        <Tg i={<ModuleIcon />} n={2} t="modules" /> <span class="caret" aria-hidden="true" />
       </span>
       {(([c, t]) => <span class={`pill ${c}`}>{t}</span>)(size(84, 12, 4))}
     </div>

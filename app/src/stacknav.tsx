@@ -58,7 +58,7 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
     <span class="stack-nav submit" title="This PR's stack ([ and ] to move)">
       {step(-1)}
       <button class="stack-k" onClick={() => setOpen(!open)} aria-expanded={open} title="Every layer of the stack">
-        {k + 1}/{stack.length} ▾
+        {k + 1}/{stack.length} <span class="caret" aria-hidden="true" />
       </button>
       {step(1)}
       {open && (

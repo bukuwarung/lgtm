@@ -1,9 +1,9 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
-import { showReviewers } from './shortcuts.tsx';
+import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
@@ -55,6 +55,35 @@ function ReviewLog({ log }: { log: { repo: string; n: number; title: string; how
         </a>
       ))}
       <button class="link" onClick={copy}>{copied ? 'Copied' : 'Copy as text'}</button>
+    </div>
+  );
+}
+
+// No PR open: the queue at a glance; each number opens its tab of the list.
+function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
+  const [showDrafts] = useStoredFlag('showDrafts', false);
+  if (!items) return <p class="note page empty">Pick a pull request from the list, or paste a PR link in the box at the top (⌘K).</p>;
+  const needs = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts));
+  const mine = items.filter((i) => i.authored && !i.isDraft);
+  const oldest = needs.map((i) => i.waitingSince).sort()[0];
+  const cards: [string, number | string, string, string][] = [
+    ['reviewing', needs.length, 'need your review', needs.length ? 'Open the Reviewing tab' : ''],
+    ['reviewing', oldest ? ago(oldest).replace(/ ago$/, '') : '–', 'oldest wait', oldest ? `Since ${new Date(oldest).toLocaleString()}` : ''],
+    ['mine', mine.filter((i) => i.reviewDecision !== 'APPROVED' && i.reviewDecision !== 'CHANGES_REQUESTED').length, 'of yours waiting for review', 'Open Your PRs'],
+    ['mine', mine.filter(readyToMerge).length, 'of yours ready to merge', 'Open Your PRs'],
+    ['mine', mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, 'of yours with changes requested', 'Open Your PRs'],
+  ];
+  return (
+    <div class="page start">
+      <div class="start-grid">
+        {cards.map(([tab, n, label, title]) => (
+          <button class="start-card" title={title} onClick={() => onTab(tab)}>
+            <b>{n}</b>
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+      <p class="note">Pick a pull request from the list, or paste a PR link in the box at the top (⌘K).</p>
     </div>
   );
 }
@@ -166,6 +195,8 @@ function App() {
   routeRef.current = route;
   const [backTo, setBackTo] = useState('');
   const [failure, setFailure] = useState(''); // platform.ts reportError
+  const [queueItems, setQueueItems] = useState<QueueItem[] | null>(null); // the list's, for the start page
+  const [, setPrTab] = useStoredValue('prTab', 'reviewing');
   useEffect(() => {
     const show = (e: Event) => setFailure((e as CustomEvent<string>).detail);
     addEventListener('lgtm:error', show);
@@ -325,6 +356,13 @@ function App() {
             ⬆ {update}
           </a>
         )}
+        <button
+          title="Keyboard shortcuts (?)"
+          aria-label="Keyboard shortcuts"
+          onClick={() => (r ? dispatchEvent(new Event('lgtm:help')) : ((location.hash = '/settings'), jumpTo('set-keyboard-shortcuts')))}
+        >
+          ?
+        </button>
         <ThemeToggle />
         <AccountMenu />
         </>)}
@@ -356,7 +394,7 @@ function App() {
       )}
       <div class={showPRs && !rm ? 'shell' : 'shell no-prs'}>
         {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
-        <PRList hidden={!showPRs || !!rm} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setRefreshing(false), void moveMerged(items))} />
+        <PRList hidden={!showPRs || !!rm} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setQueueItems(items), setRefreshing(false), void moveMerged(items))} />
         {r ? (
           <Review
             key={route}
@@ -398,7 +436,7 @@ function App() {
             )}
           </div>
         ) : (
-          <p class="note page empty">Pick a pull request from the list, or paste a PR link in the box at the top (⌘K).</p>
+          <StartPage items={queueItems} onTab={(t) => (setPrTab(t), !showPRs && togglePRs())} />
         )}
       </div>
     </>
@@ -739,7 +777,8 @@ function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon:
   return (
     <span class="pill-drop" ref={box}>
       <button class={step === 'done' ? 'pill p-ok' : failed ? 'pill p-bad' : `pill ${tone}`} title={failed ? step : (step === 'done' && said) || title} aria-expanded={open} onClick={(e) => (stop(e), (step === 'idle' || failed) && setOpen(!open))}>
-        {step === 'done' ? <Tg i="approved" t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : `${step === 'idle' ? idle : "couldn't"} ▾`} />}
+        {step === 'done' ? <Tg i="approved" t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : step === 'idle' ? idle : "couldn't"} />}
+        {step !== 'done' && step !== 'busy' && <span class="caret" aria-hidden="true" />}
       </button>
       {open && <button class="quick-menu" onClick={go}>{failed ? `${action} again` : action}</button>}
     </span>
@@ -854,7 +893,15 @@ function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolea
 }
 
 function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
-  const [loaded, setItems] = useState<QueueItem[] | null>(null);
+  // The last list (per account) shows at once on launch, "updating…" until GitHub's answer replaces it.
+  const [loaded, setItems] = useState<QueueItem[] | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(own('queueCache')) ?? 'null');
+    } catch {
+      return null;
+    }
+  });
+  const [fresh, setFresh] = useState(false);
   const items = useMemo(() => loaded && withAnswered(loaded, answered), [loaded, answeredTick]);
   const [err, setErr] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
@@ -913,8 +960,13 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
       setItems(items);
       // Secondary: the list works without them.
       const [st, est] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items.map((i) => i.id)).catch(() => null)]);
-      setItems(items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id) })));
+      const full = items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id) }));
+      setItems(full);
       setSettled(true);
+      setFresh(true);
+      try {
+        localStorage.setItem(own('queueCache'), JSON.stringify(full));
+      } catch {}
     }, (e) => setErr(e instanceof TypeError && /fetch|load failed|network/i.test(e.message) ? "Couldn't reach GitHub" : e.message));
   };
   // Unsent comments live in localStorage; re-read them whenever a review page saves drafts.
@@ -1195,6 +1247,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           <button class="link" onClick={() => setAgain((n) => n + 1)}>Retry</button>
         </p>
       )}
+      {shown && !fresh && !err && <p class="list-updating"><span class="sk-dot" /> Updating…</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
           {([['reviewing', 'Reviewing', shown.filter(listed).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData && teamItems.length]] as const).map(([t, name, n]) => (

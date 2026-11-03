@@ -216,7 +216,7 @@ function PillMenu({ cls = '', label, head, children }: { cls?: string; label: Co
       onToggle={() => ref.current?.open && document.querySelectorAll<HTMLDetailsElement>('.pill-menu[open]').forEach((d) => d !== ref.current && (d.open = false))}
     >
       <summary class={`pill ${cls}`}>
-        {label} <span class="pill-caret">▾</span>
+        {label} <span class="caret" aria-hidden="true" />
       </summary>
       <div class="pill-pop" onClick={(e) => (e.target as Element).closest('a, button') && ref.current && (ref.current.open = false)}>
         <p class="pill-head">{head}</p>
@@ -375,6 +375,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
   const [renderAll, setRenderAll] = useState(false);
   const [help, setHelp] = useState(false);
+  useEffect(() => {
+    const open = () => setHelp(true); // the title bar's ? button
+    addEventListener('lgtm:help', open);
+    return () => removeEventListener('lgtm:help', open);
+  }, []);
   const [status, setStatus] = useState<Awaited<ReturnType<typeof getStatus>> | null>(null);
   const [ignoreWs, toggleWs] = useStoredFlag('ignoreWs', false);
   const [changedSinceVisit, setChangedSinceVisit] = useState<Set<string>>(new Set());
@@ -1294,8 +1299,8 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
 
   return (
     <div class="submit">
-      <button class="primary" onClick={() => setOpen(!open)}>
-        {authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''}
+      <button class="primary" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" />
       </button>
       {open && (
         <div class="panel">

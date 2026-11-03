@@ -70,7 +70,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   // The bar's button and its panel.
   const bar = (label: preact.ComponentChildren, cls: string, title: string, body: preact.ComponentChildren, onOpen?: () => void) => (
     <div class="submit merge-bar">
-      <button class={cls} title={title} onClick={() => (!shown && onOpen?.(), setShown(!shown))}>{label} ▾</button>
+      <button class={cls} title={title} aria-expanded={shown} onClick={() => (!shown && onOpen?.(), setShown(!shown))}>{label} <span class="caret" aria-hidden="true" /></button>
       {shown && body}
     </div>
   );
