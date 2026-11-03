@@ -138,9 +138,6 @@ mark.sx-ch { color: inherit; border-radius: 2px; background: color-mix(in srgb, 
 .spec-peek.doc .rich { --doc-size: 13px; --doc-measure: none; padding: 8px 14px; max-height: 260px; overflow: hidden; }
 /* The jump between a PR's specs and its code: bottom right, clear of the scroll strip. */
 .doc-code-jump { position: fixed; right: 28px; bottom: 20px; z-index: 15; padding: 4px 12px; border-radius: 999px; box-shadow: 0 2px 8px var(--shadow); background: var(--bg); }
-.jira-pill { font-variant-numeric: tabular-nums; }
-.jira-pill.jc-indeterminate { color: var(--accent); }
-.jira-pill.jc-done { color: var(--pill-ok); }
 .rm-count { color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Review mode: the PR's own Slack and Claude shortcuts go too. */
 .review-mode .bar-group:not(.bar-actions) { display: none; }

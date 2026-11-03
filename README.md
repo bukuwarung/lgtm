@@ -29,7 +29,6 @@ gh auth login   # once, if you haven't
 - Tabs for PRs to review, your own, and a GitHub team you watch, grouped by where they stand. The list shows its last copy at once on launch, then updates.
 - With no PR open, your queue at a glance: how many need your review, the oldest wait, and your own PRs waiting, ready to merge or with changes requested.
 - Drafts you're a code owner of (CODEOWNERS, by name or team), before GitHub asks you, tagged `code owner`.
-- Your PRs show their Jira tickets' status.
 - Pills for what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, `↻ re-review`, `no reviewers`, how long a ready PR has waited, and commits pushed since you approved.
 - On your PRs, a pill's menu fixes what it names: re-run failed jobs, update a branch that's behind, mark a draft ready, turn auto-merge on or off, ask whoever requested changes to look again.
 - PRs that mention you, in their own group.
