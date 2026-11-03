@@ -7,6 +7,7 @@ import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
+import { changedRange, parseString, stringHtml } from './strings.ts';
 
 // Small, made-up examples of each diff helper, drawn with the app's own styles: shown beside the switches in
 // Settings, and captured as the README's pictures (`npm run demos`). No real code from any PR.
@@ -31,7 +32,7 @@ function Rows({ rows, extra }: { rows: Row[]; extra?: ComponentChildren }) {
   );
 }
 
-function File({ path, st = 'modified', add, del, mod, untested, children }: { path: string; st?: string; add: number; del: number; mod?: string; untested?: boolean; children?: ComponentChildren }) {
+function File({ path, st = 'modified', add, del, mod, untested, chips, children }: { path: string; st?: string; add: number; del: number; mod?: string; untested?: boolean; chips?: ComponentChildren; children?: ComponentChildren }) {
   return (
     <section class="file">
       <header class="file-h">
@@ -49,6 +50,7 @@ function File({ path, st = 'modified', add, del, mod, untested, children }: { pa
         <span class="counts">
           <b class="a">+{add}</b> <b class="d">−{del}</b>
         </span>
+        {chips}
       </header>
       {children}
     </section>
@@ -659,6 +661,127 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
       </div>
     ),
   },
+};
+
+// Review mode: only the PR, the queue's place in the bar, and the submit panel saying what goes out.
+SCENES.reviewmode = {
+  title: 'Review mode',
+  width: 860,
+  body: (
+    <div class="scene-rm">
+      <nav class="top">
+        <b class="rm-title">Review mode</b>
+        <span class="rm-count">2 of 5</span>
+        <span class="spacer" />
+        <button>Skip <kbd>N</kbd></button>
+        <button>Exit <kbd>Esc</kbd></button>
+      </nav>
+      <div class="bar">
+        <button class="bar-index">⇤</button>
+        <h1>
+          <a><span class="pr-num">#412</span> Retry failed payments with backoff</a>
+        </h1>
+        <div class="bar-group bar-actions">
+          <div class="submit">
+            <button class="primary" aria-expanded="true">Finish review <span class="caret" aria-hidden="true" /></button>
+            <div class="panel">
+              <textarea rows={4}>{'Please address my comments:\n\n- Keep the attempts configurable (RetryPolicy.kt:18)\n- A declined card shouldn\'t be retried (PaymentService.kt:33)'}</textarea>
+              <label><input type="radio" name="ev" /> Comment</label>
+              <label><input type="radio" name="ev" /> Approve</label>
+              <label><input type="radio" name="ev" checked /> Request changes</label>
+              <label><input type="checkbox" checked /> Message @rina on Slack</label>
+              <div class="sends">
+                Sends a change request with your summary; messages @rina on Slack.
+              </div>
+              <button class="primary">Submit review</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="scene-main">
+        <File path="payments/PaymentService.kt" add={3} del={1}>
+          <Rows rows={SNIPPET} />
+        </File>
+      </div>
+    </div>
+  ),
+};
+
+// Specs and code: a spec's names of the PR's code are links, one previewing its change; the code file links back.
+const PEEK: Row[] = [
+  [' ', 16, 16, 'class RetryPolicy('],
+  [' ', 17, 17, '    val backoff: Duration = 2.seconds,'],
+  ['+', '', 18, '    val attempts: Int = 3,'],
+  ['+', '', 19, '    val retryIf: (Throwable) -> Boolean = { it is IOException },'],
+  [' ', 18, 20, ')'],
+];
+SCENES.specs = {
+  title: 'Specs and code',
+  width: 860,
+  body: (
+    <div class="scene-specs">
+      <File path="openspec/changes/retries/tasks.md" st="added" add={9} del={0}>
+        <div class="rich mdt mdt-lgtm">
+          <div class="md chunk demo-chunk">
+            <h2>2. Retries</h2>
+            <ul>
+              <li>
+                [x] 2.1 Add <code class="spec-ref">RetryPolicy</code> with the attempts and the errors to retry
+                <span class="spec-touch">1 file in this PR</span>
+              </li>
+              <li>
+                [ ] 2.2 Call it from <code class="spec-ref">PaymentService.charge()</code>; a declined card is never retried
+                <span class="spec-touch">1 file in this PR</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="spec-peek scene-peek">
+          <div class="spec-peek-h">
+            <b>RetryPolicy.kt</b>:18 <small>payments</small>
+          </div>
+          <Rows rows={PEEK} />
+        </div>
+      </File>
+      <File
+        path="payments/RetryPolicy.kt"
+        st="added"
+        add={12}
+        del={0}
+        chips={
+          <button class="spec-chip">
+            <Octicon name="file" /> tasks.md 2.1
+          </button>
+        }
+      />
+    </div>
+  ),
+};
+
+// Android strings as texts: names, the text as the app shows it, the changed words, a placeholder, other languages.
+const sx = (raw: string, kind?: '-' | '+', other?: string, notes?: string[]) => {
+  const s = parseString(raw)!;
+  const r = other != null ? changedRange(kind === '-' ? s.value : parseString(other)!.value, kind === '-' ? parseString(other)!.value : s.value) : null;
+  return stringHtml({ ...s, lead: '' }, r ? (kind === '-' ? r[0] : r[1]) : undefined, notes);
+};
+const OTP_OLD = '<string name="otp_sent">We sent a code to %1$s.</string>';
+const OTP_NEW = '<string name="otp_sent">We sent a 6-digit code to %1$s.</string>';
+SCENES.strings = {
+  title: 'Android strings',
+  width: 860,
+  body: (
+    <File path="app/src/main/res/values/strings.xml" add={2} del={1}>
+      <Rows
+        rows={[
+          [' ', 12, 12, sx('<string name="otp_title">Verify it\\\'s you</string>')],
+          ['-', 13, '', sx(OTP_OLD, '-', OTP_NEW)],
+          ['+', '', 13, sx(OTP_NEW, '+', OTP_OLD, ['values-in not updated'])],
+          ['+', '', 14, sx('<string name="otp_resend">Didn\\\'t get it?\\nResend in %1$d s</string>', '+', undefined, ['missing in values-in'])],
+          [' ', 14, 15, sx('<string name="otp_help" translatable="false">help@acme.example</string>')],
+        ]}
+      />
+    </File>
+  ),
 };
 
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which

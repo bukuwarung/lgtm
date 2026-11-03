@@ -128,6 +128,11 @@ mark.sx-ch { color: inherit; border-radius: 2px; background: color-mix(in srgb, 
 .spec-peek { position: fixed; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: 300px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); cursor: pointer; }
 .spec-peek-h { padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: calc(12px * var(--ts)); }
 .spec-peek-h small { color: var(--muted); }
+/* The README's picture of a preview: in place under its link, not floating. */
+.scene-peek { position: static; width: auto; margin: -6px 14px 14px 44px; }
+.scene .scene-rm .bar { position: relative; top: 0; z-index: 20; }
+.scene-rm .panel { z-index: 3; }
+.scene-rm .scene-main { min-height: 330px; }
 .spec-peek table { width: 100%; border-collapse: collapse; font: calc(12px * var(--cs)) / 1.5 var(--mono); }
 .spec-peek td.code { white-space: pre; overflow: hidden; text-overflow: ellipsis; max-width: 0; width: 100%; }
 .spec-peek.doc .rich { --doc-size: 13px; --doc-measure: none; padding: 8px 14px; max-height: 260px; overflow: hidden; }

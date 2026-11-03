@@ -43,6 +43,11 @@ gh auth login   # once, if you haven't
 
 ## Review mode
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-reviewmode-dark.png">
+  <img alt="Review mode: 2 of 5 in the bar, Skip and Exit, and the submit panel saying what GitHub and Slack will get" src="docs/features/scene-reviewmode-light.png" width="760">
+</picture>
+
 - **▶ Review N PRs** (or ⇧⌘R in the app) goes through the PRs that need your review, longest-waiting first, with only the PR on screen.
 - Finishing a review opens the next; `N` skips one. At the end, what you did with each, to copy (for Slack, say).
 - With nothing to review, a practice run on your own PRs: nothing is sent to GitHub.
@@ -73,9 +78,19 @@ gh auth login   # once, if you haven't
 - Back and forward (⌘[ ⌘]) through PRs and every jump within one; where you land lights up for a moment.
 - The PR centred at a reading width, or filling the window; it fills anyway when a line wouldn't fit.
 - Android `strings.xml` as texts: each string's name and its text as the app shows it, the changed words marked, and other languages checked (missing, placeholders that differ, not updated).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-strings-dark.png">
+  <img alt="An Android strings file as names and texts: the changed words marked, a placeholder, and notes on the other languages" src="docs/features/scene-strings-light.png" width="760">
+</picture>
 - In tests, Given / When / Then and Arrange / Act / Assert comments as coloured phase labels.
 
 ## Specs and code
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-specs-dark.png">
+  <img alt="A spec's task list with its code names as links, one previewing the change it names, and the code file's chip back to the task" src="docs/features/scene-specs-light.png" width="760">
+</picture>
 
 - In a spec (Markdown, openspec, docs), a file, class or function the PR changes becomes a link to it: hover for a preview of the change, click to go there.
 - Each changed file links back to where the specs name it, with a preview of that part of the spec.
