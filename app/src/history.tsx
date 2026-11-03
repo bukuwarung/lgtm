@@ -2,6 +2,35 @@ import { useEffect, useState } from 'preact/hooks';
 import { getMyReviews, type MyReview } from './github.ts';
 import { Tg } from './tags.tsx';
 
+// While a page of PRs loads (this one, a person's): its shape, shimmering (style.css .sk). `face`: a picture by the title.
+const SK = [78, 62, 88, 55, 70];
+export function PageSkeleton({ title, face }: { title: string; face?: boolean }) {
+  return (
+    <div class="page history" aria-busy="true" aria-label={`Loading ${title}`}>
+      <header class="person-h">
+        {face && <span class="sk sk-face" />}
+        <div class="sk-head">
+          <span class="sk" style={{ width: '220px', height: '20px' }} />
+          {face && <span class="sk" style={{ width: '160px' }} />}
+        </div>
+      </header>
+      <span class="sk sk-sum" />
+      {[4, 3].map((rows, s) => (
+        <section>
+          <span class="sk sk-h4" />
+          {Array.from({ length: rows }, (_, k) => (
+            <div class="history-row sk-row">
+              <span class="sk sk-pill" style={{ width: '96px' }} />
+              <span class="sk" style={{ width: `${SK[(k + s) % SK.length]}%`, height: '12px' }} />
+              <span class="sk sk-meta" style={{ width: `${SK[(k + s + 2) % SK.length] - 20}%` }} />
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 // Your reviews of the last week (#/history): a summary line, then each day's, to read back or paste in a standup.
 const VERDICT: Record<string, [string, string]> = { APPROVED: ['approved', 'Approved'], CHANGES_REQUESTED: ['changes', 'Requested changes'], COMMENTED: ['reply', 'Commented'], DISMISSED: ['', 'Dismissed'] };
 const hours = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.round(ms / 60_000))} min` : ms < 86_400_000 ? `${Math.round(ms / 3_600_000)} h` : `${Math.round(ms / 86_400_000)} d`);
@@ -11,7 +40,7 @@ export function History() {
   const [list, setList] = useState<MyReview[] | string | null>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => void getMyReviews(7).then(setList, (e) => setList(e.message)), []);
-  if (list === null) return <div class="page history"><h2>Your reviews this week</h2><p class="note">Loading…</p></div>;
+  if (list === null) return <PageSkeleton title="your reviews" />;
   if (typeof list === 'string') return <div class="page history"><h2>Your reviews this week</h2><p class="error">{list}</p></div>;
   const count = (s: string) => list.filter((r) => r.state === s).length;
   const waits = list.flatMap((r) => (r.waited != null ? [r.waited] : [])).sort((a, b) => a - b);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem } from './github.ts';
 import { ago } from './platform.ts';
 import { Tg } from './tags.tsx';
+import { PageSkeleton } from './history.tsx';
 
 // Someone's page (#/person/<login>), from their picture or name anywhere: their open PRs, the PRs waiting on their
 // review, and their reviews of the last week.
@@ -39,7 +40,7 @@ function Row({ i, waiting }: { i: QueueItem; waiting?: boolean }) {
 export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
   const [p, setP] = useState<Person | string | null>(null);
   useEffect(() => void (setP(null), getPerson(login, orgs).then(setP, (e) => setP(e.message))), [login, orgs.join()]);
-  if (p === null) return <div class="page history person"><h2>@{login}</h2><p class="note">Loading…</p></div>;
+  if (p === null) return <PageSkeleton title={`@${login}`} face />;
   if (typeof p === 'string') return <div class="page history person"><h2>@{login}</h2><p class="error">{p}</p></div>;
   const count = (s: string) => p.reviews.filter((r) => r.state === s).length;
   const waits = p.reviews.flatMap((r) => (r.waited != null ? [r.waited] : [])).sort((a, b) => a - b);

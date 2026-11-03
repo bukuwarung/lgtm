@@ -107,6 +107,13 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .person-h h2 { margin: 0; }
 .person-h .note { margin: 2px 0 0; }
 .person-pills { display: flex; gap: 4px; flex-wrap: wrap; align-items: start; }
+.sk.sk-face { width: 56px; height: 56px; border-radius: 50%; flex: none; }
+.sk-head { display: grid; gap: 8px; }
+.sk.sk-sum { width: 60%; height: 11px; margin: 16px 0 6px; }
+.sk.sk-h4 { width: 140px; height: 9px; margin: 24px 0 10px; }
+.sk-row { align-items: center; row-gap: 8px; }
+.sk-row .sk-pill { grid-row: span 2; align-self: start; }
+.sk.sk-meta { height: 8px; opacity: .7; }
 /* A description's before / after screenshots, compared. */
 .shots { margin-top: 12px; display: grid; gap: 14px; }
 .shots-h { margin: 0; font-size: calc(12px * var(--ts)); color: var(--muted); }
