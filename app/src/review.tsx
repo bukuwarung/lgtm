@@ -653,6 +653,15 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
 
   async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean) {
     if (practice) return onSubmitted(event), onReviewed(null), true;
+    // GitHub won't take a comment or a change request with nothing in it. A comment with nothing new (my comments
+    // already posted one by one) has nothing to send: it's done, move on. A change request needs to say what.
+    if (event !== 'APPROVE' && !body.trim() && !drafts.length && !pending?.count) {
+      if (event === 'REQUEST_CHANGES') throw new Error('Say what to change: a change request needs a summary, or comments on lines.');
+      onSubmitted(event);
+      if (next || focus) onReviewed(null);
+      else setNotice({ ok: true, text: 'Your comments are already on GitHub: nothing more to send.' });
+      return true;
+    }
     const head = (await getPR(repo, n)).head.sha;
     const sha = drafts.length ? saved.sha : head;
     if (sha !== head && !confirm('New commits were pushed after you started this review. Submit your comments against the older commit?')) return false;
