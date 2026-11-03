@@ -26,16 +26,26 @@ gh auth login   # once, if you haven't
   <img alt="The PR list: Reviewing, Your PRs and Team tabs, PRs grouped by where they stand, with pills for what needs you" src="docs/features/scene-queue-light.png" width="380">
 </picture>
 
-- Tabs for PRs to review, your own, and a GitHub team you watch, grouped by where they stand.
+- Tabs for PRs to review, your own, and a GitHub team you watch, grouped by where they stand. The list shows its last copy at once on launch, then updates.
+- With no PR open, your queue at a glance: how many need your review, the oldest wait, and your own PRs waiting, ready to merge or with changes requested.
+- Drafts you're a code owner of (CODEOWNERS, by name or team), before GitHub asks you, tagged `code owner`.
+- Your PRs show their Jira tickets' status.
 - Pills for what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, `↻ re-review`, `no reviewers`, how long a ready PR has waited, and commits pushed since you approved.
 - On your PRs, a pill's menu fixes what it names: re-run failed jobs, update a branch that's behind, mark a draft ready, turn auto-merge on or off, ask whoever requested changes to look again.
 - PRs that mention you, in their own group.
 - Auto-merge, or a PR's place in its repo's merge queue.
 - Each PR's author picture, a rough time to review (⏱), and when it was last active (amber after a week).
-- On the Team tab, each member folded with their picture and how many reviews they're asked for.
+- On the Team tab, each member folded with their picture and how many reviews they're asked for; their own PRs and the ones asking them for a review are two tabs under their name.
 - Pills as words, icons or both (GitHub's Octicons).
 - Keeps itself fresh, loads the PRs waiting on you ahead, and catches up when you're back online.
-- Notifications, with sound, for replies, verdicts, mentions, CI, new commits on PRs you approved, and your PR leaving the merge queue; a click opens the PR.
+- Notifications, with sound, for replies, verdicts, mentions, CI, new commits on PRs you approved, your PR ready to merge (it opens the merge box), and your PR leaving the merge queue; a click opens the PR.
+- Easy on GitHub's hourly API limit; if it's used up anyway, lgtm says until when and waits.
+
+## Review mode
+
+- **▶ Review N PRs** (or ⇧⌘R in the app) goes through the PRs that need your review, longest-waiting first, with only the PR on screen.
+- Finishing a review opens the next; `N` skips one. At the end, what you did with each, to copy (for Slack, say).
+- With nothing to review, a practice run on your own PRs: nothing is sent to GitHub.
 
 ## Reading
 
@@ -59,6 +69,18 @@ gh auth login   # once, if you haven't
 - Images in descriptions and comments (private repos too), in markdown files, and SVG files; swipe between an image's old and new versions.
 - Your pick of code themes and fonts, ligatures included; changed words filled, boxed or squiggled, changed lines filled, subtle or barred; rainbow brackets.
 - Stacked PRs, layer by layer, with an overview of every layer.
+- Your own reviews, comments and threads first in the index; on someone else's PR, other people's threads start folded, and resolved or outdated ones you're not in are hidden.
+- Back and forward (⌘[ ⌘]) through PRs and every jump within one; where you land lights up for a moment.
+- The PR centred at a reading width, or filling the window; it fills anyway when a line wouldn't fit.
+- Android `strings.xml` as texts: each string's name and its text as the app shows it, the changed words marked, and other languages checked (missing, placeholders that differ, not updated).
+- In tests, Given / When / Then and Arrange / Act / Assert comments as coloured phase labels.
+
+## Specs and code
+
+- In a spec (Markdown, openspec, docs), a file, class or function the PR changes becomes a link to it: hover for a preview of the change, click to go there.
+- Each changed file links back to where the specs name it, with a preview of that part of the spec.
+- The PR description links the same way, and a spec's tasks say how many of the PR's files they name.
+- `g`, or the button at the bottom right, jumps between the specs and the code.
 
 ## Less to read
 
@@ -172,6 +194,7 @@ Markdown themes: lgtm's own or 20 from [markdown.style](https://markdown.style/t
 - Line, range and file comments, rendered markdown included.
 - An editor with preview, `:emoji:` and `@mention` completion, saved replies (`/`), and suggested changes.
 - Drafts survive reloads and go out as one review, the verdict pre-picked; then the next PR opens. Or post a comment at once.
+- Before you submit, what GitHub and Slack will get; a change request starts its summary from your comments.
 - A review you started on github.com shows here, with its comments to edit, and goes out with yours.
 - ⌥-click a line number to copy a link to it.
 
@@ -189,7 +212,7 @@ Markdown themes: lgtm's own or 20 from [markdown.style](https://markdown.style/t
 - Mark files, folders or modules viewed from the index; rerun failed GitHub Actions jobs.
 - A merge box with what's blocking: ready for review, update branch, merge, auto-merge, and deleting the branch; merge a whole stack from its overview.
 - Edit the description in place.
-- Once merged, move the Jira ticket on.
+- Merging moves the Jira tickets on (to a status picked from the project's own), auto-merge too once it merges.
 - Waiting a day for review: `🔔 nudge` reminds the reviewers on Slack.
 
 ## Slack
@@ -230,7 +253,8 @@ lgtm messages people as you, through slackcli.
 - A Dock badge with the "needs your review" count, and notifications that open the PR you click.
 - `lgtm://` links; copy a PR link anywhere and lgtm offers to open it.
 - Several GitHub accounts: switch from your avatar (each one's drafts kept apart).
-- Find across every file, Back and Forward, and text sizes.
+- Find across every file, Back and Forward, and text sizes (rendered Markdown too).
+- Anything that fails (a review, a merge, a Slack message) shows in a red bar until you dismiss it.
 - Glass bars and pop-ups, a remembered window, Launch at login.
 - Updates itself through Homebrew.
 
