@@ -16,6 +16,7 @@ import { DemoPage } from './demos.tsx';
 import { CODE_SIZE, TEXT_SIZE, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
+import { keyLabel, useBindings, type Action } from './keys.ts';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
 export function parseRoute(s: string) {
@@ -37,7 +38,28 @@ function TrialBar({ look }: { look: ReturnType<typeof useCodeLook> }) {
   );
 }
 
+// Review mode's end: what became of each PR, with a copy to paste (on Slack, say).
+const VERB: Record<ReviewEvent | 'skipped', [string, string]> = { APPROVE: ['approved', 'Approved'], REQUEST_CHANGES: ['changes', 'Requested changes'], COMMENT: ['reply', 'Commented'], skipped: ['skipped', 'Skipped'] };
+function ReviewLog({ log }: { log: { repo: string; n: number; title: string; how: ReviewEvent | 'skipped' }[] }) {
+  const [copied, setCopied] = useState(false);
+  const url = (l: (typeof log)[number]) => `https://github.com/${l.repo}/pull/${l.n}`;
+  const copy = () =>
+    navigator.clipboard.writeText(log.map((l) => `${VERB[l.how][1]}: ${l.title || `${l.repo}#${l.n}`} ${url(l)}`).join('\n')).then(() => setCopied(true), () => {});
+  return (
+    <div class="review-log">
+      {log.map((l) => (
+        <a href={`#/${l.repo}/pull/${l.n}`} class={`rl-${l.how.toLowerCase()}`}>
+          <Tg i={VERB[l.how][0]} t={VERB[l.how][1]} /> <b>{l.title}</b> <small>{l.repo}#{l.n}</small>
+        </a>
+      ))}
+      <button class="link" onClick={copy}>{copied ? 'Copied' : 'Copy as text'}</button>
+    </div>
+  );
+}
+
 function App() {
+  const [bindings] = useBindings();
+  const keyFor = (a: Action) => keyLabel(bindings[a]);
   const [state, setState] = useState<'loading' | 'in' | { error: string }>('loading');
   const [route, setRoute] = useState(location.hash);
   const [queueVersion, setQueueVersion] = useState(0);
@@ -63,6 +85,8 @@ function App() {
   useEffect(() => void document.documentElement.classList.toggle('no-signs', !signs), [signs]);
   const [centered] = useStoredFlag('centerDiff', false); // Settings → Diff, or the PR header: the page at a reading width
   useEffect(() => void document.documentElement.classList.toggle('center-diff', centered), [centered]);
+  const [cols] = useStoredValue('centerCols', '120'); // its width, in columns of code
+  useEffect(() => document.documentElement.style.setProperty('--cols', cols), [cols]);
   const [lineStyle] = useStoredValue('lineStyle', 'fill'); // Settings → Diff: changed lines filled, tinted or barred
   useEffect(() => {
     document.documentElement.classList.toggle('ln-subtle', lineStyle === 'subtle');
@@ -79,7 +103,8 @@ function App() {
   const [flash, setFlash] = useState<{ route: string; text: string; ok: boolean } | null>(null);
   // Review mode: the PRs that need my review one after another, with nothing else on screen. seen: the ones reviewed
   // or skipped since it started (GitHub's search can list a reviewed one for a while).
-  const [rm, setRm] = useState<{ seen: string[]; done: number; skipped: number } | null>(null);
+  const [rm, setRm] = useState<{ seen: string[]; done: number; skipped: number; log: { repo: string; n: number; title: string; how: ReviewEvent | 'skipped' }[] } | null>(null);
+  const lastEvent = useRef<ReviewEvent>('COMMENT'); // the review just submitted, for review mode's summary
   useEffect(() => void document.documentElement.classList.toggle('review-mode', !!rm), [rm]);
   const needs = (items: QueueItem[], skip: string[]) => {
     const l = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft && !skip.includes(`${i.repo}#${i.number}`));
@@ -97,19 +122,22 @@ function App() {
   const moveOn = (from: { repo: string; n: number }, how: 'done' | 'skipped', notice: { text: string; ok: boolean } | null = null) => {
     if (!rm) return goNext(from, notice);
     const seen = [...rm.seen, `${from.repo}#${from.n}`];
-    setRm({ ...rm, seen, [how]: rm[how] + 1 });
+    const title = queue.current.find((i) => i.repo === from.repo && i.number === from.n)?.title ?? '';
+    setRm({ ...rm, seen, [how]: rm[how] + 1, log: [...rm.log, { ...from, title, how: how === 'done' ? lastEvent.current : 'skipped' }] });
     return goNext(null, notice, seen);
   };
-  const startReview = () => (setRm({ seen: [], done: 0, skipped: 0 }), goNext(null, null, []));
+  const startReview = () => (setRm({ seen: [], done: 0, skipped: 0, log: [] }), goNext(null, null, []));
   useEffect(() => {
     if (!rm) return;
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || (e.target as Element).closest('input, textarea, [contenteditable]') || document.querySelector('.help, .panel, dialog[open]')) return;
       setRm(null);
     };
+    const skip = () => r && moveOn(r, 'skipped'); // the skip key (keys.ts), from the PR page
     addEventListener('keydown', esc);
-    return () => removeEventListener('keydown', esc);
-  }, [rm]);
+    addEventListener('lgtm:skip', skip);
+    return () => (removeEventListener('keydown', esc), removeEventListener('lgtm:skip', skip));
+  }, [rm, route]);
 
   const signIn = () =>
     loadToken()
@@ -224,8 +252,8 @@ function App() {
               return <span class="rm-count">{rm.seen.length + 1} of {rm.seen.length + left}</span>;
             })()}
             <span class="spacer" />
-            {r && <button onClick={() => moveOn(r, 'skipped')} title="On to the next PR without reviewing this one">Skip <Octicon name="arrow-right" /></button>}
-            <button onClick={() => setRm(null)} title="Back to everything (Esc)">Exit</button>
+            {r && <button onClick={() => moveOn(r, 'skipped')} title={`On to the next PR without reviewing this one (${keyFor('skip')})`}>Skip <kbd>{keyFor('skip')}</kbd></button>}
+            <button onClick={() => setRm(null)} title="Back to everything (Esc)">Exit <kbd>Esc</kbd></button>
           </>
         ) : (<>
         <button title="Toggle pull request list" onClick={togglePRs}><Octicon name="three-bars" /></button>
@@ -287,6 +315,7 @@ function App() {
             onOpened={() => noteOpened(r.repo, r.n)}
             onSubmitted={(event?: ReviewEvent) => {
               if (!event) return setQueueVersion((v) => v + 1); // the merge box changed something: reload now
+              lastEvent.current = event;
               // A review: shown in the list at once, reloaded once GitHub's search has caught up with it.
               answered.set(`${r.repo}#${r.n}`, { event, at: Date.now() });
               setAnsweredTick((t) => t + 1);
@@ -303,6 +332,7 @@ function App() {
             <img src="/favicon.png" alt="" width="96" height="96" />
             <h2>{rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
             <p>{rm?.skipped ? `Reviewed ${rm.done}, skipped ${rm.skipped}: those still need your review.` : rm ? `Reviewed ${rm.done}. No pull requests need your review right now.` : 'No pull requests need your review right now.'}</p>
+            {rm && rm.log.length > 0 && <ReviewLog log={rm.log} />}
             {rm && <button class="primary" onClick={() => setRm(null)}>Back to the list</button>}
             {flash?.route === route && (
               <p class={flash.ok ? 'notice' : 'warn'}>

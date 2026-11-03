@@ -45,7 +45,21 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   useEffect(() => {
     Promise.all(tickets.map((k) => fetchJira(k).then((i) => (i.statusCategory === 'done' ? null : k), () => null))).then((l) => setOpenTickets(l.filter((k): k is string => !!k)));
   }, [tickets.join()]);
-  const statuses = useJiraStatuses(openTickets.map(project));
+  const statuses = useJiraStatuses(tickets.map(project)); // listed as the PR opens: ready by the time you merge
+  // Auto-merge merges later: the move waits (saved per PR) for the next time the PR is open here after it merged.
+  const pendingKey = `jiraOnMerge:${repo}#${n}`;
+  const [moved, setMoved] = useState('');
+  useEffect(() => {
+    const to = localStorage.getItem(pendingKey);
+    if (s?.state === 'CLOSED') localStorage.removeItem(pendingKey);
+    if (s?.state !== 'MERGED' || !to || !openTickets.length) return;
+    localStorage.removeItem(pendingKey);
+    Promise.all(openTickets.map((k) => moveJira(k, to).then(() => '', (e) => `${k} didn't move to ${to}: ${e.message}`))).then((errs) => {
+      const failed = errs.filter(Boolean);
+      failed.length ? setErr(`Merged, but ${failed.join('; ')}`) : setMoved(`Merged: moved ${openTickets.join(', ')} to ${to}`);
+      setShown(true);
+    });
+  }, [s?.state, openTickets.join()]);
   const [shown, setShown] = useState(false);
   useEffect(() => {
     const toggle = () => setShown((x) => !x);
@@ -81,6 +95,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
             {busy === 'delete' ? 'Deleting…' : `Delete ${s.headRefName}`}
           </button>
         )}
+        {moved && <p class="ok">{moved}</p>}
         {s.state === 'MERGED' && tickets.map((k) => <TicketMove key={k} id={k} />)}
         {err && <p class="error">{err}</p>}
       </div>,
@@ -173,18 +188,19 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
                   if (deleting) await deleteBranch(repo, s).catch((e) => setErr(`Merged, but ${e.message}`));
                   if (confirm === 'merge' && moveTickets)
                     for (const k of openTickets) await moveJira(k, to).catch((e) => setErr(`Merged, but ${k} didn't move to ${to}: ${e.message}`));
+                  if (confirm === 'auto') moveTickets ? localStorage.setItem(pendingKey, to) : localStorage.removeItem(pendingKey);
                 })
               }
             >
               {busy === 'merge' ? 'Working…' : confirm === 'auto' ? `Enable auto-merge (${VERB[m].toLowerCase()})` : `Confirm ${VERB[m].toLowerCase()}`}
             </button>
             <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
-            {confirm === 'merge' && openTickets.length > 0 && (
-              <label title="Settings → Reviewing: whether this starts ticked, and the status">
-                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> Move {openTickets.join(', ')} to
+            {openTickets.length > 0 && (
+              <label title={confirm === 'auto' ? 'Auto-merge merges later: the ticket moves the next time you open this PR here after it merged' : 'Settings → Reviewing: whether this starts ticked, and the status'}>
+                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> {confirm === 'auto' ? 'Once merged, move' : 'Move'} {openTickets.join(', ')} to
               </label>
             )}
-            {confirm === 'merge' && openTickets.length > 0 && (
+            {openTickets.length > 0 && (
               <StatusSelect value={to} onChange={setTo} statuses={statuses} />
             )}
             {offerDelete && (

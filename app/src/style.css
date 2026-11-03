@@ -186,8 +186,9 @@ kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: va
 .submit { position: relative; }
 .panel { position: absolute; right: 0; top: calc(100% + 6px); width: 420px; display: grid; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
 main { padding: 16px; }
-/* Settings → Diff: the PR at a reading width (about 120 columns of code), centred; it grows with the code size. */
-.center-diff .review main { max-width: calc(1080px * var(--cs)); margin-inline: auto; }
+/* Settings → Diff: the PR at a reading width (--cols columns of code, plus the line numbers), centred; it grows with
+   the code size. A PR with a changed line wider than that fills the window (.too-wide, when Settings says so). */
+.center-diff .review:not(.too-wide) main { max-width: calc((var(--cols, 120) * 7.2px + 216px) * var(--cs)); margin-inline: auto; }
 .conversation { margin-bottom: 16px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; }
 .conversation > summary { cursor: pointer; font-weight: 600; }
 .rstate { font-size: calc(12px * var(--ts)); padding: 0 6px; border-radius: 10px; border: 1px solid currentColor; color: var(--muted); }
@@ -439,6 +440,16 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .done { display: grid; justify-items: center; align-content: start; gap: 4px; padding-top: 15vh; text-align: center; }
 .done h2 { margin: 12px 0 0; }
 .done p { color: var(--muted); }
+.review-log { display: grid; gap: 2px; margin: 8px 0 12px; min-width: min(560px, 90vw); text-align: left; }
+.review-log a { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--fg); }
+.review-log a:hover { background: var(--soft); }
+.review-log b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.review-log small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+.review-log .rl-approve .ti { color: var(--pill-ok); }
+.review-log .rl-request_changes .ti { color: var(--delfg); }
+.review-log .rl-skipped { color: var(--muted); }
+.review-log > button { justify-self: end; }
+.top kbd { margin-left: 4px; padding: 0 4px; font-size: calc(11px * var(--ts)); }
 /* Android vector drawable preview: on a checkerboard so transparency shows */
 .vector-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px; }
 .vector-preview figure { margin: 0; display: grid; gap: 4px; justify-items: center; }

@@ -39,6 +39,7 @@ const ICONS: Record<string, string> = {
   changes: 'file-diff',
   waiting: 'eye',
   reply: 'comment',
+  skipped: 'skip',
   again: 'sync',
   nobody: 'person/',
   conflict: 'alert',

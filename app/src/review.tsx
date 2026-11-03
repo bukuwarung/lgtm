@@ -350,6 +350,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const focusIndex = useStoredFlag('reviewModeIndex', false);
   const [showIndex, toggleIndex] = focus ? focusIndex : index;
   const [centered, toggleCentered] = useStoredFlag('centerDiff', false);
+  const [fit] = useStoredFlag('centerFit', true);
+  const [cols] = useStoredValue('centerCols', '120');
   useEffect(() => {
     const show = () => !showIndex && toggleIndex();
     addEventListener('lgtm:show-index', show);
@@ -849,6 +851,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const importOnly = files.filter((f) => importsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
   const shown = [...visible, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : [])];
+  // Centred, a changed line too wide for it: the PR fills the window instead (Settings → Diff); tabs count as 4.
+  const tooWide = centered && fit && visible.some((f) => f.patch?.split('\n').some((l) => l[0] !== '@' && l.length > Number(cols) + 1 && l.replace(/\t/g, '    ').length > Number(cols) + 1));
   // Modules as the files on show have them (not the ones waiting behind a row).
   const shownModules = new Map(shown.map((f) => [f.filename, modules.get(f.filename) ?? '']));
   const view = byModule ? moduleView(shownModules) : 'none';
@@ -932,6 +936,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
       stackPrev: () => stackAt(-1) && (location.hash = `/${repo}/pull/${stackAt(-1)!.number}`),
       stackNext: () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
       help: () => setHelp(!help),
+      skip: () => dispatchEvent(new Event('lgtm:skip')), // review mode (main.tsx) moves on
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
       // The file in view on github.dev, at the first line showing below the bars.
@@ -957,7 +962,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   };
 
   return (
-    <div class={showIndex ? 'review' : 'review no-index'}>
+    <div class={`review${showIndex ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}`}>
       {/* Always there, so showing and hiding can slide (style.css); hidden, it's out of reach of the keyboard. */}
       {(
         <aside class={showIndex ? 'side tree' : 'side tree collapsed'} aria-hidden={!showIndex}>

@@ -332,7 +332,10 @@ export function Settings() {
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)." />
         <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text." />
-        <Flag k="centerDiff" initial={false} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too." />
+        <Flag k="centerDiff" initial={false} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too.">
+          <CenterCols />
+          <Flag k="centerFit" initial={true} label="Fill the window when a line in the diff is wider than that" />
+        </Flag>
         <Flag k="diffSigns" initial={false} label="Show + and − before changed lines" hint="Off: their colour alone marks added and removed lines, and the code gets that column back." />
         <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Its name, Comment and Viewed, as in its header." />
         <Flag k="rainbowBrackets" initial={false} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)." />
@@ -676,6 +679,19 @@ function ThemeGallery({ look }: { look: Look }) {
       )}
       <p class="note">Themes are their authors' work, under their own licenses; lgtm reads only their colours.</p>
     </div>
+  );
+}
+
+// The centred PR's width, in columns of code.
+function CenterCols() {
+  const [cols, setCols] = useStoredValue('centerCols', '120');
+  return (
+    <label class="set-row">
+      <span>Width</span>
+      <select value={cols} onChange={(e) => setCols(e.currentTarget.value)}>
+        {['80', '100', '120', '140', '160'].map((c) => <option value={c}>{c} columns of code</option>)}
+      </select>
+    </label>
   );
 }
 
