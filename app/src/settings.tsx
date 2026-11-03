@@ -291,6 +291,7 @@ export function Settings() {
           <Flag k="notifyReplies" initial={true} label="New replies waiting for you" />
           <Flag k="notifyVerdicts" initial={true} label="Your PR approved, or changes requested" />
           <Flag k="notifyCI" initial={true} label="Your PR's checks passed or failed" />
+          <Flag k="notifyReady" initial={true} label="Your PR is ready to merge" hint="Approved, checks passed, nothing in the way and no auto-merge on: the notification opens its merge box." />
           <Flag k="notifyMentions" initial={true} label="Someone mentions you in a PR" />
           <Flag k="notifyApprovedPush" initial={true} label="New commits on a PR you approved" />
           <Flag k="notifyQueue" initial={true} label="Your PR left the merge queue, or its auto-merge turned off" />

@@ -8,7 +8,7 @@ import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { fetchJira, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -18,6 +18,7 @@ import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 import { keyLabel, useBindings, type Action } from './keys.ts';
 import { movePending } from './merge.tsx';
+import { jiraKeys } from './jira.ts';
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
 export function parseRoute(s: string) {
@@ -875,6 +876,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   const [notifyMentions] = useStoredFlag('notifyMentions', true);
   const [notifyQueue] = useStoredFlag('notifyQueue', true);
   const [notifyApprovedPush] = useStoredFlag('notifyApprovedPush', true);
+  const [notifyReady] = useStoredFlag('notifyReady', true);
   const seen = useRef<Set<string> | null>(null);
   const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
   // The Claude Code sessions linked to listed PRs, and what each is doing, every 15 seconds.
@@ -903,12 +905,14 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
     if (seen.current && notify) {
-      const tell = (what: string, i: QueueItem) =>
+      const tell = (what: string, i: QueueItem) => {
+        if (what === 'Ready to merge') sessionStorage.setItem('openMerge', `${i.repo}#${i.number}`); // its merge box opens (merge.tsx)
         void notifyNative(`${what}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, `/${i.repo}/pull/${i.number}`);
+      };
       for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i);
       for (const i of items) {
         const was = before.current.get(i.id);
-        if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, approvedPush: notifyApprovedPush })) tell(n, i);
+        if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, approvedPush: notifyApprovedPush, ready: notifyReady })) tell(n, i);
         else if (notifyMentions && mentionNew(i)) tell('Mentioned you', i);
       }
     }
@@ -939,6 +943,35 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     return () => void (stop = true);
   }, [items, settled]);
 
+  // Your PRs' Jira tickets and where each stands (Your PRs tab), kept 10 minutes (lgtm-wide, by key); one that can't be
+  // loaded (no Jira, no such ticket) is kept too, as nothing, so it isn't asked for again each refresh.
+  const [jira, setJira] = useState<Record<string, { status?: string; category?: string; at: number }>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('jiraStatusOf') ?? '{}');
+    } catch {
+      return {};
+    }
+  });
+  const myKeys = [...new Set((items ?? []).filter((i) => i.mine).flatMap((i) => jiraKeys(i.title, i.head)))].join();
+  useEffect(() => {
+    let stop = false;
+    (async () => {
+      for (const k of myKeys ? myKeys.split(',') : []) {
+        if (stop) return;
+        if ((jira[k]?.at ?? 0) > Date.now() - 10 * 60_000) continue;
+        const i = await fetchJira(k).catch(() => null);
+        setJira((j) => {
+          const next = { ...j, [k]: { status: i?.status, category: i?.statusCategory, at: Date.now() } };
+          try {
+            localStorage.setItem('jiraStatusOf', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+      }
+    })();
+    return () => void (stop = true);
+  }, [myKeys, items]);
+
   // who: the person the list is already about (you on "Your PRs", the member on their PRs tab); their face is left out.
   const item = (kind: Kind, i: QueueItem, layer?: string, who?: string) => (
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`}>
@@ -958,6 +991,9 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
         )}
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
+        {kind === MINE && jiraKeys(i.title, i.head).map((k) => jira[k]?.status && (
+          <span class={`pill jira-pill jc-${jira[k].category}`} title={`Jira: ${k} is ${jira[k].status}`}>{k} · {jira[k].status}</span>
+        ))}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&
           (kind === MINE ? (
             <QuickPill icon="ci" tone="p-bad" idle="CI failing" action="Re-run failed jobs" busy="re-running…" done="re-running failed jobs" title="Its checks failed: Re-run failed jobs runs the failed GitHub Actions jobs again" run={() => rerunFailed(i)} />

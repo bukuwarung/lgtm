@@ -938,8 +938,13 @@ export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
 
 // What changed on a listed PR between two refreshes, worth a notification: new replies waiting on me; on my PR, a
 // verdict or its checks finishing.
-export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean; approvedPush: boolean }): string[] {
+// My PR approved, its checks passed and GitHub willing to merge it, with nothing (auto-merge, the queue) merging it for me.
+export const readyToMerge = (i: QueueItem) =>
+  i.authored && !i.isDraft && i.reviewDecision === 'APPROVED' && i.ci === 'SUCCESS' && ['CLEAN', 'HAS_HOOKS'].includes(i.mergeState) && !i.autoMerge && !i.queue;
+export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean; approvedPush: boolean; ready?: boolean }): string[] {
   const running = (ci: QueueItem['ci']) => ci === 'PENDING' || ci === 'EXPECTED';
+  // Ready to merge says it all: no separate "Approved" or "Checks passed" with it.
+  if (on.ready && readyToMerge(now) && !readyToMerge(was)) return ['Ready to merge', ...queueNews(was, now, { ...on, ready: false, verdicts: false, ci: false })];
   return [
     on.replies && was.thread && now.thread && now.thread.awaiting > was.thread.awaiting && 'New reply for you',
     on.verdicts && now.authored && now.reviewDecision !== was.reviewDecision && ({ APPROVED: 'Approved', CHANGES_REQUESTED: 'Changes requested' } as Record<string, string>)[now.reviewDecision ?? ''],

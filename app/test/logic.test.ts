@@ -489,6 +489,11 @@ test('queueNews: what changed between list refreshes', () => {
   assert.deepEqual(queueNews({ ...base, ci: 'FAILURE' }, { ...base, ci: 'SUCCESS' }, on), []); // a rerun that went green without being seen running
   assert.deepEqual(queueNews({ ...base, thread: undefined }, { ...base, thread: { awaiting: 2 } }, on), []); // thread status missing before
   assert.deepEqual(queueNews(base, { ...base, authored: false, reviewDecision: 'APPROVED' }, on), []);
+  // Approved, green and mergeable at once: one "Ready to merge", not three notifications.
+  const ready = { ...base, isDraft: false, reviewDecision: 'APPROVED', ci: 'SUCCESS', mergeState: 'CLEAN', autoMerge: false, queue: null };
+  assert.deepEqual(queueNews({ ...base, mergeState: 'BLOCKED' }, ready, { ...on, ready: true }), ['Ready to merge']);
+  assert.deepEqual(queueNews({ ...base, mergeState: 'BLOCKED' }, { ...ready, autoMerge: true }, { ...on, ready: true }), ['Approved', 'Checks passed']); // auto-merge merges it
+  assert.deepEqual(queueNews(ready, ready, { ...on, ready: true }), []);
 });
 
 test('withAnswered: a review just sent leaves "needs your review" until the search catches up', () => {

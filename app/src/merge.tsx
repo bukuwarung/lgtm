@@ -59,7 +59,8 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
       setShown(true);
     });
   }, [s?.state]);
-  const [shown, setShown] = useState(false);
+  // A "ready to merge" notification (main.tsx) brought you here: the box opens.
+  const [shown, setShown] = useState(() => sessionStorage.getItem('openMerge') === `${repo}#${n}` && (sessionStorage.removeItem('openMerge'), true));
   useEffect(() => {
     const toggle = () => setShown((x) => !x);
     addEventListener('lgtm:merge', toggle); // the m shortcut
