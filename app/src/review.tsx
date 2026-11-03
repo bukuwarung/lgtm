@@ -1,5 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
@@ -1598,6 +1599,8 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
   const canStrings = isStringsXml(file.filename) && !!file.patch;
   const [strings, setStrings] = useState(canStrings); // its names and texts; the pair of buttons switches to the XML
+  const canLint = isLintBaseline(file.filename) && !!file.patch;
+  const [lint, setLint] = useState(canLint); // what it now suppresses, and what it no longer does; or the XML
   const [richFirst] = useStoredFlag('richMarkdown', true);
   const [previewFirst] = useStoredFlag('previewImages', true);
   const [collapseDeleted] = useStoredFlag('collapseDeleted', true);
@@ -1632,7 +1635,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   // line each, plus the header; so drawing it barely moves the page (WebKit, the app's, doesn't hold your place).
   const rows = collapsed || hideDeleted ? 1 : hunks.reduce((n, h) => n + h.lines.length + 1, 0);
   // Better still, its height when last drawn (this version, shown this way), so reopening a PR barely moves at all.
-  const shape = `${path}@${file.sha}:${rich ? 'r' : 'd'}${ctx.ignoreWs ? 'w' : ''}${collapsed || hideDeleted ? 'c' : ''}`;
+  const shape = `${path}@${file.sha}:${rich || (canLint && lint) ? 'r' : 'd'}${ctx.ignoreWs ? 'w' : ''}${collapsed || hideDeleted ? 'c' : ''}`;
   const seen = drawnHeight(shape);
   const placeholder = seen ? `auto ${seen}px` : `auto calc(${rows} * 20px * var(--cs) + 48px)`;
   body.stand = seen ? `${Math.max(0, seen - 48)}px` : `calc(${rows} * 20px * var(--cs))`;
@@ -1692,6 +1695,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
         {canRich && <DiffMode rich={rich} set={setRich} />}
         {canStrings && <DiffMode rich={strings} set={setStrings} />}
+        {canLint && <DiffMode rich={lint} set={setLint} />}
         {canPreview && <DiffMode rich={preview} set={setPreview} />}
         {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
         <button class="icon-btn" title={`Comment on this file${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fileComment)}`} aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>
@@ -1724,6 +1728,8 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         </button>
       ) : !near && !ctx.renderAll ? (
         <div style={{ height: `${hunks.reduce((s, h) => s + h.lines.length + 1, 0) * 20}px` }} />
+      ) : canLint && lint ? (
+        <LintBaselineView file={file} ctx={ctx} />
       ) : rich ? (
         <RichView {...body} />
       ) : (
@@ -1748,6 +1754,46 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         </>
       )}
     </section>
+  );
+}
+
+// A lint baseline as what changed in it: new suppressions first (warnings now hidden: worth a question), then the
+// cleared ones (fixed), each at its code (in this PR, or on GitHub).
+function LintBaselineView({ file, ctx }: { file: File; ctx: Ctx }) {
+  const { added, removed } = useMemo(() => baselineChanges(file.filename, file.patch ?? ''), [file.patch]);
+  const at = (x: Suppression) => {
+    const where = `${x.file.split('/').pop()}${x.line ? `:${x.line}` : ''}`;
+    return ctx.codeIx.patches.has(x.file) ? (
+      <a href={'#'} onClick={(e) => (e.preventDefault(), jumpToLine(x.file, x.line))} title={x.file}>{where}</a>
+    ) : (
+      <a href={`https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${x.file}${x.line ? `#L${x.line}` : ''}`} target="_blank" rel="noopener" title={x.file}>{where}</a>
+    );
+  };
+  const row = (x: Suppression) => (
+    <li>
+      <code>{x.id}</code> {at(x)} <span class="lint-msg">{x.message}</span>
+    </li>
+  );
+  return (
+    <div class="lint-sum">
+      {added.length ? (
+        <>
+          <p class="lint-new">
+            <Octicon name="alert" /> <b>{added.length} new suppression{added.length === 1 ? '' : 's'}</b>: warnings lint will no longer report.
+          </p>
+          <ul>{added.map(row)}</ul>
+        </>
+      ) : (
+        <p>No new suppressions.</p>
+      )}
+      {removed.length > 0 && (
+        <details>
+          <summary>{removed.length} cleared (fixed, or their code went)</summary>
+          <ul>{removed.map(row)}</ul>
+        </details>
+      )}
+      {!added.length && !removed.length && <p class="note">Only line numbers moved.</p>}
+    </div>
   );
 }
 

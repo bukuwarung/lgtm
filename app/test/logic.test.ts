@@ -809,3 +809,19 @@ test('relocate moves a draft with its lines, or gives up', () => {
   assert.equal(relocate(old, ['x', ...old, ...old], all(11), 3, 3), null); // moved, and twice: can't tell
   assert.equal(relocate(old, ['x', 'y', ...old], all(3), 3, 3), null); // moved out of the diff
 });
+
+test('lint baseline: new and cleared suppressions, moves ignored', async () => {
+  const { baselineChanges, isLintBaseline } = await import('../src/lintbaseline.ts');
+  assert.ok(isLintBaseline('app/lint-baseline.xml') && !isLintBaseline('app/src/main/res/values/strings.xml'));
+  const issue = (mark: string, id: string, file: string, line: string[]) =>
+    [`<issue`, `id="${id}"`, `message="Call &quot;x&quot;">`, `<location`, `file="src/main/java/${file}"`].map((l) => mark + l).concat(line, [mark + `</issue>`]);
+  const patch = [
+    '@@ -1,20 +1,20 @@',
+    ...issue(' ', 'Moved', 'A.kt', ['-line="3"/>', '+line="9"/>']), // only its line changed
+    ...issue('-', 'Gone', 'B.kt', ['-line="4"/>']),
+    ...issue('+', 'MissingPermission', 'C.kt', ['+line="7"/>']),
+  ];
+  const { added, removed } = baselineChanges('app/lint-baseline.xml', patch.join('\n'));
+  assert.deepEqual(added.map((s) => [s.id, s.file, s.line, s.message]), [['MissingPermission', 'app/src/main/java/C.kt', 7, 'Call "x"']]);
+  assert.deepEqual(removed.map((s) => s.id), ['Gone']);
+});

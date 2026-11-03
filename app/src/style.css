@@ -1139,3 +1139,11 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 /* A spec chip's menu in a file's header: over the file (content-visibility would clip it), opening leftward */
 .file:has(> * .pill-menu[open]) { content-visibility: visible; position: relative; z-index: 5; }
 .file .pill-pop { left: auto; right: 0; }
+/* A lint baseline as its suppressions */
+.lint-sum { padding: 10px 16px; font-size: calc(13px * var(--ts)); }
+.lint-sum p { margin: 4px 0; }
+.lint-sum .lint-new { color: var(--attn, light-dark(#9a6700, #d29922)); }
+.lint-sum ul { margin: 4px 0 8px; padding-left: 18px; }
+.lint-sum li { margin: 2px 0; }
+.lint-sum .lint-msg { color: var(--muted); }
+.lint-sum summary { cursor: pointer; color: var(--muted); }
