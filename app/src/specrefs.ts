@@ -26,6 +26,19 @@ export function codeIndex(files: F[]): CodeIndex {
   return { files: code.map((f) => f.filename), symbols, patches: new Map(files.map((f) => [f.filename, f.patch ?? ''])) };
 }
 
+// A spec's preview: the block holding the line (from the blank line before it to the one after, at most `max` lines
+// around it), as it reads now, for rendering.
+export function docSnippet(patch: string, line: number, max = 12): string {
+  const h = parsePatch(patch).find((x) => x.lines.some((l) => l.new === line));
+  if (!h) return '';
+  const L = h.lines.filter((l) => l.kind !== '-');
+  const i = L.findIndex((l) => l.new === line);
+  let s = i, e = i;
+  while (s > 0 && L[s - 1].text.trim() && i - s < max / 2) s--;
+  while (e + 1 < L.length && L[e + 1].text.trim() && e - s < max - 1) e++;
+  return L.slice(s, e + 1).map((l) => l.text).join('\n');
+}
+
 // What a link's preview shows: the diff around the declaration it names, else the file's first change that isn't an
 // import (an added import says little about the change).
 const IMPORT = /^\s*(?:import|package|using|#include|from\s+\S+\s+import)\b/;

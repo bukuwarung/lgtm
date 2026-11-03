@@ -25,7 +25,7 @@ import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lin
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, reviewOrder, untested, type BuildRoot } from './files.ts';
 import { own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
-import { codeIndex, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
+import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
 import { below, jumpTo, noteJump, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
@@ -2139,8 +2139,9 @@ function useRefPeek(ix: CodeIndex) {
 
 // A link's preview: the lines of the change it names, highlighted, below the link (above it near the window's bottom).
 function SpecPeek({ p, ix, onEnter, onLeave, onGo }: { p: PeekAt; ix: CodeIndex; onEnter: () => void; onLeave: () => void; onGo: () => void }) {
-  const doc = isDoc(p.path); // a spec's lines are prose: wrapped, and fewer of them
-  const lines = peekLines(ix.patches.get(p.path) ?? '', p.line, doc ? 8 : 14);
+  const [mdStyle] = useMdStyle();
+  const doc = isDoc(p.path) && isMarkdown(p.path) && !!p.line; // a spec: its block, rendered as the spec is
+  const lines = doc ? [] : peekLines(ix.patches.get(p.path) ?? '', p.line);
   const lang = languageFor(p.path);
   const text = lines.map((l) => l.text).join('\n');
   const html = lang ? splitLines(highlightCode(text, lang)) : text.split('\n').map((l) => l.replace(/[&<>]/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt' }[c]};`));
@@ -2152,7 +2153,9 @@ function SpecPeek({ p, ix, onEnter, onLeave, onGo }: { p: PeekAt; ix: CodeIndex;
         <b>{base(p.path)}</b>
         {p.line ? `:${p.line}` : ''} <small>{dir(p.path)}</small>
       </div>
-      {lines.length ? (
+      {doc ? (
+        ((look) => <div class={`rich ${look.class}`} style={look.style} dangerouslySetInnerHTML={{ __html: md.render(docSnippet(ix.patches.get(p.path) ?? '', p.line!)) }} />)(mdStyleProps(mdStyle))
+      ) : lines.length ? (
         <table class="diff">
           {lines.map((l, i) => (
             <tr class={l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln'}>
