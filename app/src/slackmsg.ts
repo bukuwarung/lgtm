@@ -8,7 +8,7 @@ export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string;
   review: {
     label: 'After your review, to the author and assignees',
     initial: '{verdict} {pr}{comments}\n{note}',
-    fields: '{verdict} Approved, Requested changes on, Reviewed · {comments} " · 3 comments" · {note} your review summary, quoted',
+    fields: '{verdict} Approved, Requested changes on, Reviewed · {comments} " · 3 comments on PaymentService.kt, RetryPolicy.kt" · {note} your review summary, quoted',
   },
   nudge: {
     label: 'Nudging the reviewers of your PR that has waited a day or more',

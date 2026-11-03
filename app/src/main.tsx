@@ -12,6 +12,7 @@ import { ago, since, askNotifications, slackStatus, availableUpdate, getGhAccoun
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
+import { History } from './history.tsx';
 import { DemoPage } from './demos.tsx';
 import { CODE_SIZE, TEXT_SIZE, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
@@ -82,7 +83,9 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
           </button>
         ))}
       </div>
-      <p class="note">Pick a pull request from the list, or paste a PR link in the box at the top (⌘K).</p>
+      <p class="note">
+        Pick a pull request from the list, or paste a PR link in the box at the top (⌘K). <a href="#/history">Your reviews this week →</a>
+      </p>
     </div>
   );
 }
@@ -414,6 +417,8 @@ function App() {
             practice={rm?.practice}
             flash={flash?.route === route ? flash : null}
           />
+        ) : route === '#/history' ? (
+          <History />
         ) : route === '#/settings' ? (
           <Settings />
         ) : route === '#/done' ? (

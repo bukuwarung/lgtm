@@ -755,3 +755,21 @@ test('translations: a changed string against the other languages', async () => {
   assert.deepEqual(Object.fromEntries(translationNotes(changed, [updated])), { sent: ['values-in not updated'] });
   assert.deepEqual(Object.fromEntries(translationNotes(changed, [{ ...updated, changed: new Set(['sent']) }])), {});
 });
+
+test('collapseReviews: comments posted one by one are one review, its strongest verdict', async () => {
+  const { collapseReviews } = await import('../src/github.ts');
+  const at = (m: number) => new Date(Date.UTC(2026, 10, 3, 7, m)).toISOString();
+  const out = collapseReviews(
+    [
+      { state: 'COMMENTED', submittedAt: at(0) },
+      { state: 'COMMENTED', submittedAt: at(3) },
+      { state: 'CHANGES_REQUESTED', submittedAt: at(8) }, // within 10 min of the last: the same review
+      { state: 'APPROVED', submittedAt: at(40) },
+      { state: 'PENDING', submittedAt: null },
+    ],
+    [at(-60)], // asked an hour before
+    at(-120),
+  );
+  assert.deepEqual(out.map((r) => [r.state, r.at]), [['CHANGES_REQUESTED', at(8)], ['APPROVED', at(40)]]);
+  assert.equal(out[0].waited, 60 * 60_000);
+});

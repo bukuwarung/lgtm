@@ -361,6 +361,49 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
     .map((p) => ({ ...toItem(p), requested: true, reviewing: true, codeOwner: true, myState: null, newSinceApproval: 0, reviewedBefore: false, mine: false, assigned: false, authored: false, mentioned: false }));
 }
 
+// My reviews of the last `days` days, newest first: each PR's verdict, when, and how long it had waited for me (from the
+// last time I was asked, if I was). Comments posted one by one within 10 minutes count as one review, its strongest
+// verdict kept.
+export type MyReview = { repo: string; number: number; title: string; url: string; author: string; state: ReviewState; at: string; waited?: number };
+export async function getMyReviews(days = 7): Promise<MyReview[]> {
+  const me = await getViewer();
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const d = await graphql(
+    `query($q:String!,$me:String!){s:search(query:$q,type:ISSUE,first:100){nodes{...on PullRequest{number title url repository{nameWithOwner} author{login}
+      reviews(author:$me,last:30){nodes{state submittedAt}}
+      timelineItems(itemTypes:[REVIEW_REQUESTED_EVENT],last:20){nodes{...on ReviewRequestedEvent{createdAt requestedReviewer{...on User{login}}}}}}}}}`,
+    { q: `is:pr reviewed-by:@me -author:@me updated:>=${since.slice(0, 10)}`, me },
+  );
+  return (d.s.nodes as any[])
+    .filter((p) => p?.reviews)
+    .flatMap((p) =>
+      collapseReviews(
+        p.reviews.nodes,
+        (p.timelineItems.nodes as any[]).filter((e) => e.requestedReviewer?.login === me).map((e) => e.createdAt),
+        since,
+      ).map((r) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, url: p.url, author: p.author?.login ?? 'ghost', ...r })),
+    )
+    .sort((a, b) => b.at.localeCompare(a.at));
+}
+// One PR's reviews of mine since `since` as the reviews I meant: ones within 10 minutes of the last count as it (its
+// strongest verdict kept), and each says how long it came after I was last asked (`asks`, oldest first).
+export function collapseReviews(reviews: { state: string; submittedAt: string | null }[], asks: string[], since: string) {
+  const rank: Record<string, number> = { COMMENTED: 0, DISMISSED: 0, APPROVED: 1, CHANGES_REQUESTED: 2 };
+  const out: { state: ReviewState; at: string; waited?: number }[] = [];
+  for (const r of reviews) {
+    if (!r.submittedAt || r.state === 'PENDING' || r.submittedAt < since) continue;
+    const last = out.at(-1);
+    if (last && Date.parse(r.submittedAt) - Date.parse(last.at) < 10 * 60_000) {
+      if (rank[r.state] > rank[last.state]) last.state = r.state as ReviewState;
+      last.at = r.submittedAt;
+      continue;
+    }
+    const asked = asks.filter((a) => a <= r.submittedAt!).at(-1);
+    out.push({ state: r.state as ReviewState, at: r.submittedAt, waited: asked ? Date.parse(r.submittedAt) - Date.parse(asked) : undefined });
+  }
+  return out;
+}
+
 // The open PRs in an org asking someone, by name, for a review (up to 50), the longest-waiting first.
 export async function getAskedPRs(org: string, login: string): Promise<QueueItem[]> {
   const d = await graphql(

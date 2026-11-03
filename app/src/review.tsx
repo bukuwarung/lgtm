@@ -16,7 +16,7 @@ import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
 import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { claudeContinueLink, claudeNewLink, askPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
+import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
@@ -74,13 +74,17 @@ type Visit = { files: Record<string, string>; at: { path: string; y: number } | 
 
 
 // The note to the author and assignees after a review (Settings → Slack → Messages).
-function slackText(pr: PR, repo: string, n: number, event: ReviewEvent, body: string, comments: number) {
+// places: the files my comments in this review are on (else my open threads'), for "3 comments on A.kt, B.kt".
+function slackText(pr: PR, repo: string, n: number, event: ReviewEvent, body: string, places: string[]) {
+  const files = [...new Set(places.map(base))];
+  const on = files.length ? ` on ${files.slice(0, 3).join(', ')}${files.length > 3 ? ` and ${files.length - 3} more` : ''}` : '';
+  const comments = places.length;
   // :approved: and :request-changes: are the workspace's custom Slack emoji.
   const verdict = { APPROVE: ':approved: Approved', REQUEST_CHANGES: ':request-changes: Requested changes on', COMMENT: '💬 Reviewed' }[event];
   return fillSlack(slackTemplate('review'), {
     ...prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }),
     verdict,
-    comments: comments ? ` · ${comments} comment${comments > 1 ? 's' : ''}` : '',
+    comments: comments ? ` · ${comments} comment${comments > 1 ? 's' : ''}${on}` : '',
     note: body.trim() ? slackEscape(body.trim().slice(0, 1000)).replace(/^/gm, '>') : '',
   });
 }
@@ -694,7 +698,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
         const emails = await getEmails(repo.split('/')[0], slackTo);
         const results = await notifySlack(
           slackTo.map((login) => ({ login, emails: emails[login] })),
-          slackText(pr, repo, n, event, body, drafts.length),
+          slackText(pr, repo, n, event, body, drafts.length ? drafts.map((d) => d.path) : me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).map((t) => t.path) : []),
           `${repo}#${n}`,
         );
         slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads)); // a first message starts a thread
@@ -1058,6 +1062,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
               </a>
             ))}
             <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
+            <button class="claude-btn" title="Ask Claude a question about the whole PR (Claude Code, no session)" onClick={() => dispatchEvent(new Event('lgtm:ask-pr'))}>
+              ✳ Ask
+            </button>
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
@@ -3179,18 +3186,25 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
         setSel({ path: file.id.slice(2), text: text.slice(0, 4000), x: Math.min(r.right, innerWidth - 140), y: r.bottom + 4 });
       });
     const away = () => setSel(null);
+    const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setAnswer(null)); // the bar's ✳ Ask
+    addEventListener('lgtm:ask-pr', whole);
     addEventListener('mouseup', up);
     addEventListener('scroll', away, { passive: true });
-    return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away));
+    return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away), removeEventListener('lgtm:ask-pr', whole));
   }, []);
   const ask = async () => {
     if (!panel || !q.trim()) return;
     setBusy(true);
     setAnswer(null);
     try {
-      const f = files.find((f) => f.filename === panel.path);
-      const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
-      const text = await askClaudeCli(askPrompt(pr, panel.path, f?.patch, source, panel.text, q.trim()));
+      let prompt: string;
+      if (!panel.path) prompt = prAskPrompt(pr, files, q.trim()); // the whole PR (the bar's ✳ Ask)
+      else {
+        const f = files.find((f) => f.filename === panel.path);
+        const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
+        prompt = askPrompt(pr, panel.path, f?.patch, source, panel.text, q.trim());
+      }
+      const text = await askClaudeCli(prompt);
       setAnswer({ html: await renderGfm(text, repo) }); // GitHub sanitizes the HTML
     } catch (e: any) {
       setAnswer({ error: e.message });
@@ -3212,15 +3226,15 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
       {panel && (
         <div class="ask-panel" role="dialog" aria-label="Ask Claude">
           <div class="row">
-            <b>Ask Claude about {panel.path.split('/').pop()}</b>
+            <b>Ask Claude about {panel.path ? panel.path.split('/').pop() : 'this PR'}</b>
             <span class="spacer" />
             <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
           </div>
-          <pre class="ask-sel">{panel.text}</pre>
+          {panel.text ? <pre class="ask-sel">{panel.text}</pre> : <p class="note">Claude reads the description and every file's diff, specs included.</p>}
           <textarea
             rows={2}
             autoFocus
-            placeholder="Your question · ↵ to ask"
+            placeholder={panel.path ? 'Your question · ↵ to ask' : "What's risky here? Does it match the spec? · ↵ to ask"}
             value={q}
             onInput={(e) => setQ(e.currentTarget.value)}
             onKeyDown={(e) => {
@@ -3293,6 +3307,69 @@ const STATE_LABEL: Record<string, string> = { APPROVED: 'approved', CHANGES_REQU
 
 const botExcerpt = (html: string, max = 100) => (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
+// Before / after screenshots in a description: a table with Before and After columns (a row each), or an image under a
+// "Before" label followed by one under "After". The images themselves, so they show as the description has them signed.
+type ShotPair = { label: string; before: HTMLImageElement; after: HTMLImageElement };
+const BEFORE = /^\W*(before|old|current|sebelum)\b/i;
+const AFTER = /^\W*(after|new|now|sesudah|setelah)\b/i;
+function shotPairs(root: HTMLElement | null): ShotPair[] {
+  if (!root) return [];
+  const out: ShotPair[] = [];
+  for (const t of root.querySelectorAll('table')) {
+    const head = [...(t.querySelector('tr')?.children ?? [])].map((c) => c.textContent?.trim() ?? '');
+    const b = head.findIndex((h) => BEFORE.test(h)), a = head.findIndex((h) => AFTER.test(h));
+    if (b < 0 || a < 0) continue;
+    for (const tr of [...t.querySelectorAll('tr')].slice(1)) {
+      const cells = [...tr.children];
+      const bi = cells[b]?.querySelector('img'), ai = cells[a]?.querySelector('img');
+      if (bi && ai) out.push({ label: cells.find((_, k) => k !== a && k !== b)?.textContent?.trim() ?? '', before: bi, after: ai });
+    }
+  }
+  // Outside tables: the short text just before an image (in its block, else the block before) names it.
+  let before: HTMLImageElement | null = null;
+  for (const img of [...root.querySelectorAll('img')].filter((i) => !i.closest('table'))) {
+    const block = img.closest('p, li, div, h1, h2, h3, h4, h5, h6') as HTMLElement | null;
+    const r = document.createRange();
+    if (block) (r.setStartBefore(block.firstChild ?? block), r.setEndBefore(img));
+    const label = ((block && r.toString().trim()) || (block?.previousElementSibling?.textContent ?? '')).trim().split('\n').pop()!.slice(-40);
+    if (BEFORE.test(label)) before = img;
+    else if (AFTER.test(label) && before) out.push({ label: '', before, after: img }), (before = null);
+  }
+  return out;
+}
+
+// One pair: side by side, or one over the other with a slider (as a changed image in the diff).
+function ShotCompare({ p }: { p: ShotPair }) {
+  const [mode, setMode] = useStoredValue('descCompare', 'swipe');
+  const [x, setX] = useState(50);
+  return (
+    <figure class="shot-pair">
+      <span class="set-seg img-modes" role="radiogroup" aria-label="Compare">
+        {([['swipe', 'Swipe'], ['side', 'Side by side']] as const).map(([v, name]) => (
+          <button role="radio" aria-checked={mode === v} class={mode === v ? 'on' : ''} onClick={() => setMode(v)}>{name}</button>
+        ))}
+      </span>
+      {p.label && <figcaption>{p.label}</figcaption>}
+      {mode === 'swipe' ? (
+        <>
+          <div class="img-swipe shot-swipe">
+            <img src={p.before.src} alt="Before" />
+            <img src={p.after.src} alt="After" style={{ clipPath: `inset(0 0 0 ${x}%)` }} />
+            <span class="img-swipe-line" style={{ left: `${x}%` }} />
+          </div>
+          <input type="range" min={0} max={100} value={x} onInput={(e) => setX(Number(e.currentTarget.value))} aria-label="Before ↔ after" />
+          <span class="img-swipe-labels"><span>Before</span><span>After</span></span>
+        </>
+      ) : (
+        <div class="shot-side">
+          <figure><img src={p.before.src} alt="Before" /><figcaption>Before</figcaption></figure>
+          <figure><img src={p.after.src} alt="After" /><figcaption>After</figcaption></figure>
+        </div>
+      )}
+    </figure>
+  );
+}
+
 // folded: review mode starts with it closed, the diff first.
 function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean; ix: CodeIndex }) {
   const [editing, setEditing] = useState(false);
@@ -3300,7 +3377,12 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr:
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle); // the description reads like a markdown file (Settings → Markdown files)
   const desc = useRef<HTMLDivElement>(null);
-  useEffect(() => (tidyDoc(desc.current), linkSpecRefs(desc.current, ix)), [pr.body_html, ix]); // links to the code too, as specs have
+  const [shots, setShots] = useState<ShotPair[]>([]);
+  useEffect(() => {
+    tidyDoc(desc.current);
+    linkSpecRefs(desc.current, ix); // links to the code too, as specs have
+    setTimeout(() => setShots(shotPairs(desc.current)), 300); // once its images are signed
+  }, [pr.body_html, ix]);
   const peek = useRefPeek(ix);
   return (
     <details class="conversation" id="conversation" open={!folded}>
@@ -3323,6 +3405,12 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr:
           </div>
         ) : (
           <p class="note">No description.</p>
+        )}
+        {!editing && shots.length > 0 && (
+          <div class="shots">
+            <p class="shots-h">Screenshots, before and after</p>
+            {shots.map((p) => <ShotCompare p={p} />)}
+          </div>
         )}
       </div>
       {items.map((c) => {

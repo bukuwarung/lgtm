@@ -59,6 +59,27 @@ export function askPrompt(
   ].join('\n\n');
 }
 
+// A question about the whole PR: its description, then every file's diff (the specs among them), as much as fits.
+export function prAskPrompt(pr: { html_url: string; title: string; body: string | null }, files: { filename: string; patch?: string }[], question: string): string {
+  let room = 400_000;
+  const diffs = files.map((f) => {
+    const d = `--- ${f.filename}\n${f.patch ?? '(no diff: binary, too large, or only renamed)'}`;
+    const take = d.slice(0, Math.max(0, room));
+    room -= take.length;
+    return take.length < d.length ? take + '\n(cut here for length)' : take;
+  });
+  return [
+    "You're helping someone review a GitHub pull request. They have a question about the whole PR.",
+    "Answer in Markdown, concisely and concretely, naming files and identifiers. If the answer depends on code you can't see here, say so.",
+    '',
+    `PR: ${pr.html_url} (${pr.title})`,
+    `Description:\n${pr.body?.trim() || '(none)'}`,
+    `Files changed (${files.length}):\n${files.map((f) => f.filename).join('\n')}`,
+    `The diffs:\n${diffs.filter(Boolean).join('\n\n')}`,
+    `Question: ${question}`,
+  ].join('\n\n');
+}
+
 // After a review of a PR a Claude Code session sent to lgtm: the outcome, as a message for that session.
 export function reviewDonePrompt(
   pr: { html_url: string; number: number; title: string },

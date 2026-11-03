@@ -740,7 +740,7 @@ function SlackMessages() {
 const SLACK_SAMPLE = {
   ...prValues({ repo: 'acme/app', number: 1234, title: 'Retry payments on network errors', url: 'https://github.com/acme/app/pull/1234', author: 'ana' }),
   verdict: ':approved: Approved',
-  comments: ' · 3 comments',
+  comments: ' · 3 comments on PaymentService.kt, RetryPolicy.kt',
   note: '>Looks good, two small nits.',
   days: '2 days',
 };
