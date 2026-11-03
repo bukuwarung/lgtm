@@ -685,10 +685,10 @@ test('specrefs: code spans in specs naming the PR\'s files, and where', () => {
     { filename: 'openspec/changes/x/tasks.md', patch: '@@ -0,0 +1,3 @@\n+- [ ] 2.1 Tighten `proguard-rules.pro`\n+- [x] 2.2 Call `initialiseBureau()` from `LegacySignalHandler.start`\n+- [ ] 2.3 Mention `Unrelated` and `app/Other.kt`' },
   ];
   const ix = codeIndex(files);
-  assert.equal(refTo('proguard-rules.pro', ix), 'app/proguard-rules.pro');
-  assert.equal(refTo('app/proguard-rules.pro:12', ix), 'app/proguard-rules.pro');
-  assert.equal(refTo('initialiseBureau()', ix), 'app/src/main/java/x/LegacySignalHandler.kt');
-  assert.equal(refTo('LegacySignalHandler#start', ix), 'app/src/main/java/x/LegacySignalHandler.kt');
+  assert.deepEqual(refTo('proguard-rules.pro', ix), { path: 'app/proguard-rules.pro' });
+  assert.deepEqual(refTo('app/proguard-rules.pro:12', ix), { path: 'app/proguard-rules.pro' });
+  assert.deepEqual(refTo('initialiseBureau()', ix), { path: 'app/src/main/java/x/LegacySignalHandler.kt', line: 2 }); // its declaration
+  assert.deepEqual(refTo('LegacySignalHandler#start', ix), { path: 'app/src/main/java/x/LegacySignalHandler.kt', line: 1 }); // start isn't declared: its class
   assert.equal(refTo('Unrelated', ix), null);
   assert.equal(refTo('run the build', ix), null);
   assert.equal(refTo('tasks.md', ix), null); // specs aren't code

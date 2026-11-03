@@ -7,34 +7,36 @@ import { parsePatch } from './diff.ts';
 export const isDoc = (path: string) => /\.(md|mdx|markdown)$/i.test(path) || /(^|\/)(openspec|docs)\//.test(path);
 
 const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
-export type CodeIndex = { files: string[]; symbols: Map<string, string> };
+export type Ref = { path: string; line?: number }; // a changed file, and the line declaring what's named (new side)
+export type CodeIndex = { files: string[]; symbols: Map<string, Ref> };
 type F = { filename: string; patch?: string };
 
 // Declarations in the diff's added and unchanged lines; a file named like a class stands for it (Kotlin, Java, Swift).
 const DECL = /\b(?:class|interface|object|enum|fun|def|func|function|struct|trait|protocol|record)\s+([A-Za-z_]\w{2,})/g;
 export function codeIndex(files: F[]): CodeIndex {
   const code = files.filter((f) => !isDoc(f.filename));
-  const symbols = new Map<string, string>();
+  const symbols = new Map<string, Ref>();
+  for (const f of code)
+    for (const h of parsePatch(f.patch ?? ''))
+      for (const l of h.lines) if (l.kind !== '-' && l.new != null) for (const m of l.text.matchAll(DECL)) if (!symbols.has(m[1])) symbols.set(m[1], { path: f.filename, line: l.new });
   for (const f of code) {
     const name = base(f.filename).replace(/\.\w+$/, '');
-    if (/^[A-Z]\w{2,}$/.test(name)) symbols.set(name, f.filename);
+    if (/^[A-Z]\w{2,}$/.test(name) && !symbols.has(name)) symbols.set(name, { path: f.filename });
   }
-  for (const f of code)
-    for (const l of (f.patch ?? '').split('\n')) if (l[0] !== '-') for (const m of l.matchAll(DECL)) if (!symbols.has(m[1])) symbols.set(m[1], f.filename);
   return { files: code.map((f) => f.filename), symbols };
 }
 
 // The changed file a code span names, if any: `app/build.gradle.kts`, `proguard-rules.pro`, `Foo.kt:12`,
 // `LegacySignalHandler`, `initialiseBureau()`, `Foo.bar`, `Foo#bar`.
-export function refTo(text: string, ix: CodeIndex): string | null {
+export function refTo(text: string, ix: CodeIndex): Ref | null {
   const t = text.trim().replace(/^\.?\//, '').replace(/:\d+(?:-\d+)?$/, '').replace(/\(.*\)$/, '');
   if (!t || /\s/.test(t)) return null;
   if (t.includes('/') || /\.\w+$/.test(t)) {
     const hit = ix.files.find((p) => p === t) ?? ix.files.find((p) => p.endsWith('/' + t));
-    if (hit) return hit;
+    if (hit) return { path: hit };
   }
-  const parts = t.split(/[.#:]+/).filter(Boolean);
-  for (const s of [parts[0], parts.at(-1)]) if (s && ix.symbols.has(s)) return ix.symbols.get(s)!;
+  const parts = t.split(/[.#:]+/).filter(Boolean); // the member named first, then its class
+  for (const s of [parts.at(-1), parts[0]]) if (s && ix.symbols.has(s)) return ix.symbols.get(s)!;
   return null;
 }
 
@@ -51,7 +53,7 @@ export function specRefs(files: F[], ix: CodeIndex): Map<string, SpecRef[]> {
       for (const l of h.lines) {
         if (l.kind === '-' || l.new == null) continue;
         for (const m of l.text.matchAll(/`([^`\n]+)`/g)) {
-          const to = refTo(m[1], ix);
+          const to = refTo(m[1], ix)?.path;
           if (!to) continue;
           const no = taskNo(l.text);
           const list = out.get(to) ?? [];

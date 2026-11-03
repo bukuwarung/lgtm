@@ -1993,7 +1993,7 @@ function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'j
   const { paras, tags } = useMemo(() => docParts(doc.lines ?? doc.text.split('\n').map((text) => ({ text, changed: false })), syntax, doc.style), [doc.text]);
   return (
     <div class={doc.style === 'line' && doc.start === doc.end ? 'doc-render doc-one' : 'doc-render'} style={{ marginLeft: `${doc.indent}ch`, width: `calc(100% - ${doc.indent + 3}ch)` }}>
-      <button class="link doc-source" title="Show the comment's source lines" onClick={onSource}>&lt;/&gt; source</button>
+      <button class="link doc-source" title="Show the comment's source lines" onClick={onSource} aria-label="Show the comment's source lines">&lt;/&gt;</button>
       {paras.map((p) => (
         <div class={p.changed ? 'md doc-chg' : 'md'} dangerouslySetInnerHTML={{ __html: md.render(p.md) }} />
       ))}
@@ -2028,11 +2028,12 @@ function linkSpecRefs(root: HTMLElement | null, ix: CodeIndex) {
   for (const c of root.querySelectorAll('code')) {
     if (c.closest('pre, a') || c.hasAttribute('data-ref')) continue;
     const to = refTo(c.textContent ?? '', ix);
-    c.setAttribute('data-ref', to ?? '');
+    c.setAttribute('data-ref', to?.path ?? '');
     if (to) {
-      c.setAttribute('data-jump', to);
+      c.setAttribute('data-jump', to.path);
+      if (to.line) c.setAttribute('data-line', String(to.line));
       c.classList.add('spec-ref');
-      c.title = `${to}: go to its changes`;
+      c.title = `${to.path}${to.line ? `:${to.line}` : ''}: go there`;
     }
   }
   if (!root.querySelector('[data-jump]')) return; // a spec that names no code: its tasks aren't about this PR's files
@@ -2062,6 +2063,21 @@ function jumpToSpec(r: SpecRef) {
     if (!el) return void (tries++ < 60 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + r.spec)); // it may still be loading
     el.id ||= `sl-${r.spec}-${r.line}`;
     jumpTo(el.id);
+  };
+  setTimeout(go, 50);
+}
+
+// To a changed file, at its new-side line when that's on show (not folded away), else its top.
+function jumpToLine(path: string, line?: number) {
+  if (!line) return jumpTo('f-' + path);
+  const sec = document.getElementById('f-' + path);
+  sec?.scrollIntoView();
+  let tries = 0;
+  const go = () => {
+    const row = [...(sec?.querySelectorAll('tr.ln') ?? [])].find((r) => r.children[1]?.textContent === String(line));
+    if (!row) return void (tries++ < 30 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + path)); // drawing, or not on show
+    row.id ||= `ln-${path}-${line}`;
+    jumpTo(row.id);
   };
   setTimeout(go, 50);
 }
@@ -2176,8 +2192,8 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
       style={look.style}
       ref={root}
       onClick={(e) => {
-        const to = (e.target as Element).closest('[data-jump]')?.getAttribute('data-jump');
-        if (to) return void (e.preventDefault(), jumpTo('f-' + to));
+        const ref = (e.target as Element).closest('[data-jump]');
+        if (ref) return void (e.preventDefault(), jumpToLine(ref.getAttribute('data-jump')!, Number(ref.getAttribute('data-line')) || undefined));
         onDocClick(e, root.current, linkTo);
       }}
     >
