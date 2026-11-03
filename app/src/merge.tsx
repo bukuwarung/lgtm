@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon } from './tags.tsx';
-import { fetchJira, moveJira, useStoredFlag, useStoredValue, type JiraIssue } from './platform.ts';
+import { fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -38,12 +38,14 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   const [dropBranch, toggleDropBranch] = useStoredFlag('deleteBranch', true);
   // Its Jira tickets that aren't done, moved as it merges when ticked (Settings → Reviewing ticks it to start with).
   const [moveOnMerge] = useStoredFlag('jiraOnMerge', false);
-  const [jiraTo] = useStoredValue('jiraAfterMerge', 'Ready for QA');
+  const [jiraTo] = useStoredValue('jiraAfterMerge', 'Done');
+  const [to, setTo] = useState(jiraTo); // this merge's, from the usual one
   const [moveTickets, setMoveTickets] = useState(moveOnMerge);
   const [openTickets, setOpenTickets] = useState<string[]>([]);
   useEffect(() => {
     Promise.all(tickets.map((k) => fetchJira(k).then((i) => (i.statusCategory === 'done' ? null : k), () => null))).then((l) => setOpenTickets(l.filter((k): k is string => !!k)));
   }, [tickets.join()]);
+  const statuses = useJiraStatuses(openTickets.map(project));
   const [shown, setShown] = useState(false);
   useEffect(() => {
     const toggle = () => setShown((x) => !x);
@@ -170,7 +172,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
                   await mergePR(s, m, msg.title, msg.body, confirm === 'auto');
                   if (deleting) await deleteBranch(repo, s).catch((e) => setErr(`Merged, but ${e.message}`));
                   if (confirm === 'merge' && moveTickets)
-                    for (const k of openTickets) await moveJira(k, jiraTo).catch((e) => setErr(`Merged, but ${k} didn't move to ${jiraTo}: ${e.message}`));
+                    for (const k of openTickets) await moveJira(k, to).catch((e) => setErr(`Merged, but ${k} didn't move to ${to}: ${e.message}`));
                 })
               }
             >
@@ -179,8 +181,11 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
             <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
             {confirm === 'merge' && openTickets.length > 0 && (
               <label title="Settings → Reviewing: whether this starts ticked, and the status">
-                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> Move {openTickets.join(', ')} to {jiraTo}
+                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> Move {openTickets.join(', ')} to
               </label>
+            )}
+            {confirm === 'merge' && openTickets.length > 0 && (
+              <StatusSelect value={to} onChange={setTo} statuses={statuses} />
             )}
             {offerDelete && (
               <label title="GitHub doesn't delete this repo's merged branches by itself">
@@ -196,29 +201,38 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
   );
 }
 
-// Once merged: its Jira ticket moved on (unless it's done already), to the status you pick (Settings → Reviewing sets the usual one; ones used
-// before are suggested). Jira's own names; one it doesn't allow from where the ticket is comes back as its error.
+const project = (key: string) => key.split('-')[0];
+
+// A Jira status to move to: the project's own (listed once a day, which takes a while: meanwhile the one picked), by
+// category. One that isn't among them (a name from before) stays, marked.
+export function StatusSelect({ value, onChange, statuses }: { value: string; onChange: (s: string) => void; statuses: JiraStatus[] | null }) {
+  const groups = [['new', 'To do'], ['indeterminate', 'In progress'], ['done', 'Done']] as const;
+  return (
+    <select value={value} onChange={(e) => onChange(e.currentTarget.value)} aria-label="Jira status" title={statuses ? undefined : "Listing the project's statuses…"}>
+      {!statuses?.some((s) => s.name === value) && <option value={value}>{statuses ? `${value} (not in this project)` : value}</option>}
+      {statuses && groups.map(([c, label]) => statuses.some((s) => s.category === c) && (
+        <optgroup label={label}>
+          {statuses.filter((s) => s.category === c).map((s) => <option value={s.name}>{s.name}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+// Once merged: its Jira ticket moved on (unless it's done already), to the status you pick (Settings → Reviewing sets
+// the usual one). Jira's own names; one it doesn't allow from where the ticket is comes back as its error.
 function TicketMove({ id }: { id: string }) {
   const [issue, setIssue] = useState<JiraIssue | null>(null);
-  const [usual] = useStoredValue('jiraAfterMerge', 'Ready for QA');
+  const [usual] = useStoredValue('jiraAfterMerge', 'Done');
   const [status, setStatus] = useState(usual);
   const [state, setState] = useState<'' | 'moving' | 'moved' | string>('');
+  const statuses = useJiraStatuses([project(id)]);
   useEffect(() => void fetchJira(id).then(setIssue, () => {}), [id]);
-  const used = (() => {
-    try {
-      return JSON.parse(localStorage.getItem('jiraStatuses') ?? '[]') as string[];
-    } catch {
-      return [];
-    }
-  })();
   const move = () => {
     setState('moving');
     moveJira(id, status).then(
       () => {
         setState('moved');
-        try {
-          localStorage.setItem('jiraStatuses', JSON.stringify([status, ...used.filter((u) => u !== status)].slice(0, 8)));
-        } catch {}
         fetchJira(id).then(setIssue, () => {});
       },
       (e) => setState(e.message),
@@ -235,13 +249,8 @@ function TicketMove({ id }: { id: string }) {
       ) : issue.statusCategory === 'done' ? null : (
         <>
           <span>→</span>
-          <input list={`statuses-${id}`} value={status} onInput={(e) => setStatus(e.currentTarget.value)} aria-label="Move it to" />
-          <datalist id={`statuses-${id}`}>
-            {[...new Set([usual, ...used])].map((u) => (
-              <option value={u} />
-            ))}
-          </datalist>
-          <button disabled={state === 'moving' || !status.trim() || status.trim() === issue.status}>{state === 'moving' ? 'Moving…' : 'Move'}</button>
+          <StatusSelect value={status} onChange={setStatus} statuses={statuses} />
+          <button disabled={state === 'moving' || status === issue.status}>{state === 'moving' ? 'Moving…' : 'Move'}</button>
           {state && state !== 'moving' && <span class="warn-text">{state}</span>}
         </>
       )}

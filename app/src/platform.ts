@@ -302,6 +302,44 @@ export async function moveJira(key: string, status: string): Promise<void> {
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not move the ticket');
 }
 
+// A Jira project's statuses (through acli, slowly: half a minute or so), kept a day per project; the hook gives the
+// ones of all the projects named, saved ones at once, newly listed ones when they come.
+export type JiraStatus = { name: string; category: 'new' | 'indeterminate' | 'done' };
+async function jiraStatuses(project: string): Promise<JiraStatus[]> {
+  if (isDesktop) return command<JiraStatus[]>('jira_statuses', { project });
+  const res = await fetch(`/jira-statuses?project=${encodeURIComponent(project)}`);
+  const body = await res.json().catch(() => ({ error: res.statusText }));
+  if (!res.ok) throw new Error(body.error || 'Could not list the statuses');
+  return body;
+}
+const savedStatuses = (p: string): { at: number; list: JiraStatus[] } | null => {
+  try {
+    return JSON.parse(localStorage.getItem(`jiraStatusList:${p}`) ?? 'null');
+  } catch {
+    return null;
+  }
+};
+const listing = new Map<string, Promise<void>>(); // one listing per project at a time
+export function useJiraStatuses(projects: string[]): JiraStatus[] | null {
+  const [, setTick] = useState(0);
+  const key = [...new Set(projects)].sort().join();
+  useEffect(() => {
+    for (const p of key ? key.split(',') : []) {
+      if ((savedStatuses(p)?.at ?? 0) > Date.now() - 86_400_000) continue;
+      if (!listing.has(p))
+        listing.set(p, jiraStatuses(p).then((list) => {
+          try {
+            if (list.length) localStorage.setItem(`jiraStatusList:${p}`, JSON.stringify({ at: Date.now(), list }));
+          } catch {}
+        }, () => {}).finally(() => listing.delete(p)));
+      listing.get(p)!.then(() => setTick((t) => t + 1));
+    }
+  }, [key]);
+  const lists = key ? key.split(',').map((p) => savedStatuses(p)?.list) : [];
+  if (!lists.length || lists.some((l) => !l)) return lists.find((l) => l) ?? null;
+  return [...new Map(lists.flat().map((s) => [s!.name, s!])).values()];
+}
+
 // --- Native side: the app uses macOS through Tauri plugins; the browser version falls back to web APIs ---
 
 // Notifications: macOS notifications in the app, the Web Notification API in the browser.

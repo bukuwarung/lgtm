@@ -276,6 +276,37 @@ pub async fn jira_move(key: String, status: String) -> Result<(), String> {
     acli(&["jira", "workitem", "transition", "--key", &key, "--status", &status, "--yes"]).map(|_| ())
 }
 
+/// A project's statuses (Jira's names, and their category: new, indeterminate or done), for the after-merge pickers.
+/// acli can't list them, so: a ticket in none of the ones found so far, again and again (each query finds one more),
+/// the three categories side by side.
+#[tauri::command]
+pub async fn jira_statuses(project: String) -> Result<Vec<Value>, String> {
+    if !re(r"^[A-Z][A-Z0-9]+$").is_match(&project) {
+        return Err("Bad project".into());
+    }
+    let in_category = |cat: &str, key: &str| -> Result<Vec<Value>, String> {
+        let mut found: Vec<String> = Vec::new();
+        for _ in 0..25 {
+            let not = if found.is_empty() { String::new() } else { format!(" AND status not in ({})", found.iter().map(|s| Value::from(s.as_str()).to_string()).collect::<Vec<_>>().join(", ")) };
+            let jql = format!("project = {project} AND statusCategory = \"{cat}\"{not}");
+            let out = acli(&["jira", "workitem", "search", "--jql", &jql, "--fields", "status", "--limit", "1", "--json"])?;
+            match serde_json::from_str::<Value>(&out).ok().and_then(|v| v[0]["fields"]["status"]["name"].as_str().map(String::from)) {
+                Some(name) => found.push(name),
+                None => break,
+            }
+        }
+        Ok(found.into_iter().map(|name| json!({ "name": name, "category": key })).collect())
+    };
+    std::thread::scope(|s| {
+        let parts: Vec<_> = [("To Do", "new"), ("In Progress", "indeterminate"), ("Done", "done")].iter().map(|(c, k)| s.spawn(move || in_category(c, k))).collect();
+        let mut all = Vec::new();
+        for p in parts {
+            all.extend(p.join().map_err(|_| "Couldn't list the statuses".to_string())??);
+        }
+        Ok(all)
+    })
+}
+
 /// Links to this PR's Slack threads (one per person messaged), as permalinks on the workspace's own URL.
 fn pr_threads(pr: &str) -> Vec<Value> {
     if !re(PR_REF).is_match(pr) {

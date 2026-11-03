@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-jira-statuses"
+description = "Enables the jira_statuses command without any pre-configured scope."
+commands.allow = ["jira_statuses"]
+
+[[permission]]
+identifier = "deny-jira-statuses"
+description = "Denies the jira_statuses command without any pre-configured scope."
+commands.deny = ["jira_statuses"]

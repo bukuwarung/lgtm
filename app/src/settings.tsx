@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir } from './github.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
-import { notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { StatusSelect } from './merge.tsx';
 import { estimateLabel } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
@@ -680,14 +681,23 @@ function ThemeGallery({ look }: { look: Look }) {
 
 // The status a merged PR's Jira ticket moves to, as the merge box offers it (you can change it there each time).
 function JiraAfterMerge() {
-  const [status, setStatus] = useStoredValue('jiraAfterMerge', 'Ready for QA');
+  const [status, setStatus] = useStoredValue('jiraAfterMerge', 'Done');
+  // The projects of the tickets seen lately (review.tsx keeps them), for their statuses.
+  const projects = (() => {
+    try {
+      return Object.keys(JSON.parse(localStorage.getItem('jiraSeen') ?? '{}')).map((k) => k.split('-')[0]);
+    } catch {
+      return [];
+    }
+  })();
+  const statuses = useJiraStatuses(projects);
   return (
     <label class="set-row">
       <span>
         After merging, move the Jira ticket to
-        <small>As you merge (above), or offered under the merge box once your PR is merged; Jira's own status name.</small>
+        <small>As you merge (above), or offered under the merge box once your PR is merged. {projects.length ? 'The statuses of your recent tickets\' projects.' : 'Open a PR with a Jira ticket to list its project\'s statuses.'}</small>
       </span>
-      <input value={status} onInput={(e) => setStatus(e.currentTarget.value)} style={{ maxWidth: '220px' }} />
+      <StatusSelect value={status} onChange={setStatus} statuses={statuses} />
     </label>
   );
 }

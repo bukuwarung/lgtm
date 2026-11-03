@@ -396,6 +396,25 @@ async function jiraMove(b) {
   await acli(['jira', 'workitem', 'transition', '--key', b.key, '--status', status, '--yes']);
 }
 
+// A project's statuses (Jira's names, and their category: new, indeterminate or done), for the after-merge pickers. acli
+// can't list them, so: a ticket in none of the ones found so far, again and again (each query finds one more), the
+// three categories side by side.
+async function jiraStatuses(project) {
+  if (!/^[A-Z][A-Z0-9]+$/.test(project ?? '')) throw new Error('Bad project');
+  const inCategory = async (cat, key) => {
+    const found = [];
+    for (let i = 0; i < 25; i++) {
+      const not = found.length ? ` AND status not in (${found.map((s) => JSON.stringify(s)).join(', ')})` : '';
+      const out = await acli(['jira', 'workitem', 'search', '--jql', `project = ${project} AND statusCategory = "${cat}"${not}`, '--fields', 'status', '--limit', '1', '--json']);
+      const name = (() => { try { return JSON.parse(out)[0]?.fields?.status?.name; } catch { return null; } })();
+      if (!name) break;
+      found.push(name);
+    }
+    return found.map((name) => ({ name, category: key }));
+  };
+  return (await Promise.all([inCategory('To Do', 'new'), inCategory('In Progress', 'indeterminate'), inCategory('Done', 'done')])).flat();
+}
+
 // --- Claude Code sessions per PR (Settings → Claude Code) ---
 // Claude desktop keeps a record per Code session (its desktop id, title, transcript id) and Claude Code a transcript
 // whose first message is the prompt. A session belongs to the PRs whose links appear in that first prompt (lgtm's
@@ -546,7 +565,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/jira-move'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/jira-move', '/jira-statuses'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -584,6 +603,7 @@ const server = createServer(async (req, res) => {
     ]);
     return json(res, 200, { slack, jira });
   }
+  if (path === '/jira-statuses') return jiraStatuses(new URL(req.url ?? '/', ORIGIN).searchParams.get('project')).then((l) => json(res, 200, l), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira-move' && req.method === 'POST')
     return readJson(req).then(jiraMove).then(() => json(res, 200, { ok: true }), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira') {
