@@ -827,6 +827,32 @@ function Waiting({ i, nudge }: { i: QueueItem; nudge: boolean }) {
 
 const answered: Answered = new Map(); // reviews sent from here, until the list catches up
 
+// While the list loads: its shape, shimmering (style.css .sk), the tabs too unless `rows` is a list's part.
+const SK_TITLES = [86, 64, 92, 72, 58, 80];
+function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolean }) {
+  return (
+    <div class="list-skel" aria-busy="true" aria-label="Loading the pull requests">
+      {tabs && (
+        <div class="list-skel-tabs">
+          {[0, 1, 2].map(() => <span class="sk" />)}
+        </div>
+      )}
+      {tabs && <span class="sk list-skel-group" />}
+      {Array.from({ length: rows }, (_, k) => (
+        <div class="list-skel-item">
+          <span class="sk" style={{ width: `${SK_TITLES[k % SK_TITLES.length]}%` }} />
+          {k % 2 === 0 && <span class="sk" style={{ width: `${SK_TITLES[(k + 3) % SK_TITLES.length] - 30}%` }} />}
+          <span class="sk list-skel-meta" />
+          <div class="skel-pills">
+            <span class="sk sk-pill" style={{ width: '56px' }} />
+            <span class="sk sk-pill" style={{ width: `${40 + ((k * 17) % 30)}px` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
   const [loaded, setItems] = useState<QueueItem[] | null>(null);
   const items = useMemo(() => loaded && withAnswered(loaded, answered), [loaded, answeredTick]);
@@ -1142,7 +1168,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
                 </div>
               )}
               {askedTab[g] && kind.asked?.(g)
-                ? typeof asked[g] === 'string' ? <p class="error">{asked[g] as string}</p> : asked[g] ? (asked[g] as QueueItem[]).map((i) => item(kind, i)) : <p class="note">Loading…</p>
+                ? typeof asked[g] === 'string' ? <p class="error">{asked[g] as string}</p> : asked[g] ? (asked[g] as QueueItem[]).map((i) => item(kind, i)) : <ListSkeleton rows={2} />
                 : entries.map((e) =>
                     Array.isArray(e) ? (
                       <div class="stack" key={e[0].id}>
@@ -1189,7 +1215,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         </button>
       ))(tab === 'team' ? teamDrafts : draftCount)}
       {!shown ? (
-        !err && <p class="note">Loading…</p>
+        !err && <ListSkeleton tabs />
       ) : (
         <>
           {tab === 'mine' && section(MINE, shown.filter((i) => i.mine))}
@@ -1208,7 +1234,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
                 </select>
               </div>
               {teamErr && <p class="error">{teamErr}</p>}
-              {team && !teamData && !teamErr && <p class="note">Loading…</p>}
+              {team && !teamData && !teamErr && <ListSkeleton rows={4} />}
               {teamData?.team === team && section(teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamItems)}
             </>
           )}
