@@ -2102,6 +2102,12 @@ type PeekAt = { path: string; line?: number; at: DOMRect; go: () => void };
 function useRefPeek(ix: CodeIndex) {
   const [peek, setPeek] = useState<PeekAt | null>(null);
   const timer = useRef(0);
+  // Scrolling away closes it, and cancels one about to open (links pass under the pointer while the page moves).
+  useEffect(() => {
+    const away = () => (clearTimeout(timer.current), setPeek(null));
+    addEventListener('scroll', away, { passive: true });
+    return () => (clearTimeout(timer.current), removeEventListener('scroll', away));
+  }, []);
   const show = (p: Omit<PeekAt, 'at'>, el: Element) => {
     clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setPeek({ ...p, at: el.getBoundingClientRect() }), 250);
