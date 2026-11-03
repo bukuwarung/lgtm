@@ -2455,6 +2455,8 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   // Bot-only threads (AI reviewers, linters) start collapsed to their one-line preview.
   const foldBots = useFoldBots(!!ctx.me && ctx.pr.user.login === ctx.me);
   const bot = foldBots && t.comments.nodes.every((c) => c.author?.__typename === 'Bot');
+  // On someone else's PR, other people's threads start folded too: mine (and ones waiting on me) stay open.
+  const others = !!ctx.me && ctx.pr.user.login !== ctx.me && !t.comments.nodes.some((c) => c.author?.login === ctx.me);
 
   async function act(f: () => Promise<void>) {
     setBusy(true);
@@ -2472,7 +2474,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   });
 
   return (
-    <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot}>
+    <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot && !others}>
       <summary>
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}

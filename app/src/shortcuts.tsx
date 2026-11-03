@@ -429,7 +429,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
           </details>
         )}
         {tiers.bot.length > 0 && (
-          <details class="ix-ckgroup" open>
+          <details class="ix-ckgroup" open={minePR}>
             <summary><Octicon name="dependabot" /> {tiers.bot.length} from bots</summary>
             {tiers.bot.map((t) => threadEntry(t, 'bot'))}
           </details>
