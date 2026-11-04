@@ -118,6 +118,7 @@ const limitError = (bucket: string) => {
   const at = new Date(l.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', ...(l.until - Date.now() < 120_000 ? { second: '2-digit' } : {}) });
   return new Error(l.slow ? `GitHub asked lgtm to slow down: it asks again at ${at}` : `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`} is used up until ${at}: lgtm waits until then`);
 };
+export const isLimited = (bucket: string) => (limited.get(bucket)?.until ?? 0) > Date.now();
 function noteLimit(res: Response, path: string) {
   const bucket = res.headers.get('x-ratelimit-resource') ?? bucketOf(path);
   const retry = Number(res.headers.get('retry-after'));
@@ -611,7 +612,7 @@ export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${re
 export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);
 
 // Everything a PR page shows first, as one bundle (also cached, and loaded ahead for the list's top PRs).
-export type LoadedPR = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null; pending?: PendingReview | null };
+export type LoadedPR = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null; pending?: PendingReview | null; paused?: string }; // paused: why the threads are missing
 // Everything asked at once; only .gitattributes (at the head commit) waits for the PR. `onPR`: the PR as soon as it's
 // here, for what can start or show before the rest (the page's header, its stack).
 export async function loadPR(repo: string, n: number, onPR?: (pr: PR) => void): Promise<LoadedPR> {
@@ -622,8 +623,12 @@ export async function loadPR(repo: string, n: number, onPR?: (pr: PR) => void): 
     } catch {}
     return getRaw(pr.head.repo?.full_name ?? repo, '.gitattributes', pr.head.sha);
   });
-  const [pr, files, threads, conversation, attrs, pending] = await Promise.all([prP, getFiles(repo, n), getThreads(repo, n), getConversation(repo, n), attrsP, getPendingReview(repo, n)]);
-  return { pr, files, threads, conversation, attrs, pending };
+  // The review threads and a pending review come from GraphQL, the rest from REST: with GraphQL's limit used up, the PR
+  // still opens, without them.
+  let paused: string | undefined;
+  const gq = <T,>(p: Promise<T>, none: T) => p.catch((e) => (isLimited('graphql') ? ((paused = e.message), none) : Promise.reject(e)));
+  const [pr, files, threads, conversation, attrs, pending] = await Promise.all([prP, getFiles(repo, n), gq(getThreads(repo, n), []), getConversation(repo, n), attrsP, gq(getPendingReview(repo, n), null)]);
+  return { pr, files, threads, conversation, attrs, pending, paused };
 }
 
 // A review I started on github.com and haven't sent (GitHub shows each person only their own): Finish review sends it,

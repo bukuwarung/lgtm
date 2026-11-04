@@ -524,7 +524,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
       fresh = true;
       setStale(null);
       show(loaded);
-      void prCache.set(`${repo}#${n}`, loaded);
+      setPaused(loaded.paused ?? '');
+      if (!loaded.paused) void prCache.set(`${repo}#${n}`, loaded); // not a copy missing its threads
     })().catch((e) => setError(e.message));
     // What needs only the PR (not its files), started as soon as it's here: who I am to it, its stack, my last review.
     let started = false;
@@ -706,6 +707,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   });
 
   const [planOrder, togglePlanOrder] = useStoredFlag('planOrder', true); // a big PR's files in its plan's order
+  const [paused, setPaused] = useState(''); // GraphQL's limit used up: the threads couldn't load
   // Settings → Checks and → Android: what lgtm points out.
   const [chkSecrets] = useStoredFlag('checkSecrets', true);
   const [chkDeps] = useStoredFlag('checkDeps', true);
@@ -1347,6 +1349,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
                 <button onClick={() => setSince(true)}>Show only those changes</button>
               )}
             </div>
+          )}
+          {paused && (
+            <p class="warn">
+              Review threads aren't shown: {paused.replace(/: lgtm waits until then$/, '')}. The diff, description and conversation are here; reload after that for the threads.
+            </p>
           )}
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your comments move to them with their lines when you submit; you'll be asked about any whose lines changed.</p>
