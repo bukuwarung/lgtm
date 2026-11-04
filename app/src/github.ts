@@ -1235,6 +1235,38 @@ export function markBots<T extends { comments: { nodes: Pick<Comment, 'author'>[
 
 // Does this review thread wait on me? Open and current, last word from a person other than me, and it's my PR or I'm
 // in the thread. Outdated threads don't count: the code moved on, and a reply there is nearly always "done".
+// PRs merged in the last 14 days that I opened or reviewed, where a review thread may wait on my reply: a reply after
+// the merge would otherwise go unseen (the PR has left the list). A light look at each PR's threads (the last few
+// comments) picks the candidates; the inbox then reads their threads in full and applies awaitsMe. Kept 10 minutes.
+export type MergedPR = { id: string; repo: string; number: number; title: string; authored: boolean; mergedAt: string; updatedAt: string };
+let mergedSeen: { at: number; list: Promise<MergedPR[]> } | null = null;
+export function getMergedAwaiting(me: string): Promise<MergedPR[]> {
+  if (mergedSeen && Date.now() - mergedSeen.at < 10 * 60_000) return mergedSeen.list;
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+  const F = `nodes{...on PullRequest{id number title mergedAt updatedAt repository{nameWithOwner} author{login}
+    reviewThreads(last:30){nodes{isResolved isOutdated starter:comments(first:1){nodes{author{login}}} comments(last:5){nodes{author{__typename login}}}}}}}`;
+  const list = graphql(
+    `query($a:String!,$r:String!){a:search(query:$a,type:ISSUE,first:20){${F}} r:search(query:$r,type:ISSUE,first:20){${F}}}`,
+    { a: `is:pr is:merged merged:>=${since} author:@me sort:updated-desc`, r: `is:pr is:merged merged:>=${since} reviewed-by:@me -author:@me sort:updated-desc` },
+  ).then((d) =>
+    [...d.a.nodes, ...d.r.nodes]
+      .filter((p: any) => p?.id)
+      .filter((p: any) => {
+        const mine = p.author?.login === me;
+        return p.reviewThreads.nodes.some((t: any) => {
+          const cs = t.comments.nodes;
+          const last = cs.at(-1)?.author;
+          if (t.isResolved || t.isOutdated || !last || last.login === me || last.__typename === 'Bot') return false;
+          return mine || t.starter.nodes[0]?.author?.login === me || cs.some((c: any) => c.author?.login === me);
+        });
+      })
+      .map((p: any) => ({ id: p.id, repo: p.repository.nameWithOwner, number: p.number, title: p.title, authored: p.author?.login === me, mergedAt: p.mergedAt, updatedAt: p.updatedAt })),
+  );
+  mergedSeen = { at: Date.now(), list };
+  list.catch(() => (mergedSeen = null));
+  return list;
+}
+
 export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { comments: { nodes: Pick<Comment, 'author'>[] } }, me: string, myPR: boolean) {
   const last = t.comments.nodes.at(-1)?.author;
   if (t.isResolved || t.isOutdated || !last || last.login === me || last.__typename === 'Bot') return false;

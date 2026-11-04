@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'preact/hooks';
-import { awaitsMe, getThreads, getViewer, markBots, reply, resolveThread, type QueueItem, type Thread } from './github.ts';
+import { awaitsMe, getMergedAwaiting, getThreads, getViewer, markBots, reply, resolveThread, type QueueItem, type Thread } from './github.ts';
 import { ago, readBots, reportError } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
 import { Tg } from './tags.tsx';
 
-// Every review thread waiting on my reply, across the PRs in my list (#/inbox): the last word in each, and a reply or
-// a resolve right here. Only PRs the list already counts a thread waiting on me in are asked for their threads.
-type Waiting = { item: QueueItem; threads: Thread[] };
+// Every review thread waiting on my reply (#/inbox): in the PRs in my list (only those the list already counts one
+// waiting in are asked for their threads), and in PRs merged lately that I opened or reviewed, where a reply after
+// the merge would go unseen. The last word in each, and a reply or a resolve right here.
+type Item = Pick<QueueItem, 'id' | 'repo' | 'number' | 'title' | 'authored' | 'updatedAt'> & { mergedAt?: string };
+type Waiting = { item: Item; threads: Thread[] };
 
 export function Inbox({ items }: { items: QueueItem[] | null }) {
   const [me, setMe] = useState('');
@@ -18,12 +20,14 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
     if (!items) return;
     let stop = false;
     // Bots marked as the list marks them, so the count here is the list's.
-    getViewer().then((login) =>
-      Promise.all(asked.map(async (item) => ({ item, threads: markBots(await getThreads(item.repo, item.number), readBots()).filter((t) => awaitsMe(t, login, item.authored)) }))).then(
+    getViewer().then(async (login) => {
+      const merged: Item[] = await getMergedAwaiting(login).catch(() => []);
+      const look = (item: Item) => getThreads(item.repo, item.number).then((ts) => ({ item, threads: markBots(ts, readBots()).filter((t) => awaitsMe(t, login, item.authored)) }));
+      Promise.all([...asked, ...merged.filter((m) => !asked.some((a) => a.id === m.id))].map(look)).then(
         (l) => !stop && (setMe(login), setList(l.filter((w) => w.threads.length))),
         (e) => !stop && (reportError(`Couldn't load your threads: ${e.message}`), setList([])),
-      ),
-    );
+      );
+    });
     return () => void (stop = true);
   }, [key]);
   if (!list) return <PageSkeleton title="threads waiting on your reply" />;
@@ -37,6 +41,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
         <section>
           <h4>
             <a href={`#/${item.repo}/pull/${item.number}`}>{item.title}</a> <small>{item.repo.split('/')[1]}#{item.number}</small>
+            {item.mergedAt && <small class="inbox-merged"> · merged {ago(item.mergedAt)}</small>}
           </h4>
           {threads.map((t) => (
             <InboxThread t={t} item={item} me={me} onDone={() => setDone((s) => new Set(s).add(t.id))} />
@@ -47,7 +52,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   );
 }
 
-function InboxThread({ t, item, me, onDone }: { t: Thread; item: QueueItem; me: string; onDone: () => void }) {
+function InboxThread({ t, item, me, onDone }: { t: Thread; item: Item; me: string; onDone: () => void }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState('');
   const last = t.comments.nodes[t.comments.nodes.length - 1];

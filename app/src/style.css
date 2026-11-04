@@ -1261,3 +1261,4 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .inbox-last { max-height: 180px; overflow: auto; font-size: calc(13px * var(--ts)); }
 .inbox-thread textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .inbox-thread .row { display: flex; gap: 6px; justify-content: flex-end; }
+.inbox-merged { color: light-dark(#8250df, #a371f7); }
