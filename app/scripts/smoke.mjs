@@ -1,5 +1,5 @@
 // A smoke test of the built app (dist/), run before a release and in CI: the PR list, a PR, a line comment, Finish
-// review and Submit; the inbox (its keys, Done, a reply) and the bell (a closed PR's entry dropped, a new review request
+// review and Submit; the inbox (a thread's code, its keys, Done, a reply, a mention) and the bell (a closed PR's entry dropped, a new review request
 // listed and dismissed); in headless Chrome, with every GitHub request answered here from made-up data (nothing reaches GitHub; writes
 // are only recorded). It fails on an uncaught error, on confirm()/alert()/prompt() (the Mac app's web view answers
 // them without asking: submit once stopped silently that way), and when the review's mutations don't go out.
@@ -41,8 +41,9 @@ const mineNode = { ...node, id: 'PR_2', number: 2, title: 'Faster checkout', aut
 const laterNode = { ...node, id: 'PR_4', number: 4, title: 'Log declined cards' };
 let later = false;
 const comment = (databaseId, login, body) => ({ id: `C${databaseId}`, databaseId, url: '', body, bodyHTML: `<p>${body}</p>`, bodyText: body, createdAt: now, state: 'SUBMITTED', author: { __typename: 'User', login, avatarUrl: '', databaseId: 7 }, originalCommit: { oid: HEAD } });
+const mention = { ...comment(41, 'wawan', 'Can you check the tax?'), bodyHTML: '<p><a class="user-mention notranslate" data-hovercard-type="user" href="https://github.com/tester">@tester</a> can you check the tax?</p>' };
 const threads2 = [
-  { id: 'T21', path: 'src/Cart.kt', line: 5, startLine: null, originalLine: 5, originalStartLine: null, diffSide: 'RIGHT', subjectType: 'LINE', isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: false, comments: { nodes: [comment(21, 'rina', 'Why not cache the cart?')] } },
+  { id: 'T21', path: 'src/Cart.kt', line: 5, startLine: null, originalLine: 5, originalStartLine: null, diffSide: 'RIGHT', subjectType: 'LINE', isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: false, comments: { nodes: [comment(21, 'rina', 'Why not cache the cart?')] }, hunk: { nodes: [{ diffHunk: '@@ -1,3 +1,5 @@\n fun total(c: Cart) =\n-    c.items.sum()\n+    cache.getOrPut(c.id) {\n+        c.items.sum()\n+    }' }] } },
   { id: 'T31', path: 'src/Cart.kt', line: 9, startLine: null, originalLine: 9, originalStartLine: null, diffSide: 'RIGHT', subjectType: 'LINE', isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: false, comments: { nodes: [comment(31, 'eko', 'Nit: rename to total')] } },
 ];
 
@@ -60,6 +61,7 @@ function graphql(body) {
   if (/p0:repository/.test(query)) return { data: Object.fromEntries(Object.keys(variables).filter((k) => k[0] === 'n').map((k) => ['p' + k.slice(1), { pullRequest: { state: variables[k] === 3 ? 'CLOSED' : 'OPEN' } }])) };
   if (query.includes('is:merged')) return { data: { a: { nodes: [] }, r: { nodes: [] } } };
   if (query.includes('reviewThreads(first:100') && variables.n === 2) return { data: { repository: { pullRequest: { reviewThreads: { ...empty, nodes: threads2 } } } } };
+  if (query.includes('nodes(ids:') && query.includes('comments(last:30)')) return { data: { nodes: [{ id: 'PR_2', comments: { nodes: [mention] }, reviews: { nodes: [] } }] } };
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
   const pullRequest = { reviewThreads: empty, reviews: { nodes: [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty };
   if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest } } };
@@ -187,15 +189,17 @@ try {
     if (bar) throw new Error(`error bar: ${bar}`);
   });
   const key = (k, opts = {}) => evaluate(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true, ...${JSON.stringify(opts)} }))`);
-  await step('the inbox lists the threads waiting on me, and j moves', async () => {
+  await step('the inbox lists a mention and the threads waiting on me, with their code, and j moves', async () => {
     await evaluate(`location.hash = '/inbox'`);
-    await until('two threads', `document.querySelectorAll('.inbox-thread').length === 2`);
+    await until('a mention and two threads', `document.querySelectorAll('.inbox-thread').length === 3 && document.querySelector('.inbox .note').textContent.startsWith('2 threads and 1 mention')`);
+    if (!(await evaluate(`!!document.querySelector('.inbox-code .a')`))) throw new Error("the thread's code isn't shown");
     await key('j');
-    await until('the second current', `document.querySelectorAll('.inbox-thread')[1].classList.contains('cur')`, 2000);
+    await key('j');
+    await until('the third current', `document.querySelectorAll('.inbox-thread')[2].classList.contains('cur')`, 2000);
   });
   await step('e marks a thread done', async () => {
     await key('e');
-    await until('one thread left', `document.querySelectorAll('.inbox-thread').length === 1`, 3000);
+    await until('one thread left', `document.querySelectorAll('.inbox-thread').length === 2`, 3000);
     if (!(await evaluate(`localStorage.getItem('@tester/repliesDone') ?? ''`)).includes('T31')) throw new Error("Done wasn't kept");
   });
   await step('r and ⌘↵ reply', async () => {
@@ -208,8 +212,12 @@ try {
     })()`);
     await sleep(100);
     await key('Enter', { metaKey: true });
-    await until('the reply sent', `document.querySelector('.inbox .note')?.textContent.includes('Nothing waits on your reply')`, 5000);
+    await until('the reply sent', `document.querySelector('.inbox .note')?.textContent.startsWith('1 mention')`, 5000);
     if (!sent.includes('reply')) throw new Error("the reply didn't go out");
+  });
+  await step('e marks the mention done', async () => {
+    await key('e');
+    await until('nothing left', `document.querySelector('.inbox .note')?.textContent.includes('Nothing waits on your reply')`, 3000);
   });
   await step('the bell lists a new review request, and dismisses it', async () => {
     later = true;

@@ -1261,6 +1261,13 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .inbox-last { max-height: 180px; overflow: auto; font-size: calc(13px * var(--ts)); }
 .inbox-thread textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .inbox-thread .row { display: flex; gap: 6px; justify-content: flex-end; }
+.inbox-code { margin: 0; padding: 6px 0; overflow-x: auto; font: calc(12px * var(--cs)) / 1.5 var(--mono); border: 1px solid var(--border); border-radius: 6px; }
+.inbox-code div { padding: 0 10px; white-space: pre; }
+.inbox-code .a { background: var(--add); }
+.inbox-code .d { background: var(--del); }
+.inbox-earlier summary { cursor: pointer; color: var(--muted); font-size: calc(12px * var(--ts)); }
+.inbox-earlier-one { margin: 6px 0 0 12px; font-size: calc(13px * var(--ts)); }
+.inbox-earlier-one small { color: var(--muted); }
 .inbox-thread.cur { border-color: var(--accent); }
 .inbox-keys { margin-left: 12px; }
 .inbox-merged { color: light-dark(#8250df, #a371f7); }

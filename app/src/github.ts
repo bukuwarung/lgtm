@@ -48,6 +48,7 @@ export type Thread = {
   viewerCanResolve: boolean;
   viewerCanUnresolve: boolean;
   comments: { nodes: Comment[] };
+  hunk?: { nodes: { diffHunk: string }[] }; // the diff the first comment was written on, up to its line
 };
 export type Draft = { id: string; path: string; body: string; side: 'LEFT' | 'RIGHT'; line?: number; startLine?: number };
 export type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
@@ -870,8 +871,32 @@ export function signRelativeImages(root: ParentNode | null, repo: string, ref: s
 
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
-    nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve
+    nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve hunk:comments(first:1){nodes{diffHunk}}
       comments(first:100){nodes{id databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
+
+// A comment on the PR's conversation (not on a line), as my own: answers someone there.
+export const commentOnPR = (repo: string, n: number, body: string) => json(`/repos/${repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+
+// Per PR (by id), the latest conversation comment that @-mentions me, from someone (not a bot), unless I've commented
+// or reviewed there since or marked it done (the inbox). GitHub's own mention link in the rendered comment decides:
+// not a team's mention, not "@me" in code.
+export async function getMentions(ids: string[], me: string, bots: Set<string> = new Set()): Promise<Map<string, Comment>> {
+  const out = new Map<string, Comment>();
+  if (!ids.length || !me) return out;
+  const d = await graphql(
+    `query($ids:[ID!]!){nodes(ids:$ids){...on PullRequest{id comments(last:30){nodes{id databaseId url bodyHTML bodyText createdAt author{__typename login avatarUrl(size:40)}}} reviews(last:30){nodes{author{login} submittedAt}}}}}`,
+    { ids: ids.slice(0, 100) },
+  );
+  const link = new RegExp(`class="user-mention[^"]*"[^>]*>@${me}<`, 'i');
+  for (const p of d.nodes ?? []) {
+    if (!p?.id) continue;
+    const cs: Comment[] = p.comments.nodes;
+    const since = [...cs.filter((c) => c.author?.login === me).map((c) => c.createdAt), ...p.reviews.nodes.filter((r: any) => r.author?.login === me && r.submittedAt).map((r: any) => r.submittedAt as string)].sort().at(-1) ?? '';
+    const c = cs.filter((c) => c.author && c.author.login !== me && c.author.__typename !== 'Bot' && !bots.has(c.author.login) && c.createdAt > since && link.test(c.bodyHTML)).at(-1);
+    if (c && repliesDone()[c.id!] !== c.databaseId) out.set(p.id, c);
+  }
+  return out;
+}
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');
