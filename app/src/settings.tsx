@@ -181,7 +181,7 @@ export function Settings() {
   const [found, setFound] = useState(true);
   const page = useRef<HTMLDivElement>(null);
   // The side panel: every section by its title (the ones search keeps), the one you're in marked.
-  const [toc, setToc] = useState<{ id: string; name: string }[]>([]);
+  const [toc, setToc] = useState<{ id: string; name: string; sub: boolean }[]>([]);
   const [cur, setCur] = useState('');
   useLayoutEffect(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -191,6 +191,12 @@ export function Settings() {
       const whole = !words.length || has(sec.querySelector('h3') ?? sec);
       const items = [...sec.querySelectorAll<HTMLElement>(':scope > .set-flag, :scope > .set-row')];
       for (const it of items) it.hidden = !whole && !has(it);
+      // A platform's subsection (Checks → Android…): all of it when its name matches, else its matching switches.
+      for (const g of sec.querySelectorAll<HTMLElement>(':scope > .set-group')) {
+        const all = whole || has(g.querySelector('h4') ?? g);
+        for (const it of g.querySelectorAll<HTMLElement>(':scope > .set-flag')) it.hidden = !all && !has(it);
+        g.hidden = !all && !has(g);
+      }
       sec.hidden = !whole && !has(sec);
       any ||= !sec.hidden;
     }
@@ -199,14 +205,19 @@ export function Settings() {
       const name = sec.querySelector(':scope > h3')?.textContent ?? '';
       if (!name) return [];
       sec.id ||= 'set-' + name.toLowerCase().replace(/\W+/g, '-');
-      return [{ id: sec.id, name }];
+      const subs = [...sec.querySelectorAll<HTMLElement>(':scope > .set-group:not([hidden])')].map((g) => {
+        const n = g.querySelector(':scope > h4')?.textContent ?? '';
+        g.id ||= 'set-' + n.toLowerCase().replace(/\W+/g, '-');
+        return { id: g.id, name: n, sub: true };
+      });
+      return [{ id: sec.id, name, sub: false }, ...subs];
     });
     if (list.map((t) => t.id).join() !== toc.map((t) => t.id).join()) setToc(list);
   });
   useEffect(() => {
     const spy = () => {
       let c = '';
-      for (const sec of page.current?.querySelectorAll<HTMLElement>(':scope > section[id]:not([hidden])') ?? []) if (sec.getBoundingClientRect().top < innerHeight * 0.3) c = sec.id;
+      for (const sec of page.current?.querySelectorAll<HTMLElement>(':scope > section[id]:not([hidden]), :scope > section > .set-group[id]:not([hidden])') ?? []) if (sec.getBoundingClientRect().top < innerHeight * 0.3) c = sec.id;
       setCur(c);
     };
     spy();
@@ -233,7 +244,7 @@ export function Settings() {
     <div class="page settings" ref={page}>
       <nav class="set-toc" aria-label="Settings sections">
         {toc.map((t) => (
-          <button class={cur === t.id ? 'on' : ''} onClick={() => document.getElementById(t.id)?.scrollIntoView({ block: 'start' })}>
+          <button class={`${cur === t.id ? 'on' : ''}${t.sub ? ' sub' : ''}`} onClick={() => document.getElementById(t.id)?.scrollIntoView({ block: 'start' })}>
             {SECTION_ICON[t.name] ? <Octicon name={SECTION_ICON[t.name]} /> : <span class="set-toc-glyph">✳</span>} {t.name}
           </button>
         ))}
@@ -398,16 +409,14 @@ export function Settings() {
       {/* What lgtm looks for in a PR. Ones for one platform or framework get a section of their own, below. */}
       <section>
         <h3>Checks</h3>
-        <p class="note">What lgtm points out in a PR, each with a button to turn it into a comment. Switch off any that's noise in your repos.</p>
+        <p class="note">What lgtm points out in a PR, each with a button to turn it into a comment. Switch off any that's noise in your repos. Ones for a platform or framework are grouped under it, below.</p>
         <Flag k="checkSecrets" initial={true} label="Possible secrets" hint="Added lines that look like a private key, a token (AWS, GitHub, Slack, Google, Stripe, JWT) or a password or key given a literal. Placeholders, environment lookups and tests' made-up passwords don't count."  demo />
         <Flag k="checkDeps" initial={true} label="Dependency changes" hint="Libraries added, removed or moved to another version (Gradle, version catalogs, package.json), major jumps marked."  demo />
         <Flag k="checkBinaries" initial={true} label="Binary files: what they are" hint="Kind, size before and after, in Git LFS or not; a warning for one over 1 MB straight in Git, or one .gitattributes puts in LFS that isn't."  demo />
         <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)."  demo />
         <Flag k="reviewPlan" initial={true} label="A review plan for big PRs" hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed."  demo />
-      </section>
-
-      <section>
-        <h3>Android</h3>
+        <div class="set-group">
+          <h4>Android</h4>
         <Flag k="checkHardcoded" initial={true} label="UI text not in strings.xml" hint="A layout's android:text, Compose's Text(“…”), toasts, dialogs: text written in code is never translated. Tests, debug code and previews don't count."  demo />
         <Flag k="checkRoom" initial={true} label="Room tables changed without a version bump" hint="An @Entity's columns changed while no @Database version goes up: installed apps would crash on update."  demo />
         <Flag k="manifestSummary" initial={true} label="What a manifest change means" hint="Above AndroidManifest.xml's diff: permissions asked for or dropped, components added, removed or now reachable by other apps."  demo />
@@ -415,21 +424,20 @@ export function Settings() {
         <Flag k="stringsView" initial={true} label="strings.xml as names and texts" hint="The XML a click away." demo>
           <Flag k="translationChecks" initial={true} label="Check the other languages" hint="A new or changed string missing in a values-xx folder, with different placeholders there, or not updated with it."  demo />
         </Flag>
-      </section>
-
-      <section>
-        <h3>Java backend</h3>
+        </div>
+        <div class="set-group">
+          <h4>Java backend</h4>
         <Flag k="checkMigrations" initial={true} label="Flyway migrations edited or out of order" hint="One already there changed, renamed or deleted (Flyway won't start where it ran), or a new one with a version older than, or the same as, the newest on the base branch." demo />
         <Flag k="checkJpa" initial={true} label="JPA entities changed with no migration" hint="An @Entity's columns change and the PR adds no migration: the database won't have them." demo />
         <Flag k="checkTransactional" initial={true} label="@Transactional on a private method" hint="Spring's proxy never sees the call, so it runs without a transaction." demo />
-      </section>
-
-      <section>
-        <h3>Web</h3>
+        </div>
+        <div class="set-group">
+          <h4>Web</h4>
         <Flag k="checkLockfile" initial={true} label="Lockfile not updated" hint="package.json's dependencies change but its package-lock.json, yarn.lock or pnpm-lock.yaml doesn't: a clean install (npm ci) fails." demo />
         <Flag k="checkFocused" initial={true} label="Focused tests and debugger left in" hint="it.only, describe.only, test.only (CI runs only those, and passes), and debugger statements." demo />
         <Flag k="checkRawHtml" initial={true} label="Raw HTML rendering" hint="v-html, dangerouslySetInnerHTML, innerHTML = and document.write: an XSS hole if any of it comes from users." demo />
         <Flag k="checkSuppressions" initial={true} label="Type and lint checks switched off" hint="New @ts-ignore, @ts-nocheck and eslint-disable lines (@ts-expect-error doesn't count: it says when it's no longer needed)." demo />
+        </div>
       </section>
 
       {isDesktop && <LaunchAtLogin />}

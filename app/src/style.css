@@ -1222,3 +1222,7 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .preflight p { margin: 0 0 4px; }
 .preflight ul { margin: 0 0 8px; padding-left: 18px; }
 .preflight .row { display: flex; gap: 6px; justify-content: flex-end; }
+/* Settings → Checks: a platform's subsection, and its entry in the list, indented under Checks */
+.settings .set-group { margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--border); scroll-margin-top: calc(var(--nav) + 16px); }
+.settings .set-group > h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
+.set-toc button.sub { padding-left: 30px; font-size: calc(12px * var(--ts)); }
