@@ -128,6 +128,27 @@ function BellMenu({ items, onRefresh }: { items: QueueItem[] | null; onRefresh: 
       </button>
       {open && (
         <div class="account-menu bell-menu" role="menu">
+          <div class="bell-notify">
+            <Octicon name={notify ? 'bell' : 'bell-slash'} />
+            <span>
+              Notifications
+              <small>New review requests, and what you pick in Settings</small>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={notify}
+              aria-label="Desktop notifications"
+              class="switch"
+              onClick={async () => {
+                setErr('');
+                if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
+                toggleNotify();
+              }}
+            />
+          </div>
+          {err && <p class="note">{err}</p>}
+          <hr />
           <div class="account-head">{needs.length ? `Needs your review (${needs.length})` : 'Nothing needs your review'}</div>
           {needs.map((i) => row(i))}
           {mine.length > 0 && (
@@ -143,19 +164,6 @@ function BellMenu({ items, onRefresh }: { items: QueueItem[] | null; onRefresh: 
           <button role="menuitem" class="bell-act" onClick={() => (onRefresh(), setOpen(false))}>
             <Octicon name="sync" /> Refresh
           </button>
-          <label class="bell-notify">
-            <input
-              type="checkbox"
-              checked={notify}
-              onChange={async () => {
-                setErr('');
-                if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
-                toggleNotify();
-              }}
-            />{' '}
-            Desktop notifications for new review requests
-          </label>
-          {err && <p class="note">{err}</p>}
         </div>
       )}
     </span>
