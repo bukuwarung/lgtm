@@ -27,7 +27,9 @@ export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) =>
 // Merge status and controls, on my own PRs: a button in the PR's bar (named for the merge, green when it can go) opening
 // GitHub's merge box: ready for review, update branch, merge (or auto-merge), the commit message editable before
 // confirming. Once merged, the branch and the Jira ticket.
-export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[] }) {
+// open: the PR's unresolved review threads, the ones waiting on my reply first.
+export type OpenThread = { id: string; path: string; awaiting: boolean; bot: boolean };
+export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThreads = [] }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[] }) {
   const [s, setS] = useState<MergeState | null>(null);
   const [err, setErr] = useState('');
   const fail = (text: string) => (setErr(text), reportError(text)); // in the box, and in the bar at the top
@@ -146,6 +148,17 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [] }: { rep
         {!ready && why.length > 0 && <span class="merge-why">{why.join(' · ')}</span>}
         {conflict && <a href={`${url}/conflicts`} target="_blank" rel="noopener">Resolve conflicts on GitHub</a>}
       </div>
+      {openThreads.length > 0 && (() => {
+        const waiting = openThreads.filter((t) => t.awaiting).length, bots = openThreads.filter((t) => t.bot).length;
+        return (
+          <div class="merge-row merge-open">
+            <Octicon name="comment-discussion" /> {openThreads.length} review thread{openThreads.length === 1 ? '' : 's'} still open
+            {waiting > 0 && <b> · {waiting} waiting on your reply</b>}
+            {bots > 0 && <span class="merge-why"> · {bots} from bots</span>}
+            <button class="link" onClick={() => jumpTo(openThreads[0].id, 'f-' + openThreads[0].path)}>Go to {waiting ? 'the first waiting on you' : 'the first'}</button>
+          </div>
+        );
+      })()}
       {s.autoMergeRequest && (
         <div class="merge-row">
           Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{s.autoMergeRequest.enabledBy ? `, enabled by ${s.autoMergeRequest.enabledBy.login}` : ''}: it merges once requirements are met.

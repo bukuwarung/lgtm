@@ -1104,6 +1104,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const layer = stack.findIndex((l) => l.number === n);
   const failingChecks = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const waitingOnMe = me ? allThreads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
+  // Unresolved threads, for the merge box: the ones waiting on my reply first.
+  const openThreads = allThreads
+    .filter((t) => !t.isResolved)
+    .map((t) => ({ id: t.id, path: t.path, awaiting: !!me && awaitsMe(t, me, pr.user.login === me), bot: t.comments.nodes.every((c) => c.author?.__typename === 'Bot') }))
+    .sort((a, b) => +b.awaiting - +a.awaiting);
   const myOpenThreads = me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).length : 0;
   const mySummary = me ? changesSummary(allThreads, me) : '';
   // On my PR: a reviewer who's away swapped for the first suggested one who isn't (Slack status), on GitHub.
@@ -1282,7 +1287,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
-            {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} />}
+            {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
           </div>
         </div>

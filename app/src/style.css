@@ -1247,3 +1247,5 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .on-base { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: calc(11px * var(--ts)); color: var(--muted); background: var(--soft); white-space: nowrap; }
 .on-base.same { color: light-dark(#57606a, #9da7b3); }
 .on-base.diff { color: light-dark(#cf222e, #f85149); background: color-mix(in srgb, #f85149 12%, transparent); }
+.merge-open { flex-wrap: wrap; gap: 6px; font-size: calc(13px * var(--ts)); }
+.merge-open .link { margin-left: auto; }
