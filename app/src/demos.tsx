@@ -1216,6 +1216,36 @@ Object.assign(DEMOS, {
   },
 } satisfies Record<string, Demo>);
 
+// Settings → Web, previewed.
+const ts = (code: string) => highlightCode(code, 'typescript');
+const tsRows = (rows: [k: '+' | ' ', n: number, code: string][]): Row[] => rows.map(([k, n, c]) => [k, k === '+' ? '' : n, n, `<span>${ts(c)}</span>`] as Row);
+const PKG_ROWS: Row[] = [['-', 12, '', sql('    "vue": "^3.4.0",')], ['+', '', 12, sql('    "vue": "^3.5.0",')]];
+const ONLY_ROWS = tsRows([['+', 8, "describe.only('cart', () => {"], ['+', 9, "  it('adds an item', () => {"]]);
+const HTML_ROWS: Row[] = [['+', '', 21, sql('<div class="note" v-html="order.note"></div>')]];
+const SUPP_ROWS = tsRows([['+', 30, '// @ts-ignore'], ['+', 31, 'const total = cart.items.reduce(sum)']]);
+Object.assign(DEMOS, {
+  checkLockfile: {
+    title: 'Lockfile not updated',
+    off: <File path="package.json" add={1} del={1}><Rows rows={PKG_ROWS} /></File>,
+    on: <>{pills(['p-bad', <Tg i="package" t="lockfile not updated" />])}<File path="package.json" add={1} del={1}><Rows rows={PKG_ROWS} /></File></>,
+  },
+  checkFocused: {
+    title: 'Focused tests and debugger left in',
+    off: <File path="cart.test.ts" add={2} del={0}><Rows rows={ONLY_ROWS} /></File>,
+    on: <>{pills(['p-bad', <Tg i="alert" n={1} t="focused test left in" />])}<File path="cart.test.ts" add={2} del={0}><Rows rows={ONLY_ROWS} /></File></>,
+  },
+  checkRawHtml: {
+    title: 'Raw HTML rendering',
+    off: <File path="OrderNote.vue" add={1} del={0}><Rows rows={HTML_ROWS} /></File>,
+    on: <>{pills(['p-warn', <Tg i="alert" n={1} t="raw HTML" />])}<File path="OrderNote.vue" add={1} del={0}><Rows rows={HTML_ROWS} /></File></>,
+  },
+  checkSuppressions: {
+    title: 'Type and lint checks switched off',
+    off: <File path="cart.ts" add={2} del={0}><Rows rows={SUPP_ROWS} /></File>,
+    on: <>{pills(['', <Tg i="alert" n={1} t="check switched off" />])}<File path="cart.ts" add={2} del={0}><Rows rows={SUPP_ROWS} /></File></>,
+  },
+} satisfies Record<string, Demo>);
+
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which
 // it's made of.
 SCENES.app = {

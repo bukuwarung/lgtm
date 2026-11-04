@@ -4,6 +4,7 @@ import { findSecrets, type Secret } from './secrets.ts';
 import { depChanges, type DepChange } from './deps.ts';
 import { findHardcoded, type Hardcoded } from './hardcoded.ts';
 import { roomCheck, type SchemaChange } from './room.ts';
+import { focused, lockfileDrift, rawHtml, suppressions, type WebHit } from './web.ts';
 import { entityWithoutMigration, isMigration, migrationIssues, privateTransactional, type MigrationIssue } from './spring.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
@@ -739,6 +740,19 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const [chkMigrations] = useStoredFlag('checkMigrations', true);
   const [chkJpa] = useStoredFlag('checkJpa', true);
   const [chkTx] = useStoredFlag('checkTransactional', true);
+  const [chkLock] = useStoredFlag('checkLockfile', true);
+  const [chkFocus] = useStoredFlag('checkFocused', true);
+  const [chkSupp] = useStoredFlag('checkSuppressions', true);
+  const [chkHtml] = useStoredFlag('checkRawHtml', true);
+  // package.json changed without its lockfile (web.ts): the base's file names in that folder, listed.
+  const [drift, setDrift] = useState<Awaited<ReturnType<typeof lockfileDrift>>>([]);
+  useEffect(() => {
+    setDrift([]);
+    if (!data || !chkLock) return;
+    let stop = false;
+    lockfileDrift(data.files, (d) => listDir(repo, d, data.pr.base.sha).then((l) => l.map((x) => x.name))).then((r) => !stop && setDrift(r), () => {});
+    return () => void (stop = true);
+  }, [data?.files, chkLock]);
   // Java backends (spring.ts): migrations edited or out of order (the base's migration folders, listed), JPA entities
   // changed with no migration (their files, read).
   const [backend, setBackend] = useState<{ mig: MigrationIssue[]; ent: Awaited<ReturnType<typeof entityWithoutMigration>> }>({ mig: [], ent: [] });
@@ -872,6 +886,8 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
   const majors = deps.filter((d) => d.major);
   const txs = chkTx ? privateTransactional(data.files) : [];
+  const web = webOf(data.files);
+  const focusHits = chkFocus ? web.focus : [], supp = chkSupp ? web.supp : [], html = chkHtml ? web.html : [];
   const migText = (m: MigrationIssue) =>
     m.kind === 'edited' ? 'an applied migration changed: Flyway refuses to start where it already ran' : m.kind === 'duplicate' ? 'the same version as one already on the base branch' : `older than ${m.newest}, the newest on the base branch: Flyway refuses it where that one ran`;
   const findings: { text: string; go: () => void }[] = [
@@ -880,6 +896,9 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
     ...(room.length ? [{ text: `${room[0].entity}: a table changed with no database version raised`, go: () => jumpToLine(room[0].path, room[0].side === 'RIGHT' ? room[0].line : undefined) }] : []),
     ...backend.mig.map((m) => ({ text: `${base(m.path)}: ${migText(m)}`, go: () => jumpTo('f-' + m.path) })),
     ...(backend.ent.length ? [{ text: `${backend.ent[0].entity}: columns changed with no migration in this PR`, go: () => jumpToLine(backend.ent[0].path, backend.ent[0].side === 'RIGHT' ? backend.ent[0].line : undefined) }] : []),
+    ...drift.map((d) => ({ text: `${d.path}: dependencies changed, ${d.lock} not`, go: () => jumpToLine(d.path, d.line) })),
+    ...(focusHits.length ? [{ text: `${plural(focusHits.length, 'focused test or debugger', 'focused tests or debuggers')} left in (${[...new Set(focusHits.map((f) => f.what))].join(', ')})`, go: () => jumpToLine(focusHits[0].path, focusHits[0].line) }] : []),
+    ...(html.length ? [{ text: `${plural(html.length, 'place')} rendering raw HTML (${[...new Set(html.map((f) => f.what))].join(', ')})`, go: () => jumpToLine(html[0].path, html[0].line) }] : []),
     ...(txs.length ? [{ text: `${plural(txs.length, '@Transactional on a private method')}: it runs without a transaction`, go: () => jumpToLine(txs[0].path, txs[0].line) }] : []),
     ...(majors.length ? [{ text: `${plural(majors.length, 'major dependency jump')} (${majors.map((d) => d.name.split(':').pop()).join(', ')})`, go: () => jumpToLine(majors[0].path, majors[0].line) }] : []),
   ];
@@ -1316,6 +1335,54 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
                       <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
                     </button>
                     <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table's columns, but the PR adds no migration. Where does the database get the change?`, x.side)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {drift.length > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="package" t="lockfile not updated" />} head="package.json's dependencies changed, its lockfile didn't: npm ci (and the like) fail on the mismatch.">
+                {drift.map((d) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(d.path, d.line)} title={d.path}>
+                      <b>{d.path}</b> <small>{d.lock} unchanged</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(d.path, d.line, `The dependencies change here but ${d.lock} doesn't, so a clean install (npm ci and the like) will fail. Could you run the install and commit ${d.lock}?`)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {focusHits.length > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="alert" n={focusHits.length} t={focusHits.every((f) => f.what === 'debugger') ? 'debugger left in' : 'focused test left in'} />} head="A .only makes CI run just that test (and pass); a debugger stops the app in anyone's dev tools:">
+                {focusHits.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, x.what === 'debugger' ? 'A debugger statement is left in: it stops the app for anyone with dev tools open. Remove it?' : `${x.what} makes CI run only this, and skip the rest of the suite. Remove the .only?`)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {html.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="alert" n={html.length} t="raw HTML" />} head="HTML put in as is: safe only if none of it comes from users (else it's an XSS hole):">
+                {html.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `${x.what} puts this HTML in as is. Can any of it come from a user? If so it needs sanitizing (DOMPurify or the like), or rendering as text.`)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {supp.length > 0 && (
+              <PillMenu label={<Tg i="alert" n={supp.length} t={`check${supp.length > 1 ? 's' : ''} switched off`} />} head="Type and lint checks switched off by the PR:">
+                {supp.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `${x.what} switches a check off here. Could the code satisfy it instead${/ts-/.test(x.what) ? ' (or @ts-expect-error with the reason, so it shows when it\u2019s no longer needed)' : ''}?`)} />
                   </div>
                 ))}
               </PillMenu>
@@ -2075,6 +2142,10 @@ function textsOf(files: File[]) {
   }
   return t;
 }
+
+// The web checks (web.ts), once per file list.
+const webSeen = new WeakMap<object, { focus: WebHit[]; supp: WebHit[]; html: WebHit[] }>();
+const webOf = (files: File[]) => webSeen.get(files) ?? (webSeen.set(files, { focus: focused(files), supp: suppressions(files), html: rawHtml(files) }), webSeen.get(files)!);
 
 // Dependency changes (deps.ts), once per file list; and a library's page, where its versions and changelog are.
 const depsSeen = new WeakMap<object, DepChange[]>();

@@ -895,7 +895,7 @@ test('depChanges: gradle, catalog and npm; upgrades, adds, removes', async () =>
   const { depChanges } = await import('../src/deps.ts');
   const gradle = ['@@ -1,4 +1,4 @@', '-    implementation("com.squareup.okhttp3:okhttp:4.12.0")', '+    implementation("com.squareup.okhttp3:okhttp:5.0.0")', '+    implementation(libs.timber)', '-    testImplementation "junit:junit:4.13.2"', '     // implementation("x:y:1.0")'].join('\n');
   const toml = ['@@ -1,3 +1,3 @@', '-retrofit = "2.9.0"', '+retrofit = "2.11.0"', '+room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }'].join('\n');
-  const npm = ['@@ -1,3 +1,3 @@', '-    "preact": "^10.19.0",', '+    "preact": "^10.24.0",', '     "build": "vite build"'].join('\n');
+  const npm = ['@@ -1,5 +1,5 @@', '-  "version": "1.7.3",', '+  "version": "1.8.0",', '-    "preact": "^10.19.0",', '+    "preact": "^10.24.0",', '     "build": "vite build"'].join('\n');
   const got = depChanges([{ filename: 'app/build.gradle.kts', patch: gradle }, { filename: 'gradle/libs.versions.toml', patch: toml }, { filename: 'app/package.json', patch: npm }]);
   assert.deepEqual(got.map((d) => [d.name, d.from ?? null, d.to ?? null, !!d.major]), [
     ['com.squareup.okhttp3:okhttp', '4.12.0', '5.0.0', true],
@@ -971,4 +971,17 @@ test('spring: Flyway edits and order, private @Transactional, JPA entity without
   const jpa = '@Entity\n@Table(name = "payments")\npublic class PaymentEntity {';
   assert.deepEqual((await entityWithoutMigration([entity], async () => jpa)).map((x) => [x.entity, x.line]), [['PaymentEntity', 6]]);
   assert.deepEqual(await entityWithoutMigration([entity, { filename: `${dir}/v20250501__fee.sql`, status: 'added', patch: '' }], async () => jpa), []);
+});
+
+test('web: focused tests, debugger, suppressions, raw HTML, lockfile drift', async () => {
+  const { focused, suppressions, rawHtml, lockfileDrift } = await import('../src/web.ts');
+  const spec = { filename: 'src/cart.test.ts', status: 'modified', patch: ['@@ -1,1 +1,4 @@', "+describe.only('cart', () => {", "+  it('adds', () => {})", '+  // it.only is fine in a comment', '+  debugger'].join('\n') };
+  const app = { filename: 'src/Cart.vue', status: 'modified', patch: ['@@ -1,1 +1,5 @@', '+  <div v-html="note"></div>', '+  // @ts-ignore', '+  el.innerHTML = html', '+  if (el.innerHTML == "") {}', '+  // eslint-disable-next-line no-console'].join('\n') };
+  assert.deepEqual(focused([spec, app]).map((h) => [h.line, h.what]), [[1, 'describe.only'], [4, 'debugger']]);
+  assert.deepEqual(suppressions([app]).map((h) => h.what), ['@ts-ignore', 'eslint-disable-next-line no-console']);
+  assert.deepEqual(rawHtml([app, spec]).map((h) => [h.line, h.what]), [[1, 'v-html'], [3, '.innerHTML =']]);
+  const pkg = { filename: 'web/package.json', status: 'modified', patch: ['@@ -5,3 +5,3 @@', '-    "vue": "^3.4.0",', '+    "vue": "^3.5.0",'].join('\n') };
+  assert.deepEqual(await lockfileDrift([pkg], async () => ['package.json', 'package-lock.json']), [{ path: 'web/package.json', line: 5, lock: 'package-lock.json' }]);
+  assert.deepEqual(await lockfileDrift([pkg, { filename: 'web/package-lock.json', status: 'modified' }], async () => ['package-lock.json']), []);
+  assert.deepEqual(await lockfileDrift([pkg], async () => ['package.json']), []); // no lockfile there: nothing to drift
 });

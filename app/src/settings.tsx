@@ -163,6 +163,7 @@ const SECTION_ICON: Record<string, string> = {
   Checks: 'alert',
   Android: 'device-mobile',
   'Java backend': 'stack',
+  Web: 'code',
   App: 'device-desktop',
   Appearance: 'paintbrush',
   'Markdown files': 'markdown',
@@ -421,6 +422,14 @@ export function Settings() {
         <Flag k="checkMigrations" initial={true} label="Flyway migrations edited or out of order" hint="One already there changed, renamed or deleted (Flyway won't start where it ran), or a new one with a version older than, or the same as, the newest on the base branch." demo />
         <Flag k="checkJpa" initial={true} label="JPA entities changed with no migration" hint="An @Entity's columns change and the PR adds no migration: the database won't have them." demo />
         <Flag k="checkTransactional" initial={true} label="@Transactional on a private method" hint="Spring's proxy never sees the call, so it runs without a transaction." demo />
+      </section>
+
+      <section>
+        <h3>Web</h3>
+        <Flag k="checkLockfile" initial={true} label="Lockfile not updated" hint="package.json's dependencies change but its package-lock.json, yarn.lock or pnpm-lock.yaml doesn't: a clean install (npm ci) fails." demo />
+        <Flag k="checkFocused" initial={true} label="Focused tests and debugger left in" hint="it.only, describe.only, test.only (CI runs only those, and passes), and debugger statements." demo />
+        <Flag k="checkRawHtml" initial={true} label="Raw HTML rendering" hint="v-html, dangerouslySetInnerHTML, innerHTML = and document.write: an XSS hole if any of it comes from users." demo />
+        <Flag k="checkSuppressions" initial={true} label="Type and lint checks switched off" hint="New @ts-ignore, @ts-nocheck and eslint-disable lines (@ts-expect-error doesn't count: it says when it's no longer needed)." demo />
       </section>
 
       {isDesktop && <LaunchAtLogin />}

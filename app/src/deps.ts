@@ -11,12 +11,14 @@ const COORD = /["']([\w.-]+:[\w.-]+):([\w.+\-\[\]]+)["']/; // "group:name:versio
 const CATALOG_USE = /\b(?:implementation|api|compileOnly|runtimeOnly|kapt|ksp|annotationProcessor|\w+Implementation|\w+Api|classpath)\s*\(?\s*(?:platform\()?(libs\.[\w.]+)/;
 const TOML_LIB = /^\s*([\w-]+)\s*=\s*\{.*?(?:module\s*=\s*"([\w.-]+:[\w.-]+)"|group\s*=\s*"([\w.-]+)".*?name\s*=\s*"([\w.-]+)")(?:.*?\bversion\s*=\s*"([^"]+)")?/;
 const TOML_VER = /^\s*([\w-]+)\s*=\s*"(\d[\w.+-]*)"\s*$/; // [versions] name = "1.2.3"
+// package.json's own fields (and engines'), which look like "name": "1.2.3" but aren't libraries.
+const NOT_A_DEP = new Set(['version', 'name', 'description', 'main', 'module', 'types', 'typings', 'license', 'packageManager', 'node', 'npm', 'yarn', 'pnpm', 'bun']);
 const NPM = /^\s*"(@?[\w./-]+)"\s*:\s*"([\^~>=<]*\s*\d[\w.+-]*|workspace:[^"]*|npm:[^"]*)"/;
 
 function read(path: string, text: string): { name: string; version?: string; npm?: boolean; test?: boolean } | null {
   if (path.endsWith('package.json')) {
     const m = text.match(NPM);
-    return m ? { name: m[1], version: m[2], npm: true } : null;
+    return m && !NOT_A_DEP.has(m[1]) ? { name: m[1], version: m[2], npm: true } : null;
   }
   if (path.endsWith('.toml')) {
     const lib = text.match(TOML_LIB);
