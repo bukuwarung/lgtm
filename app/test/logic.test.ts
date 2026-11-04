@@ -850,3 +850,23 @@ test('gitattributes: filter=lfs, last rule wins', async () => {
   assert.ok(!inLfs(r, 'app/src/debug/assets/fw.bin'));
   assert.ok(!inLfs(r, 'app/x.kt') && isGenerated(r, 'yarn.lock') && !isGenerated(r, 'a.bin'));
 });
+
+test('findSecrets: key shapes and literal passwords, not placeholders', async () => {
+  const { findSecrets } = await import('../src/secrets.ts');
+  const patch = [
+    '@@ -1,1 +1,10 @@',
+    '+-----BEGIN RSA PRIVATE KEY-----',
+    '+MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun',
+    '+storePassword = "hunter2hunter2"',
+    '+val apiKey = BuildConfig.API_KEY',
+    '+password: "${DB_PASSWORD}"',
+    '+const token = "ghp_' + 'a'.repeat(36) + '"',
+    '+keyPassword "changeme123"',
+    ' val password = "context-not-added"',
+    '+Vendor keys arrive as PKCS#1 (`-----BEGIN RSA PRIVATE KEY-----`); convert them',
+    '+const k = "-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7"',
+  ].join('\n');
+  assert.deepEqual(findSecrets([{ filename: 'app/x.kt', patch }]).map((s) => [s.line, s.kind]), [
+    [1, 'Private key'], [3, 'A literal storePassword'], [6, 'GitHub token'], [10, 'Private key'],
+  ]);
+});

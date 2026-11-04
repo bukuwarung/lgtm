@@ -55,6 +55,7 @@ const ICONS: Record<string, string> = {
   auto: 'git-merge',
   queue: 'git-merge-queue',
   unsent: 'pencil',
+  key: 'key',
   '🔔': 'bell',
   '⏱': 'stopwatch',
 };

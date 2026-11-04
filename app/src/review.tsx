@@ -1,5 +1,6 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { findSecrets, type Secret } from './secrets.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
@@ -68,6 +69,7 @@ type Ctx = {
   applySuggestions: (list: Suggestion[]) => Promise<void>;
   codeIx: CodeIndex; // the PR's changed code files and what they declare, for specs naming them (specrefs.ts)
   specRefs: Map<string, SpecRef[]>; // where the specs name each changed file
+  secrets: Map<string, Map<number, string>>; // added lines that look like a secret, per file: line → what (secrets.ts)
 };
 type SinceComment = { kind: 'same' | 'gone' | 'unknown' } | { kind: 'changed'; lines: Line[] };
 type Saved = { sha: string; drafts: Draft[] };
@@ -795,9 +797,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
+  const secrets = secretsOf(data.files);
   const ctx: Ctx = {
     codeIx,
     specRefs: refs,
+    secrets: secrets.byPath,
     untested: noTests,
     modules: undefined, // set below, once the shown files are known
     sinceComment,
@@ -1166,6 +1170,15 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
               <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] }>
                 <Tg i={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
               </span>
+            )}
+            {secrets.list.length > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="key" n={secrets.list.length} t={`possible secret${secrets.list.length > 1 ? 's' : ''}`} />} head="Added lines that look like a secret (a key, a token, a password in the code):">
+                {secrets.list.map((x) => (
+                  <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                    <b>{x.kind}</b> <small>{base(x.path)}:{x.line}</small>
+                  </button>
+                ))}
+              </PillMenu>
             )}
             {failingChecks > 0 && (
               <PillMenu cls="p-bad" label={<Tg i="ci" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
@@ -1829,6 +1842,19 @@ function BinaryInfo({ file, ctx }: { file: File; ctx: Ctx }) {
   );
 }
 
+// Possible secrets, worked out once per file list (the list is the same object until the PR reloads).
+const secretsSeen = new WeakMap<object, { list: Secret[]; byPath: Map<string, Map<number, string>> }>();
+function secretsOf(files: File[]) {
+  let s = secretsSeen.get(files);
+  if (!s) {
+    const list = findSecrets(files);
+    const byPath = new Map<string, Map<number, string>>();
+    for (const x of list) byPath.set(x.path, (byPath.get(x.path) ?? new Map()).set(x.line, x.kind));
+    secretsSeen.set(files, (s = { list, byPath }));
+  }
+  return s;
+}
+
 // A big PR's reading plan (files.ts reviewPlan): each step with how much of it is viewed, a click to its first file
 // not yet viewed; a switch puts the files in this order (review mode's next-file keys follow it too).
 function ReviewPlan({ plan, viewed, ordered, onOrdered }: { plan: PlanStep[]; viewed: Set<string>; ordered: boolean; onOrdered: () => void }) {
@@ -2155,6 +2181,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
     return dedentHtml(w ? markText(html, w[1], w[2], w[0]) : html, indent);
   };
   const mv = ctx.moved.get(path);
+  const secretAt = ctx.secrets.get(path);
   // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
   const [foldImports] = useStoredFlag('foldImports', true);
   const folds = useMemo(() => (foldImports && importSyntax(path) ? importFolds(hunks, importSyntax(path)!) : []), [hunks, foldImports]);
@@ -2376,7 +2403,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '')} data-k={`${hi}-${li}`}>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : '')} data-k={`${hi}-${li}`} title={l.kind === '+' ? secretAt?.get(l.new!) && `Looks like a secret: ${secretAt.get(l.new!)}` : undefined}>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />
