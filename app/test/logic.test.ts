@@ -935,3 +935,18 @@ test('findHardcoded: UI text in layouts and code, not ids, resources, tests or p
     ['Screen.kt', 1, 'Pindah ke BukuAgen'], ['Screen.kt', 3, 'Gagal menyimpan'],
   ]);
 });
+
+test('room: stored-field changes in an entity, unless the database version is raised', async () => {
+  const { roomCheck, schemaLines } = await import('../src/room.ts');
+  const entity = ['@@ -3,6 +3,8 @@', ' @Entity(tableName = "card")', ' data class CardEntity(', '     @PrimaryKey val id: String,', '+    val nickname: String?,', '+    @Ignore val cached: Boolean = false,', '     val last4: String,', ' ) {', '+    fun label() = "x"', ' }'].join('\n');
+  assert.deepEqual(schemaLines('a/CardEntity.kt', entity).map((l) => l.line), [6]);
+  assert.deepEqual(schemaLines('a/X.kt', ['@@ -1,2 +1,2 @@', '-    val deleted: Int,', '+    var deleted: Int = 0,', '-    val name: String', '+    val title: String'].join('\n')).map((l) => l.text), ['val name: String', 'val title: String']);
+  const files = [{ filename: 'app/src/main/java/a/db/CardEntity.kt', status: 'modified', patch: entity }];
+  const full = '@Entity(tableName = "card")\ndata class CardEntity(';
+  const got = await roomCheck(files, async () => full);
+  assert.deepEqual(got.map((c) => [c.entity, c.line]), [['CardEntity', 6]]);
+  const db = { filename: 'app/src/main/java/a/db/AppDatabase.kt', status: 'modified', patch: ['@@ -1,2 +1,2 @@', ' @Database(entities = [CardEntity::class],', '-    version = 4)', '+    version = 5)'].join('\n') };
+  assert.deepEqual(await roomCheck([...files, db], async (f) => (f.filename.endsWith('AppDatabase.kt') ? db.patch : full)), []);
+  const notEntity = [{ filename: 'app/src/main/java/a/model/Card.kt', status: 'modified', patch: entity.replace('@Entity(tableName = "card")', '@Serializable') }];
+  assert.deepEqual(await roomCheck(notEntity, async () => 'data class Card('), []);
+});

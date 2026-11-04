@@ -1172,9 +1172,12 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 .manifest-sum p { margin: 3px 0; }
 .manifest-sum .risky { color: light-dark(#9a6700, #d29922); }
 /* The dependencies pill's rows: the change (a jump to its line), its page */
-.pill-pop .dep-row { display: flex; align-items: center; }
-.pill-pop .dep-row > button { flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pill-pop .dep-row > button:hover, .pill-pop .dep-row > a:hover { background: var(--soft); }
-.pill-pop .dep-row > a { padding: 5px 8px; border-radius: 6px; color: var(--muted); }
+.pill-pop .pill-row { display: flex; align-items: center; }
+.pill-pop .pill-row > button { flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill-pop .pill-row > button:hover, .pill-pop .pill-row > a:hover { background: var(--soft); }
+.pill-pop .pill-row > a { padding: 5px 8px; border-radius: 6px; color: var(--muted); }
 .dep-major { color: light-dark(#9a6700, #d29922); font-weight: 600; }
 .diff tr.ln.hardcoded td.code { box-shadow: inset 3px 0 0 light-dark(#bf8700, #d29922); }
+/* A finding's "comment on it" button */
+.say-it { display: inline-flex; align-items: center; padding: 2px 6px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; vertical-align: middle; }
+.say-it:hover { color: var(--fg); background: var(--soft); }

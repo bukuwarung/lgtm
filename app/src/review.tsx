@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { findSecrets, type Secret } from './secrets.ts';
 import { depChanges, type DepChange } from './deps.ts';
 import { findHardcoded, type Hardcoded } from './hardcoded.ts';
+import { roomCheck, type SchemaChange } from './room.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
@@ -46,6 +47,7 @@ type Ctx = {
   headRepo: string;
   target: Target | null;
   setTarget: (t: Target | null) => void;
+  suggest: (path: string, line: number | undefined, body: string, side?: Side) => void; // a comment form, written for me, on a finding
   addDraft: (d: Omit<Draft, 'id'>) => void;
   postNow: (d: Omit<Draft, 'id'>) => Promise<void>; // a comment out at once, not kept for Finish review
   updateDraft: (id: string, d: Omit<Draft, 'id'>) => void;
@@ -704,6 +706,16 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   });
 
   const [planOrder, togglePlanOrder] = useStoredFlag('planOrder', true); // a big PR's files in its plan's order
+  // Room tables changed with no database version raised (room.ts): it reads the files it needs, so after the PR.
+  const [room, setRoom] = useState<SchemaChange[]>([]);
+  useEffect(() => {
+    if (!data) return;
+    let stop = false;
+    const read = (f: { filename: string; status: string }) =>
+      f.status === 'removed' ? getRaw(repo, f.filename, data.pr.base.sha) : getRaw(data.headRepo, f.filename, data.pr.head.sha);
+    roomCheck(data.files, read).then((r) => !stop && setRoom(r), () => {});
+    return () => void (stop = true);
+  }, [data?.files]);
   if (error) return <p class="error page">{error}</p>;
   if (!data) return <PRSkeleton pr={early} />;
   const { pr, headRepo } = data;
@@ -816,6 +828,12 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
     headRepo,
     target,
     setTarget,
+    // A finding's comment, drafted: the form opens on its line (or the file) with the text in, to edit or send.
+    suggest: (path, line, body, side = 'RIGHT') => {
+      setTarget({ path, side, line, body });
+      if (line && side === 'RIGHT') jumpToLine(path, line);
+      else jumpTo('f-' + path);
+    },
     addDraft: (d) => saveDrafts([...drafts, { ...d, id: crypto.randomUUID() }]),
     updateDraft: (id, d) => saveDrafts(drafts.map((x) => (x.id === id ? { ...d, id } : x))),
     removeDraft: (id) => saveDrafts(drafts.filter((d) => d.id !== id)),
@@ -1181,25 +1199,43 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
             {secrets.list.length > 0 && (
               <PillMenu cls="p-bad" label={<Tg i="key" n={secrets.list.length} t={`possible secret${secrets.list.length > 1 ? 's' : ''}`} />} head="Added lines that look like a secret (a key, a token, a password in the code):">
                 {secrets.list.map((x) => (
-                  <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
-                    <b>{x.kind}</b> <small>{base(x.path)}:{x.line}</small>
-                  </button>
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>{x.kind}</b> <small>{base(x.path)}:{x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This looks like ${aKind(x.kind)}. If it's real, it's in the Git history now: please revoke it, and load it from a secret store or the build environment instead.`)} />
+                  </div>
                 ))}
               </PillMenu>
             )}
             {texts.list.length > 0 && (
               <PillMenu cls="p-warn" label={<Tg i="text" n={texts.list.length} t={`text${texts.list.length > 1 ? 's' : ''} not in strings.xml`} />} head="Text people see, written in the code instead of strings.xml, so never translated:">
                 {texts.list.map((x) => (
-                  <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
-                    <b>“{x.text}”</b> <small>{base(x.path)}:{x.line}</small>
-                  </button>
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>“{x.text}”</b> <small>{base(x.path)}:{x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `“${x.text}” is written in the code, so it won't be translated. Could it go in strings.xml?`)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {room.length > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="alert" t="table changed, database version not raised" />} head="These change a Room table's columns, but no @Database version is raised in this PR: installed apps keep the old table and crash when they update, until the version goes up (with a migration).">
+                {room.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
+                      <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table, but the database version isn't raised in this PR. Installed apps would keep the old table, and Room would crash on update: could the @Database version go up, with a migration?`, x.side)} />
+                  </div>
                 ))}
               </PillMenu>
             )}
             {deps.length > 0 && (
               <PillMenu cls={deps.some((d) => d.major) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved to another version (major version jumps marked):">
                 {deps.map((d) => (
-                  <div class="dep-row">
+                  <div class="pill-row">
                     <button onClick={() => jumpToLine(d.path, d.removed ? undefined : d.line)} title={`${d.path}:${d.line}`}>
                       <b>{d.name}</b>{' '}
                       <small class={d.major ? 'dep-major' : ''}>
@@ -1209,6 +1245,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
                       {new Set(deps.map((x) => x.path)).size > 1 && <small>{dir(d.path) || 'root'}</small>}
                     </button>
                     {depPage(d) && <a href={depPage(d)} target="_blank" rel="noopener" title="Its page: versions, changelog"><Octicon name="link-external" /></a>}
+                    {d.major && <SayIt onClick={() => ctx.suggest(d.path, d.line, `${d.name} goes from ${d.from} to ${d.to}, a major version. Have its breaking changes been checked?${depPage(d) ? ` ${depPage(d)}` : ''}`)} />}
                   </div>
                 ))}
               </PillMenu>
@@ -1864,12 +1901,14 @@ function BinaryInfo({ file, ctx }: { file: File; ctx: Ctx }) {
       {now && !now.lfs && file.lfs && (
         <p class="bin-warn">
           <Octicon name="alert" /> The repo's .gitattributes puts this in Git LFS, but it went straight into Git: Git LFS wasn't set up where it was
-          committed. Run <code>git lfs install</code>, then <code>git rm --cached</code> and add it again.
+          committed. Run <code>git lfs install</code>, then <code>git rm --cached</code> and add it again.{' '}
+          <SayIt onClick={() => ctx.suggest(path, undefined, "The repo's .gitattributes puts this file in Git LFS, but it was committed straight into Git (Git LFS wasn't installed where it was committed). Could you run `git lfs install`, then `git rm --cached` it and add it again?")} />
         </p>
       )}
       {now && !now.lfs && !file.lfs && now.size > BIG && (
         <p class="bin-warn">
-          <Octicon name="alert" /> Over 1 MB, straight in Git: every clone downloads it, and every version of it, for good. Git LFS keeps big files out of the history.
+          <Octicon name="alert" /> Over 1 MB, straight in Git: every clone downloads it, and every version of it, for good. Git LFS keeps big files out of the history.{' '}
+          <SayIt onClick={() => ctx.suggest(path, undefined, `This is ${bytes(now.size)}, committed straight into Git: every clone will download it, and every later version of it, for good. Could it go in Git LFS?`)} />
         </p>
       )}
     </div>
@@ -1888,6 +1927,19 @@ function secretsOf(files: File[]) {
   }
   return s;
 }
+
+// "an AWS access key", "a private key", "a hard-coded storePassword": a secret's kind (secrets.ts) in a sentence.
+const aKind = (kind: string) => {
+  const k = kind.replace(/^A literal /, 'hard-coded ').replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase());
+  return `${/^[aeiouAEIO]|^[FHLMNRSX][A-Z]/.test(k) ? 'an' : 'a'} ${k}`;
+};
+
+// A finding's "comment on it" button, beside it in a list.
+const SayIt = ({ onClick }: { onClick: () => void }) => (
+  <button class="say-it" title="Comment on it: a comment drafted for you to edit" aria-label="Comment on it" onClick={onClick}>
+    <Octicon name="comment" />
+  </button>
+);
 
 // UI text written in code (hardcoded.ts), once per file list.
 const textsSeen = new WeakMap<object, { list: Hardcoded[]; byPath: Map<string, Map<number, string>> }>();
@@ -1960,24 +2012,29 @@ function ManifestSummary({ file, ctx }: { file: File; ctx: Ctx }) {
     ]).then(([a, b]) => a != null && b != null && setC(manifestChanges(a, b)));
   }, [file.sha]);
   if (!c || !(c.added.length + c.removed.length + c.newComps.length + c.goneComps.length + c.nowExported.length)) return null;
-  const perm = (p: string) => (
-    <code class={isRisky(p) ? 'risky' : ''} title={isRisky(p) ? 'Users are asked for this one, or it reaches far' : undefined}>
-      {p.replace(/^android\.permission\./, '')}
-    </code>
+  const say = (body: string) => <SayIt onClick={() => ctx.suggest(file.filename, undefined, body)} />;
+  const perm = (p: string, ask = false) => (
+    <>
+      <code class={isRisky(p) ? 'risky' : ''} title={isRisky(p) ? 'Users are asked for this one, or it reaches far' : undefined}>
+        {p.replace(/^android\.permission\./, '')}
+      </code>
+      {ask && isRisky(p) && say(`This asks for ${p.replace(/^android\.permission\./, '')}, which users are asked to grant (or which reaches far). Is it needed, and is a refusal handled?`)}
+    </>
   );
   const comp = (x: { type: string; name: string; exported: boolean; implicit: boolean }) => (
     <>
       {x.type} {cls(x.name)}
       {x.exported && <b class="risky"> exported{x.implicit ? ' (by its intent-filter)' : ''}</b>}
+      {x.exported && say(`${x.name.split('.').pop()} is exported${x.implicit ? ' (its intent-filter makes it so)' : ''}, so other apps can start it. Is that intended? If not, android:exported="false".`)}
     </>
   );
   const list = (items: ComponentChildren[]) => items.map((x, i) => <>{i ? ', ' : ''}{x}</>);
   const cls = (name: string) => <code title={name}>{name.split('.').pop()}</code>; // the class; its package on hover
   return (
     <div class="manifest-sum">
-      {c.added.length > 0 && <p><b>Asks for</b> {list(c.added.map(perm))}</p>}
-      {c.removed.length > 0 && <p><b>No longer asks for</b> {list(c.removed.map(perm))}</p>}
-      {c.nowExported.length > 0 && <p><b>Now exported</b>, other apps can reach: {list(c.nowExported.map((x) => <>{x.type} {cls(x.name)}</>))}</p>}
+      {c.added.length > 0 && <p><b>Asks for</b> {list(c.added.map((p) => perm(p, true)))}</p>}
+      {c.removed.length > 0 && <p><b>No longer asks for</b> {list(c.removed.map((p) => perm(p)))}</p>}
+      {c.nowExported.length > 0 && <p><b>Now exported</b>, other apps can reach: {list(c.nowExported.map((x) => <>{x.type} {cls(x.name)}{say(`${x.name.split('.').pop()} is now exported, so other apps can start it. Is that intended?`)}</>))}</p>}
       {c.newComps.length > 0 && <p><b>New</b> {list(c.newComps.map(comp))}</p>}
       {c.goneComps.length > 0 && <p><b>Removed</b> {list(c.goneComps.map((x) => <>{x.type} {cls(x.name)}</>))}</p>}
     </div>
@@ -1996,9 +2053,10 @@ function LintBaselineView({ file, ctx }: { file: File; ctx: Ctx }) {
       <a href={`https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${x.file}${x.line ? `#L${x.line}` : ''}`} target="_blank" rel="noopener" title={x.file}>{where}</a>
     );
   };
-  const row = (x: Suppression) => (
+  const row = (x: Suppression, ask = false) => (
     <li>
       <code>{x.id}</code> {at(x)} <span class="lint-msg">{x.message}</span>
+      {ask && <SayIt onClick={() => ctx.suggest(file.filename, undefined, `This adds a lint suppression for ${x.id} in ${x.file.split('/').pop()}${x.line ? `:${x.line}` : ''} ("${x.message}"). Could the warning be fixed instead?`)} />}
     </li>
   );
   return (
@@ -2008,7 +2066,7 @@ function LintBaselineView({ file, ctx }: { file: File; ctx: Ctx }) {
           <p class="lint-new">
             <Octicon name="alert" /> <b>{added.length} new suppression{added.length === 1 ? '' : 's'}</b>: warnings lint will no longer report.
           </p>
-          <ul>{added.map(row)}</ul>
+          <ul>{added.map((x) => row(x, true))}</ul>
         </>
       ) : (
         <p>No new suppressions.</p>
@@ -2016,7 +2074,7 @@ function LintBaselineView({ file, ctx }: { file: File; ctx: Ctx }) {
       {removed.length > 0 && (
         <details>
           <summary>{removed.length} cleared (fixed, or their code went)</summary>
-          <ul>{removed.map(row)}</ul>
+          <ul>{removed.map((x) => row(x))}</ul>
         </details>
       )}
       {!added.length && !removed.length && <p class="note">Only line numbers moved.</p>}
