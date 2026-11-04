@@ -833,7 +833,7 @@ export async function getThreads(repo: string, n: number): Promise<Thread[]> {
 }
 
 // jobId: the GitHub Actions job, whose log the local server can fetch.
-export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string; jobId?: number };
+export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string; jobId?: number; onBase?: Check['state'] | null }; // onBase: the same check on the base branch's latest commit (a failing one only)
 
 const CHECKS = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
   commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename
@@ -872,6 +872,30 @@ export async function getChecks(repo: string, n: number): Promise<Check[]> {
   return [...latest.values()]
     .sort((a: Check, b: Check) => CHECK_ORDER.indexOf(a.state) - CHECK_ORDER.indexOf(b.state) || a.name.localeCompare(b.name));
 }
+
+// The base branch's latest commit: its checks by name, from REST (check runs, and statuses such as Jenkins'), not
+// GraphQL; kept 5 minutes per branch, as every PR into it asks the same. A PR's check is named "Workflow / job", a
+// branch's run only "job": both are kept by their last part too.
+const baseSeen = new Map<string, { at: number; states: Promise<Map<string, Check['state']>> }>();
+export function baseChecks(repo: string, ref: string): Promise<Map<string, Check['state']>> {
+  const k = `${repo}@${ref}`;
+  const c = baseSeen.get(k);
+  if (c && Date.now() - c.at < 5 * 60_000) return c.states;
+  const r = encodeURIComponent(ref);
+  const states = Promise.all([
+    json(`/repos/${repo}/commits/${r}/check-runs?per_page=100&filter=latest`).catch(() => ({ check_runs: [] })),
+    json(`/repos/${repo}/commits/${r}/status?per_page=100`).catch(() => ({ statuses: [] })),
+  ]).then(([runs, status]) => {
+    const out = new Map<string, Check['state']>();
+    for (const x of runs.check_runs ?? []) out.set(x.name, x.status === 'completed' ? RUN_STATE[String(x.conclusion).toUpperCase()] ?? 'neutral' : 'pending');
+    for (const x of status.statuses ?? []) if (!out.has(x.context)) out.set(x.context, STATUS_STATE[String(x.state).toUpperCase()] ?? 'neutral');
+    return out;
+  });
+  baseSeen.set(k, { at: Date.now(), states });
+  states.catch(() => baseSeen.delete(k));
+  return states;
+}
+export const onBaseOf = (base: Map<string, Check['state']>, c: Check) => base.get(c.name) ?? base.get(c.name.split(' / ').pop()!) ?? null;
 
 // Running failed GitHub Actions jobs again: one job (and the jobs that wait on it), or every failed job of a run.
 export const rerunJob = async (repo: string, jobId: number) => void (await ok(await gh(`/repos/${repo}/actions/jobs/${jobId}/rerun`, { method: 'POST' })));

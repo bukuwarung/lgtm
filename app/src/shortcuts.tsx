@@ -224,7 +224,20 @@ function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[
   );
 }
 
-function CheckEntry({ c, repo, onRefresh }: { c: Check; repo: string; onRefresh: () => void }) {
+// A failing check, on the base branch's latest commit: failing there too (likely not this PR's doing), passing (so
+// it's likely this PR's), or still running. Nothing when the base doesn't run it (a PR-only check).
+export const OnBase = ({ c, branch: full }: { c: Check; branch: string }) => {
+  const branch = full.length > 20 ? 'the base branch' : full; // a feature branch's long name: said on hover
+  return c.onBase === 'failure' ? (
+    <span class="on-base same" title={`The same check fails on ${full}'s latest commit: likely not this PR's doing (matched by name, not by which test failed)`}>also failing on {branch}</span>
+  ) : c.onBase === 'success' ? (
+    <span class="on-base diff" title={`It passes on ${full}'s latest commit: likely this PR's`}>passes on {branch}</span>
+  ) : c.onBase === 'pending' ? (
+    <span class="on-base">{branch}: still running</span>
+  ) : null;
+};
+
+function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRefresh: () => void; base: string }) {
   const [log, setLog] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [rerun, setRerun] = useState<'' | 'asking' | 'queued' | string>('');
@@ -248,6 +261,7 @@ function CheckEntry({ c, repo, onRefresh }: { c: Check; repo: string; onRefresh:
             <CheckMark state={c.state} /> {c.name}
           </span>
           {c.summary && <span class="ix-sub">{c.summary}</span>}
+          {c.onBase && c.onBase !== 'neutral' && <span class="ix-sub"><OnBase c={c} branch={base} /></span>}
         </a>
         {c.state === 'failure' && c.jobId && (
           <>
@@ -425,13 +439,13 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
           <p class="note ix-pad">No checks.</p>
         ) : (
           <>
-            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} />)}
+            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
             {([['success', 'passed'], ['neutral', 'skipped or cancelled']] as const).map(([state, label]) => {
               const group = checks.filter((c) => c.state === state);
               return group.length > 0 && (
                 <details class="ix-ckgroup">
                   <summary><CheckMark state={state} /> {group.length} {label}</summary>
-                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} />)}
+                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
                 </details>
               );
             })}

@@ -11,7 +11,7 @@ import { baselineChanges, isLintBaseline, type Suppression } from './lintbaselin
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -38,7 +38,7 @@ import { toPerson } from './person.tsx';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
-import { below, jumpTo, noteJump, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
+import { OnBase, below, jumpTo, noteJump, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -480,7 +480,14 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   // Checks are secondary: a failure here shouldn't block the review.
   const loadChecks = () => {
     setChecks(null);
-    getChecks(repo, n).then(setChecks, () => setChecks([]));
+    getChecks(repo, n).then((cs) => {
+      setChecks(cs);
+      // A failing check: is it failing on the base branch too (not this PR's doing)?
+      if (!cs.some((c) => c.state === 'failure')) return;
+      getPR(repo, n)
+        .then((pr) => baseChecks(repo, pr.base.ref))
+        .then((base) => setChecks(cs.map((c) => (c.state === 'failure' ? { ...c, onBase: onBaseOf(base, c) } : c))), () => {});
+    }, () => setChecks([]));
   };
 
   useEffect(() => {
@@ -1435,6 +1442,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
                   <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary}>
                     <CheckMark state="failure" /> {c.name}
                     {c.summary && <small>{c.summary}</small>}
+                    <OnBase c={c} branch={pr.base.ref} />
                   </a>
                 ))}
               </PillMenu>

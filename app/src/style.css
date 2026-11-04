@@ -1237,3 +1237,6 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .demo-traymenu > div:not(.h) { padding-left: 22px; }
 .demo-traymenu .h { color: var(--muted); }
 .demo-traymenu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
+.on-base { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: calc(11px * var(--ts)); color: var(--muted); background: var(--soft); white-space: nowrap; }
+.on-base.same { color: light-dark(#57606a, #9da7b3); }
+.on-base.diff { color: light-dark(#cf222e, #f85149); background: color-mix(in srgb, #f85149 12%, transparent); }
