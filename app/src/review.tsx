@@ -1577,7 +1577,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} />
-          {visible.map(section)}
+          {inOrder.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
               <button class="gen-row" onClick={() => setShowGenerated(true)}>

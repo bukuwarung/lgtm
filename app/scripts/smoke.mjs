@@ -32,9 +32,13 @@ const pr = {
   number: 1, node_id: 'PR_1', title: node.title, body: 'Retries a failed charge.', body_html: '<p>Retries a failed charge.</p>', html_url: 'https://github.com/acme/shop/pull/1',
   state: 'open', draft: false, merged: false, user: { login: 'rina', type: 'User' }, assignees: [], requested_reviewers: [{ login: 'tester' }], requested_teams: [],
   head: { sha: HEAD, ref: 'retry', repo: { full_name: 'acme/shop', owner: { login: 'acme' } } }, base: { ref: 'main', sha: BASE, repo: { full_name: 'acme/shop' } },
-  additions: 3, deletions: 1, changed_files: 1, created_at: now, updated_at: now,
+  additions: 4, deletions: 1, changed_files: 2, created_at: now, updated_at: now,
 };
-const files = [{ filename: 'src/Pay.kt', status: 'modified', additions: 3, deletions: 1, changes: 4, sha: 'f1', blob_url: 'https://github.com/acme/shop/blob/x/src/Pay.kt', patch: PATCH }];
+// A doc GitHub lists after the code (by path): the reading order puts it first.
+const files = [
+  { filename: 'src/Pay.kt', status: 'modified', additions: 3, deletions: 1, changes: 4, sha: 'f1', blob_url: 'https://github.com/acme/shop/blob/x/src/Pay.kt', patch: PATCH },
+  { filename: 'web/docs/retry.md', status: 'added', additions: 1, deletions: 0, changes: 1, sha: 'f2', blob_url: 'https://github.com/acme/shop/blob/x/web/docs/retry.md', patch: '@@ -0,0 +1 @@\n+Retries a failed charge three times.' },
+];
 const empty = { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] };
 // acme/shop#2, mine, with two threads waiting on my reply; #4, a review request that arrives at the second refresh.
 const mineNode = { ...node, id: 'PR_2', number: 2, title: 'Faster checkout', author: { __typename: 'User', login: 'tester' }, reviewRequests: { nodes: [] } };
@@ -163,9 +167,11 @@ try {
   await send('Page.navigate', { url: ORIGIN + '/#/' });
   await step('the PR list shows the PR', () => until('the list', `[...document.querySelectorAll('.pr-item')].some((a) => a.textContent.includes('Retry failed payments'))`));
   await step("the bell drops a closed PR's entry", () => until('the entry gone', `localStorage.getItem('@tester/notices') === '[]'`));
-  await step('a PR opens with its diff', async () => {
+  await step('a PR opens with its diff, docs first', async () => {
     await evaluate(`location.hash = '/acme/shop/pull/1'`);
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
+    const first = await evaluate(`document.querySelector('[id^="f-"]')?.id`);
+    if (first !== 'f-web/docs/retry.md') throw new Error(`files not in reading order: ${first} first`);
   });
   await step('a line comment goes into the review', async () => {
     await evaluate(`document.querySelector('[id="f-src/Pay.kt"] tr.ln.a td.num:nth-child(2)').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
