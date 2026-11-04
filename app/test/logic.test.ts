@@ -950,3 +950,25 @@ test('room: stored-field changes in an entity, unless the database version is ra
   const notEntity = [{ filename: 'app/src/main/java/a/model/Card.kt', status: 'modified', patch: entity.replace('@Entity(tableName = "card")', '@Serializable') }];
   assert.deepEqual(await roomCheck(notEntity, async () => 'data class Card('), []);
 });
+
+test('spring: Flyway edits and order, private @Transactional, JPA entity without a migration', async () => {
+  const { migrationIssues, migrationVersion, privateTransactional, entityWithoutMigration } = await import('../src/spring.ts');
+  assert.equal(migrationVersion('a/db/migration/V2026_11_02_1__fleet.sql'), '2026.11.02.1');
+  assert.equal(migrationVersion('a/db/migration/202009101700__setup.sql'), '202009101700');
+  const dir = 'svc/src/main/resources/db/migration';
+  const existing = new Map([[dir, [`${dir}/v20250201__a.sql`, `${dir}/v20250301__b.sql`]]]);
+  const got = migrationIssues([
+    { filename: `${dir}/v20250201__a.sql`, status: 'modified', patch: '@@ -1 +1 @@\n-ALTER TABLE a ADD x int;\n+ALTER TABLE a ADD x bigint;' },
+    { filename: `${dir}/v20250215__late.sql`, status: 'added', patch: '' },
+    { filename: `${dir}/v20250301__dup.sql`, status: 'added', patch: '' },
+    { filename: `${dir}/v20250401__new.sql`, status: 'added', patch: '' },
+    { filename: `${dir}/R__views.sql`, status: 'modified', patch: '@@ -1 +1 @@\n-x\n+y' },
+  ], existing);
+  assert.deepEqual(got.map((i) => [i.path.split('/').pop(), i.kind]), [['v20250201__a.sql', 'edited'], ['v20250215__late.sql', 'older'], ['v20250301__dup.sql', 'duplicate']]);
+  const tx = ['@@ -1,1 +1,4 @@', '+    @Transactional', '+    private void settle(Payment p) {', '+    @Transactional', '+    public void pay(Payment p) {'].join('\n');
+  assert.deepEqual(privateTransactional([{ filename: 'svc/src/main/java/PayService.java', status: 'modified', patch: tx }]).map((x) => x.line), [1]);
+  const entity = { filename: 'svc/src/main/java/persistence/PaymentEntity.java', status: 'modified', patch: '@@ -5,2 +5,3 @@\n     private String id;\n+    private BigDecimal fee;\n     private String status;' };
+  const jpa = '@Entity\n@Table(name = "payments")\npublic class PaymentEntity {';
+  assert.deepEqual((await entityWithoutMigration([entity], async () => jpa)).map((x) => [x.entity, x.line]), [['PaymentEntity', 6]]);
+  assert.deepEqual(await entityWithoutMigration([entity, { filename: `${dir}/v20250501__fee.sql`, status: 'added', patch: '' }], async () => jpa), []);
+});

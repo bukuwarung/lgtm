@@ -162,6 +162,7 @@ const SECTION_ICON: Record<string, string> = {
   Diff: 'diff',
   Checks: 'alert',
   Android: 'device-mobile',
+  'Java backend': 'stack',
   App: 'device-desktop',
   Appearance: 'paintbrush',
   'Markdown files': 'markdown',
@@ -413,6 +414,13 @@ export function Settings() {
         <Flag k="stringsView" initial={true} label="strings.xml as names and texts" hint="The XML a click away." demo>
           <Flag k="translationChecks" initial={true} label="Check the other languages" hint="A new or changed string missing in a values-xx folder, with different placeholders there, or not updated with it."  demo />
         </Flag>
+      </section>
+
+      <section>
+        <h3>Java backend</h3>
+        <Flag k="checkMigrations" initial={true} label="Flyway migrations edited or out of order" hint="One already there changed, renamed or deleted (Flyway won't start where it ran), or a new one with a version older than, or the same as, the newest on the base branch." demo />
+        <Flag k="checkJpa" initial={true} label="JPA entities changed with no migration" hint="An @Entity's columns change and the PR adds no migration: the database won't have them." demo />
+        <Flag k="checkTransactional" initial={true} label="@Transactional on a private method" hint="Spring's proxy never sees the call, so it runs without a transaction." demo />
       </section>
 
       {isDesktop && <LaunchAtLogin />}

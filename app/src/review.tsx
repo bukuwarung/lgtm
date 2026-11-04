@@ -4,6 +4,7 @@ import { findSecrets, type Secret } from './secrets.ts';
 import { depChanges, type DepChange } from './deps.ts';
 import { findHardcoded, type Hardcoded } from './hardcoded.ts';
 import { roomCheck, type SchemaChange } from './room.ts';
+import { entityWithoutMigration, isMigration, migrationIssues, privateTransactional, type MigrationIssue } from './spring.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
@@ -735,6 +736,25 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const [chkDeps] = useStoredFlag('checkDeps', true);
   const [chkTexts] = useStoredFlag('checkHardcoded', true);
   const [chkRoom] = useStoredFlag('checkRoom', true);
+  const [chkMigrations] = useStoredFlag('checkMigrations', true);
+  const [chkJpa] = useStoredFlag('checkJpa', true);
+  const [chkTx] = useStoredFlag('checkTransactional', true);
+  // Java backends (spring.ts): migrations edited or out of order (the base's migration folders, listed), JPA entities
+  // changed with no migration (their files, read).
+  const [backend, setBackend] = useState<{ mig: MigrationIssue[]; ent: Awaited<ReturnType<typeof entityWithoutMigration>> }>({ mig: [], ent: [] });
+  useEffect(() => {
+    setBackend({ mig: [], ent: [] });
+    if (!data || (!chkMigrations && !chkJpa)) return;
+    let stop = false;
+    const folders = [...new Set(data.files.filter((f) => isMigration(f.filename)).map((f) => f.filename.slice(0, f.filename.lastIndexOf('/'))))];
+    Promise.all([
+      chkMigrations
+        ? Promise.all(folders.map((d) => listDir(repo, d, data.pr.base.sha).then((l) => [d, l.map((x) => x.path)] as const, () => [d, [] as string[]] as const))).then((ls) => migrationIssues(data.files, new Map(ls)))
+        : [],
+      chkJpa ? entityWithoutMigration(data.files, (f) => getRaw(data.headRepo, f.filename, data.pr.head.sha)) : [],
+    ]).then(([mig, ent]) => !stop && setBackend({ mig, ent }), () => {});
+    return () => void (stop = true);
+  }, [data?.files, chkMigrations, chkJpa]);
   const [showPlan] = useStoredFlag('reviewPlan', true);
   // Room tables changed with no database version raised (room.ts): it reads the files it needs, so after the PR.
   const [room, setRoom] = useState<SchemaChange[]>([]);
@@ -851,10 +871,16 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   // What a reviewer would point out, for asking on my own PR (AskReviewer): each with a jump to the first of it.
   const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
   const majors = deps.filter((d) => d.major);
+  const txs = chkTx ? privateTransactional(data.files) : [];
+  const migText = (m: MigrationIssue) =>
+    m.kind === 'edited' ? 'an applied migration changed: Flyway refuses to start where it already ran' : m.kind === 'duplicate' ? 'the same version as one already on the base branch' : `older than ${m.newest}, the newest on the base branch: Flyway refuses it where that one ran`;
   const findings: { text: string; go: () => void }[] = [
     ...(secrets.list.length ? [{ text: plural(secrets.list.length, 'possible secret'), go: () => jumpToLine(secrets.list[0].path, secrets.list[0].line) }] : []),
     ...(texts.list.length ? [{ text: `${plural(texts.list.length, 'text')} not in strings.xml`, go: () => jumpToLine(texts.list[0].path, texts.list[0].line) }] : []),
     ...(room.length ? [{ text: `${room[0].entity}: a table changed with no database version raised`, go: () => jumpToLine(room[0].path, room[0].side === 'RIGHT' ? room[0].line : undefined) }] : []),
+    ...backend.mig.map((m) => ({ text: `${base(m.path)}: ${migText(m)}`, go: () => jumpTo('f-' + m.path) })),
+    ...(backend.ent.length ? [{ text: `${backend.ent[0].entity}: columns changed with no migration in this PR`, go: () => jumpToLine(backend.ent[0].path, backend.ent[0].side === 'RIGHT' ? backend.ent[0].line : undefined) }] : []),
+    ...(txs.length ? [{ text: `${plural(txs.length, '@Transactional on a private method')}: it runs without a transaction`, go: () => jumpToLine(txs[0].path, txs[0].line) }] : []),
     ...(majors.length ? [{ text: `${plural(majors.length, 'major dependency jump')} (${majors.map((d) => d.name.split(':').pop()).join(', ')})`, go: () => jumpToLine(majors[0].path, majors[0].line) }] : []),
   ];
   const ctx: Ctx = {
@@ -1258,6 +1284,50 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
                       <b>“{x.text}”</b> <small>{base(x.path)}:{x.line}</small>
                     </button>
                     <SayIt onClick={() => ctx.suggest(x.path, x.line, `“${x.text}” is written in the code, so it won't be translated. Could it go in strings.xml?`)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {backend.mig.length > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="alert" n={backend.mig.length} t={`migration problem${backend.mig.length > 1 ? 's' : ''}`} />} head="Flyway checks every migration it already ran, and runs new ones in version order:">
+                {backend.mig.map((m) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpTo('f-' + m.path)} title={m.path}>
+                      <b>{base(m.path)}</b> <small>{migText(m)}</small>
+                    </button>
+                    <SayIt
+                      onClick={() =>
+                        ctx.suggest(m.path, undefined, m.kind === 'edited'
+                          ? "This migration was already there, so it has run on our databases: Flyway checks its checksum and won't start once it changes. Could the change go in a new migration instead?"
+                          : m.kind === 'duplicate'
+                            ? 'A migration with this version is already on the base branch, so Flyway will refuse to start. Could it take the next version?'
+                            : `This version is older than ${m.newest}, already on the base branch: where that one has run, Flyway refuses this one (unless outOfOrder is on). Could it take a newer version?`)
+                      }
+                    />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {backend.ent.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="alert" t="entity changed, no migration" />} head="These change a JPA entity's columns, and this PR adds no migration: the database won't have them (unless something else creates them).">
+                {backend.ent.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
+                      <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table's columns, but the PR adds no migration. Where does the database get the change?`, x.side)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {txs.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="alert" n={txs.length} t="@Transactional on a private method" />} head="Spring's proxy never sees a call to a private method, so it runs without a transaction:">
+                {txs.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>{base(x.path)}</b> <small>line {x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, "@Transactional does nothing on a private method: Spring's proxy never sees the call, so this runs without a transaction. Could it be public, or the transaction start in the caller?")} />
                   </div>
                 ))}
               </PillMenu>

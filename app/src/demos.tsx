@@ -1178,6 +1178,44 @@ Object.assign(DEMOS, {
   glass: { title: 'Glass', off: GLASS(false), on: GLASS(true) },
 } satisfies Record<string, Demo>);
 
+// Settings → Java backend, previewed.
+const sql = (code: string) => `<span>${md.utils.escapeHtml(code)}</span>`;
+const MIG_ROWS: Row[] = [['-', 1, '', sql('ALTER TABLE payments ADD fee INT;')], ['+', '', 1, sql('ALTER TABLE payments ADD fee BIGINT;')]];
+const JPA_ROWS: Row[] = [[' ', 12, 12, '    private String id;'], ['+', '', 13, '    private BigDecimal fee;'], [' ', 13, 14, '    private String status;']];
+const TX_ROWS: Row[] = [['+', '', 40, '    @Transactional'], ['+', '', 41, '    private void settle(Payment p) {']];
+Object.assign(DEMOS, {
+  checkMigrations: {
+    title: 'Flyway migrations edited or out of order',
+    off: <File path="db/migration/V20250201__fee.sql" add={1} del={1}><Rows rows={MIG_ROWS} /></File>,
+    on: (
+      <>
+        {pills(['p-bad', <Tg i="alert" n={1} t="migration problem" />])}
+        <File path="db/migration/V20250201__fee.sql" add={1} del={1}><Rows rows={MIG_ROWS} /></File>
+      </>
+    ),
+  },
+  checkJpa: {
+    title: 'JPA entities changed with no migration',
+    off: <File path="PaymentEntity.java" add={1} del={0}><Rows rows={JPA_ROWS} /></File>,
+    on: (
+      <>
+        {pills(['p-warn', <Tg i="alert" t="entity changed, no migration" />])}
+        <File path="PaymentEntity.java" add={1} del={0}><Rows rows={JPA_ROWS} /></File>
+      </>
+    ),
+  },
+  checkTransactional: {
+    title: '@Transactional on a private method',
+    off: <File path="PaymentService.java" add={2} del={0}><Rows rows={TX_ROWS} /></File>,
+    on: (
+      <>
+        {pills(['p-warn', <Tg i="alert" n={1} t="@Transactional on a private method" />])}
+        <File path="PaymentService.java" add={2} del={0}><Rows rows={TX_ROWS} /></File>
+      </>
+    ),
+  },
+} satisfies Record<string, Demo>);
+
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which
 // it's made of.
 SCENES.app = {
