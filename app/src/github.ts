@@ -1,5 +1,6 @@
 import { setEmojiMap } from './emoji.ts';
 import { fetchToken, recordError } from './platform.ts';
+import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 
 export type PR = {
@@ -535,8 +536,36 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
 
 // People to ask for a review of my PR, least busy first: whoever reviewed this repo's recent PRs (they know the code),
 // else the PR list's team. Busy: open PRs in the org that already ask them, by name, for a review.
-export type ReviewerPick = { login: string; load: number; why: string };
-export async function suggestReviewers(repo: string, skip: Set<string>, team: string): Promise<ReviewerPick[]> {
+export type ReviewerPick = { login: string; load: number; why: string; knows?: number }; // knows: share of the changed code they wrote
+// Who wrote the code a PR changes (expertise.ts): git blame at the base commit for its 5 most-changed files, one query.
+export async function whoWrote(repo: string, base: string, files: { filename: string; status: string; patch?: string; additions: number; deletions: number }[]): Promise<Knows[]> {
+  const [owner, name] = repo.split('/');
+  const pick = files
+    .filter((f) => f.status === 'modified' && f.patch && !/(^|\/)(lint-baseline[^/]*\.xml|[\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml)$|(^|\/)(generated|build)\//.test(f.filename)) // tests count: their authors know the code too
+    .sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions))
+    .slice(0, 5)
+    .map((f) => ({ path: f.filename, lines: touchedLines(f.patch!) }))
+    .filter((f) => f.lines.length);
+  if (!pick.length) return [];
+  const vars = Object.fromEntries([['owner', owner], ['name', name], ['exp', base], ...pick.map((f, k) => [`p${k}`, f.path])]);
+  const d = await graphql(
+    `query($owner:String!,$name:String!,$exp:String!,${pick.map((_, k) => `$p${k}:String!`).join(',')}){repository(owner:$owner,name:$name){object(expression:$exp){...on Commit{${pick
+      .map((_, k) => `f${k}:blame(path:$p${k}){ranges{startingLine endingLine commit{author{user{login}}}}}`)
+      .join(' ')}}}}}`,
+    vars,
+    true,
+  );
+  const c = d?.repository?.object ?? {};
+  return whoKnows(
+    pick.map((f, k) => ({
+      path: f.path,
+      lines: f.lines.length,
+      by: tally((c[`f${k}`]?.ranges ?? []).map((r: any) => ({ startingLine: r.startingLine, endingLine: r.endingLine, login: r.commit?.author?.user?.login ?? null })), f.lines),
+    })),
+  );
+}
+
+export async function suggestReviewers(repo: string, skip: Set<string>, team: string, knows: Knows[] = []): Promise<ReviewerPick[]> {
   const [owner, name] = repo.split('/');
   const d = await graphql(
     `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(last:40,states:[OPEN,MERGED]){nodes{reviews(first:30){nodes{author{__typename login}}}}}}}`,
@@ -547,13 +576,23 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
     for (const login of new Set<string>(p.reviews.nodes.filter((r: any) => r.author?.__typename === 'User').map((r: any) => r.author.login)))
       count.set(login, (count.get(login) ?? 0) + 1);
   const fit = (p: { login: string }) => !skip.has(p.login) && !p.login.endsWith('[bot]');
-  let people = [...count].sort((a, b) => b[1] - a[1]).map(([login, k]) => ({ login, why: `reviewed ${k} of the last 40 PRs here` })).filter(fit);
+  let people: { login: string; why: string; knows?: number }[] = [...count].sort((a, b) => b[1] - a[1]).map(([login, k]) => ({ login, why: `reviewed ${k} of the last 40 PRs here` })).filter(fit);
   if (!people.length && team) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${team.split('/')[1]}` })).filter(fit);
-  people = people.slice(0, 30);
+  // Whoever wrote a real share (10%+) of the code being changed: named for it, and in the list even if they don't review here.
+  for (const k of knows.filter((k) => k.share >= 0.1 && fit(k))) {
+    const said = `wrote ${Math.round(k.share * 100)}% of the code this PR changes, most in ${k.file.split('/').pop()}`;
+    const p = people.find((p) => p.login === k.login);
+    if (p) (p.knows = k.share), (p.why = `${said}; ${p.why}`);
+    else people.push({ login: k.login, why: said, knows: k.share });
+  }
+  people = people.sort((a, b) => (b.knows ?? 0) - (a.knows ?? 0)).slice(0, 30);
   if (!people.length) return [];
   const vars = Object.fromEntries(people.map((p, k) => [`r${k}`, `is:open is:pr archived:false org:${owner} user-review-requested:${p.login}`]));
   const l = await graphql(`query(${people.map((_, k) => `$r${k}:String!`).join(',')}){${people.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}`, vars);
-  return people.map((p, k) => ({ ...p, load: l[`r${k}`].issueCount as number })).sort((a, b) => a.load - b.load || a.login.localeCompare(b.login));
+  // Who knows the code first, then the least busy; someone who wrote little of it counts as not knowing it.
+  return people
+    .map((p, k) => ({ ...p, load: l[`r${k}`].issueCount as number }))
+    .sort((a, b) => +((b.knows ?? 0) >= 0.1) - +((a.knows ?? 0) >= 0.1) || a.load - b.load || a.login.localeCompare(b.login));
 }
 
 export const requestReview = (repo: string, n: number, login: string) =>

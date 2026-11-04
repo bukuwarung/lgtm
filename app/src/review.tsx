@@ -11,7 +11,7 @@ import { baselineChanges, isLintBaseline, type Suppression } from './lintbaselin
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
 } from './github.ts';
@@ -125,7 +125,7 @@ type Notice = { text: string; ok: boolean };
 // busy first. A click asks them on GitHub and, unless unticked, on Slack too.
 // On a draft, asking someone first marks it ready for review (GitHub doesn't tell reviewers about drafts).
 type Finding = { text: string; go: () => void };
-function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void; findings?: Finding[] }) {
+function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void; findings?: Finding[]; files?: PRFile[] }) {
   // What lgtm found in my PR, shown once before the first ask: reviewers needn't point out the obvious.
   const [held, setHeld] = useState<string | null>(null);
   const [cleared, setCleared] = useState(false);
@@ -139,7 +139,15 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [] }: { p
   // Each person on their own: asking one doesn't hold up the others, and ones asked stay marked.
   const [state, setState] = useState<Record<string, 'asking' | 'asked'>>({});
   const mark = (login: string, s?: 'asking' | 'asked') => setState((m) => ({ ...m, [login]: s! }));
-  useEffect(() => void suggestReviewers(repo, skip, team).then(setPicks, (e) => setErr(e.message)), [team]);
+  // Who wrote the code being changed (git blame) goes first; then the least busy of those who review here.
+  useEffect(
+    () =>
+      void whoWrote(repo, pr.base.sha, files)
+        .catch(() => [])
+        .then((knows) => suggestReviewers(repo, skip, team, knows))
+        .then(setPicks, (e) => setErr(e.message)),
+    [team],
+  );
   // Their Slack statuses: someone out sick, on vacation or leave shows it, and goes to the bottom (still askable).
   const [presence, setPresence] = useState<Record<string, SlackPresence>>({});
   const shownPicks = picks?.slice(0, 6).map((p) => p.login).join() ?? '';
@@ -1227,6 +1235,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
                 !!me && pr.user.login === me && (
                   <AskReviewer
                     findings={findings}
+                    files={data.files}
                     pr={pr}
                     repo={repo}
                     n={n}

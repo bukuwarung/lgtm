@@ -985,3 +985,13 @@ test('web: focused tests, debugger, suppressions, raw HTML, lockfile drift', asy
   assert.deepEqual(await lockfileDrift([pkg, { filename: 'web/package-lock.json', status: 'modified' }], async () => ['package-lock.json']), []);
   assert.deepEqual(await lockfileDrift([pkg], async () => ['package.json']), []); // no lockfile there: nothing to drift
 });
+
+test('expertise: who wrote the lines a PR touches', async () => {
+  const { touchedLines, tally, whoKnows } = await import('../src/expertise.ts');
+  const patch = ['@@ -10,4 +10,5 @@', ' a', '-b', '+B', '+C', ' d', ' e'].join('\n');
+  assert.deepEqual(touchedLines(patch), [10, 11, 12, 13]);
+  const by = tally([{ startingLine: 1, endingLine: 11, login: 'rina' }, { startingLine: 12, endingLine: 20, login: 'budi' }], [10, 11, 12, 13]);
+  assert.deepEqual([...by], [['rina', 2], ['budi', 2]]);
+  const k = whoKnows([{ path: 'Pay.kt', lines: 4, by }, { path: 'Cart.kt', lines: 4, by: new Map([['rina', 4]]) }]);
+  assert.deepEqual(k.map((x) => [x.login, x.share, x.file]), [['rina', 0.75, 'Cart.kt'], ['budi', 0.25, 'Pay.kt']]);
+});
