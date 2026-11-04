@@ -92,30 +92,41 @@ function TagStyle() {
   );
 }
 
-// The reading order's steps, dragged (or moved with the arrows) into the order you read in.
+// The reading order's steps, dragged (or moved with the arrows) into the order you read in. Pointer events, not HTML
+// drag and drop: the Mac app's web view takes drags as file drops.
 function ReadingSteps() {
   const [saved, save] = useStoredValue('readingSteps', '');
   const order = stepOrder(saved);
+  const latest = useRef(order);
+  latest.current = order;
+  const list = useRef<HTMLOListElement>(null);
   const [dragging, setDragging] = useState<StepKey | null>(null);
   const move = (k: StepKey, to: number) => {
-    const next = order.filter((x) => x !== k);
+    const next = latest.current.filter((x) => x !== k);
     next.splice(to, 0, k);
-    save(next.join() === stepOrder('').join() ? '' : next.join());
+    if (next.join() !== latest.current.join()) save(next.join() === stepOrder('').join() ? '' : next.join());
+  };
+  // Held down on a row: it goes where the pointer is among the other rows, until let go.
+  const grab = (k: StepKey) => (e: PointerEvent) => {
+    if (e.button !== 0 || (e.target as Element).closest('button') || list.current?.closest('fieldset')?.disabled) return;
+    e.preventDefault();
+    setDragging(k);
+    const follow = (m: PointerEvent) => {
+      const others = [...list.current!.children].filter((r) => (r as HTMLElement).dataset.k !== k);
+      move(k, others.filter((r) => { const b = r.getBoundingClientRect(); return b.top + b.height / 2 < m.clientY; }).length);
+    };
+    const drop = () => (setDragging(null), removeEventListener('pointermove', follow), removeEventListener('pointerup', drop), removeEventListener('pointercancel', drop));
+    addEventListener('pointermove', follow);
+    addEventListener('pointerup', drop);
+    addEventListener('pointercancel', drop);
   };
   return (
     <>
-      <ol class="set-steps">
+      <ol class="set-steps" ref={list}>
         {order.map((k, i) => {
           const [, title, why] = STEPS.find(([x]) => x === k)!;
           return (
-            <li
-              key={k}
-              draggable
-              class={dragging === k ? 'dragging' : ''}
-              onDragStart={(e) => (setDragging(k), e.dataTransfer?.setData('text/plain', k))}
-              onDragOver={(e) => (e.preventDefault(), dragging && dragging !== k && move(dragging, i))}
-              onDragEnd={() => setDragging(null)}
-            >
+            <li key={k} data-k={k} class={dragging === k ? 'dragging' : ''} onPointerDown={grab(k)}>
               <span class="set-grip" aria-hidden="true">⠿</span>
               <span>
                 <b>{title}</b> <small>{why}{k === 'tests' && ": the ones whose code the PR doesn't change (the rest sit below their code)"}</small>
