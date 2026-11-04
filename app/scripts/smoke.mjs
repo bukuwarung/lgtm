@@ -1,5 +1,6 @@
-// A smoke test of the built app (dist/), run before a release: the PR list, a PR, a line comment, Finish review and
-// Submit, in headless Chrome, with every GitHub request answered here from made-up data (nothing reaches GitHub; writes
+// A smoke test of the built app (dist/), run before a release and in CI: the PR list, a PR, a line comment, Finish
+// review and Submit; the inbox (its keys, Done, a reply) and the bell (a closed PR's entry dropped, a new review request
+// listed and dismissed); in headless Chrome, with every GitHub request answered here from made-up data (nothing reaches GitHub; writes
 // are only recorded). It fails on an uncaught error, on confirm()/alert()/prompt() (the Mac app's web view answers
 // them without asking: submit once stopped silently that way), and when the review's mutations don't go out.
 // Needs Google Chrome; like scripts/demos.mjs it talks to it over the DevTools protocol, nothing to install.
@@ -35,6 +36,15 @@ const pr = {
 };
 const files = [{ filename: 'src/Pay.kt', status: 'modified', additions: 3, deletions: 1, changes: 4, sha: 'f1', blob_url: 'https://github.com/acme/shop/blob/x/src/Pay.kt', patch: PATCH }];
 const empty = { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] };
+// acme/shop#2, mine, with two threads waiting on my reply; #4, a review request that arrives at the second refresh.
+const mineNode = { ...node, id: 'PR_2', number: 2, title: 'Faster checkout', author: { __typename: 'User', login: 'tester' }, reviewRequests: { nodes: [] } };
+const laterNode = { ...node, id: 'PR_4', number: 4, title: 'Log declined cards' };
+let later = false;
+const comment = (databaseId, login, body) => ({ id: `C${databaseId}`, databaseId, url: '', body, bodyHTML: `<p>${body}</p>`, bodyText: body, createdAt: now, state: 'SUBMITTED', author: { __typename: 'User', login, avatarUrl: '', databaseId: 7 }, originalCommit: { oid: HEAD } });
+const threads2 = [
+  { id: 'T21', path: 'src/Cart.kt', line: 5, startLine: null, originalLine: 5, originalStartLine: null, diffSide: 'RIGHT', subjectType: 'LINE', isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: false, comments: { nodes: [comment(21, 'rina', 'Why not cache the cart?')] } },
+  { id: 'T31', path: 'src/Cart.kt', line: 9, startLine: null, originalLine: 9, originalStartLine: null, diffSide: 'RIGHT', subjectType: 'LINE', isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: false, comments: { nodes: [comment(31, 'eko', 'Nit: rename to total')] } },
+];
 
 const sent = []; // the mutations, by name
 function graphql(body) {
@@ -44,8 +54,12 @@ function graphql(body) {
     sent.push(m[1]);
     return { data: { addPullRequestReview: { pullRequestReview: { id: 'R1' } }, addPullRequestReviewThread: { thread: { id: 'T1' } }, submitPullRequestReview: { clientMutationId: null } } };
   }
-  if (query.includes('review-requested:@me')) return { data: { viewer: { login: 'tester' }, requested: { nodes: [node] }, reviewed: { nodes: [] }, authored: { nodes: [] }, assigned: { nodes: [] }, mentioned: { nodes: [] } } };
-  if (/p0:node/.test(query)) return { data: Object.fromEntries(Object.keys(variables).map((k) => [k.replace('i', 'p'), { reviewThreads: { nodes: [] } }])) };
+  if (query.includes('review-requested:@me')) return { data: { viewer: { login: 'tester' }, requested: { nodes: later ? [node, laterNode] : [node] }, reviewed: { nodes: [] }, authored: { nodes: [mineNode] }, assigned: { nodes: [] }, mentioned: { nodes: [] } } };
+  if (/p0:node/.test(query)) return { data: Object.fromEntries(Object.entries(variables).map(([k, id]) => [k.replace('i', 'p'), { reviewThreads: { nodes: id === 'PR_2' ? threads2.map((t) => ({ ...t, starter: { nodes: t.comments.nodes } })) : [] } }])) };
+  // The bell's PRs that left the list (closedPRs): #3 closed, any other open.
+  if (/p0:repository/.test(query)) return { data: Object.fromEntries(Object.keys(variables).filter((k) => k[0] === 'n').map((k) => ['p' + k.slice(1), { pullRequest: { state: variables[k] === 3 ? 'CLOSED' : 'OPEN' } }])) };
+  if (query.includes('is:merged')) return { data: { a: { nodes: [] }, r: { nodes: [] } } };
+  if (query.includes('reviewThreads(first:100') && variables.n === 2) return { data: { repository: { pullRequest: { reviewThreads: { ...empty, nodes: threads2 } } } } };
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
   const pullRequest = { reviewThreads: empty, reviews: { nodes: [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty };
   if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest } } };
@@ -53,6 +67,7 @@ function graphql(body) {
 }
 function rest(path) {
   if (path === '/user') return [200, { login: 'tester' }];
+  if (path === '/repos/acme/shop/pulls/2/comments/21/replies') return sent.push('reply'), [201, { id: 99 }];
   if (path === '/repos/acme/shop/pulls/1') return [200, pr];
   if (path.startsWith('/repos/acme/shop/pulls/1/files')) return [200, files];
   if (/\/(issues\/1\/comments|pulls\/1\/reviews|pulls\/1\/comments|pulls\/1\/commits)/.test(path)) return [200, []];
@@ -115,7 +130,9 @@ try {
   // The Mac app's web view answers these without asking: none may be used.
   await send('Page.addScriptToEvaluateOnNewDocument', {
     source: `for (const f of ['confirm', 'alert', 'prompt']) window[f] = () => { throw new Error(f + '() used: the Mac app answers it without asking') };
-      localStorage.setItem('seenVersion', '999.0.0'); localStorage.setItem('setupSeen', '1');`, // no first-run dialogs
+      localStorage.setItem('seenVersion', '999.0.0'); localStorage.setItem('setupSeen', '1'); // no first-run dialogs
+      // On the bell from before: acme/shop#3, closed since (closedPRs drops it).
+      if (!sessionStorage.getItem('seeded')) sessionStorage.setItem('seeded', '1'), localStorage.setItem('lastLogin', 'tester'), localStorage.setItem('@tester/notices', JSON.stringify([{ id: 'n3', what: 'Approved', title: 'Old change', pr: 'acme/shop#3', at: Date.now() - 86400000 }]));`,
   });
   const evaluate = async (expression) => {
     const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
@@ -143,6 +160,7 @@ try {
   console.log(`Smoke test of the built app (${ORIGIN}), GitHub made up:`);
   await send('Page.navigate', { url: ORIGIN + '/#/' });
   await step('the PR list shows the PR', () => until('the list', `[...document.querySelectorAll('.pr-item')].some((a) => a.textContent.includes('Retry failed payments'))`));
+  await step("the bell drops a closed PR's entry", () => until('the entry gone', `localStorage.getItem('@tester/notices') === '[]'`));
   await step('a PR opens with its diff', async () => {
     await evaluate(`location.hash = '/acme/shop/pull/1'`);
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
@@ -167,6 +185,40 @@ try {
     for (const m of ['addPullRequestReview', 'addPullRequestReviewThread', 'submitPullRequestReview']) if (!sent.includes(m)) throw new Error(`${m} wasn't sent (sent: ${sent.join(', ') || 'nothing'})`);
     const bar = await evaluate(`document.querySelector('.fail-bar')?.innerText ?? ''`);
     if (bar) throw new Error(`error bar: ${bar}`);
+  });
+  const key = (k, opts = {}) => evaluate(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true, ...${JSON.stringify(opts)} }))`);
+  await step('the inbox lists the threads waiting on me, and j moves', async () => {
+    await evaluate(`location.hash = '/inbox'`);
+    await until('two threads', `document.querySelectorAll('.inbox-thread').length === 2`);
+    await key('j');
+    await until('the second current', `document.querySelectorAll('.inbox-thread')[1].classList.contains('cur')`, 2000);
+  });
+  await step('e marks a thread done', async () => {
+    await key('e');
+    await until('one thread left', `document.querySelectorAll('.inbox-thread').length === 1`, 3000);
+    if (!(await evaluate(`localStorage.getItem('@tester/repliesDone') ?? ''`)).includes('T31')) throw new Error("Done wasn't kept");
+  });
+  await step('r and ⌘↵ reply', async () => {
+    await key('r');
+    await until('the reply box focused', `document.activeElement?.matches('.inbox-thread.cur textarea')`, 2000);
+    await evaluate(`(() => {
+      const t = document.activeElement;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, 'Cached in the next commit.');
+      t.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await sleep(100);
+    await key('Enter', { metaKey: true });
+    await until('the reply sent', `document.querySelector('.inbox .note')?.textContent.includes('Nothing waits on your reply')`, 5000);
+    if (!sent.includes('reply')) throw new Error("the reply didn't go out");
+  });
+  await step('the bell lists a new review request, and dismisses it', async () => {
+    later = true;
+    await evaluate(`dispatchEvent(new Event('lgtm:list-refresh'))`);
+    await until('its count', `document.querySelector('.bell .nav-count')?.textContent === '1'`);
+    await evaluate(`document.querySelector('.bell > button').click()`);
+    await until('the entry', `[...document.querySelectorAll('.bell-row')].some((r) => r.textContent.includes('Review requested') && r.textContent.includes('Log declined cards'))`, 2000);
+    await evaluate(`document.querySelector('.bell-row .bell-x').click()`);
+    await until('the count gone', `!document.querySelector('.bell .nav-count')`, 2000);
   });
 } catch (e) {
   failed = true;

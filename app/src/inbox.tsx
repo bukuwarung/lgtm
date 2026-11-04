@@ -17,9 +17,11 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   const [done, setDone] = useState<Set<string>>(new Set()); // replied to or resolved here
   const [cur, setCur] = useState(0); // the thread the keys act on, in page order
   const asked = (items ?? []).filter((i) => (i.thread?.awaiting ?? 0) > 0);
-  const key = items ? asked.map((i) => `${i.id}@${i.updatedAt}`).join() + '|' : ''; // the list's arrival counts, even with nothing waiting in it
+  // A refresh asks again about the PRs that changed: until it knows, what's shown stays (and a reply being typed with it).
+  const pending = !!items?.some((i) => (i.mine || i.myState) && !i.thread);
+  const key = items ? asked.map((i) => `${i.id}@${i.updatedAt}`).join() + '|' + (pending ? 'pending' : '') : ''; // the list's arrival counts, even with nothing waiting in it
   useEffect(() => {
-    if (!items) return;
+    if (!items || (pending && list)) return;
     let stop = false;
     // Bots marked as the list marks them, so the count here is the list's.
     getViewer().then(async (login) => {
@@ -39,9 +41,11 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest('input, textarea, select, [contenteditable]') || document.querySelector('.help, .panel, dialog[open]')) return;
-      const el = document.querySelectorAll<HTMLElement>('.inbox-thread')[at];
+      // From the page, not this render's state: a key pressed just after a thread goes acts on what's shown.
+      const all = [...document.querySelectorAll<HTMLElement>('.inbox-thread')];
+      const el = document.querySelector<HTMLElement>('.inbox-thread.cur');
       const move = e.key === 'j' ? 1 : e.key === 'k' ? -1 : 0;
-      if (move) setCur(Math.max(0, Math.min(count - 1, at + move)));
+      if (move) setCur(Math.max(0, Math.min(all.length - 1, all.indexOf(el!) + move)));
       else if (e.key === 'r') el?.querySelector('textarea')?.focus();
       else if ('exco'.includes(e.key) && e.key.length === 1) el?.querySelector<HTMLElement>(`[data-k="${e.key}"]`)?.click();
       else return;
@@ -49,7 +53,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
     };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
-  }, [at, count]);
+  }, []);
   useEffect(() => document.querySelectorAll('.inbox-thread')[at]?.scrollIntoView({ block: 'nearest' }), [at]);
   if (!list) return <PageSkeleton title="threads waiting on your reply" />;
   let k = 0;
@@ -65,14 +69,14 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
         )}
       </p>
       {open.map(({ item, threads }) => (
-        <section>
+        <section key={item.id}>
           <h4>
             <a href={`#/${item.repo}/pull/${item.number}`}>{item.title}</a> <small>{item.repo.split('/')[1]}#{item.number}</small>
             {item.mergedAt && <small class="inbox-merged"> · merged {ago(item.mergedAt)}</small>}
           </h4>
           {threads.map((t) => {
             const n = k++;
-            return <InboxThread t={t} item={item} me={me} current={n === at} onPick={() => setCur(n)} onDone={() => setDone((s) => new Set(s).add(t.id))} />;
+            return <InboxThread key={t.id} t={t} item={item} me={me} current={n === at} onPick={() => setCur(n)} onDone={() => setDone((s) => new Set(s).add(t.id))} />;
           })}
         </section>
       ))}

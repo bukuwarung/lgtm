@@ -244,6 +244,20 @@ async function graphql<T = any>(query: string, variables: Record<string, unknown
   return r.data;
 }
 
+// Which of these PRs ("owner/repo#n") GitHub says are merged or closed, in one query. One it can't find (gone, or no
+// access) isn't counted: only a closed one is certain.
+export async function closedPRs(prs: string[]): Promise<string[]> {
+  const parts = prs.map((p) => p.match(/^([^/]+)\/([^#]+)#(\d+)$/));
+  const ks = parts.flatMap((m, k) => (m ? [k] : []));
+  if (!ks.length) return [];
+  const d = await graphql(
+    `query(${ks.map((k) => `$o${k}:String!,$r${k}:String!,$n${k}:Int!`).join(',')}){${ks.map((k) => `p${k}:repository(owner:$o${k},name:$r${k}){pullRequest(number:$n${k}){state}}`).join(' ')}}`,
+    Object.fromEntries(ks.flatMap((k) => [[`o${k}`, parts[k]![1]], [`r${k}`, parts[k]![2]], [`n${k}`, Number(parts[k]![3])]])),
+    true,
+  );
+  return ks.filter((k) => ['MERGED', 'CLOSED'].includes(d?.[`p${k}`]?.pullRequest?.state)).map((k) => prs[k]);
+}
+
 // Review queue: GitHub drops a PR from review-requested:@me once you review it, so reviewed-by:@me covers the rest.
 // Plus my own PRs and the ones assigned to me.
 const QUEUE = `query{viewer{login}

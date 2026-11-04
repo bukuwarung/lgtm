@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { closedPRs, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
@@ -1043,6 +1043,8 @@ function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolea
   );
 }
 
+const closedAsked = new Map<string, number>(); // the bell's PRs asked about, when ("owner/repo#n")
+
 function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
   // The last list (per account) shows at once on launch, "updating…" until GitHub's answer replaces it.
   const [loaded, setItems] = useState<QueueItem[] | null>(() => {
@@ -1176,6 +1178,16 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   }, [linkedIds]);
   const claudeWaiting = (i: QueueItem) => claude.get(linkedClaude(i.repo, i.number)?.id ?? '') === 'waiting';
   useEffect(() => void (items && onItems(items)), [items]);
+  // The bell's entries for a PR that's been merged or closed go: nothing's left to act on. Only the PRs that left the
+  // list are asked about, each at most every 30 minutes.
+  useEffect(() => {
+    if (!items) return;
+    const listed = new Set(items.map((i) => `${i.repo}#${i.number}`));
+    const ask = [...new Set(notices().map((n) => n.pr))].filter((p) => !listed.has(p) && Date.now() - (closedAsked.get(p) ?? 0) > 30 * 60_000);
+    if (!ask.length) return;
+    ask.forEach((p) => closedAsked.set(p, Date.now()));
+    closedPRs(ask).then((gone) => gone.length && dropNotices((n) => gone.includes(n.pr)), () => {});
+  }, [items]);
   useEffect(() => {
     if (!items || !settled) return;
     const waiting = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);
