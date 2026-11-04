@@ -1249,3 +1249,4 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .on-base.diff { color: light-dark(#cf222e, #f85149); background: color-mix(in srgb, #f85149 12%, transparent); }
 .merge-open { flex-wrap: wrap; gap: 6px; font-size: calc(13px * var(--ts)); }
 .merge-open .link { margin-left: auto; }
+.approve-open { margin: 0; font-size: calc(12.5px * var(--ts)); }

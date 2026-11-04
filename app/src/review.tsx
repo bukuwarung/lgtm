@@ -1104,6 +1104,13 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const layer = stack.findIndex((l) => l.number === n);
   const failingChecks = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const waitingOnMe = me ? allThreads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
+  // Threads I started that are still open and whose code hasn't changed since (or no commit came after): approving
+  // past them is worth a word in the submit panel.
+  const stillOpen = me
+    ? allThreads
+        .filter((t) => !t.isResolved && t.comments.nodes[0]?.author?.login === me && (sinceComment.get(t.id)?.kind === 'same' || t.comments.nodes[0]?.originalCommit?.oid === pr.head.sha))
+        .map((t) => ({ id: t.id, path: t.path, line: t.line }))
+    : [];
   // Unresolved threads, for the merge box: the ones waiting on my reply first.
   const openThreads = allThreads
     .filter((t) => !t.isResolved)
@@ -1288,7 +1295,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} stillOpen={stillOpen} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -1601,6 +1608,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
 }
 
 type SubmitProps = {
+  stillOpen?: { id: string; path: string; line?: number | null }[]; // threads I started, unresolved, their code unchanged since
   saveAs: string; // where an unsent summary is kept
   count: number;
   myOpenThreads: number; // unresolved review threads I'm in
@@ -1633,7 +1641,7 @@ const APPROVE_NOTE = 'Approved, but please address the comments';
 // The verdict to start from: pending comments → request changes; my earlier threads still open → comment; else approve.
 export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEvent => (pending ? 'REQUEST_CHANGES' : myOpenThreads ? 'COMMENT' : 'APPROVE');
 
-function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, onSubmit, saveAs, repo, mentions, authored }: SubmitProps) {
+function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, onSubmit, saveAs, repo, mentions, authored, stillOpen = [] }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
@@ -1720,6 +1728,19 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
             </label>
           )}
           {slackNote && <p class="note">{slackNote}</p>}
+          {event === 'APPROVE' && stillOpen.length > 0 && (
+            <p class="warn approve-open">
+              {stillOpen.length === 1 ? 'A thread you started is' : `${stillOpen.length} threads you started are`} still open, and{' '}
+              {stillOpen.length === 1 ? 'its' : 'their'} code hasn't changed since you commented:{' '}
+              {stillOpen.slice(0, 4).map((t, i) => (
+                <>
+                  {i ? ', ' : ''}
+                  <button class="link" onClick={() => jumpTo(t.id, 'f-' + t.path)}>{t.path.split('/').pop()}{t.line ? `:${t.line}` : ''}</button>
+                </>
+              ))}
+              {stillOpen.length > 4 && ` and ${stillOpen.length - 4} more`}. You can still approve.
+            </p>
+          )}
           {/* What GitHub (and Slack) will get, so nothing about submitting is a surprise. */}
           <div class="sends">
             {event !== 'APPROVE' && !body.trim() && !count && !(event === 'REQUEST_CHANGES' && mySummary) ? (
