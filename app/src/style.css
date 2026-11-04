@@ -1310,3 +1310,12 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .bell-row:hover .bell-x, .bell-x:focus-visible { opacity: 1; }
 .top .bell .bell-menu > .bell-clear { justify-content: center; color: var(--muted); }
 .bell-empty { margin: 4px 8px 8px; white-space: normal; }
+
+/* Settings → Files in reading order: its steps, dragged into another order */
+.set-steps { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; max-width: 520px; }
+.set-steps li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); cursor: grab; }
+.set-steps li.dragging { opacity: 0.5; }
+.set-steps li > span:nth-child(2) { flex: 1; min-width: 0; }
+.set-steps small { color: var(--muted); }
+.set-grip { color: var(--muted); }
+fieldset:disabled .set-steps li { cursor: default; opacity: 0.6; }

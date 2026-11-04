@@ -7,6 +7,8 @@ import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
+import { reviewPlan, stepOrder } from './files.ts';
+import { useStoredValue } from './platform.ts';
 import { changedRange, parseString, stringHtml } from './strings.ts';
 
 // Small, made-up examples of each diff helper, drawn with the app's own styles: shown beside the switches in
@@ -363,6 +365,13 @@ export const DEMOS: Record<string, Demo> = {
 };
 
 // Without → with, side by side. `active`: which side the current setting gives (outlined).
+// In the order the steps are dragged into (Settings): the view model's test stays right below it; the flow test, whose
+// code isn't in the PR, goes with the Tests step.
+function ReadingOrderOn() {
+  const [saved] = useStoredValue('readingSteps', '');
+  return <>{reviewPlan(READING, stepOrder(saved)).flatMap((s) => s.paths).map((p) => <File path={p} add={12} del={2} />)}</>;
+}
+
 export function DemoPair({ k, active }: { k: string; active?: boolean }) {
   const d = DEMOS[k];
   if (!d) return null;
@@ -816,6 +825,7 @@ const ENTITY_ROWS: Row[] = [
 const MANIFEST = ['<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />', '<receiver android:name=".sync.BootReceiver">', '    <intent-filter>', '        <action android:name="android.intent.action.BOOT_COMPLETED" />', '    </intent-filter>', '</receiver>'];
 const BASELINE = ['<issue', '    id="MissingPermission"', '    message="Call requires permission which may be rejected by user">', '    <location file="src/main/java/acme/BtScanner.kt" line="42"/>', '</issue>'];
 const FILES_BIG = ['openspec/changes/checkout/design.md', 'app/build.gradle.kts', 'app/src/main/java/acme/model/Order.kt', 'app/src/main/java/acme/CheckoutViewModel.kt', 'app/src/test/java/acme/CheckoutViewModelTest.kt'];
+const READING = [...FILES_BIG, 'app/src/test/java/acme/CheckoutFlowTest.kt'];
 
 Object.assign(DEMOS, {
   checkSecrets: {
@@ -870,8 +880,8 @@ Object.assign(DEMOS, {
   },
   readingOrder: {
     title: 'Files in reading order',
-    off: <>{[...FILES_BIG].sort().map((p) => <File path={p} add={12} del={2} />)}</>,
-    on: <>{FILES_BIG.map((p) => <File path={p} add={12} del={2} />)}</>, // the test right below its view model
+    off: <>{[...READING].sort().map((p) => <File path={p} add={12} del={2} />)}</>,
+    on: <ReadingOrderOn />,
   },
   reviewPlan: {
     title: 'A review plan for big PRs',

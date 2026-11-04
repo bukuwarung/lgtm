@@ -43,19 +43,40 @@ type Changed = { filename: string; status: string; additions: number; patch?: st
 // A big PR's reading plan: what it means to do, what it needs (build, permissions), the shapes the rest builds on,
 // the change itself, what it promises (tests), then resources. Each path in its first matching step, in the order
 // given; a test of a file the PR also changes goes right below that file instead (FooTest.kt under Foo.kt).
-export type PlanStep = { title: string; why: string; paths: string[] };
+export type PlanStep = { key: StepKey; title: string; why: string; paths: string[] };
+// The steps, in the default order (Settings → Files in reading order lets you drag them into another).
+export const STEPS = [
+  ['specs', 'Specs and docs', 'what the change is meant to do'],
+  ['build', 'Build and config', 'dependencies, permissions, settings'],
+  ['models', 'Models and contracts', 'the shapes the rest builds on'],
+  ['code', 'Implementation', 'the change itself'],
+  ['tests', 'Tests', 'what it promises'],
+  ['resources', 'Resources and assets', 'strings, layouts, images, binaries'],
+] as const;
+export type StepKey = (typeof STEPS)[number][0];
+// A saved order ("tests,specs,…"), the steps it leaves out (or doesn't know) after it in the default order.
+export function stepOrder(saved: string): StepKey[] {
+  const keys = STEPS.map(([k]) => k as StepKey);
+  const picked = [...new Set(saved.split(','))].filter((k): k is StepKey => keys.includes(k as StepKey));
+  return [...picked, ...keys.filter((k) => !picked.includes(k))];
+}
 export const PLAN_AT = 50; // files: below this a PR reads fine top to bottom
 const MODELS = /(^|\/)(api|apis|model|models|domain|dto|dtos|entity|entities|contract|contracts|types|interfaces?)\//i;
 const CONFIG = /\.(gradle|kts|toml|properties|ya?ml|json|pro|cfg|ini|xml|lock)$|(^|\/)(Dockerfile|Makefile|\.gitattributes|\.gitignore)$/;
-export function reviewPlan(paths: string[]): PlanStep[] {
-  const steps: (PlanStep & { has: (p: string) => boolean; at: number })[] = [
-    { title: 'Specs and docs', why: 'what the change is meant to do', has: (p) => isMarkdown(p) || /(^|\/)(openspec|docs)\//.test(p), at: 0, paths: [] },
-    { title: 'Tests', why: 'what it promises', has: inTests, at: 4, paths: [] },
-    { title: 'Build and config', why: 'dependencies, permissions, settings', has: (p) => CONFIG.test(p) && !/\/res\//.test(p), at: 1, paths: [] },
-    { title: 'Models and contracts', why: 'the shapes the rest builds on', has: (p) => CODE.test(p) && MODELS.test(p), at: 2, paths: [] },
-    { title: 'Implementation', why: 'the change itself', has: (p) => CODE.test(p), at: 3, paths: [] },
-    { title: 'Resources and assets', why: 'strings, layouts, images, binaries', has: () => true, at: 5, paths: [] },
-  ];
+// Which step a path is in: the first that has it, in this order (not the reading order).
+const HAS: [StepKey, (p: string) => boolean][] = [
+  ['specs', (p) => isMarkdown(p) || /(^|\/)(openspec|docs)\//.test(p)],
+  ['tests', inTests],
+  ['build', (p) => CONFIG.test(p) && !/\/res\//.test(p)],
+  ['models', (p) => CODE.test(p) && MODELS.test(p)],
+  ['code', (p) => CODE.test(p)],
+  ['resources', () => true],
+];
+export function reviewPlan(paths: string[], order: StepKey[] = stepOrder('')): PlanStep[] {
+  const steps = HAS.map(([key, has]) => {
+    const [, title, why] = STEPS.find(([k]) => k === key)!;
+    return { key, title, why, has, paths: [] as string[] };
+  });
   const all = new Set(paths);
   const below = (p: string) => subject(p) !== p && all.has(subject(p));
   for (const p of paths) if (!below(p)) steps.find((s) => s.has(p))!.paths.push(p);
@@ -66,7 +87,7 @@ export function reviewPlan(paths: string[]): PlanStep[] {
     while (i < step.paths.length && subject(step.paths[i]) === s) i++; // after its other tests
     step.paths.splice(i, 0, p);
   }
-  return steps.filter((s) => s.paths.length).sort((a, b) => a.at - b.at).map(({ title, why, paths }) => ({ title, why, paths }));
+  return steps.filter((s) => s.paths.length).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map(({ key, title, why, paths }) => ({ key, title, why, paths }));
 }
 export function untested(files: Changed[]): string[] {
   const tested = new Set(files.filter((f) => isTest(f.filename) || /(^|\/)test_[^/]+$/.test(f.filename)).map((f) => base(subject(f.filename))));

@@ -3,7 +3,7 @@ import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getT
 import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
-import { estimateLabel } from './files.ts';
+import { estimateLabel, STEPS, stepOrder, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
@@ -89,6 +89,45 @@ function TagStyle() {
         ))}
       </span>
     </div>
+  );
+}
+
+// The reading order's steps, dragged (or moved with the arrows) into the order you read in.
+function ReadingSteps() {
+  const [saved, save] = useStoredValue('readingSteps', '');
+  const order = stepOrder(saved);
+  const [dragging, setDragging] = useState<StepKey | null>(null);
+  const move = (k: StepKey, to: number) => {
+    const next = order.filter((x) => x !== k);
+    next.splice(to, 0, k);
+    save(next.join() === stepOrder('').join() ? '' : next.join());
+  };
+  return (
+    <>
+      <ol class="set-steps">
+        {order.map((k, i) => {
+          const [, title, why] = STEPS.find(([x]) => x === k)!;
+          return (
+            <li
+              key={k}
+              draggable
+              class={dragging === k ? 'dragging' : ''}
+              onDragStart={(e) => (setDragging(k), e.dataTransfer?.setData('text/plain', k))}
+              onDragOver={(e) => (e.preventDefault(), dragging && dragging !== k && move(dragging, i))}
+              onDragEnd={() => setDragging(null)}
+            >
+              <span class="set-grip" aria-hidden="true">⠿</span>
+              <span>
+                <b>{title}</b> <small>{why}{k === 'tests' && ": the ones whose code the PR doesn't change (the rest sit below their code)"}</small>
+              </span>
+              <button class="link" disabled={!i} aria-label={`Move ${title} up`} onClick={() => move(k, i - 1)}>↑</button>
+              <button class="link" disabled={i === order.length - 1} aria-label={`Move ${title} down`} onClick={() => move(k, i + 1)}>↓</button>
+            </li>
+          );
+        })}
+      </ol>
+      {saved && <button onClick={() => save('')}>Back to the default order</button>}
+    </>
   );
 }
 
@@ -372,7 +411,9 @@ export function Settings() {
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation"  demo />
         <Flag k="jiraOnMerge" initial={false} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge."  demo />
         <JiraAfterMerge />
-        <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Specs and docs, then build and config, models and contracts, the implementation (each file with its tests right below it), other tests, and last resources and assets. Off: GitHub's order, by path." demo />
+        <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Specs and docs, then build and config, models and contracts, the implementation (each file with its tests right below it), other tests, and last resources and assets. Off: GitHub's order, by path. Drag the steps into the order you read in." demo>
+          <ReadingSteps />
+        </Flag>
         <Flag k="gradleModules" initial={true} label="Group files by module" hint="Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a PR touches two or more, the index groups its files by them and each file says its own; with one, a pill names it."  demo />
         <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it."  demo />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review."  demo />

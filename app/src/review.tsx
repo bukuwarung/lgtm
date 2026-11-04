@@ -30,7 +30,7 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, isAway, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
-import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, untested, type BuildRoot, type PlanStep } from './files.ts';
+import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
 import { slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
@@ -744,6 +744,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   });
 
   const [readingOrder] = useStoredFlag('readingOrder', true); // files in the plan's order, else GitHub's
+  const [stepsSaved] = useStoredValue('readingSteps', ''); // its steps' order, if dragged into another
   const [paused, setPaused] = useState(''); // GraphQL's limit used up: the threads couldn't load
   // Settings → Checks and → Android: what lgtm points out.
   const [chkSecrets] = useStoredFlag('checkSecrets', true);
@@ -1075,7 +1076,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
   // The files on show in reading order (files.ts reviewPlan: specs, build, models, the change, tests, resources) or
   // GitHub's (Settings → Pull request view); a big PR also gets the plan itself, with how much of each step is viewed.
-  const steps = readingOrder || showPlan ? reviewPlan(reviewOrder(visible.map((f) => f.filename))) : [];
+  const steps = readingOrder || showPlan ? reviewPlan(reviewOrder(visible.map((f) => f.filename)), stepOrder(stepsSaved)) : [];
   const plan = showPlan && visible.length >= PLAN_AT ? steps : null;
   const rank = readingOrder ? new Map(steps.flatMap((s) => s.paths).map((p, i) => [p, i])) : null;
   const inOrder = rank ? [...visible].sort((a, b) => rank.get(a.filename)! - rank.get(b.filename)!) : visible;
