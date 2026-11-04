@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { fetchToken, recordError } from './platform.ts';
+import { fetchToken, recordError, repliesDone } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 
@@ -1267,9 +1267,11 @@ export function getMergedAwaiting(me: string): Promise<MergedPR[]> {
   return list;
 }
 
-export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { comments: { nodes: Pick<Comment, 'author'>[] } }, me: string, myPR: boolean) {
-  const last = t.comments.nodes.at(-1)?.author;
+export function awaitsMe(t: Pick<Thread, 'isResolved' | 'isOutdated'> & { id?: string; comments: { nodes: (Pick<Comment, 'author'> & { databaseId?: number })[] } }, me: string, myPR: boolean) {
+  const lastComment = t.comments.nodes.at(-1);
+  const last = lastComment?.author;
   if (t.isResolved || t.isOutdated || !last || last.login === me || last.__typename === 'Bot') return false;
+  if (t.id && lastComment?.databaseId && repliesDone()[t.id] === lastComment.databaseId) return false; // marked done, nothing new since
   return myPR || t.comments.nodes.some((c) => c.author?.login === me);
 }
 
@@ -1316,6 +1318,9 @@ const keep = (i: { id: string; updatedAt: string }, part: { estimate?: Estimate;
   extrasSeen.set(i.id, { ...(c && c.at === i.updatedAt ? c : {}), at: i.updatedAt, ...part });
 };
 
+// A PR's thread status asked again at the next refresh (a thread marked done changes it; the PR itself didn't change).
+export const forgetThreadStatus = (id: string) => void extrasSeen.set(id, { ...(extrasSeen.get(id) ?? { at: '' }), thread: undefined });
+
 // Each PR's rough time to review, asked after the list shows (its description and per-file line counts would slow the
 // list down).
 export async function getEstimates(items: { id: string; updatedAt: string }[]): Promise<Map<string, Estimate>> {
@@ -1337,7 +1342,7 @@ export async function getThreadStatus(items: QueueItem[], bots: Set<string> = ne
   const vars = Object.fromEntries(ask.map((i, k) => [`i${k}`, i.id]));
   const d = await graphql(
     `query(${ask.map((_, k) => `$i${k}:ID!`).join(',')}){${ask
-      .map((_, k) => `p${k}:node(id:$i${k}){...on PullRequest{reviewThreads(last:100){nodes{isResolved isOutdated starter:comments(first:1){nodes{author{login}}} comments(last:20){nodes{author{__typename login}}}}}}}`)
+      .map((_, k) => `p${k}:node(id:$i${k}){...on PullRequest{reviewThreads(last:100){nodes{id isResolved isOutdated starter:comments(first:1){nodes{author{login}}} comments(last:20){nodes{databaseId author{__typename login}}}}}}}`)
       .join(' ')}}`,
     vars,
   );

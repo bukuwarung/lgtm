@@ -4,7 +4,7 @@ import { useEffect, useState } from 'preact/hooks';
 // drafts, what you'd seen of a PR, Claude session links, the PR list's team, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$)/;
 let account = '';
 export const lastLogin = () => {
   try {
@@ -732,4 +732,21 @@ export function claudeFolder(repo: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+// Threads I marked done without replying (the inbox's Done): not waiting on me until someone writes again. Each is
+// kept as its last comment then; on this machine only, per account (GitHub has no such state).
+export const repliesDone = (): Record<string, number> => {
+  try {
+    return JSON.parse(localStorage.getItem(own('repliesDone')) ?? '{}');
+  } catch {
+    return {};
+  }
+};
+export function markReplyDone(thread: string, lastComment: number) {
+  const d = repliesDone();
+  d[thread] = lastComment;
+  const keys = Object.keys(d);
+  for (const k of keys.slice(0, Math.max(0, keys.length - 500))) delete d[k]; // the oldest go first
+  localStorage.setItem(own('repliesDone'), JSON.stringify(d));
 }

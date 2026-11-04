@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
-import { awaitsMe, getMergedAwaiting, getThreads, getViewer, markBots, reply, resolveThread, type QueueItem, type Thread } from './github.ts';
-import { ago, readBots, reportError } from './platform.ts';
+import { awaitsMe, forgetThreadStatus, getMergedAwaiting, getThreads, getViewer, markBots, reply, resolveThread, type QueueItem, type Thread } from './github.ts';
+import { ago, markReplyDone, readBots, reportError } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
 import { Tg } from './tags.tsx';
 
@@ -15,7 +15,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   const [list, setList] = useState<Waiting[] | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set()); // replied to or resolved here
   const asked = (items ?? []).filter((i) => (i.thread?.awaiting ?? 0) > 0);
-  const key = asked.map((i) => `${i.id}@${i.updatedAt}`).join();
+  const key = items ? asked.map((i) => `${i.id}@${i.updatedAt}`).join() + '|' : ''; // the list's arrival counts, even with nothing waiting in it
   useEffect(() => {
     if (!items) return;
     let stop = false;
@@ -74,6 +74,14 @@ function InboxThread({ t, item, me, onDone }: { t: Thread; item: Item; me: strin
       {last && <div class="md inbox-last" dangerouslySetInnerHTML={{ __html: last.bodyHTML }} />}
       <textarea rows={2} placeholder={`Reply to ${last?.author?.login === me ? 'this thread' : `@${last?.author?.login ?? 'them'}`}`} value={text} onInput={(e) => setText(e.currentTarget.value)} disabled={!!busy} />
       <div class="row">
+        {/* Done: off the list without a reply or a resolve, until someone writes again (kept on this machine). */}
+        <button
+          disabled={!!busy || !last}
+          title="Take it off your list without replying; it comes back if someone writes again. Nothing changes on GitHub."
+          onClick={() => (markReplyDone(t.id, last!.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone())}
+        >
+          Done
+        </button>
         {t.viewerCanResolve && <button disabled={!!busy} onClick={() => act('resolve', () => resolveThread(t.id, true))}>{busy === 'resolve' ? 'Resolving…' : 'Resolve'}</button>}
         <button class="primary" disabled={!!busy || !text.trim()} onClick={() => act('reply', () => reply(item.repo, item.number, t.comments.nodes[0].databaseId, text.trim()))}>
           {busy === 'reply' ? 'Sending…' : 'Reply'}
