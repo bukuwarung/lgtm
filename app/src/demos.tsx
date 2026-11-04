@@ -1077,11 +1077,11 @@ Object.assign(DEMOS, {
   },
   gradleModules: {
     title: 'Group files by module',
-    off: <>{['core/data/orders/src/main/java/OrderRepo.kt', 'feature/checkout/src/main/java/CheckoutScreen.kt'].map((p) => <File path={p} add={8} del={2} />)}</>,
+    off: <>{['orders/src/main/Repo.kt', 'checkout/src/main/Screen.kt'].map((p) => <File path={p} add={8} del={2} />)}</>,
     on: (
       <>
-        <File path="src/main/java/OrderRepo.kt" mod=":core:data:orders" add={8} del={2} />
-        <File path="src/main/java/CheckoutScreen.kt" mod=":feature:checkout" add={8} del={2} />
+        <File path="Repo.kt" mod=":orders" add={8} del={2} />
+        <File path="Screen.kt" mod=":checkout" add={8} del={2} />
       </>
     ),
   },
@@ -1095,6 +1095,87 @@ Object.assign(DEMOS, {
     off: form(false),
     on: form(true),
   },
+} satisfies Record<string, Demo>);
+
+// The last of the switches that show something: layout, the list, Jira, Slack, Glass.
+const listItem = (title: string, who: string, repo: string, ps: [string, ComponentChildren][]) => (
+  <a class="pr-item g-needs">
+    <span class="pr-title">{title}</span>
+    <span class="meta"><img class="pr-face" src={face(who)} alt="" /> {who} · {repo}</span>
+    <span class="pills">{ps.map(([cls, t]) => <span class={`pill ${cls}`}>{t}</span>)}</span>
+  </a>
+);
+const LIST_ONE = listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-time', <Tg i="⏱" n="~10 min" />]]);
+const SHORT_FILE = <File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12)} /></File>;
+const TINY_FILE = <File path="Notify.kt" add={1} del={0}><Rows rows={[[' ', 40, 40, 'if (paid) {'], ['+', '', 41, '  ship()'], [' ', 41, 42, '}']]} /></File>;
+const LONG_ROW: Row[] = [['+', '', 41, 'notify(owner, PUSH, template = Templates.ORDER_PAID, locale = owner.locale)']];
+const page = (body: ComponentChildren, narrow: boolean) => <div class="demo-window"><div class={narrow ? 'demo-window-in narrow' : 'demo-window-in'}>{body}</div></div>;
+const TICKET = (open: boolean) => (
+  <details class="ticket" open={open}>
+    <summary><a>BUKU-4120</a> <span class="jira-st js-indeterminate">In Progress</span> <span class="badge">Story</span> <b>Retry failed payments</b></summary>
+    <div class="md"><p>When a charge fails on a network error, try again up to three times before showing the error.</p></div>
+  </details>
+);
+const MERGE = (tick: boolean) => (
+  <div class="demo-panel merge-confirm">
+    <input value="Retry failed payments with backoff (#412)" aria-label="Commit title" />
+    <div class="merge-opt"><label><input type="checkbox" checked={tick} /> Move BUKU-4120 to</label> <select><option>Done</option></select></div>
+    <div class="merge-row"><button class="primary">Confirm squash and merge</button> <button>Cancel</button></div>
+  </div>
+);
+const SUBMIT = (tick: boolean) => (
+  <div class="demo-panel">
+    <label><input type="radio" checked /> Approve</label>
+    <label><input type="checkbox" checked={tick} /> Message @rina on Slack</label>
+    <button class="primary">Submit review</button>
+  </div>
+);
+const GLASS = (on: boolean) => (
+  <div class={on ? 'demo-glass glass' : 'demo-glass demo-solid'}>
+    <Rows rows={dedent(NESTED, 12)} />
+    <div class="bar">
+      <button>✳ Claude</button>
+      <button class="primary">Finish review</button>
+    </div>
+  </div>
+);
+
+Object.assign(DEMOS, {
+  showDrafts: {
+    title: "Other people's draft PRs",
+    off: <div class="demo-list">{LIST_ONE}</div>,
+    on: <div class="demo-list">{LIST_ONE}{listItem('Try the new checkout layout', 'budi', 'acme/shop#415', [['', <Tg i="draft" t="draft" />]])}</div>,
+  },
+  centerDiff: {
+    title: 'Centre the PR',
+    off: page(TINY_FILE, false),
+    on: page(TINY_FILE, true),
+  },
+  centerFit: {
+    title: 'Fill the window for a wide line',
+    off: page(<File path="OrderNotifier.kt" add={1} del={0}><Rows rows={LONG_ROW} /></File>, true),
+    on: page(<File path="OrderNotifier.kt" add={1} del={0}><Rows rows={LONG_ROW} /></File>, false),
+  },
+  showIndex: {
+    title: 'The PR index beside the diff',
+    off: SHORT_FILE,
+    on: (
+      <div class="demo-with-index">
+        <div class="demo-index">
+          <b>Files 2</b>
+          <div class="demo-idx">OrderNotifier.kt</div>
+          <div class="demo-idx">OrderNotifierTest.kt</div>
+          <b>Review threads 1</b>
+          <div class="demo-idx">OrderNotifier.kt:41 <small>you</small></div>
+        </div>
+        {SHORT_FILE}
+      </div>
+    ),
+  },
+  ticketOpen: { title: 'The Jira ticket, expanded', off: TICKET(false), on: TICKET(true) },
+  jiraOnMerge: { title: 'Move the Jira ticket when you merge', off: MERGE(false), on: MERGE(true) },
+  slackNotify: { title: 'Message on Slack after a review', off: SUBMIT(false), on: SUBMIT(true) },
+  glass: { title: 'Glass', off: GLASS(false), on: GLASS(true) },
 } satisfies Record<string, Demo>);
 
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which

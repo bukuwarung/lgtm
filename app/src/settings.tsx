@@ -270,7 +270,7 @@ export function Settings() {
 
       <section>
         <h3>Pull request list</h3>
-        <Flag k="showDrafts" initial={false} label="Show other people's draft PRs" hint="Your own drafts always show." />
+        <Flag k="showDrafts" initial={false} label="Show other people's draft PRs" hint="Your own drafts always show."  demo />
         <label class="set-row">
           <input
             type="checkbox"
@@ -314,14 +314,14 @@ export function Settings() {
 
       <section>
         <h3>Reviewing</h3>
-        <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)} />
+        <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)}  demo />
         <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
-        <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation" />
-        <Flag k="jiraOnMerge" initial={false} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge." />
+        <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation"  demo />
+        <Flag k="jiraOnMerge" initial={false} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge."  demo />
         <JiraAfterMerge />
         <Flag k="gradleModules" initial={true} label="Group files by module" hint="Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a PR touches two or more, the index groups its files by them and each file says its own; with one, a pill names it."  demo />
         <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it."  demo />
-        <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review." />
+        <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review."  demo />
         <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
       </section>
 
@@ -336,9 +336,9 @@ export function Settings() {
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)."  demo />
         <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text."  demo />
         <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint="Old on the left, new on the right; rendered doc comments show as source. The button beside the PR's title switches it too."  demo />
-        <Flag k="centerDiff" initial={false} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too.">
+        <Flag k="centerDiff" initial={false} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too." demo>
           <CenterCols />
-          <Flag k="centerFit" initial={true} label="Fill the window when a line in the diff is wider than that" />
+          <Flag k="centerFit" initial={true} label="Fill the window when a line in the diff is wider than that"  demo />
         </Flag>
         <Flag k="diffSigns" initial={false} label="Show + and − before changed lines" hint="Off: their colour alone marks added and removed lines, and the code gets that column back."  demo />
         <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Its name, Comment and Viewed, as in its header."  demo />
@@ -390,7 +390,7 @@ export function Settings() {
 
       <section>
         <h3>Appearance</h3>
-        <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency." />
+        <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency."  demo />
         <TagStyle />
         <div class="set-row">
           <span>

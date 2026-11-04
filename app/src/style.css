@@ -1197,3 +1197,22 @@ html .demo-strike .removed pre { text-decoration: line-through; }
 .demo-idx small { color: var(--muted); }
 .demo-idx.settled { opacity: .6; }
 .demo-idx.more { color: var(--muted); }
+/* Previews: a page (for the centring switches), a list, a panel, the index beside a file, Glass over code */
+.demo-window { padding: 6px; border: 1px dashed var(--border); border-radius: 6px; }
+.demo-window-in.narrow { max-width: 72%; margin: 0 auto; }
+.demo-window .file { margin-bottom: 0; }
+.demo-list { display: grid; gap: 2px; }
+.demo-list .pr-item { display: grid; gap: 2px; padding: 6px 8px; border-radius: 6px; }
+.demo-panel { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: calc(13px * var(--ts)); }
+.demo-panel input:not([type]) { width: 100%; box-sizing: border-box; font: inherit; }
+.demo-panel .merge-row { display: flex; gap: 6px; }
+.demo-with-index { display: grid; grid-template-columns: 34% minmax(0, 1fr); gap: 8px; align-items: start; }
+.demo-with-index .demo-index { padding: 0; }
+.demo-glass { position: relative; padding-top: 6px; overflow: hidden; border-radius: 6px; }
+.demo-glass .bar { position: absolute; left: 0; right: 0; top: 22px; height: 36px; gap: 6px; padding: 0 8px; justify-content: flex-end; }
+html.glass .demo-solid .bar { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom-color: var(--border); }
+html.glass .demo-solid .bar :is(button, .nav-btn) { border-radius: 6px; box-shadow: none; }
+html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border-color: var(--border); }
+.demo-with-index > .file { min-width: 0; overflow: hidden; }
+.demo-with-index .demo-index > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.demo-glass .bar button { white-space: nowrap; padding: 2px 10px; font-size: calc(12px * var(--ts)); }
