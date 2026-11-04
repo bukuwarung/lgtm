@@ -706,16 +706,23 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   });
 
   const [planOrder, togglePlanOrder] = useStoredFlag('planOrder', true); // a big PR's files in its plan's order
+  // Settings → Checks and → Android: what lgtm points out.
+  const [chkSecrets] = useStoredFlag('checkSecrets', true);
+  const [chkDeps] = useStoredFlag('checkDeps', true);
+  const [chkTexts] = useStoredFlag('checkHardcoded', true);
+  const [chkRoom] = useStoredFlag('checkRoom', true);
+  const [showPlan] = useStoredFlag('reviewPlan', true);
   // Room tables changed with no database version raised (room.ts): it reads the files it needs, so after the PR.
   const [room, setRoom] = useState<SchemaChange[]>([]);
   useEffect(() => {
-    if (!data) return;
+    setRoom([]);
+    if (!data || !chkRoom) return;
     let stop = false;
     const read = (f: { filename: string; status: string }) =>
       f.status === 'removed' ? getRaw(repo, f.filename, data.pr.base.sha) : getRaw(data.headRepo, f.filename, data.pr.head.sha);
     roomCheck(data.files, read).then((r) => !stop && setRoom(r), () => {});
     return () => void (stop = true);
-  }, [data?.files]);
+  }, [data?.files, chkRoom]);
   if (error) return <p class="error page">{error}</p>;
   if (!data) return <PRSkeleton pr={early} />;
   const { pr, headRepo } = data;
@@ -813,9 +820,10 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
-  const secrets = secretsOf(data.files);
-  const deps = depsOf(data.files);
-  const texts = textsOf(data.files);
+  const none = { list: [], byPath: new Map() };
+  const secrets = chkSecrets ? secretsOf(data.files) : none;
+  const deps = chkDeps ? depsOf(data.files) : [];
+  const texts = chkTexts ? textsOf(data.files) : none;
   const ctx: Ctx = {
     codeIx,
     specRefs: refs,
@@ -975,7 +983,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const importOnly = files.filter((f) => importsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
   // A big PR: a reading plan over the files on show, and (its switch) those files in its order.
-  const plan = visible.length >= PLAN_AT ? reviewPlan(visible.map((f) => f.filename)) : null;
+  const plan = showPlan && visible.length >= PLAN_AT ? reviewPlan(visible.map((f) => f.filename)) : null;
   const rank = plan && planOrder ? new Map(plan.flatMap((s) => s.paths).map((p, i) => [p, i])) : null;
   const inOrder = rank ? [...visible].sort((a, b) => rank.get(a.filename)! - rank.get(b.filename)!) : visible;
   const shown = [...inOrder, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : [])];
@@ -1687,9 +1695,14 @@ type SectionProps = {
 
 function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand, changed }: SectionProps) {
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
-  const canStrings = isStringsXml(file.filename) && !!file.patch;
+  const [stringsView] = useStoredFlag('stringsView', true);
+  const [translationChecks] = useStoredFlag('translationChecks', true);
+  const [lintBaselines] = useStoredFlag('lintBaselines', true);
+  const [manifestSummary] = useStoredFlag('manifestSummary', true);
+  const [checkBinaries] = useStoredFlag('checkBinaries', true);
+  const canStrings = stringsView && isStringsXml(file.filename) && !!file.patch;
   const [strings, setStrings] = useState(canStrings); // its names and texts; the pair of buttons switches to the XML
-  const canLint = isLintBaseline(file.filename) && !!file.patch;
+  const canLint = lintBaselines && isLintBaseline(file.filename) && !!file.patch;
   const [lint, setLint] = useState(canLint); // what it now suppresses, and what it no longer does; or the XML
   const [richFirst] = useStoredFlag('richMarkdown', true);
   const [previewFirst] = useStoredFlag('previewImages', true);
@@ -1702,7 +1715,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   const [showDeleted, setShowDeleted] = useState(threads.some((x) => !isFileLevel(x)) || drafts.some((d) => d.line));
   const hideDeleted = collapseDeleted && file.status === 'removed' && !showDeleted;
   const [ref, near] = useNear<HTMLElement>();
-  const sxNotes = useTranslationNotes(file, ctx, canStrings && strings && near);
+  const sxNotes = useTranslationNotes(file, ctx, canStrings && strings && near && translationChecks);
   // With whitespace ignored, a hunk left with no change at all (nor a comment on it) folds into the unchanged lines
   // around it. ponytail: those lines' old numbers (shown only with "old line numbers") can be off by the blank lines
   // the folded hunk added; split the gap there if that matters.
@@ -1805,10 +1818,10 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         drafts={drafts.filter((d) => !d.line)}
         form={t?.path === path && t.line == null && !t.atEnd}
       />
-      {isManifest(path) && (near || ctx.renderAll) && <ManifestSummary file={file} ctx={ctx} />}
+      {manifestSummary && isManifest(path) && (near || ctx.renderAll) && <ManifestSummary file={file} ctx={ctx} />}
       {canPreview && preview && (near || ctx.renderAll) ? (
         <ImagePreview file={file} ctx={ctx} onFail={() => (setCanPreview(false), setPreview(false))} />
-      ) : !file.patch && !file.additions && !file.deletions && file.status !== 'renamed' && (near || ctx.renderAll) ? (
+      ) : checkBinaries && !file.patch && !file.additions && !file.deletions && file.status !== 'renamed' && (near || ctx.renderAll) ? (
         <BinaryInfo file={file} ctx={ctx} />
       ) : !file.patch ? (
         <p class="note pad">
