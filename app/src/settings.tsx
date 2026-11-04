@@ -164,7 +164,8 @@ const SECTION_ICON: Record<string, string> = {
   Android: 'device-mobile',
   'Java backend': 'stack',
   Web: 'code',
-  App: 'device-desktop',
+  App: 'gear',
+  'Mac app': 'device-desktop',
   Appearance: 'paintbrush',
   'Markdown files': 'markdown',
   Backup: 'archive',
@@ -194,7 +195,7 @@ export function Settings() {
       // A platform's subsection (Checks → Android…): all of it when its name matches, else its matching switches.
       for (const g of sec.querySelectorAll<HTMLElement>(':scope > .set-group')) {
         const all = whole || has(g.querySelector('h4') ?? g);
-        for (const it of g.querySelectorAll<HTMLElement>(':scope > .set-flag')) it.hidden = !all && !has(it);
+        for (const it of g.querySelectorAll<HTMLElement>(':scope > .set-flag, :scope > .set-row')) it.hidden = !all && !has(it);
         g.hidden = !all && !has(g);
       }
       sec.hidden = !whole && !has(sec);
@@ -302,13 +303,15 @@ export function Settings() {
           {ints && !ints.jira.ok && <pre>brew install atlassian/homebrew-acli/acli{'\n'}acli jira auth login --web</pre>}
         </Status>
         {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
+      
+        <div class="set-group">
+          <h4>Slack</h4>
+          {ints?.slack.ok && <SlackPeople team={team} />}
+          <SlackMessages />
+        </div>
+        <ClaudeFolders />
       </section>
 
-      <section>
-        <h3>Slack</h3>
-        {ints?.slack.ok && <SlackPeople team={team} />}
-        <SlackMessages />
-      </section>
 
       <section>
         <h3>Pull request list</h3>
@@ -350,9 +353,9 @@ export function Settings() {
             {[...new Set([...(team ? [team] : []), ...(teams ?? [])])].map((t) => <option value={t}>{t}</option>)}
           </select>
         </label>
+        <TimeToReview />
       </section>
 
-      <TimeToReview />
 
       <section>
         <h3>Reviewing</h3>
@@ -365,6 +368,7 @@ export function Settings() {
         <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it."  demo />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review."  demo />
         <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
+        <SavedReplies />
       </section>
 
       <section>
@@ -440,7 +444,6 @@ export function Settings() {
         </div>
       </section>
 
-      {isDesktop && <LaunchAtLogin />}
 
       <section>
         <h3>Appearance</h3>
@@ -518,17 +521,15 @@ export function Settings() {
           </select>
         </label>
         <pre class="code-sample" dangerouslySetInnerHTML={{ __html: highlightCode(SAMPLE, 'kotlin') }} />
+        <MarkdownStyle />
       </section>
 
-      <MarkdownStyle />
-
-      <ClaudeFolders />
-
-      <BackupSection />
-
-      <Shortcuts />
-
-      <SavedReplies />
+      <section>
+        <h3>App</h3>
+        {isDesktop && <LaunchAtLogin />}
+        <Shortcuts />
+        <BackupSection />
+      </section>
       <About />
     </div>
   );
@@ -802,7 +803,7 @@ function SlackMessages() {
   const { names, emoji } = useSlackEmoji(); // for the previews and the suggestions
   return (
     <>
-      <h4>Messages</h4>
+      <h5>Messages</h5>
       <p class="note">
         What lgtm says on Slack. Fill-ins: {COMMON_FIELDS}. A tag becomes a Slack mention for people in People above (or, for who gets it, by their
         email); anyone else stays @login.
@@ -939,8 +940,8 @@ function MarkdownStyle() {
   );
   useEffect(() => MD_THEMES.forEach((t) => loadMdFonts({ theme: t.id })), []); // for the previews
   return (
-    <section>
-      <h3>Markdown files</h3>
+    <div class="set-group">
+      <h4>Markdown files</h4>
       <p class="note">How markdown files and PR descriptions read: pick a theme, then change anything in it. In dark mode they follow your light-mode theme (its night version), or pick another.</p>
       <div class="md-mode">
         <span class="set-seg" role="radiogroup" aria-label="Style for">
@@ -1006,7 +1007,7 @@ function MarkdownStyle() {
           <div class="md chunk" dangerouslySetInnerHTML={{ __html: md.render(MD_SAMPLE) }} />
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -1066,8 +1067,8 @@ function TimeToReview() {
   const pace = Number(raw) || 100;
   const example = (minutes: number) => estimateLabel(minutes / (pace / 100));
   return (
-    <section>
-      <h3>Time to review</h3>
+    <div class="set-group">
+      <h4>Time to review</h4>
       <p class="note">
         Each PR in the list gets a rough time to review (<Octicon name="stopwatch" />): reading its description, then its changed lines. The paces:
       </p>
@@ -1087,7 +1088,7 @@ function TimeToReview() {
         <input type="range" min={50} max={200} step={10} value={pace} onInput={(e) => setPace(e.currentTarget.value)} aria-label="Your review pace, percent" />
       </label>
       {pace !== 100 && <button onClick={() => setPace('100')}>Back to 100%</button>}
-    </section>
+    </div>
   );
 }
 
@@ -1096,8 +1097,8 @@ function SavedReplies() {
   const [list, save] = useSavedReplies();
   const change = (i: number, r: Partial<SavedReply>) => save(list.map((x, k) => (k === i ? { ...x, ...r } : x)));
   return (
-    <section>
-      <h3>Saved replies</h3>
+    <div class="set-group">
+      <h4>Saved replies</h4>
       <p class="note">In a comment box, type / and the name at the start of a line (or use ↩︎ Replies), then Enter.</p>
       <table class="set-replies">
         <tbody>
@@ -1117,7 +1118,7 @@ function SavedReplies() {
         </tbody>
       </table>
       <button onClick={() => save([...list, { title: 'new', body: '' }])}>Add a reply</button>
-    </section>
+    </div>
   );
 }
 
@@ -1145,8 +1146,8 @@ function Shortcuts() {
     return () => removeEventListener('keydown', onKey, true);
   }, [editing, b]);
   return (
-    <section>
-      <h3>Keyboard shortcuts</h3>
+    <div class="set-group">
+      <h4>Keyboard shortcuts</h4>
       <p class="note">On a PR. Click a key to change it.</p>
       <table class="set-keys">
         <tbody>
@@ -1171,7 +1172,7 @@ function Shortcuts() {
       {editing && <p class="note">Backspace for no key, Esc to keep it.</p>}
       {msg && <p class="notice">{msg}</p>}
       <button onClick={() => (reset(), setMsg('Shortcuts back to the defaults.'))}>Reset to defaults</button>
-    </section>
+    </div>
   );
 }
 
@@ -1270,7 +1271,7 @@ function SlackPeople({ team }: { team: string }) {
 
   return (
     <>
-      <h4>People</h4>
+      <h5>People</h5>
       <p class="note">
         Who gets the Slack message for each GitHub account, saved in your <code>~/.config/lgtm/config.json</code>. Unmapped people are
         still tried by their GitHub email when you send.
@@ -1349,8 +1350,8 @@ function LaunchAtLogin() {
   const [menuBar, toggleMenuBar] = useStoredFlag('menuBar', true);
   useEffect(() => void launchAtLogin().then(setOn, () => setOn(false)), []);
   return (
-    <section>
-      <h3>App</h3>
+    <div class="set-group">
+      <h4>Mac app</h4>
       <label class="set-row">
         <input
           type="checkbox"
@@ -1373,7 +1374,7 @@ function LaunchAtLogin() {
           <small>How many PRs wait on you, and a menu of them to open one.</small>
         </span>
       </label>
-    </section>
+    </div>
   );
 }
 
@@ -1382,8 +1383,8 @@ function BackupSection() {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const file = useRef<HTMLInputElement>(null);
   return (
-    <section>
-      <h3>Backup</h3>
+    <div class="set-group">
+      <h4>Backup</h4>
       <p class="note">Your preferences (themes you added included) and pending (unsubmitted) comments live in this {isDesktop ? 'app' : 'browser'}. Export them to move to {isDesktop ? 'the browser version' : 'the macOS app'} or another Mac.</p>
       <div class="row">
         <button onClick={() => saveBackup().then((where) => setMsg({ ok: true, text: `Saved to ${where}.` }), (e) => setMsg({ ok: false, text: e.message }))}>Export settings and drafts</button>
@@ -1410,7 +1411,7 @@ function BackupSection() {
         />
       </div>
       {msg && <p class={msg.ok ? 'notice' : 'error'}>{msg.text}</p>}
-    </section>
+    </div>
   );
 }
 
@@ -1458,8 +1459,8 @@ function ClaudeFolders() {
     setRaw(JSON.stringify(next));
   };
   return (
-    <section>
-      <h3>Claude Code</h3>
+    <div class="set-group">
+      <h4>Claude Code</h4>
       <p class="note">
         ✳ Claude (on a PR or a comment) opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt. Set where each repo is checked
         out so the session starts there.
@@ -1481,6 +1482,6 @@ function ClaudeFolders() {
           </tbody>
         </table>
       )}
-    </section>
+    </div>
   );
 }
