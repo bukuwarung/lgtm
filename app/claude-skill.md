@@ -34,12 +34,14 @@ When a pull request is ready for the user to review:
    lgtm "https://github.com/OWNER/REPO/pull/NUMBER?claude=SESSION_ID"
    ```
 
-4. Tell the user it's open, in one line, with the links to come back to it, written out in full:
+4. Tell the user it's open, in one line, with the GitHub link written out in full:
 
-   > Opened in lgtm: [OWNER/REPO#NUMBER](lgtm://OWNER/REPO/pull/NUMBER?claude=SESSION_ID) · [on GitHub](https://github.com/OWNER/REPO/pull/NUMBER)
+   > Opened in lgtm: OWNER/REPO#NUMBER · [on GitHub](https://github.com/OWNER/REPO/pull/NUMBER)
 
-   With the browser version, link the address the `lgtm` command printed, followed by `#/OWNER/REPO/pull/NUMBER`,
-   instead of the `lgtm://` one. If neither command worked, say so and give just the GitHub link.
+   Don't link the `lgtm://` address: the Claude app doesn't open those links from a chat, so it would do nothing.
+   If the user wants it open again later, run step 2 again. With the browser version, do link the PR: the address
+   the `lgtm` command printed, followed by `#/OWNER/REPO/pull/NUMBER` (a web link, which opens). If neither command
+   worked, say so and give just the GitHub link.
 
 ## Messages from lgtm ("check lgtm")
 
