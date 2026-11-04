@@ -1216,8 +1216,14 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .demo-with-index > .file { min-width: 0; overflow: hidden; }
 .demo-with-index .demo-index > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .demo-glass .bar button { white-space: nowrap; padding: 2px 10px; font-size: calc(12px * var(--ts)); }
-.api-budget { display: grid; gap: 2px; margin-top: 4px; }
-.api-budget .low { color: light-dark(#9a6700, #d29922); }
+.api-budget { display: grid; gap: 4px; margin-top: 6px; max-width: 520px; font-size: calc(12px * var(--ts)); }
+.api-row { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 8px; }
+.api-name { color: var(--muted); }
+.api-bar { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+.api-bar i { display: block; height: 100%; border-radius: 3px; background: light-dark(#1a7f37, #3fb950); }
+.api-bar i.mid { background: light-dark(#bf8700, #d29922); }
+.api-bar i.low { background: light-dark(#cf222e, #f85149); }
+.api-left { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .preflight { margin: 4px 0 8px; padding: 8px 10px; border: 1px solid light-dark(#d4a72c, #9e6a03); border-radius: 8px; background: color-mix(in srgb, #d29922 10%, transparent); font-size: calc(13px * var(--ts)); }
 .preflight p { margin: 0 0 4px; }
 .preflight ul { margin: 0 0 8px; padding-left: 18px; }

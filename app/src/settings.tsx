@@ -127,17 +127,24 @@ function ApiBudget() {
   const at = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const NAME = { core: 'REST', graphql: 'GraphQL' };
   return (
-    <small class="api-budget">
+    <div class="api-budget">
       {rows.map(([b, x]) => {
+        const left = x!.remaining / x!.limit;
         const by = spentThisHour(b).filter(([what]) => what !== 'other').slice(0, 3);
+        const tip = `${x!.remaining.toLocaleString()} of ${x!.limit.toLocaleString()} left this hour, until ${at(x!.reset)}${by.length ? `. Most used since lgtm opened: ${by.map(([what, n]) => `${what} (${n} request${n === 1 ? '' : 's'})`).join(', ')}` : ''}`;
         return (
-          <span class={x!.remaining <= x!.limit / 10 ? 'low' : ''}>
-            <b>{NAME[b]}</b>: {x!.remaining.toLocaleString()} of {x!.limit.toLocaleString()} left this hour, until {at(x!.reset)}
-            {by.length > 0 && <> · most used, since lgtm opened: {by.map(([what, n]) => `${what} (${n} request${n === 1 ? '' : 's'})`).join(', ')}</>}
-          </span>
+          <div class="api-row" title={tip}>
+            <span class="api-name">{NAME[b]}</span>
+            <span class="api-bar" role="meter" aria-valuemin={0} aria-valuemax={x!.limit} aria-valuenow={x!.remaining} aria-label={`${NAME[b]} left this hour`}>
+              <i class={left <= 0.1 ? 'low' : left <= 0.5 ? 'mid' : ''} style={{ width: `${Math.max(1, left * 100)}%` }} />
+            </span>
+            <span class="api-left">
+              {x!.remaining.toLocaleString()} left · resets {at(x!.reset)}
+            </span>
+          </div>
         );
       })}
-    </small>
+    </div>
   );
 }
 
