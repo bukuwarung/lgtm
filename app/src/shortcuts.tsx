@@ -8,7 +8,7 @@ import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
-export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean };
+export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
 
 // Scroll to an element by id, opening any collapsed <details> around it and flashing it. `near` is scrolled to
 // first when the target isn't in the DOM yet (file bodies render lazily), then we wait for it to appear.

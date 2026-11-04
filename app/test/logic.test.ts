@@ -842,3 +842,11 @@ test('reviewPlan: specs, build, models, code, tests, resources', async () => {
     ['Specs and docs', 1], ['Build and config', 2], ['Models and contracts', 1], ['Implementation', 1], ['Tests', 1], ['Resources and assets', 2],
   ]);
 });
+
+test('gitattributes: filter=lfs, last rule wins', async () => {
+  const { inLfs, isGenerated, parseGeneratedRules } = await import('../src/gitattributes.ts');
+  const r = parseGeneratedRules('*.bin filter=lfs diff=lfs merge=lfs -text\napp/src/debug/** -filter\n*.lock linguist-generated');
+  assert.ok(inLfs(r, 'app/src/main/assets/fw.bin'));
+  assert.ok(!inLfs(r, 'app/src/debug/assets/fw.bin'));
+  assert.ok(!inLfs(r, 'app/x.kt') && isGenerated(r, 'yarn.lock') && !isGenerated(r, 'a.bin'));
+});

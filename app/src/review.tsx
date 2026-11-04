@@ -2,7 +2,7 @@ import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
-import { isGenerated, parseGeneratedRules } from './gitattributes.ts';
+import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
@@ -99,6 +99,7 @@ const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>)
     .map((f) => ({
       ...f,
       generated: isGenerated(rules, f.filename),
+      lfs: inLfs(rules, f.filename),
       // Nothing in it changed: renamed, copied or mode-changed as it was, or an empty text file added or deleted (GitHub
       // gives that no diff, as it does a binary one: its type tells them apart).
       noDiff: !f.additions && !f.deletions && (['renamed', 'copied', 'changed'].includes(f.status) || (!f.patch && ['added', 'removed'].includes(f.status) && !!languageFor(f.filename))),
@@ -1813,7 +1814,13 @@ function BinaryInfo({ file, ctx }: { file: File; ctx: Ctx }) {
         {ships && file.status !== 'removed' && <> · packed into the app{ships === 'main' ? '' : ` (${ships} builds)`}</>}{' '}
         <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a>
       </p>
-      {now && !now.lfs && now.size > BIG && (
+      {now && !now.lfs && file.lfs && (
+        <p class="bin-warn">
+          <Octicon name="alert" /> The repo's .gitattributes puts this in Git LFS, but it went straight into Git: Git LFS wasn't set up where it was
+          committed. Run <code>git lfs install</code>, then <code>git rm --cached</code> and add it again.
+        </p>
+      )}
+      {now && !now.lfs && !file.lfs && now.size > BIG && (
         <p class="bin-warn">
           <Octicon name="alert" /> Over 1 MB, straight in Git: every clone downloads it, and every version of it, for good. Git LFS keeps big files out of the history.
         </p>
