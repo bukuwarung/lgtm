@@ -101,10 +101,9 @@ function slackText(pr: PR, repo: string, n: number, event: ReviewEvent, body: st
   });
 }
 
-// Mark generated and content-free files, and put them in reading order (markdown first, tests after their source).
+// Mark generated and content-free files (in GitHub's order: the reading order is the view's, by its switch).
 // Binary and too-large files also come without a patch but did change, so only renames/copies/mode changes count.
 const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>): File[] => {
-  const order = new Map(reviewOrder(files.map((f) => f.filename)).map((p, i) => [p, i]));
   return files
     .map((f) => ({
       ...f,
@@ -113,8 +112,7 @@ const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>)
       // Nothing in it changed: renamed, copied or mode-changed as it was, or an empty text file added or deleted (GitHub
       // gives that no diff, as it does a binary one: its type tells them apart).
       noDiff: !f.additions && !f.deletions && (['renamed', 'copied', 'changed'].includes(f.status) || (!f.patch && ['added', 'removed'].includes(f.status) && !!languageFor(f.filename))),
-    }))
-    .sort((a, b) => order.get(a.filename)! - order.get(b.filename)!);
+    }));
 };
 
 const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
@@ -745,7 +743,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
     main?.querySelectorAll<HTMLElement>('.md[data-lang]').forEach((el) => highlightBlocks(el, el.dataset.lang || undefined));
   });
 
-  const [planOrder, togglePlanOrder] = useStoredFlag('planOrder', true); // a big PR's files in its plan's order
+  const [readingOrder] = useStoredFlag('readingOrder', true); // files in the plan's order, else GitHub's
   const [paused, setPaused] = useState(''); // GraphQL's limit used up: the threads couldn't load
   // Settings → Checks and → Android: what lgtm points out.
   const [chkSecrets] = useStoredFlag('checkSecrets', true);
@@ -1075,9 +1073,11 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const wsOnly = files.filter((f) => wsOnlySet.has(f.filename));
   const importOnly = files.filter((f) => importsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
-  // A big PR: a reading plan over the files on show, and (its switch) those files in its order.
-  const plan = showPlan && visible.length >= PLAN_AT ? reviewPlan(visible.map((f) => f.filename)) : null;
-  const rank = plan && planOrder ? new Map(plan.flatMap((s) => s.paths).map((p, i) => [p, i])) : null;
+  // The files on show in reading order (files.ts reviewPlan: specs, build, models, the change, tests, resources) or
+  // GitHub's (Settings → Pull request view); a big PR also gets the plan itself, with how much of each step is viewed.
+  const steps = readingOrder || showPlan ? reviewPlan(reviewOrder(visible.map((f) => f.filename))) : [];
+  const plan = showPlan && visible.length >= PLAN_AT ? steps : null;
+  const rank = readingOrder ? new Map(steps.flatMap((s) => s.paths).map((p, i) => [p, i])) : null;
   const inOrder = rank ? [...visible].sort((a, b) => rank.get(a.filename)! - rank.get(b.filename)!) : visible;
   const shown = [...inOrder, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : [])];
   // Centred, a changed line too wide for it: the PR fills the window instead (Settings → Diff); tabs count as 4.
@@ -1556,7 +1556,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
           {drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your comments move to them with their lines when you submit; you'll be asked about any whose lines changed.</p>
           )}
-          {plan && <ReviewPlan plan={plan} viewed={viewed} ordered={planOrder} onOrdered={togglePlanOrder} />}
+          {plan && <ReviewPlan plan={plan} viewed={viewed} />}
           {pending && (
             <p class="warn">
               You have a review in progress on GitHub ({pending.count} comment{pending.count === 1 ? '' : 's'}): Finish review sends it, with your comments here.{' '}
@@ -2197,8 +2197,8 @@ const depPage = (d: DepChange) =>
   d.npm ? `https://www.npmjs.com/package/${d.name}?activeTab=versions` : /^[\w.-]+:[\w.-]+$/.test(d.name) ? `https://central.sonatype.com/artifact/${d.name.replace(':', '/')}/versions` : undefined;
 
 // A big PR's reading plan (files.ts reviewPlan): each step with how much of it is viewed, a click to its first file
-// not yet viewed; a switch puts the files in this order (review mode's next-file keys follow it too).
-function ReviewPlan({ plan, viewed, ordered, onOrdered }: { plan: PlanStep[]; viewed: Set<string>; ordered: boolean; onOrdered: () => void }) {
+// not yet viewed. The files are in its order unless Settings → "Files in reading order" is off.
+function ReviewPlan({ plan, viewed }: { plan: PlanStep[]; viewed: Set<string> }) {
   const [open, toggleOpen] = useStoredFlag('planOpen', true);
   const total = plan.reduce((n, s) => n + s.paths.length, 0);
   const done = plan.reduce((n, s) => n + s.paths.filter((p) => viewed.has(p)).length, 0);
@@ -2229,9 +2229,6 @@ function ReviewPlan({ plan, viewed, ordered, onOrdered }: { plan: PlanStep[]; vi
           );
         })}
       </ol>
-      <label>
-        <input type="checkbox" checked={ordered} onChange={onOrdered} /> Files in this order
-      </label>
     </details>
   );
 }

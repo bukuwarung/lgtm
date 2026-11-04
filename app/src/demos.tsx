@@ -868,6 +868,11 @@ Object.assign(DEMOS, {
       </>
     ),
   },
+  readingOrder: {
+    title: 'Files in reading order',
+    off: <>{[...FILES_BIG].sort().map((p) => <File path={p} add={12} del={2} />)}</>,
+    on: <>{FILES_BIG.map((p) => <File path={p} add={12} del={2} />)}</>, // the test right below its view model
+  },
   reviewPlan: {
     title: 'A review plan for big PRs',
     off: <>{FILES_BIG.slice(0, 3).map((p) => <File path={p} add={12} del={2} />)}</>,

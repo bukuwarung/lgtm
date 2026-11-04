@@ -826,7 +826,7 @@ test('lint baseline: new and cleared suppressions, moves ignored', async () => {
   assert.deepEqual(removed.map((s) => s.id), ['Gone']);
 });
 
-test('reviewPlan: specs, build, models, code, tests, resources', async () => {
+test('reviewPlan: specs, build, models, code (each with its tests), other tests, resources', async () => {
   const { reviewPlan } = await import('../src/files.ts');
   const plan = reviewPlan([
     'openspec/changes/x/design.md',
@@ -837,10 +837,17 @@ test('reviewPlan: specs, build, models, code, tests, resources', async () => {
     'app/src/main/AndroidManifest.xml',
     'app/src/main/res/values/strings.xml',
     'app/src/main/assets/fw.bin',
+    'app/src/test/java/a/model/CardTest.kt',
+    'app/src/test/java/a/CardReaderIT.kt',
+    'app/src/test/java/a/PinPadTest.kt', // its subject isn't in the PR
   ]);
   assert.deepEqual(plan.map((s) => [s.title, s.paths.length]), [
-    ['Specs and docs', 1], ['Build and config', 2], ['Models and contracts', 1], ['Implementation', 1], ['Tests', 1], ['Resources and assets', 2],
+    ['Specs and docs', 1], ['Build and config', 2], ['Models and contracts', 2], ['Implementation', 3], ['Tests', 1], ['Resources and assets', 2],
   ]);
+  // A test right below what it tests, in that file's step.
+  assert.deepEqual(plan[3].paths, ['app/src/main/java/a/CardReader.kt', 'app/src/test/java/a/CardReaderTest.kt', 'app/src/test/java/a/CardReaderIT.kt']);
+  assert.deepEqual(plan[2].paths, ['app/src/main/java/a/model/Card.kt', 'app/src/test/java/a/model/CardTest.kt']);
+  assert.deepEqual(plan[4].paths, ['app/src/test/java/a/PinPadTest.kt']);
 });
 
 test('gitattributes: filter=lfs, last rule wins', async () => {

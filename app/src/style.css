@@ -1163,7 +1163,6 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 .plan-bar i { display: block; height: 100%; background: var(--primary); }
 .plan-n { color: var(--muted); text-align: right; }
 .plan-ok { color: var(--primary); }
-.plan label { color: var(--muted); }
 @media (max-width: 700px) { .plan li { grid-template-columns: 1fr 52px 72px; } .plan-bar { display: none; } }
 /* An added line that looks like a secret (secrets.ts) */
 .diff tr.ln.secret td.code { box-shadow: inset 3px 0 0 light-dark(#cf222e, #f85149); background: light-dark(#ffebe9, rgb(248 81 73 / .18)); }

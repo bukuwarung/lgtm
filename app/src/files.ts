@@ -41,7 +41,8 @@ export const addsLogic = (patch?: string) =>
 type Changed = { filename: string; status: string; additions: number; patch?: string };
 
 // A big PR's reading plan: what it means to do, what it needs (build, permissions), the shapes the rest builds on,
-// the change itself, what it promises (tests), then resources. Each path in its first matching step, in reviewOrder.
+// the change itself, what it promises (tests), then resources. Each path in its first matching step, in the order
+// given; a test of a file the PR also changes goes right below that file instead (FooTest.kt under Foo.kt).
 export type PlanStep = { title: string; why: string; paths: string[] };
 export const PLAN_AT = 50; // files: below this a PR reads fine top to bottom
 const MODELS = /(^|\/)(api|apis|model|models|domain|dto|dtos|entity|entities|contract|contracts|types|interfaces?)\//i;
@@ -55,7 +56,16 @@ export function reviewPlan(paths: string[]): PlanStep[] {
     { title: 'Implementation', why: 'the change itself', has: (p) => CODE.test(p), at: 3, paths: [] },
     { title: 'Resources and assets', why: 'strings, layouts, images, binaries', has: () => true, at: 5, paths: [] },
   ];
-  for (const p of paths) steps.find((s) => s.has(p))!.paths.push(p);
+  const all = new Set(paths);
+  const below = (p: string) => subject(p) !== p && all.has(subject(p));
+  for (const p of paths) if (!below(p)) steps.find((s) => s.has(p))!.paths.push(p);
+  for (const p of paths.filter(below)) {
+    const s = subject(p);
+    const step = steps.find((x) => x.paths.includes(s))!;
+    let i = step.paths.indexOf(s) + 1;
+    while (i < step.paths.length && subject(step.paths[i]) === s) i++; // after its other tests
+    step.paths.splice(i, 0, p);
+  }
   return steps.filter((s) => s.paths.length).sort((a, b) => a.at - b.at).map(({ title, why, paths }) => ({ title, why, paths }));
 }
 export function untested(files: Changed[]): string[] {
