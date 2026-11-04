@@ -319,8 +319,8 @@ export function Settings() {
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation" />
         <Flag k="jiraOnMerge" initial={false} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge." />
         <JiraAfterMerge />
-        <Flag k="gradleModules" initial={true} label="Group files by module" hint="Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a PR touches two or more, the index groups its files by them and each file says its own; with one, a pill names it." />
-        <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it." />
+        <Flag k="gradleModules" initial={true} label="Group files by module" hint="Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a PR touches two or more, the index groups its files by them and each file says its own; with one, a pill names it."  demo />
+        <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it."  demo />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review." />
         <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
       </section>
@@ -333,34 +333,34 @@ export function Settings() {
         <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
-        <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)." />
-        <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text." />
-        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint="Old on the left, new on the right; rendered doc comments show as source. The button beside the PR's title switches it too." />
+        <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)."  demo />
+        <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text."  demo />
+        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint="Old on the left, new on the right; rendered doc comments show as source. The button beside the PR's title switches it too."  demo />
         <Flag k="centerDiff" initial={false} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too.">
           <CenterCols />
           <Flag k="centerFit" initial={true} label="Fill the window when a line in the diff is wider than that" />
         </Flag>
-        <Flag k="diffSigns" initial={false} label="Show + and − before changed lines" hint="Off: their colour alone marks added and removed lines, and the code gets that column back." />
-        <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Its name, Comment and Viewed, as in its header." />
-        <Flag k="rainbowBrackets" initial={false} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)." />
+        <Flag k="diffSigns" initial={false} label="Show + and − before changed lines" hint="Off: their colour alone marks added and removed lines, and the code gets that column back."  demo />
+        <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Its name, Comment and Viewed, as in its header."  demo />
+        <Flag k="rainbowBrackets" initial={false} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)."  demo />
         <LineStyle />
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
           <WordStyle />
         </Flag>
         <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode." demo>
-          <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source." />
-          <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines (or # lines, in Python, shell, YAML, ProGuard and the like) read as prose. Commented-out code stays source.">
-            <Flag k="renderSingleComments" initial={false} label="Single comment lines too" hint="A lone comment line, lighter. Comments after code on the same line stay as they are." />
+          <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source."  demo />
+          <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines (or # lines, in Python, shell, YAML, ProGuard and the like) read as prose. Commented-out code stays source." demo>
+            <Flag k="renderSingleComments" initial={false} label="Single comment lines too" hint="A lone comment line, lighter. Comments after code on the same line stay as they are."  demo />
           </Flag>
         </Flag>
         <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Per file, <> beside it shows the source, as on GitHub. Their look: Markdown files, below." demo>
-          <Flag k="strikeRemoved" initial={false} label="Strike through removed text" hint="Removed passages show in a red box, as their source." />
+          <Flag k="strikeRemoved" initial={false} label="Strike through removed text" hint="Removed passages show in a red box, as their source."  demo />
         </Flag>
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
         <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo>
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
         </Flag>
-        <Flag k="hideSettled" initial={true} label="Hide resolved and outdated conversations" hint="Unless you commented in them. The index offers to show them per PR." />
+        <Flag k="hideSettled" initial={true} label="Hide resolved and outdated conversations" hint="Unless you commented in them. The index offers to show them per PR."  demo />
         <Flag k="resumePosition" initial={false} label="Reopen a PR where you left off" hint="Off: every PR opens at its top." />
       </section>
 

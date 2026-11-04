@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { highlightCode, splitLines } from './highlight.ts';
+import { highlightCode, rainbow, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
 import { FileIcon, ModuleIcon } from './shortcuts.tsx';
 import { folderIcon } from './fileicons.ts';
@@ -945,6 +945,155 @@ Object.assign(DEMOS, {
     title: 'Check the other languages',
     off: <File path="res/values/strings.xml" add={1} del={1}><Rows rows={[['+', '', 13, sx(OTP_NEW, '+', OTP_OLD)]]} /></File>,
     on: <File path="res/values/strings.xml" add={1} del={1}><Rows rows={[['+', '', 13, sx(OTP_NEW, '+', OTP_OLD, ['values-in not updated'])]]} /></File>,
+  },
+} satisfies Record<string, Demo>);
+
+// Settings → Diff and → Reviewing, previewed (the ones made before every switch had to have one).
+const NESTED: Row[] = [
+  [' ', 40, 40, '            if (paid) {'],
+  ['-', 41, '', '                notify(owner)'],
+  ['+', '', 41, '                notify(owner, PUSH)'],
+  [' ', 42, 42, '            }'],
+];
+const dedent = (rows: Row[], n: number) => rows.map(([k, o, w, c, cls]) => [k, o, w, c.slice(n), cls] as Row);
+const ONE_NUM = (rows: Row[]) => (
+  <table class="diff one-num">
+    <tbody>
+      {rows.map(([k, o, n, code]) => (
+        <tr class={`ln${k === '+' ? ' a' : k === '-' ? ' d' : ''}`}>
+          <td class="num">{o}</td>
+          <td class="num" data-old={n === '' ? o : undefined}>{n}</td>
+          <td class="code" dangerouslySetInnerHTML={{ __html: kt(code) }} />
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+const half = (n: number | '', code: string | null, k: '' | 'a' | 'd') => (
+  <>
+    <span class={code == null ? 'num none' : 'num'}>{code == null ? '' : n}</span>
+    <span class={`code${code == null ? ' none' : k ? ' ' + k : ''}`} dangerouslySetInnerHTML={{ __html: code == null ? '' : kt(code) }} />
+  </>
+);
+const BRACKETS = 'val total = items.filter { (it.qty > 0) }.sumOf { (it.price * it.qty) }';
+const LINE_COMMENT = ['// Retries a failed charge up to three times, waiting', '// longer each time, so a short outage doesn\'t fail the order.', 'suspend fun charge(order: Order) = retry(times = 3) {'];
+const proseRow = (n: number, html: string): Row => ['+', '', n, `<div class="doc-render" style="width: calc(100% - 3ch)"><div class="md">${html}</div></div>`];
+const footer = (name: string) => (
+  <footer class="file-f">
+    <span class="file-f-name">{name}</span>
+    <button class="icon-btn"><Octicon name="comment" /></button>
+    <label class="viewed-box"><Octicon name="eye" /></label>
+  </footer>
+);
+const form = (now: boolean) => (
+  <div class="draft-form">
+    <div class="badge">Line 42</div>
+    <div class="editor"><div class="ed-write"><textarea rows={2} value="Could this use the shared retry helper?" /></div></div>
+    <div class="row">
+      <button class="primary">{now ? 'Comment now' : 'Add to review'}</button>
+      <button>{now ? 'Add to review' : 'Comment now'}</button>
+      <button>Cancel</button>
+    </div>
+  </div>
+);
+const idxThread = (file: string, who: string, cls = '') => <div class={`demo-idx ${cls}`}><b>{file}</b> <small>{who}</small></div>;
+
+Object.assign(DEMOS, {
+  oldLineNumbers: {
+    title: 'Old line numbers too',
+    off: <File path="OrderNotifier.kt" add={1} del={1}>{ONE_NUM(dedent(NESTED, 12))}</File>,
+    on: <File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12)} /></File>,
+  },
+  trimIndent: {
+    title: 'Leave out the shared indentation',
+    off: <File path="OrderNotifier.kt" add={1} del={1}><Rows rows={NESTED} /></File>,
+    on: <File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12)} /></File>,
+  },
+  splitDiff: {
+    title: 'Side by side',
+    off: <File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12)} /></File>,
+    on: (
+      <File path="OrderNotifier.kt" add={1} del={1}>
+        <table class="diff">
+          <tbody>
+            {([[40, 'if (paid) {', 40, 'if (paid) {', ''], [41, 'notify(owner)', 41, 'notify(owner, PUSH)', 'x'], [42, '}', 42, '}', '']] as const).map(([o, a, n, b, x]) => (
+              <tr class="ln split"><td colSpan={3}><div class="split-row">{half(o, a, x ? 'd' : '')}{half(n, b, x ? 'a' : '')}</div></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </File>
+    ),
+  },
+  diffSigns: {
+    title: 'Show + and − before changed lines',
+    off: <div class="demo-nosigns"><File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12)} /></File></div>,
+    on: <div class="demo-signs"><File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12)} /></File></div>,
+  },
+  fileFooter: {
+    title: 'A bar at the end of each file',
+    off: <div class="demo-nofooter"><File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12).slice(1, 3)} />{footer('OrderNotifier.kt')}</File></div>,
+    on: <div class="demo-footer"><File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12).slice(1, 3)} />{footer('OrderNotifier.kt')}</File></div>,
+  },
+  rainbowBrackets: {
+    title: 'Rainbow brackets',
+    off: <File path="Cart.kt" add={1} del={0}><Rows rows={[['+', '', 7, BRACKETS]]} /></File>,
+    on: <File path="Cart.kt" add={1} del={0}><Rows rows={[['+', '', 7, `<span>${rainbow(kt(BRACKETS))}</span>`]]} /></File>,
+  },
+  renderLineComments: {
+    title: 'Line comments rendered too',
+    off: <File path="Payments.kt" add={3} del={0}><Rows rows={LINE_COMMENT.map((l, i) => ['+', '', 30 + i, l] as Row)} /></File>,
+    on: (
+      <File path="Payments.kt" add={3} del={0}>
+        <Rows rows={[proseRow(30, '<p>Retries a failed charge up to three times, waiting longer each time, so a short outage doesn’t fail the order.</p>'), ['+', '', 32, LINE_COMMENT[2]]]} />
+      </File>
+    ),
+  },
+  renderSingleComments: {
+    title: 'Single comment lines too',
+    off: <File path="Payments.kt" add={2} del={0}><Rows rows={[['+', '', 40, '// Gateway limit: 3 calls a second'], ['+', '', 41, 'private val limiter = RateLimiter(3)']]} /></File>,
+    on: (
+      <File path="Payments.kt" add={2} del={0}>
+        <Rows rows={[['+', '', 40, '<div class="doc-render doc-one" style="width: calc(100% - 3ch)"><div class="md"><p>Gateway limit: 3 calls a second</p></div></div>'], ['+', '', 41, 'private val limiter = RateLimiter(3)']]} />
+      </File>
+    ),
+  },
+  renderEditedDocs: {
+    title: 'Edited doc comments rendered too',
+    off: (
+      <File path="Pricing.kt" add={1} del={1}>
+        <Rows rows={[[' ', 20, 20, '/**'], ['-', 21, '', ' * Sums the [Item] prices in the cart.'], ['+', '', 21, ' * Sums the [Item] prices in the cart, after discounts.'], [' ', 22, 22, ' */']]} />
+      </File>
+    ),
+    on: (
+      <File path="Pricing.kt" add={1} del={1}>
+        <table class="diff"><tbody><tr class="ln doc edited"><td class="num">20</td><td class="num">20</td><td class="code"><div class="doc-render" style="width: calc(100% - 3ch)"><div class="md"><p>Sums the <code>Item</code> prices in the cart<span class="doc-chg">, after discounts</span>.</p></div></div></td></tr></tbody></table>
+      </File>
+    ),
+  },
+  strikeRemoved: {
+    title: 'Strike through removed text',
+    off: <div class="demo-nostrike"><File path="docs/rollout.md" add={0} del={1}><div class="md demo-md"><p>Ship behind the <code>orders_v2</code> flag.</p><div class="removed"><pre>Keep the old screen as a fallback.</pre></div></div></File></div>,
+    on: <div class="demo-strike"><File path="docs/rollout.md" add={0} del={1}><div class="md demo-md"><p>Ship behind the <code>orders_v2</code> flag.</p><div class="removed"><pre>Keep the old screen as a fallback.</pre></div></div></File></div>,
+  },
+  gradleModules: {
+    title: 'Group files by module',
+    off: <>{['core/data/orders/src/main/java/OrderRepo.kt', 'feature/checkout/src/main/java/CheckoutScreen.kt'].map((p) => <File path={p} add={8} del={2} />)}</>,
+    on: (
+      <>
+        <File path="src/main/java/OrderRepo.kt" mod=":core:data:orders" add={8} del={2} />
+        <File path="src/main/java/CheckoutScreen.kt" mod=":feature:checkout" add={8} del={2} />
+      </>
+    ),
+  },
+  hideSettled: {
+    title: 'Hide resolved and outdated conversations',
+    off: <div class="demo-index">{idxThread('OrderRepo.kt:42', 'you')}{idxThread('Cart.kt:7', 'rina · resolved', 'settled')}{idxThread('Api.kt:19', 'budi · outdated', 'settled')}</div>,
+    on: <div class="demo-index">{idxThread('OrderRepo.kt:42', 'you')}<div class="demo-idx more">2 resolved or outdated hidden · <a>show</a></div></div>,
+  },
+  commentNow: {
+    title: 'Post comments at once',
+    off: form(false),
+    on: form(true),
   },
 } satisfies Record<string, Demo>);
 

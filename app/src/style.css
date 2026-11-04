@@ -1184,3 +1184,16 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 .demo-pop { position: static; display: grid; min-width: 0; max-width: 100%; overflow: visible; margin-top: 6px; box-shadow: none; }
 .demo-pop .pill-row > button, .demo-pop .pill-head { white-space: normal; flex-wrap: wrap; column-gap: 6px; row-gap: 0; }
 .demo-side .sx-warn { display: inline-block; white-space: normal; margin-left: 0; }
+/* Previews of settings that the page's own setting would otherwise override */
+html .demo-nosigns .diff .code::before { content: none; }
+html .demo-signs .diff .code::before { content: " "; }
+html .demo-signs .diff tr.a .code::before { content: "+"; }
+html .demo-signs .diff tr.d .code::before { content: "-"; }
+html .demo-nofooter .file-f { display: none; }
+html .demo-footer .file-f { display: flex; }
+html .demo-nostrike .removed pre { text-decoration: none; }
+html .demo-strike .removed pre { text-decoration: line-through; }
+.demo-index { display: grid; gap: 2px; padding: 6px 8px; font-size: calc(12px * var(--ts)); }
+.demo-idx small { color: var(--muted); }
+.demo-idx.settled { opacity: .6; }
+.demo-idx.more { color: var(--muted); }
