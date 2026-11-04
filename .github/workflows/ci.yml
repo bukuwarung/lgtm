@@ -24,3 +24,6 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run smoke
+        env:
+          # lgtm starts only with a gh login; the smoke test answers GitHub itself, so a made-up token does.
+          GH_TOKEN: not-a-real-token
