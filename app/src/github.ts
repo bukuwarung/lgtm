@@ -107,17 +107,31 @@ export const setPractice = (on: boolean) => void (practice = on);
 const writes = (path: string, init: RequestInit) =>
   !!init.method && init.method !== 'GET' && path !== '/markdown' && (path !== '/graphql' || /"query":"(?:\\[nt]|\s)*mutation/.test(String(init.body)));
 
-// GitHub's hourly limit used up: no more asking until it resets (asking anyway only fails, and slows the reset).
-let limitedUntil = 0;
-const limitError = () => new Error(`GitHub's hourly API limit is used up until ${new Date(limitedUntil).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}: lgtm waits until then`);
-const noteLimit = (res: Response) => {
-  const reset = Number(res.headers.get('x-ratelimit-reset'));
-  if (res.headers.get('x-ratelimit-remaining') === '0' && reset) limitedUntil = reset * 1000;
+// GitHub's limits, each on its own: REST ("core", 5,000 an hour), GraphQL (5,000 points an hour), search (30 a
+// minute)… One used up stops only the requests that draw on it, until it resets (asking anyway only fails, and slows
+// the reset); a "slow down" (GitHub's secondary limit, on bursts) for the seconds GitHub asks.
+const limited = new Map<string, { until: number; slow: boolean }>();
+const bucketOf = (path: string) => (path === '/graphql' ? 'graphql' : path.startsWith('/search/code') ? 'code_search' : path.startsWith('/search/') ? 'search' : 'core');
+const LIMIT_NAME: Record<string, string> = { core: "GitHub's hourly API limit", graphql: "GitHub's hourly GraphQL limit", search: "GitHub's search limit (30 a minute)", code_search: "GitHub's code search limit (10 a minute)" };
+const limitError = (bucket: string) => {
+  const l = limited.get(bucket)!;
+  const at = new Date(l.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', ...(l.until - Date.now() < 120_000 ? { second: '2-digit' } : {}) });
+  return new Error(l.slow ? `GitHub asked lgtm to slow down: it asks again at ${at}` : `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`} is used up until ${at}: lgtm waits until then`);
 };
+function noteLimit(res: Response, path: string) {
+  const bucket = res.headers.get('x-ratelimit-resource') ?? bucketOf(path);
+  const retry = Number(res.headers.get('retry-after'));
+  const reset = Number(res.headers.get('x-ratelimit-reset'));
+  if ((res.status === 403 || res.status === 429) && retry) limited.set(bucket, { until: Date.now() + retry * 1000, slow: true });
+  else if (res.headers.get('x-ratelimit-remaining') === '0' && reset) limited.set(bucket, { until: reset * 1000, slow: false });
+  else return;
+  recordError(`GitHub ${res.status} ${path}: the ${bucket} limit (${res.headers.get('x-ratelimit-used') ?? '?'}/${res.headers.get('x-ratelimit-limit') ?? '?'} used${retry ? `, retry after ${retry}s` : ''})`);
+}
 
 async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') {
   if (practice && writes(path, init)) throw new Error('Practice run: nothing is sent to GitHub');
-  if (Date.now() < limitedUntil) throw limitError();
+  const bucket = bucketOf(path.replace(/^https:\/\/api\.github\.com/, ''));
+  if (Date.now() < (limited.get(bucket)?.until ?? 0)) throw limitError(bucket);
   const res = await fetch(path.startsWith('https://') ? path : `https://api.github.com${path}`, {
     // GitHub lets the browser keep a response for 60 seconds: always check it's current (an unchanged one is a cheap
     // 304), or a refresh, or the page after asking a reviewer, shows the copy from before.
@@ -131,14 +145,18 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
     },
   });
   if (res.status === 401) throw new Error('GitHub rejected the gh token. Run `gh auth login`, then reload.');
-  noteLimit(res);
+  noteLimit(res, path.replace(/^https:\/\/api\.github\.com/, '').split('?')[0]);
   return res;
 }
 
 async function ok(res: Response) {
   if (res.ok) return res;
   const msg = (await res.json().catch(() => null))?.message;
-  recordError(`GitHub ${res.status} ${new URL(res.url).pathname}: ${msg ?? res.statusText}`);
+  const path = new URL(res.url).pathname;
+  // A secondary limit without a time to retry: GitHub's advice is a minute.
+  if ((res.status === 403 || res.status === 429) && /secondary rate limit/i.test(msg ?? '') && !((limited.get(bucketOf(path))?.until ?? 0) > Date.now()))
+    limited.set(bucketOf(path), { until: Date.now() + 60_000, slow: true });
+  recordError(`GitHub ${res.status} ${path}: ${msg ?? res.statusText}`);
   throw new Error(`GitHub ${res.status}: ${msg ?? res.statusText}`);
 }
 
@@ -171,7 +189,7 @@ async function paginate<T>(path: string, accept?: string): Promise<T[]> {
 // partial: return what resolved even if some fields errored (they come back null).
 async function graphql<T = any>(query: string, variables: Record<string, unknown>, partial = false): Promise<T> {
   const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query, variables }) });
-  if (r.errors?.some((e: { type?: string }) => e.type === 'RATE_LIMITED') && limitedUntil > Date.now()) throw limitError();
+  if (r.errors?.some((e: { type?: string }) => e.type === 'RATE_LIMITED') && (limited.get('graphql')?.until ?? 0) > Date.now()) throw limitError('graphql');
   if (r.errors?.length) recordError(`GitHub GraphQL: ${r.errors[0].message}`);
   if (r.errors?.length && !(partial && r.data)) throw new Error(r.errors[0].message);
   return r.data;
