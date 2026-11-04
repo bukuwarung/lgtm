@@ -1,6 +1,8 @@
 # lgtm
 
-Fast GitHub PR review as a Mac app: every file on one page, less noise. It runs on your machine and signs in with your GitHub CLI login.
+**Say LGTM and mean it.**
+
+Fast GitHub PR review for your Mac: every file on one page, the noise folded away, and what a diff hides pointed out. It runs on your machine and signs in with your GitHub CLI login.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-app-dark.png">
