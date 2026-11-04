@@ -19,6 +19,8 @@ export PATH="/opt/homebrew/opt/rustup/bin:$PATH"   # rustup is keg-only
 cd desktop && npm install && npm run build         # → src-tauri/target/release/bundle/macos/lgtm.app
 ```
 
+`npm run smoke` in `app/` (after `npm run build`) runs the built app end to end in headless Chrome on made-up GitHub data: the PR list, a PR, a line comment, Finish review and Submit. It fails on an uncaught error or a `confirm()`/`alert()`/`prompt()` (the Mac app answers those without asking), and the release script runs it.
+
 `cargo test -- --ignored --nocapture` in `desktop/src-tauri` checks the app's commands against your real gh, slackcli and acli (read-only; Slack in dry run).
 
 ## The browser version

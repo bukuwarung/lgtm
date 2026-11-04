@@ -17,6 +17,7 @@ node scripts/notices.mjs # the licenses of everything in this release, current
 export LGTM_RELEASE=1 # a release build: no DEV badge
 (cd app && npm ci && npm test)
 (cd desktop && npm ci && npm run build -- --target universal-apple-darwin) # builds app/ first
+(cd app && npm run smoke) # the built app, end to end on made-up GitHub data: list, PR, comment, submit
 ditto -c -k --keepParent desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/lgtm.app "$out/lgtm-$v.zip"
 tar -czf "$out/lgtm-cli-$v.tar.gz" -C app bin dist package.json claude-skill.md
 
