@@ -21,6 +21,14 @@ gh auth login   # once, if you haven't
 
 `brew upgrade` updates it. Slack and Jira are optional; lgtm shows how to set them up on first launch.
 
+## Highlights
+
+- **One page per PR.** Every changed file in reading order, with imports, generated files, whitespace and bot chatter folded away.
+- **It points things out.** Possible secrets, edited database migrations, text that won't be translated, a lockfile left behind, and more, each with a comment drafted for you.
+- **Review mode.** Your PRs to review, one after another, with nothing else on screen.
+- **The right reviewers.** Suggested by who wrote the code you changed and who's least busy, asked on GitHub and Slack in one click.
+- **Your whole loop.** Merge box, Jira tickets moved on merge, Slack nudges, and Claude Code linked to your PRs.
+
 ## Your queue
 
 <picture>
@@ -28,19 +36,10 @@ gh auth login   # once, if you haven't
   <img alt="The PR list: Reviewing, Your PRs and Team tabs, PRs grouped by where they stand, with pills for what needs you" src="docs/features/scene-queue-light.png" width="380">
 </picture>
 
-- Tabs for PRs to review, your own, and a GitHub team you watch, grouped by where they stand. The list shows its last copy at once on launch, then updates.
-- With no PR open, your queue at a glance: how many need your review, the oldest wait, and your own PRs waiting, ready to merge or with changes requested.
-- Drafts you're a code owner of (CODEOWNERS, by name or team), before GitHub asks you, tagged `code owner`.
-- Pills for what needs you: `CI failing`, `conflicts`, unsent comments, threads awaiting your reply, `↻ re-review`, `no reviewers`, how long a ready PR has waited, and commits pushed since you approved.
-- On your PRs, a pill's menu fixes what it names: re-run failed jobs, update a branch that's behind, mark a draft ready, turn auto-merge on or off, ask whoever requested changes to look again.
-- PRs that mention you, in their own group.
-- Auto-merge, or a PR's place in its repo's merge queue.
-- Each PR's author picture, a rough time to review (⏱), and when it was last active (amber after a week).
-- On the Team tab, each member folded with their picture and how many reviews they're asked for; their own PRs and the ones asking them for a review are two tabs under their name.
-- Pills as words, icons or both (GitHub's Octicons).
-- Keeps itself fresh, loads the PRs waiting on you ahead, and catches up when you're back online.
-- Notifications, with sound, for replies, verdicts, mentions, CI, new commits on PRs you approved, your PR ready to merge (it opens the merge box), and your PR leaving the merge queue; a click opens the PR.
-- Easy on GitHub's hourly API limit; if it's used up anyway, lgtm says until when and waits.
+- PRs to review, your own, and your team's, grouped by where they stand.
+- Pills for what needs you: `CI failing`, `conflicts`, `↻ re-review`, replies waiting, commits since you approved. On your PRs, a pill's menu fixes what it names.
+- Drafts you're a code owner of, before GitHub asks you.
+- Notifications for replies, verdicts, mentions, CI and your PR ready to merge; a click opens the PR.
 
 ## Review mode
 
@@ -49,9 +48,8 @@ gh auth login   # once, if you haven't
   <img alt="Review mode: 2 of 5 in the bar, Skip and Exit, and the submit panel saying what GitHub and Slack will get" src="docs/features/scene-reviewmode-light.png" width="760">
 </picture>
 
-- **▶ Review N PRs** (or ⇧⌘R in the app) goes through the PRs that need your review, longest-waiting first, with only the PR on screen.
-- Finishing a review opens the next; `N` skips one. At the end, what you did with each, to copy (for Slack, say).
-- With nothing to review, a practice run on your own PRs: nothing is sent to GitHub.
+- **▶ Review N PRs** (⇧⌘R) goes through what needs your review, longest-waiting first. Finishing one opens the next; `N` skips.
+- At the end, what you did with each, to copy. With nothing to review, a practice run on your own PRs.
 
 ## Reading
 
@@ -60,31 +58,21 @@ gh auth login   # once, if you haven't
   <img alt="A PR: the bar with ✳ Claude and Finish review, the Jira ticket, status pills, changes since your last review, and a diff" src="docs/features/scene-review-light.png" width="760">
 </picture>
 
-- Every changed file on one page: markdown first, tests right after their source.
-- The Jira ticket and PR status on top; an index of comments, reviewers, checks (with failed-job logs), threads and files.
-- Re-reviews start with what happened since your last one, and your threads say whether their lines changed; or pick any push to see the changes since.
-- Marks files changed since your last visit, and tells you when new commits land while you read.
-- Holds still while files load, and can reopen where you left off.
-- Status pills (checks failing, files without test changes, modules) open the list behind them.
-- Files grouped by module (Gradle, npm, Go, Cargo, Python), with modules whose code changed but no test did.
-- Test files, and code whose tests the PR doesn't touch, marked on their icons.
-- File and folder icons by type (Material Icon Theme).
-- `.` opens the file you're on in github.dev.
-- A strip down the right edge is the scrollbar, with marks for threads, drafts and changes.
-- Syntax highlighting for any language highlight.js knows, Groovy and ProGuard rules included.
-- Images in descriptions and comments (private repos too), in markdown files, and SVG files; swipe between an image's old and new versions.
-- Your pick of code themes and fonts, ligatures included; changed words filled, boxed or squiggled, changed lines filled, subtle or barred; rainbow brackets.
-- Stacked PRs, layer by layer, with an overview of every layer.
-- Your own reviews, comments and threads first in the index; on someone else's PR, other people's threads start folded, and resolved or outdated ones you're not in are hidden.
-- Back and forward (⌘[ ⌘]) through PRs and every jump within one; where you land lights up for a moment.
-- The PR centred at a reading width, or filling the window; it fills anyway when a line wouldn't fit.
-- Android `strings.xml` as texts: each string's name and its text as the app shows it, the changed words marked, and other languages checked (missing, placeholders that differ, not updated).
+- Markdown first, tests right after their source; files grouped by module, with code changed but no test.
+- Re-reviews show only what changed since your last one, and your threads say whether their lines moved.
+- An index of comments, reviewers, checks (failed-job logs, and whether `main` fails them too) and files; big PRs get a review plan.
+- Side-by-side or unified, centred or full width, in your pick of themes and fonts.
+- Android `strings.xml` as texts, with the other languages checked.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-strings-dark.png">
-  <img alt="An Android strings file as names and texts: the changed words marked, a placeholder, and notes on the other languages" src="docs/features/scene-strings-light.png" width="760">
-</picture>
-- In tests, Given / When / Then and Arrange / Act / Assert comments as coloured phase labels.
+## Checks
+
+lgtm reads the diff for what's easy to miss, and says so in a pill with a comment drafted for you. Each one can be switched off in Settings.
+
+- **Any repo:** possible secrets, dependency changes (major jumps marked), binaries that belong in Git LFS, code changed without tests.
+- **Android:** UI text not in `strings.xml`, Room tables changed without a version bump, what a manifest change means, new lint suppressions.
+- **Java backend:** Flyway migrations edited or out of order, JPA entities changed with no migration, `@Transactional` on a private method.
+- **Web:** a lockfile not updated, `.only` and `debugger` left in, raw HTML (`v-html`, `dangerouslySetInnerHTML`), checks switched off.
+- On your own PR, lgtm shows what it found before you ask anyone to review.
 
 ## Specs and code
 
@@ -93,112 +81,85 @@ gh auth login   # once, if you haven't
   <img alt="A spec's task list with its code names as links, one previewing the change it names, and the code file's chip back to the task" src="docs/features/scene-specs-light.png" width="760">
 </picture>
 
-- In a spec (Markdown, openspec, docs), a file, class or function the PR changes becomes a link to it: hover for a preview of the change, click to go there.
-- Each changed file links back to where the specs name it, with a preview of that part of the spec.
-- The PR description links the same way, and a spec's tasks say how many of the PR's files they name.
-- `g`, or the button at the bottom right, jumps between the specs and the code.
+- In a spec, a file, class or function the PR changes links to it, with a preview on hover; each changed file links back.
+- `g` jumps between the specs and the code.
 
 ## Less to read
 
-On by default, each with a switch (and these examples) in ⚙ Settings.
+On by default, each with a switch and a preview in Settings:
 
-<details open><summary><b>Changes since your last review</b>: re-reviews show only what changed since you last reviewed (not on your own PRs).</summary>
+- **Since your last review:** re-reviews show only what's new.
+- **Fold imports**, naming only new libraries.
+- **Generated, moved and deleted files** wait behind one row each.
+- **Moved code** dimmed, with where it came from.
+- **Changed words** highlighted inside a line.
+- **Whitespace** ignored (`w`).
+- **Markdown and doc comments** rendered (KDoc, Javadoc, JSDoc), still commentable line by line.
+- **Images** as pictures, Android vector drawables too.
+- **Bot comments** from CI and AI reviewers folded.
+
+<details><summary>See each one, off and on</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/sinceFirst-dark.png">
   <img alt="Changes since your last review, off and on" src="docs/features/sinceFirst-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Fold imports</b>: import blocks fold to one line naming only new outside libraries.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/foldImports-dark.png">
   <img alt="Fold imports, off and on" src="docs/features/foldImports-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Hide generated files</b>: files marked <code>linguist-generated</code> wait behind one row.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/hideGenerated-dark.png">
   <img alt="Hide generated files, off and on" src="docs/features/hideGenerated-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Hide moved files</b>: files moved without changes wait behind one row.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/hideNoDiff-dark.png">
   <img alt="Hide moved files, off and on" src="docs/features/hideNoDiff-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Collapse deleted files</b>: a deleted file is one row until you open it.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/collapseDeleted-dark.png">
   <img alt="Collapse deleted files, off and on" src="docs/features/collapseDeleted-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Dim moved code</b>: code moved without changes is dimmed, with where it came from.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/dimMoved-dark.png">
   <img alt="Dim moved code, off and on" src="docs/features/dimMoved-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Word highlights</b>: the changed words inside a line stand out.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/wordDiff-dark.png">
   <img alt="Word highlights, off and on" src="docs/features/wordDiff-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Ignore whitespace</b>: re-indented lines and lone blank lines read as unchanged, and whitespace-only files and sections fold away (<code>w</code>).</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/ignoreWs-dark.png">
   <img alt="Ignore whitespace, off and on" src="docs/features/ignoreWs-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Rendered markdown</b>: markdown files and descriptions show rendered, still commentable line by line, in a theme you pick (Settings → Markdown files).</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/richMarkdown-dark.png">
   <img alt="Rendered markdown, off and on" src="docs/features/richMarkdown-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Rendered doc comments</b>: KDoc, Javadoc, JSDoc and runs of <code>//</code> comments read like IntelliJ's reader mode.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/renderDocs-dark.png">
   <img alt="Rendered doc comments, off and on" src="docs/features/renderDocs-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Image previews</b>: PNG, WebP, JPEG, GIF, SVG and Android vector drawables show as pictures.</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/previewImages-dark.png">
   <img alt="Image previews, off and on" src="docs/features/previewImages-light.png" width="760">
 </picture>
-</details>
-
-<details open><summary><b>Fold bot comments</b>: CI and AI-reviewer comments fold to one line (not on your own PRs).</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/foldBots-dark.png">
   <img alt="Fold bot comments, off and on" src="docs/features/foldBots-light.png" width="760">
 </picture>
 </details>
-
-Markdown themes: lgtm's own or 20 from [markdown.style](https://markdown.style/themes), each with a night version, every font, size and colour adjustable.
 
 ## Commenting
 
@@ -207,12 +168,8 @@ Markdown themes: lgtm's own or 20 from [markdown.style](https://markdown.style/t
   <img alt="A review thread under a diff line, with a suggested change and a reply being written" src="docs/features/scene-comment-light.png" width="760">
 </picture>
 
-- Line, range and file comments, rendered markdown included.
-- An editor with preview, `:emoji:` and `@mention` completion, saved replies (`/`), and suggested changes.
-- Drafts survive reloads and go out as one review, the verdict pre-picked; then the next PR opens. Or post a comment at once.
-- Before you submit, what GitHub and Slack will get; a change request starts its summary from your comments.
-- A review you started on github.com shows here, with its comments to edit, and goes out with yours.
-- ⌥-click a line number to copy a link to it.
+- Line, range and file comments, with preview, `@mention`, emoji, saved replies (`/`) and suggested changes.
+- Drafts survive reloads, move with new commits, and go out as one review; you see what GitHub and Slack will get first.
 
 ## Your PRs
 
@@ -221,23 +178,9 @@ Markdown themes: lgtm's own or 20 from [markdown.style](https://markdown.style/t
   <img alt="The merge box: what is blocking, update branch, merge method, merge and auto-merge" src="docs/features/scene-merge-light.png" width="760">
 </picture>
 
-- Reviewers in the index, with their verdict.
-- Nobody asked yet: reviewers suggested, least busy first; a click asks them on GitHub and Slack.
-- Ask a reviewer on Slack, or ask one who's reviewed to look again; after you push, lgtm offers it.
-- Commit reviewers' suggested changes, one at a time or batched into one commit.
-- Mark files, folders or modules viewed from the index; rerun failed GitHub Actions jobs.
-- A merge box with what's blocking: ready for review, update branch, merge, auto-merge, and deleting the branch; merge a whole stack from its overview.
-- Edit the description in place.
-- Merging moves the Jira tickets on (to a status picked from the project's own), auto-merge too once it merges.
-- Waiting a day for review: `🔔 nudge` reminds the reviewers on Slack.
-
-## Slack
-
-lgtm messages people as you, through slackcli.
-
-- One thread per PR and person; a DM you already had about the PR counts.
-- Every message is yours to word, with mentions and your workspace's emoji.
-- GitHub accounts matched to Slack users for you.
+- Reviewers suggested by who wrote the code and who's free (and who's away on Slack); one click asks on GitHub and Slack.
+- Commit suggested changes, rerun failed jobs, and merge from a box that says what's blocking.
+- Merging moves the Jira ticket on; a PR waiting a day can nudge its reviewers on Slack.
 
 ## Claude Code
 
@@ -246,12 +189,8 @@ lgtm messages people as you, through slackcli.
   <img alt="✳ Claude with a linked session (the green dot)" src="docs/features/scene-claude-light.png" width="760">
 </picture>
 
-- ✳ Claude on a PR or comment opens the PR's session in the Claude app, or starts one with the PR in the prompt.
-- See at a glance whether the session is working or waiting for you.
-- ✳ Ask Claude answers a question about code you select.
-- Claude sends PRs here for your review, linked to its session.
-- After your review, send Claude the outcome; it can reply on each thread and resolve it.
-- The list shows "✳ updated" when it pushes and "✳ waiting for you" when it needs you.
+- ✳ Claude opens a PR's Claude Code session, or starts one with the PR in the prompt; you see whether it's working or waiting for you.
+- Claude sends PRs here for review, and gets your review back to act on.
 
 ## Themes
 
@@ -260,19 +199,13 @@ lgtm messages people as you, through slackcli.
   <img alt="Colour themes as cards, each with its light and dark version: lgtm, One, Ayu and Gruvbox; more from Zed's theme gallery or a file" src="docs/features/scene-themes-light.png" width="760">
 </picture>
 
-- Colour themes for the whole app, code included, each in a light and a dark version: lgtm's own, One, Ayu and Gruvbox.
-- Hundreds more from Zed's theme gallery and VS Code's (Open VSX), previewed first and tried on the whole app before you add them; or a Zed or VS Code theme file of yours. Delete one from its card.
-- Pick a theme's light and dark version (Catppuccin's Latte with Mocha, say), and code colours of their own if you like.
+- Whole-app colour themes, light and dark: lgtm's own, One, Ayu, Gruvbox, and hundreds from Zed and VS Code.
 
 ## On your Mac
 
-- A Dock badge with the "needs your review" count, and notifications that open the PR you click.
-- `lgtm://` links; copy a PR link anywhere and lgtm offers to open it.
-- Several GitHub accounts: switch from your avatar (each one's drafts kept apart).
-- Find across every file, Back and Forward, and text sizes (rendered Markdown too).
-- Anything that fails (a review, a merge, a Slack message) shows in a red bar until you dismiss it.
-- Glass bars and pop-ups, a remembered window, Launch at login.
-- Updates itself through Homebrew.
+- A menu bar item and Dock badge with what needs your review.
+- `lgtm://` links, and an offer to open a PR link you copy.
+- Several GitHub accounts, Launch at login, and updates through Homebrew.
 
 ## More
 
