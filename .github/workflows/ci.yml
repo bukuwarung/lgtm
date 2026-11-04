@@ -1,0 +1,26 @@
+# On every push to main and every PR: the web app's typecheck, unit tests, build and smoke test (the built app end to
+# end in headless Chrome, on made-up GitHub data; app/scripts/smoke.mjs). The Mac app's Rust build is left to
+# scripts/release.sh, which runs all of this too.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - run: npm test
+      - run: npm run build
+      - run: npm run smoke

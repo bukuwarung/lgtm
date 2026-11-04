@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.env.SMOKE_PORT ?? 4599);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME ?? (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'google-chrome');
 const APP = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -71,7 +71,8 @@ function local(path) {
 // --- Chrome ---
 const server = spawn(process.execPath, ['bin/lgtm.mjs'], { cwd: APP, env: { ...process.env, LGTM_PORT: String(PORT), LGTM_NO_OPEN: '1' }, stdio: 'ignore' });
 const profile = mkdtempSync(join(tmpdir(), 'lgtm-smoke-'));
-const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=9334', `--user-data-dir=${profile}`, '--window-size=1400,900', 'about:blank'], { stdio: 'ignore' });
+// CI runners (GitHub's Linux machines) run Chrome without its sandbox.
+const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=9334', `--user-data-dir=${profile}`, '--window-size=1400,900', ...(process.env.CI ? ['--no-sandbox'] : []), 'about:blank'], { stdio: 'ignore' });
 const problems = [];
 const asked = []; // the requests answered here, for a failure's report
 let failed = false;
