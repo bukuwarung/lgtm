@@ -122,24 +122,26 @@ function ApiBudget() {
     const t = setInterval(look, 30_000);
     return () => clearInterval(t);
   }, []);
-  const rows = (['core', 'graphql'] as const).map((b) => [b, budgets.get(b)] as const).filter((x) => x[1]);
+  // Only when it matters: a limit down to a quarter (lgtm also says so, in a message, at a tenth).
+  const rows = (['core', 'graphql'] as const).map((b) => [b, budgets.get(b)] as const).filter((x) => x[1] && x[1].remaining <= x[1].limit / 4);
   if (!rows.length) return null;
   const at = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const NAME = { core: 'REST', graphql: 'GraphQL' };
   return (
     <div class="api-budget">
+      <span class="api-head">GitHub's hourly API limit is running low: lgtm stops asking GitHub when it's used up, until it resets.</span>
       {rows.map(([b, x]) => {
         const left = x!.remaining / x!.limit;
         const by = spentThisHour(b).filter(([what]) => what !== 'other').slice(0, 3);
         const tip = `${x!.remaining.toLocaleString()} of ${x!.limit.toLocaleString()} left this hour, until ${at(x!.reset)}${by.length ? `. Most used since lgtm opened: ${by.map(([what, n]) => `${what} (${n} request${n === 1 ? '' : 's'})`).join(', ')}` : ''}`;
         return (
           <div class="api-row" title={tip}>
-            <span class="api-name">{NAME[b]}</span>
+            <span class="api-name">{NAME[b]} requests</span>
             <span class="api-bar" role="meter" aria-valuemin={0} aria-valuemax={x!.limit} aria-valuenow={x!.remaining} aria-label={`${NAME[b]} left this hour`}>
               <i class={left <= 0.1 ? 'low' : left <= 0.5 ? 'mid' : ''} style={{ width: `${Math.max(1, left * 100)}%` }} />
             </span>
             <span class="api-left">
-              {x!.remaining.toLocaleString()} left · resets {at(x!.reset)}
+              {x!.remaining.toLocaleString()} of {x!.limit.toLocaleString()} left · resets {at(x!.reset)}
             </span>
           </div>
         );
