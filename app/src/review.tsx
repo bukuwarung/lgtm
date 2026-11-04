@@ -1,6 +1,7 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { findSecrets, type Secret } from './secrets.ts';
+import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
@@ -1735,6 +1736,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         drafts={drafts.filter((d) => !d.line)}
         form={t?.path === path && t.line == null && !t.atEnd}
       />
+      {isManifest(path) && (near || ctx.renderAll) && <ManifestSummary file={file} ctx={ctx} />}
       {canPreview && preview && (near || ctx.renderAll) ? (
         <ImagePreview file={file} ctx={ctx} onFail={() => (setCanPreview(false), setPreview(false))} />
       ) : !file.patch && !file.additions && !file.deletions && file.status !== 'renamed' && (near || ctx.renderAll) ? (
@@ -1892,6 +1894,42 @@ function ReviewPlan({ plan, viewed, ordered, onOrdered }: { plan: PlanStep[]; vi
         <input type="checkbox" checked={ordered} onChange={onOrdered} /> Files in this order
       </label>
     </details>
+  );
+}
+
+// An Android manifest's change, above its diff: permissions asked for or dropped (the ones users are asked about
+// marked), and components other apps can now reach. Whole files, before and after: a tag cut by a hunk still counts.
+function ManifestSummary({ file, ctx }: { file: File; ctx: Ctx }) {
+  const [c, setC] = useState<ManifestChanges | null>(null);
+  useEffect(() => {
+    const get = (repo: string, path: string, sha: string) => getRaw(repo, path, sha).then((t) => t ?? '', () => null);
+    Promise.all([
+      file.status === 'added' ? '' : get(ctx.repo, file.previous_filename ?? file.filename, ctx.pr.base.sha),
+      file.status === 'removed' ? '' : get(ctx.headRepo, file.filename, ctx.pr.head.sha),
+    ]).then(([a, b]) => a != null && b != null && setC(manifestChanges(a, b)));
+  }, [file.sha]);
+  if (!c || !(c.added.length + c.removed.length + c.newComps.length + c.goneComps.length + c.nowExported.length)) return null;
+  const perm = (p: string) => (
+    <code class={isRisky(p) ? 'risky' : ''} title={isRisky(p) ? 'Users are asked for this one, or it reaches far' : undefined}>
+      {p.replace(/^android\.permission\./, '')}
+    </code>
+  );
+  const comp = (x: { type: string; name: string; exported: boolean; implicit: boolean }) => (
+    <>
+      {x.type} {cls(x.name)}
+      {x.exported && <b class="risky"> exported{x.implicit ? ' (by its intent-filter)' : ''}</b>}
+    </>
+  );
+  const list = (items: ComponentChildren[]) => items.map((x, i) => <>{i ? ', ' : ''}{x}</>);
+  const cls = (name: string) => <code title={name}>{name.split('.').pop()}</code>; // the class; its package on hover
+  return (
+    <div class="manifest-sum">
+      {c.added.length > 0 && <p><b>Asks for</b> {list(c.added.map(perm))}</p>}
+      {c.removed.length > 0 && <p><b>No longer asks for</b> {list(c.removed.map(perm))}</p>}
+      {c.nowExported.length > 0 && <p><b>Now exported</b>, other apps can reach: {list(c.nowExported.map((x) => <>{x.type} {cls(x.name)}</>))}</p>}
+      {c.newComps.length > 0 && <p><b>New</b> {list(c.newComps.map(comp))}</p>}
+      {c.goneComps.length > 0 && <p><b>Removed</b> {list(c.goneComps.map((x) => <>{x.type} {cls(x.name)}</>))}</p>}
+    </div>
   );
 }
 

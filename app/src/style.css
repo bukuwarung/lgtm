@@ -1167,3 +1167,7 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 700px) { .plan li { grid-template-columns: 1fr 52px 72px; } .plan-bar { display: none; } }
 /* An added line that looks like a secret (secrets.ts) */
 .diff tr.ln.secret td.code { box-shadow: inset 3px 0 0 light-dark(#cf222e, #f85149); background: light-dark(#ffebe9, rgb(248 81 73 / .18)); }
+/* An Android manifest's permissions and components, above its diff */
+.manifest-sum { padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: calc(13px * var(--ts)); }
+.manifest-sum p { margin: 3px 0; }
+.manifest-sum .risky { color: light-dark(#9a6700, #d29922); }

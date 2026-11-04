@@ -870,3 +870,23 @@ test('findSecrets: key shapes and literal passwords, not placeholders', async ()
     [1, 'Private key'], [3, 'A literal storePassword'], [6, 'GitHub token'], [10, 'Private key'],
   ]);
 });
+
+test('manifest: permissions and exported components, before and after', async () => {
+  const { manifestChanges, isRisky } = await import('../src/manifest.ts');
+  const before = `<manifest><uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    <application><activity android:name=".Main" android:exported="true"><intent-filter/></activity>
+    <service android:name=".Sync" android:exported="false"/></application></manifest>`;
+  const after = `<manifest><uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- <uses-permission android:name="android.permission.CAMERA"/> -->
+    <application><activity android:name=".Main" android:exported="true"><intent-filter/></activity>
+    <service android:name=".Sync" android:exported="true"/>
+    <receiver android:name=".Boot"><intent-filter><action android:name="BOOT"/></intent-filter></receiver></application></manifest>`;
+  const c = manifestChanges(before, after);
+  assert.deepEqual(c.added, ['android.permission.BLUETOOTH_CONNECT']);
+  assert.deepEqual(c.removed, ['android.permission.READ_SMS']);
+  assert.deepEqual(c.newComps.map((x) => [x.name, x.exported, x.implicit]), [['.Boot', true, true]]);
+  assert.deepEqual(c.nowExported.map((x) => x.name), ['.Sync']);
+  assert.ok(isRisky('android.permission.BLUETOOTH_CONNECT') && !isRisky('android.permission.INTERNET'));
+});
