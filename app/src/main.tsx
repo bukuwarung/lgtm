@@ -1157,7 +1157,6 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   const [notifyCI] = useStoredFlag('notifyCI', true);
   const [notifyMentions] = useStoredFlag('notifyMentions', true);
   const [notifyQueue] = useStoredFlag('notifyQueue', true);
-  const [notifyApprovedPush] = useStoredFlag('notifyApprovedPush', true);
   const [notifyReady] = useStoredFlag('notifyReady', true);
   const seen = useRef<Set<string> | null>(null);
   const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
@@ -1198,8 +1197,8 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         if (what === 'Ready to merge') sessionStorage.setItem('openMerge', `${i.repo}#${i.number}`); // its merge box opens (merge.tsx)
         void notifyNative(`${what}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, `/${i.repo}/pull/${i.number}`);
       };
-      const all = { replies: true, verdicts: true, ci: true, queue: true, approvedPush: true, ready: true };
-      const mine = { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, approvedPush: notifyApprovedPush, ready: notifyReady };
+      const all = { replies: true, verdicts: true, ci: true, queue: true, ready: true };
+      const mine = { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, ready: notifyReady };
       for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i, true);
       for (const i of items) {
         const was = before.current.get(i.id);

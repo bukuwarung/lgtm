@@ -1296,7 +1296,7 @@ export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
 // My PR approved, its checks passed and GitHub willing to merge it, with nothing (auto-merge, the queue) merging it for me.
 export const readyToMerge = (i: QueueItem) =>
   i.authored && !i.isDraft && i.reviewDecision === 'APPROVED' && i.ci === 'SUCCESS' && ['CLEAN', 'HAS_HOOKS'].includes(i.mergeState) && !i.autoMerge && !i.queue;
-export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean; approvedPush: boolean; ready?: boolean }): string[] {
+export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean; ready?: boolean }): string[] {
   const running = (ci: QueueItem['ci']) => ci === 'PENDING' || ci === 'EXPECTED';
   // Ready to merge says it all: no separate "Approved" or "Checks passed" with it.
   if (on.ready && readyToMerge(now) && !readyToMerge(was)) return ['Ready to merge', ...queueNews(was, now, { ...on, ready: false, verdicts: false, ci: false })];
@@ -1304,7 +1304,6 @@ export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean
     on.replies && was.thread && now.thread && now.thread.awaiting > was.thread.awaiting && 'New reply for you',
     on.verdicts && now.authored && now.reviewDecision !== was.reviewDecision && ({ APPROVED: 'Approved', CHANGES_REQUESTED: 'Changes requested' } as Record<string, string>)[now.reviewDecision ?? ''],
     on.ci && now.authored && running(was.ci) && now.ci && !running(now.ci) && (now.ci === 'SUCCESS' ? 'Checks passed' : 'Checks failed'),
-    on.approvedPush && now.newSinceApproval > was.newSinceApproval && 'New commits since your approval',
     // Auto-merge that hands over to the merge queue isn't news; dropping out of either is (a merged PR leaves the list).
     on.queue && now.authored && !now.queue && (was.queue ? 'Left the merge queue' : was.autoMerge && !now.autoMerge && 'Auto-merge turned off'),
   ].filter((x): x is string => !!x);

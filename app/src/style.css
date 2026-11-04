@@ -1261,6 +1261,8 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .inbox-last { max-height: 180px; overflow: auto; font-size: calc(13px * var(--ts)); }
 .inbox-thread textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .inbox-thread .row { display: flex; gap: 6px; justify-content: flex-end; }
+.inbox-thread.cur { border-color: var(--accent); }
+.inbox-keys { margin-left: 12px; }
 .inbox-merged { color: light-dark(#8250df, #a371f7); }
 .nav-inbox { position: relative; display: inline-flex; align-items: center; }
 .nav-inbox.on { border-color: var(--accent); color: var(--accent); }
