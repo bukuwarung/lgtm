@@ -1216,3 +1216,5 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .demo-with-index > .file { min-width: 0; overflow: hidden; }
 .demo-with-index .demo-index > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .demo-glass .bar button { white-space: nowrap; padding: 2px 10px; font-size: calc(12px * var(--ts)); }
+.api-budget { display: grid; gap: 2px; margin-top: 4px; }
+.api-budget .low { color: light-dark(#9a6700, #d29922); }

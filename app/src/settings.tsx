@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir } from './github.ts';
+import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir, spentThisHour } from './github.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
@@ -113,6 +113,34 @@ function Flag({ k, initial, label, hint, demo, children }: { k: string; initial:
   );
 }
 
+// What's left of GitHub's hourly limits, and what used them this hour (github.ts budgets), every 30 seconds.
+function ApiBudget() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const look = () => getBudgets().then(() => setTick((t) => t + 1), () => {});
+    look();
+    const t = setInterval(look, 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const rows = (['core', 'graphql'] as const).map((b) => [b, budgets.get(b)] as const).filter((x) => x[1]);
+  if (!rows.length) return null;
+  const at = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const NAME = { core: 'REST', graphql: 'GraphQL' };
+  return (
+    <small class="api-budget">
+      {rows.map(([b, x]) => {
+        const by = spentThisHour(b).filter(([what]) => what !== 'other').slice(0, 3);
+        return (
+          <span class={x!.remaining <= x!.limit / 10 ? 'low' : ''}>
+            <b>{NAME[b]}</b>: {x!.remaining.toLocaleString()} of {x!.limit.toLocaleString()} left this hour, until {at(x!.reset)}
+            {by.length > 0 && <> · most used, since lgtm opened: {by.map(([what, n]) => `${what} (${n} request${n === 1 ? '' : 's'})`).join(', ')}</>}
+          </span>
+        );
+      })}
+    </small>
+  );
+}
+
 function Status({ ok, children }: { ok: boolean | null; children: preact.ComponentChildren }) {
   return (
     <div class="set-int">
@@ -220,6 +248,7 @@ export function Settings() {
         <Status ok={me == null ? null : !!me}>
           <b>GitHub</b> {me ? <>signed in as <code>@{me}</code> through the GitHub CLI</> : me === '' ? 'not signed in' : 'checking…'}
           {me === '' && <pre>gh auth login</pre>}
+          {me && <ApiBudget />}
           {accounts && accounts.length > 1 ? (
             <label class="gh-account">
               Account lgtm uses{' '}

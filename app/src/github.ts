@@ -119,8 +119,55 @@ const limitError = (bucket: string) => {
   return new Error(l.slow ? `GitHub asked lgtm to slow down: it asks again at ${at}` : `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`} is used up until ${at}: lgtm waits until then`);
 };
 export const isLimited = (bucket: string) => (limited.get(bucket)?.until ?? 0) > Date.now();
-function noteLimit(res: Response, path: string) {
+
+// What's left of each limit, from GitHub's own figures on each answer (or /rate_limit, which costs nothing), and what
+// spent it this hour, roughly: requests by what they were for. A word, once per hour, when one is down to 10%.
+export type Budget = { remaining: number; limit: number; reset: number };
+export const budgets = new Map<string, Budget>();
+const spent = new Map<string, Map<string, number>>(); // bucket → what for → requests, this hour (GitHub's own "used" count
+// jumps about between answers, so a GraphQL query's points can't be told from it)
+const warned = new Set<string>();
+function areaOf(path: string, body?: string): string {
+  if (path === '/graphql') {
+    const q = body ?? '';
+    if (/review-requested:@me|reviewed-by:@me -author|\$i0:ID!|nodes\(ids:/.test(q)) return 'the PR list';
+    if (/reviewThreads|states:PENDING|pullRequest\(number/.test(q)) return 'opening PRs';
+    if (/reviewed-by:|contributionsCollection|involves:/.test(q)) return 'people and history';
+    if (/team|members/.test(q)) return 'the Team tab';
+    return 'other';
+  }
+  if (/\/(check-runs|check-suites|status|actions)\b/.test(path)) return 'checks';
+  if (/\/(pulls|issues)\/\d+|\/contents\/|\/compare\/|\/git\//.test(path)) return 'opening PRs';
+  if (/^\/users\/|^\/orgs\//.test(path)) return 'people and teams';
+  return 'other';
+}
+function noteBudget(res: Response, bucket: string, path: string, body?: string) {
+  const remaining = Number(res.headers.get('x-ratelimit-remaining')), limit = Number(res.headers.get('x-ratelimit-limit')), reset = Number(res.headers.get('x-ratelimit-reset')) * 1000;
+  if (!limit || Number.isNaN(remaining)) return;
+  const prev = budgets.get(bucket);
+  if (!prev || Math.abs(prev.reset - reset) > 60_000) spent.set(bucket, new Map()); // a new hour
+  budgets.set(bucket, { remaining, limit, reset });
+  const by = spent.get(bucket)!;
+  by.set(areaOf(path, body), (by.get(areaOf(path, body)) ?? 0) + 1);
+  if (limit >= 1000 && remaining <= limit / 10 && !warned.has(bucket + reset)) {
+    warned.add(bucket + reset);
+    const at = new Date(reset).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`}: ${remaining} of ${limit} left until ${at}. lgtm keeps going; Settings → Accounts shows what used it.` } }));
+  }
+}
+export const spentThisHour = (bucket: string) => [...(spent.get(bucket) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1]);
+export async function getBudgets(): Promise<void> {
+  const r = await (await ok(await fetch('https://api.github.com/rate_limit', { cache: 'no-cache', headers: { Authorization: `Bearer ${token}` } }))).json();
+  for (const b of ['core', 'graphql', 'search']) {
+    const x = r.resources?.[b];
+    if (!x) continue;
+    if (!spent.has(b)) spent.set(b, new Map());
+    budgets.set(b, { remaining: x.remaining, limit: x.limit, reset: x.reset * 1000 });
+  }
+}
+function noteLimit(res: Response, path: string, body?: string) {
   const bucket = res.headers.get('x-ratelimit-resource') ?? bucketOf(path);
+  noteBudget(res, bucket, path, body);
   const retry = Number(res.headers.get('retry-after'));
   const reset = Number(res.headers.get('x-ratelimit-reset'));
   if ((res.status === 403 || res.status === 429) && retry) limited.set(bucket, { until: Date.now() + retry * 1000, slow: true });
@@ -146,7 +193,7 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
     },
   });
   if (res.status === 401) throw new Error('GitHub rejected the gh token. Run `gh auth login`, then reload.');
-  noteLimit(res, path.replace(/^https:\/\/api\.github\.com/, '').split('?')[0]);
+  noteLimit(res, path.replace(/^https:\/\/api\.github\.com/, '').split('?')[0], typeof init.body === 'string' ? init.body : undefined);
   return res;
 }
 
@@ -1165,21 +1212,33 @@ export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean
     on.queue && now.authored && !now.queue && (was.queue ? 'Left the merge queue' : was.autoMerge && !now.autoMerge && 'Auto-merge turned off'),
   ].filter((x): x is string => !!x);
 }
+// The list's extras, kept per PR until it changes (its updatedAt): a refresh asks GitHub only about the PRs that did,
+// which keeps the list's every-3-minutes refresh from spending GraphQL points on the ones that didn't.
+const extrasSeen = new Map<string, { at: string; estimate?: Estimate; thread?: ThreadStatus }>();
+const changed = <T extends { id: string; updatedAt: string }>(items: T[], k: 'estimate' | 'thread') => items.filter((i) => { const c = extrasSeen.get(i.id); return !c || c.at !== i.updatedAt || c[k] === undefined; });
+const keep = (i: { id: string; updatedAt: string }, part: { estimate?: Estimate; thread?: ThreadStatus }) => {
+  const c = extrasSeen.get(i.id);
+  extrasSeen.set(i.id, { ...(c && c.at === i.updatedAt ? c : {}), at: i.updatedAt, ...part });
+};
+
 // Each PR's rough time to review, asked after the list shows (its description and per-file line counts would slow the
 // list down).
-export async function getEstimates(ids: string[]): Promise<Map<string, Estimate>> {
-  const out = new Map<string, Estimate>();
-  for (let k = 0; k < ids.length; k += 100) {
-    const d = await graphql(`query($ids:[ID!]!){nodes(ids:$ids){... on PullRequest{id body files(first:100){nodes{path additions deletions}}}}}`, { ids: ids.slice(k, k + 100) });
-    for (const p of d.nodes) if (p?.id) out.set(p.id, estimate(p.files?.nodes ?? [], p.body));
+export async function getEstimates(items: { id: string; updatedAt: string }[]): Promise<Map<string, Estimate>> {
+  const ask = changed(items, 'estimate');
+  for (let k = 0; k < ask.length; k += 100) {
+    const part = ask.slice(k, k + 100);
+    const d = await graphql(`query($ids:[ID!]!){nodes(ids:$ids){... on PullRequest{id body files(first:100){nodes{path additions deletions}}}}}`, { ids: part.map((i) => i.id) });
+    for (const p of d.nodes) if (p?.id) keep(part.find((i) => i.id === p.id)!, { estimate: estimate(p.files?.nodes ?? [], p.body) });
   }
-  return out;
+  return new Map(items.flatMap((i) => { const e = extrasSeen.get(i.id)?.estimate; return e ? [[i.id, e] as const] : []; }));
 }
 
 export async function getThreadStatus(items: QueueItem[], bots: Set<string> = new Set()): Promise<Map<string, ThreadStatus>> {
   const me = await getViewer();
-  const ask = items.filter((i) => i.mine || i.myState);
-  if (!ask.length) return new Map();
+  const all = items.filter((i) => i.mine || i.myState);
+  const ask = changed(all, 'thread');
+  const have = () => new Map(all.flatMap((i) => { const t = extrasSeen.get(i.id)?.thread; return t ? [[i.id, t] as const] : []; }));
+  if (!ask.length) return have();
   const vars = Object.fromEntries(ask.map((i, k) => [`i${k}`, i.id]));
   const d = await graphql(
     `query(${ask.map((_, k) => `$i${k}:ID!`).join(',')}){${ask
@@ -1187,13 +1246,12 @@ export async function getThreadStatus(items: QueueItem[], bots: Set<string> = ne
       .join(' ')}}`,
     vars,
   );
-  return new Map(
-    ask.map((i, k) => {
-      const threads = markBots(d[`p${k}`].reviewThreads.nodes as any[], bots);
-      const mine = threads.filter((t: any) => [...t.starter.nodes, ...t.comments.nodes].some((c: any) => c.author?.login === me));
-      return [i.id, { awaiting: threads.filter((t: any) => awaitsMe(t, me, i.authored)).length, allMineResolved: mine.length > 0 && mine.every((t: any) => t.isResolved) }];
-    }),
-  );
+  ask.forEach((i, k) => {
+    const threads = markBots(d[`p${k}`].reviewThreads.nodes as any[], bots);
+    const mine = threads.filter((t: any) => [...t.starter.nodes, ...t.comments.nodes].some((c: any) => c.author?.login === me));
+    keep(i, { thread: { awaiting: threads.filter((t: any) => awaitsMe(t, me, i.authored)).length, allMineResolved: mine.length > 0 && mine.every((t: any) => t.isResolved) } });
+  });
+  return have();
 }
 
 // Review threads by how much they concern me, each tier keeping the given order: threads I'm in (open, then resolved),

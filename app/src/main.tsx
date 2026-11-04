@@ -989,7 +989,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     setTeamErr('');
     getTeamPRs(t).then((d) => {
       setTeamData({ team: t, ...d });
-      getEstimates(d.items.map((i) => i.id)).then(
+      getEstimates(d.items).then(
         (est) => setTeamData((cur) => (cur?.team === t ? { ...cur, items: cur.items.map((i) => ({ ...i, estimate: est.get(i.id) })) } : cur)),
         () => {},
       );
@@ -1015,7 +1015,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
       const items = [...queue, ...owned];
       setItems(items);
       // Secondary: the list works without them.
-      const [st, est] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items.map((i) => i.id)).catch(() => null)]);
+      const [st, est] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items).catch(() => null)]);
       const full = items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id) }));
       setItems(full);
       setSettled(true);
