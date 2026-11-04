@@ -122,7 +122,11 @@ type Notice = { text: string; ok: boolean };
 // On my own PR, in the index's Reviewers: who to ask (this repo's recent reviewers, else the PR list's team), least
 // busy first. A click asks them on GitHub and, unless unticked, on Slack too.
 // On a draft, asking someone first marks it ready for review (GitHub doesn't tell reviewers about drafts).
-function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void }) {
+type Finding = { text: string; go: () => void };
+function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void; findings?: Finding[] }) {
+  // What lgtm found in my PR, shown once before the first ask: reviewers needn't point out the obvious.
+  const [held, setHeld] = useState<string | null>(null);
+  const [cleared, setCleared] = useState(false);
   const draft = useRef(pr.draft);
   const emoji = useSlackEmoji(); // suggested as you type the message
   const [team] = useStoredValue('team', '');
@@ -172,6 +176,24 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
   return (
     <div class="ix-ask">
       {err && <p class="warn ix-pad">{err}</p>}
+      {held && (
+        <div class="preflight ix-pad">
+          <p>
+            <b>Before asking @{held}</b>, lgtm found in this PR:
+          </p>
+          <ul>
+            {findings.map((f) => (
+              <li>
+                <button class="link" onClick={f.go}>{f.text}</button>
+              </li>
+            ))}
+          </ul>
+          <div class="row">
+            <button onClick={() => setHeld(null)}>Fix first</button>
+            <button class="primary" onClick={() => (setCleared(true), setHeld(null), void ask(held))}>Ask anyway</button>
+          </div>
+        </div>
+      )}
       {picks == null && !err && <p class="note ix-pad">Finding who's free…</p>}
       {picks?.length === 0 && <p class="note ix-pad">No one to suggest: nobody else has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</p>}
       {picks
@@ -184,7 +206,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked }: { pr: PR; repo: st
             class={`ix-item ix-person ${state[p.login] ?? ''}${away ? ' away' : ''}`}
             disabled={!!state[p.login]}
             title={`Ask @${p.login} to review: ${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}`}
-            onClick={() => ask(p.login)}
+            onClick={() => (findings.length && !cleared ? setHeld(p.login) : ask(p.login))}
           >
             <span class="ix-label">
               <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />@{p.login}{' '}
@@ -826,6 +848,15 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const secrets = chkSecrets ? secretsOf(data.files) : none;
   const deps = chkDeps ? depsOf(data.files) : [];
   const texts = chkTexts ? textsOf(data.files) : none;
+  // What a reviewer would point out, for asking on my own PR (AskReviewer): each with a jump to the first of it.
+  const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+  const majors = deps.filter((d) => d.major);
+  const findings: { text: string; go: () => void }[] = [
+    ...(secrets.list.length ? [{ text: plural(secrets.list.length, 'possible secret'), go: () => jumpToLine(secrets.list[0].path, secrets.list[0].line) }] : []),
+    ...(texts.list.length ? [{ text: `${plural(texts.list.length, 'text')} not in strings.xml`, go: () => jumpToLine(texts.list[0].path, texts.list[0].line) }] : []),
+    ...(room.length ? [{ text: `${room[0].entity}: a table changed with no database version raised`, go: () => jumpToLine(room[0].path, room[0].side === 'RIGHT' ? room[0].line : undefined) }] : []),
+    ...(majors.length ? [{ text: `${plural(majors.length, 'major dependency jump')} (${majors.map((d) => d.name.split(':').pop()).join(', ')})`, go: () => jumpToLine(majors[0].path, majors[0].line) }] : []),
+  ];
   const ctx: Ctx = {
     codeIx,
     specRefs: refs,
@@ -1143,6 +1174,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
               ask={
                 !!me && pr.user.login === me && (
                   <AskReviewer
+                    findings={findings}
                     pr={pr}
                     repo={repo}
                     n={n}
