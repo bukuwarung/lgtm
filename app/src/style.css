@@ -1315,7 +1315,8 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .set-steps { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; max-width: 520px; }
 .set-steps li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); cursor: grab; touch-action: none; user-select: none; }
 .set-steps li.dragging { cursor: grabbing; border-color: var(--accent); box-shadow: 0 2px 8px rgb(0 0 0 / 0.2); }
-.set-steps li > span:nth-child(2) { flex: 1; min-width: 0; }
+.set-steps li > span:not(.set-grip) { flex: 1; min-width: 0; }
 .set-steps small { color: var(--muted); }
 .set-grip { color: var(--muted); }
+.set-steps .octicon, .plan-t .octicon { color: var(--muted); flex: none; }
 fieldset:disabled .set-steps li { cursor: default; opacity: 0.6; }

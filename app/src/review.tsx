@@ -30,7 +30,7 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, isAway, prValues, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
-import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
+import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
 import { slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
@@ -2215,7 +2215,7 @@ function ReviewPlan({ plan, viewed }: { plan: PlanStep[]; viewed: Set<string> })
           return (
             <li class={left.length ? '' : 'done'}>
               <span class="plan-t">
-                <b>{s.title}</b> <small>{s.why}</small>
+                <Octicon name={stepIcon(s.key)} /> <b>{s.title}</b> <small>{s.why}</small>
               </span>
               <span class="plan-bar" title={`${seen} of ${s.paths.length} viewed`}>
                 <i style={{ width: `${(100 * seen) / s.paths.length}%` }} />

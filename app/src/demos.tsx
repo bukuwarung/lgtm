@@ -7,7 +7,7 @@ import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
-import { reviewPlan, stepOrder } from './files.ts';
+import { reviewPlan, stepIcon, stepOrder } from './files.ts';
 import { useStoredValue } from './platform.ts';
 import { changedRange, parseString, stringHtml } from './strings.ts';
 
@@ -890,9 +890,9 @@ Object.assign(DEMOS, {
       <details class="plan" open>
         <summary><b>Review plan</b> · 64 files in 4 steps · 9/64 viewed</summary>
         <ol>
-          {([['Specs and docs', 'what the change is meant to do', 4, 4], ['Build and config', 'dependencies, permissions, settings', 5, 3], ['Implementation', 'the change itself', 38, 2], ['Tests', 'what it promises', 17, 0]] as const).map(([t, why, n, seen]) => (
+          {([['specs', 'Specs and docs', 'what the change is meant to do', 4, 4], ['build', 'Build and config', 'dependencies, permissions, settings', 5, 3], ['code', 'Implementation', 'the change itself', 38, 2], ['tests', 'Tests', 'what it promises', 17, 0]] as const).map(([k, t, why, n, seen]) => (
             <li class={seen === n ? 'done' : ''}>
-              <span class="plan-t"><b>{t}</b> <small>{why}</small></span>
+              <span class="plan-t"><Octicon name={stepIcon(k)} /> <b>{t}</b> <small>{why}</small></span>
               <span class="plan-bar"><i style={{ width: `${(100 * seen) / n}%` }} /></span>
               <small class="plan-n">{seen}/{n}</small>
               {seen === n ? <span class="plan-ok"><Octicon name="check" /></span> : <button class="link">{seen ? 'Continue' : 'Start'}</button>}

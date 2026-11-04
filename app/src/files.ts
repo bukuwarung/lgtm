@@ -44,15 +44,17 @@ type Changed = { filename: string; status: string; additions: number; patch?: st
 // the change itself, what it promises (tests), then resources. Each path in its first matching step, in the order
 // given; a test of a file the PR also changes goes right below that file instead (FooTest.kt under Foo.kt).
 export type PlanStep = { key: StepKey; title: string; why: string; paths: string[] };
-// The steps, in the default order (Settings → Files in reading order lets you drag them into another).
+// The steps, in the default order (Settings → Files in reading order lets you drag them into another), each with its
+// Octicon.
 export const STEPS = [
-  ['specs', 'Specs and docs', 'what the change is meant to do'],
-  ['build', 'Build and config', 'dependencies, permissions, settings'],
-  ['models', 'Models and contracts', 'the shapes the rest builds on'],
-  ['code', 'Implementation', 'the change itself'],
-  ['tests', 'Tests', 'what it promises'],
-  ['resources', 'Resources and assets', 'strings, layouts, images, binaries'],
+  ['specs', 'Specs and docs', 'what the change is meant to do', 'book'],
+  ['build', 'Build and config', 'dependencies, permissions, settings', 'gear'],
+  ['models', 'Models and contracts', 'the shapes the rest builds on', 'stack'],
+  ['code', 'Implementation', 'the change itself', 'code'],
+  ['tests', 'Tests', 'what it promises', 'beaker'],
+  ['resources', 'Resources and assets', 'strings, layouts, images, binaries', 'image'],
 ] as const;
+export const stepIcon = (k: StepKey) => STEPS.find(([x]) => x === k)![3];
 export type StepKey = (typeof STEPS)[number][0];
 // A saved order ("tests,specs,…"), the steps it leaves out (or doesn't know) after it in the default order.
 export function stepOrder(saved: string): StepKey[] {

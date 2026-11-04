@@ -3,7 +3,7 @@ import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getT
 import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
-import { estimateLabel, STEPS, stepOrder, type StepKey } from './files.ts';
+import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { highlightCode } from './highlight.ts';
@@ -128,6 +128,7 @@ function ReadingSteps() {
           return (
             <li key={k} data-k={k} class={dragging === k ? 'dragging' : ''} onPointerDown={grab(k)}>
               <span class="set-grip" aria-hidden="true">⠿</span>
+              <Octicon name={stepIcon(k)} size={14} />
               <span>
                 <b>{title}</b> <small>{why}{k === 'tests' && ": the ones whose code the PR doesn't change (the rest sit below their code)"}</small>
               </span>
