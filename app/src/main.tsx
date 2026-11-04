@@ -93,6 +93,75 @@ function StaleBranches() {
   );
 }
 
+// Where a PR of mine stands, in a few words (the menu bar's menu, the bell's).
+const standing = (i: QueueItem) =>
+  i.isDraft ? 'draft' : readyToMerge(i) ? 'ready to merge' : i.ci === 'FAILURE' || i.ci === 'ERROR' ? 'CI failing' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'changes requested' : i.reviewDecision === 'APPROVED' ? 'approved' : 'waiting for review';
+
+// The bell: what the menu bar's menu has (what needs my review, my PRs and where each stands, review mode, refresh),
+// with the needs-my-review count on it; and the switch for desktop notifications it used to be.
+function BellMenu({ items, onRefresh }: { items: QueueItem[] | null; onRefresh: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState('');
+  const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => !(e.target as Element).closest?.('.bell') && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', esc);
+    return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
+  }, [open]);
+  const needs = (items ?? []).filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);
+  const mine = (items ?? []).filter((i) => i.authored);
+  const go = (i: QueueItem) => ((location.hash = `/${i.repo}/pull/${i.number}`), setOpen(false));
+  const row = (i: QueueItem, note?: string) => (
+    <button role="menuitem" onClick={() => go(i)} title={`${i.repo}#${i.number}`}>
+      <span class="bell-title">{i.title}</span>
+      <small>{i.repo.split('/')[1]}#{i.number}{note && <> · {note}</>}</small>
+    </button>
+  );
+  return (
+    <span class="bell">
+      <button type="button" title={needs.length ? `${needs.length} need your review` : 'Your queue'} aria-haspopup="menu" aria-expanded={open} class={open ? 'on' : ''} onClick={() => setOpen(!open)}>
+        <Octicon name={notify ? 'bell' : 'bell-slash'} />
+        {needs.length > 0 && <span class="nav-count">{needs.length}</span>}
+      </button>
+      {open && (
+        <div class="account-menu bell-menu" role="menu">
+          <div class="account-head">{needs.length ? `Needs your review (${needs.length})` : 'Nothing needs your review'}</div>
+          {needs.map((i) => row(i))}
+          {mine.length > 0 && (
+            <>
+              <div class="account-head">Your PRs ({mine.length})</div>
+              {mine.map((i) => row(i, standing(i)))}
+            </>
+          )}
+          <hr />
+          <button role="menuitem" class="bell-act" disabled={!needs.length} onClick={() => (dispatchEvent(new CustomEvent('lgtm:menu', { detail: 'review-mode' })), setOpen(false))}>
+            <Octicon name="play" /> Start review mode <small>⇧⌘R</small>
+          </button>
+          <button role="menuitem" class="bell-act" onClick={() => (onRefresh(), setOpen(false))}>
+            <Octicon name="sync" /> Refresh
+          </button>
+          <label class="bell-notify">
+            <input
+              type="checkbox"
+              checked={notify}
+              onChange={async () => {
+                setErr('');
+                if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
+                toggleNotify();
+              }}
+            />{' '}
+            Desktop notifications for new review requests
+          </label>
+          {err && <p class="note">{err}</p>}
+        </div>
+      )}
+    </span>
+  );
+}
+
 // No PR open: the queue at a glance; each number opens its tab of the list.
 function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
   const [showDrafts] = useStoredFlag('showDrafts', false);
@@ -377,8 +446,19 @@ function App() {
           </>
         ) : (<>
         <button title="Toggle pull request list" onClick={togglePRs}><Octicon name="three-bars" /></button>
+        {/* The inbox: threads waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
+        <a
+          href="#/inbox"
+          class={`nav-btn nav-inbox${route === '#/inbox' ? ' on' : ''}`}
+          title="Threads waiting on your reply (in open PRs, and ones merged lately)"
+          aria-label={`Inbox${replies ? `: ${replies} waiting on your reply` : ''}`}
+        >
+          <Octicon name="inbox" />
+          {replies > 0 && <span class="nav-count">{replies}</span>}
+        </a>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
         <TopActions
+          items={queueItems}
           refreshing={refreshing}
           onRefresh={() => {
             // The PR list, and the PR that's open (it shows "updating…" meanwhile).
@@ -409,16 +489,6 @@ function App() {
             ⬆ {update}
           </a>
         )}
-        {/* The inbox: threads waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
-        <a
-          href="#/inbox"
-          class={`nav-btn nav-inbox${route === '#/inbox' ? ' on' : ''}`}
-          title="Threads waiting on your reply (in open PRs, and ones merged lately)"
-          aria-label={`Inbox${replies ? `: ${replies} waiting on your reply` : ''}`}
-        >
-          <Octicon name="inbox" />
-          {replies > 0 && <span class="nav-count">{replies}</span>}
-        </a>
         <button
           title="Keyboard shortcuts (?)"
           aria-label="Keyboard shortcuts"
@@ -634,28 +704,14 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
   );
 }
 
-// The top bar's actions: refresh the PR list and the open PR, desktop notifications on/off.
-function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
-  const [err, setErr] = useState('');
-  const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
+// The top bar's actions: refresh the PR list and the open PR, and the bell (BellMenu).
+function TopActions({ onRefresh, refreshing, items }: { onRefresh: () => void; refreshing: boolean; items: QueueItem[] | null }) {
   return (
     <div class="top-actions">
       <button type="button" class={refreshing ? 'refreshing' : ''} title="Refresh the PR list and the open PR (the list also every 3 minutes)" onClick={onRefresh}>
         <span><Octicon name="sync" /></span>
       </button>
-      <button
-        type="button"
-        title={notify ? 'Desktop notifications for new review requests: on' : 'Notify me about new review requests'}
-        aria-pressed={notify}
-        class={notify ? 'on' : ''}
-        onClick={async () => {
-          if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
-          toggleNotify();
-        }}
-      >
-        <Octicon name={notify ? 'bell' : 'bell-slash'} />
-      </button>
-      {err && <span class="top-err">{err}</span>}
+      <BellMenu items={items} onRefresh={onRefresh} />
     </div>
   );
 }
@@ -1108,9 +1164,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     void setBadge(count); // the app's Dock icon
     const forMe = [...waiting, ...items.filter((i) => !waiting.includes(i) && claudeWaiting(i))];
     // The menu bar: what waits on my review, then my own PRs and where each stands.
-    const stands = (i: QueueItem) =>
-      i.isDraft ? 'draft' : readyToMerge(i) ? 'ready to merge' : i.ci === 'FAILURE' || i.ci === 'ERROR' ? 'CI failing' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'changes requested' : i.reviewDecision === 'APPROVED' ? 'approved' : 'waiting for review';
-    const row = (i: QueueItem, section: 'needs' | 'mine') => ({ title: `${i.title} · ${i.repo.split('/')[1]}#${i.number}`, route: `/${i.repo}/pull/${i.number}`, section, note: section === 'mine' ? stands(i) : null });
+    const row = (i: QueueItem, section: 'needs' | 'mine') => ({ title: `${i.title} · ${i.repo.split('/')[1]}#${i.number}`, route: `/${i.repo}/pull/${i.number}`, section, note: section === 'mine' ? standing(i) : null });
     void setTray(menuBar ? [...forMe.map((i) => row(i, 'needs')), ...items.filter((i) => i.authored).map((i) => row(i, 'mine'))] : null);
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
