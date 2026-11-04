@@ -15,6 +15,7 @@ import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { History } from './history.tsx';
 import { PersonPage, toPerson } from './person.tsx';
+import { Inbox } from './inbox.tsx';
 import { DemoPage } from './demos.tsx';
 import { CODE_SIZE, TEXT_SIZE, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
@@ -99,9 +100,11 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
   const needs = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts));
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
+  const replies = items.reduce((n, i) => n + (i.thread?.awaiting ?? 0), 0);
   const cards: [string, number | string, string, string][] = [
     ['reviewing', needs.length, 'need your review', needs.length ? 'Open the Reviewing tab' : ''],
     ['reviewing', oldest ? ago(oldest).replace(/ ago$/, '') : '–', 'oldest wait', oldest ? `Since ${new Date(oldest).toLocaleString()}` : ''],
+    ['inbox', replies, `thread${replies === 1 ? '' : 's'} waiting on your reply`, 'Open them, to reply or resolve'],
     ['mine', mine.filter((i) => i.reviewDecision !== 'APPROVED' && i.reviewDecision !== 'CHANGES_REQUESTED').length, 'of yours waiting for review', 'Open Your PRs'],
     ['mine', mine.filter(readyToMerge).length, 'of yours ready to merge', 'Open Your PRs'],
     ['mine', mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, 'of yours with changes requested', 'Open Your PRs'],
@@ -110,7 +113,7 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
     <div class="page start">
       <div class="start-grid">
         {cards.map(([tab, n, label, title]) => (
-          <button class="start-card" title={title} onClick={() => onTab(tab)}>
+          <button class="start-card" title={title} onClick={() => (tab === 'inbox' ? (location.hash = '/inbox') : onTab(tab))}>
             <b>{n}</b>
             <span>{label}</span>
           </button>
@@ -466,6 +469,8 @@ function App() {
           />
         ) : route === '#/history' ? (
           <History />
+        ) : route === '#/inbox' ? (
+          <Inbox items={queueItems} />
         ) : route.startsWith('#/person/') ? (
           <PersonPage login={decodeURIComponent(route.slice('#/person/'.length))} orgs={[...new Set((queueItems ?? []).map((i) => i.repo.split('/')[0]))]} />
         ) : route === '#/settings' ? (

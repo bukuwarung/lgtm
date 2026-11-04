@@ -1250,3 +1250,14 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .merge-open { flex-wrap: wrap; gap: 6px; font-size: calc(13px * var(--ts)); }
 .merge-open .link { margin-left: auto; }
 .approve-open { margin: 0; font-size: calc(12.5px * var(--ts)); }
+/* #/inbox: threads waiting on my reply */
+.inbox section { margin-bottom: 18px; }
+.inbox h4 { text-transform: none; letter-spacing: 0; font-size: calc(14px * var(--ts)); color: var(--fg); }
+.inbox h4 small { color: var(--muted); font-weight: normal; }
+.inbox-thread { display: grid; gap: 6px; margin: 8px 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.inbox-where { display: flex; align-items: baseline; gap: 8px; font-size: calc(13px * var(--ts)); }
+.inbox-where a { font-family: var(--mono); }
+.inbox-where small { color: var(--muted); margin-left: auto; }
+.inbox-last { max-height: 180px; overflow: auto; font-size: calc(13px * var(--ts)); }
+.inbox-thread textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.inbox-thread .row { display: flex; gap: 6px; justify-content: flex-end; }
