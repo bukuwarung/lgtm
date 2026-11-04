@@ -4,7 +4,7 @@ import { useEffect, useState } from 'preact/hooks';
 // drafts, what you'd seen of a PR, Claude session links, the PR list's team, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$)/;
 let account = '';
 export const lastLogin = () => {
   try {
@@ -750,3 +750,21 @@ export function markReplyDone(thread: string, lastComment: number) {
   for (const k of keys.slice(0, Math.max(0, keys.length - 500))) delete d[k]; // the oldest go first
   localStorage.setItem(own('repliesDone'), JSON.stringify(d));
 }
+
+// What lgtm would notify me about, kept until I act on it (open its PR) or dismiss it: the bell's list. Kept whether
+// or not desktop notifications are on; per account, on this machine; the newest 50.
+export type Notice = { id: string; what: string; title: string; pr: string; at: number }; // pr: "owner/repo#n"
+export const notices = (): Notice[] => {
+  try {
+    return JSON.parse(localStorage.getItem(own('notices')) ?? '[]');
+  } catch {
+    return [];
+  }
+};
+const saveNotices = (list: Notice[]) => (localStorage.setItem(own('notices'), JSON.stringify(list.slice(0, 50))), dispatchEvent(new Event('lgtm:notices')));
+export const addNotice = (what: string, title: string, pr: string) =>
+  saveNotices([{ id: `${pr}:${what}:${Date.now()}`, what, title, pr, at: Date.now() }, ...notices().filter((n) => !(n.pr === pr && n.what === what))]);
+export const dropNotices = (pick: (n: Notice) => boolean) => {
+  const all = notices();
+  if (all.some(pick)) saveNotices(all.filter((n) => !pick(n)));
+};

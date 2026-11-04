@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { addNotice, dropNotices, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -97,12 +97,19 @@ function StaleBranches() {
 const standing = (i: QueueItem) =>
   i.isDraft ? 'draft' : readyToMerge(i) ? 'ready to merge' : i.ci === 'FAILURE' || i.ci === 'ERROR' ? 'CI failing' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'changes requested' : i.reviewDecision === 'APPROVED' ? 'approved' : 'waiting for review';
 
-// The bell: what the menu bar's menu has (what needs my review, my PRs and where each stands, review mode, refresh),
-// with the needs-my-review count on it; and the switch for desktop notifications it used to be.
-function BellMenu({ items, onRefresh }: { items: QueueItem[] | null; onRefresh: () => void }) {
+// The bell: what lgtm would have notified me about and I haven't acted on yet (opened its PR, or dismissed), newest
+// first, its count on the bell; and the switch for desktop notifications.
+function BellMenu() {
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState('');
   const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
+  const [list, setList] = useState(notices);
+  useEffect(() => {
+    const h = () => setList(notices());
+    addEventListener('lgtm:notices', h);
+    addEventListener('storage', h);
+    return () => (removeEventListener('lgtm:notices', h), removeEventListener('storage', h));
+  }, []);
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => !(e.target as Element).closest?.('.bell') && setOpen(false);
@@ -111,27 +118,23 @@ function BellMenu({ items, onRefresh }: { items: QueueItem[] | null; onRefresh: 
     addEventListener('keydown', esc);
     return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
   }, [open]);
-  const needs = (items ?? []).filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);
-  const mine = (items ?? []).filter((i) => i.authored);
-  const go = (i: QueueItem) => ((location.hash = `/${i.repo}/pull/${i.number}`), setOpen(false));
-  const row = (i: QueueItem, note?: string) => (
-    <button role="menuitem" onClick={() => go(i)} title={`${i.repo}#${i.number}`}>
-      <span class="bell-title">{i.title}</span>
-      <small>{i.repo.split('/')[1]}#{i.number}{note && <> · {note}</>}</small>
-    </button>
-  );
+  const go = (n: Notice) => {
+    const [repo, num] = n.pr.split('#');
+    location.hash = `/${repo}/pull/${num}`; // opening it clears what it said (the route effect)
+    setOpen(false);
+  };
   return (
     <span class="bell">
-      <button type="button" title={needs.length ? `${needs.length} need your review` : 'Your queue'} aria-haspopup="menu" aria-expanded={open} class={open ? 'on' : ''} onClick={() => setOpen(!open)}>
+      <button type="button" title={list.length ? `${list.length} new` : 'Notifications'} aria-haspopup="menu" aria-expanded={open} class={open ? 'on' : ''} onClick={() => setOpen(!open)}>
         <Octicon name={notify ? 'bell' : 'bell-slash'} />
-        {needs.length > 0 && <span class="nav-count">{needs.length}</span>}
+        {list.length > 0 && <span class="nav-count">{list.length}</span>}
       </button>
       {open && (
         <div class="account-menu bell-menu" role="menu">
           <div class="bell-notify">
             <Octicon name={notify ? 'bell' : 'bell-slash'} />
             <span>
-              Notifications
+              Desktop notifications
               <small>New review requests, and what you pick in Settings</small>
             </span>
             <button
@@ -149,21 +152,28 @@ function BellMenu({ items, onRefresh }: { items: QueueItem[] | null; onRefresh: 
           </div>
           {err && <p class="note">{err}</p>}
           <hr />
-          <div class="account-head">{needs.length ? `Needs your review (${needs.length})` : 'Nothing needs your review'}</div>
-          {needs.map((i) => row(i))}
-          {mine.length > 0 && (
+          {list.length ? (
             <>
-              <div class="account-head">Your PRs ({mine.length})</div>
-              {mine.map((i) => row(i, standing(i)))}
+              {list.map((n) => (
+                <div class="bell-row">
+                  <button role="menuitem" onClick={() => go(n)} title={`Open ${n.pr}`}>
+                    <span class="bell-title">
+                      <b>{n.what}</b> · {n.title}
+                    </span>
+                    <small>{n.pr.split('/')[1]} · {ago(new Date(n.at).toISOString())}</small>
+                  </button>
+                  <button class="bell-x" title="Dismiss" aria-label="Dismiss" onClick={() => dropNotices((x) => x.id === n.id)}>
+                    <Octicon name="x" />
+                  </button>
+                </div>
+              ))}
+              <button role="menuitem" class="bell-act bell-clear" onClick={() => dropNotices(() => true)}>
+                Clear all
+              </button>
             </>
+          ) : (
+            <p class="note bell-empty">Nothing new. What lgtm would notify you about stays here until you open its PR.</p>
           )}
-          <hr />
-          <button role="menuitem" class="bell-act" disabled={!needs.length} onClick={() => (dispatchEvent(new CustomEvent('lgtm:menu', { detail: 'review-mode' })), setOpen(false))}>
-            <Octicon name="play" /> Start review mode <small>⇧⌘R</small>
-          </button>
-          <button role="menuitem" class="bell-act" onClick={() => (onRefresh(), setOpen(false))}>
-            <Octicon name="sync" /> Refresh
-          </button>
         </div>
       )}
     </span>
@@ -209,6 +219,11 @@ function App() {
   const keyFor = (a: Action) => keyLabel(bindings[a]);
   const [state, setState] = useState<'loading' | 'in' | { error: string }>('loading');
   const [route, setRoute] = useState(location.hash);
+  // Opening a PR acts on what the bell said about it.
+  useEffect(() => {
+    const cur = parseRoute(route);
+    if (cur) dropNotices((x) => x.pr === `${cur.repo}#${cur.n}`);
+  }, [route]);
   const [queueVersion, setQueueVersion] = useState(0);
   const [answeredTick, setAnsweredTick] = useState(0); // a review sent: lay it over the list
   const [refreshing, setRefreshing] = useState(false); // ↻: until the list's next load lands
@@ -466,7 +481,6 @@ function App() {
         </a>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
         <TopActions
-          items={queueItems}
           refreshing={refreshing}
           onRefresh={() => {
             // The PR list, and the PR that's open (it shows "updating…" meanwhile).
@@ -713,13 +727,13 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
 }
 
 // The top bar's actions: refresh the PR list and the open PR, and the bell (BellMenu).
-function TopActions({ onRefresh, refreshing, items }: { onRefresh: () => void; refreshing: boolean; items: QueueItem[] | null }) {
+function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
   return (
     <div class="top-actions">
       <button type="button" class={refreshing ? 'refreshing' : ''} title="Refresh the PR list and the open PR (the list also every 3 minutes)" onClick={onRefresh}>
         <span><Octicon name="sync" /></span>
       </button>
-      <BellMenu items={items} onRefresh={onRefresh} />
+      <BellMenu />
     </div>
   );
 }
@@ -1176,16 +1190,23 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     void setTray(menuBar ? [...forMe.map((i) => row(i, 'needs')), ...items.filter((i) => i.authored).map((i) => row(i, 'mine'))] : null);
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
-    if (seen.current && notify) {
-      const tell = (what: string, i: QueueItem) => {
+    // Everything goes on the bell's list (kept until acted on); a desktop notification only per its switch.
+    if (seen.current) {
+      const tell = (what: string, i: QueueItem, desktop: boolean) => {
+        addNotice(what, i.title, `${i.repo}#${i.number}`);
+        if (!notify || !desktop) return;
         if (what === 'Ready to merge') sessionStorage.setItem('openMerge', `${i.repo}#${i.number}`); // its merge box opens (merge.tsx)
         void notifyNative(`${what}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, `/${i.repo}/pull/${i.number}`);
       };
-      for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i);
+      const all = { replies: true, verdicts: true, ci: true, queue: true, approvedPush: true, ready: true };
+      const mine = { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, approvedPush: notifyApprovedPush, ready: notifyReady };
+      for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i, true);
       for (const i of items) {
         const was = before.current.get(i.id);
-        if (was) for (const n of queueNews(was, i, { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, approvedPush: notifyApprovedPush, ready: notifyReady })) tell(n, i);
-        else if (notifyMentions && mentionNew(i)) tell('Mentioned you', i);
+        if (was) {
+          const wanted = new Set(queueNews(was, i, mine));
+          for (const n of queueNews(was, i, all)) tell(n, i, wanted.has(n));
+        } else if (mentionNew(i)) tell('Mentioned you', i, notifyMentions);
       }
     }
     seen.current = new Set(waiting.map((i) => i.id));
