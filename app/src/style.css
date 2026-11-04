@@ -1228,3 +1228,12 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .set-toc button.sub { padding-left: 30px; font-size: calc(12px * var(--ts)); }
 .settings .set-group > p, .settings .set-group > .set-row { max-width: 720px; }
 .settings h5 { margin: 14px 0 6px; font-size: calc(12px * var(--ts)); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.demo-macbar { font: 12px var(--sans); }
+.demo-macbar-strip { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 3px 10px; border-radius: 6px; background: light-dark(#e8e8ea, #2b2b2e); color: var(--fg); }
+.demo-tray { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 14%, transparent); }
+.demo-tray img { width: 16px; height: 16px; filter: light-dark(none, invert(1)); }
+.demo-traymenu { margin: 4px 0 0 auto; width: max-content; max-width: 100%; padding: 5px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 6px 18px var(--shadow); }
+.demo-traymenu > div { padding: 2px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.demo-traymenu > div:not(.h) { padding-left: 22px; }
+.demo-traymenu .h { color: var(--muted); }
+.demo-traymenu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--border); }

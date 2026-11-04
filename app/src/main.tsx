@@ -305,6 +305,7 @@ function App() {
     }
     else if (id === 'find') dispatchEvent(new Event('lgtm:find'));
     else if (id === 'reload') location.reload();
+    else if (id === 'refresh-list') dispatchEvent(new Event('lgtm:list-refresh')); // the menu bar's Refresh
     else if (id === 'back') history.back();
     else if (id === 'forward') history.forward();
     else if (id === 'toggle-prs') togglePRs();
@@ -1089,8 +1090,12 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length;
     document.title = count ? `(${count}) lgtm` : 'lgtm';
     void setBadge(count); // the app's Dock icon
-    const mine = [...waiting, ...items.filter((i) => !waiting.includes(i) && claudeWaiting(i))];
-    void setTray(menuBar ? mine.map((i) => ({ title: `${i.title} · ${i.repo.split('/')[1]}#${i.number}`, route: `/${i.repo}/pull/${i.number}` })) : null);
+    const forMe = [...waiting, ...items.filter((i) => !waiting.includes(i) && claudeWaiting(i))];
+    // The menu bar: what waits on my review, then my own PRs and where each stands.
+    const stands = (i: QueueItem) =>
+      i.isDraft ? 'draft' : readyToMerge(i) ? 'ready to merge' : i.ci === 'FAILURE' || i.ci === 'ERROR' ? 'CI failing' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'changes requested' : i.reviewDecision === 'APPROVED' ? 'approved' : 'waiting for review';
+    const row = (i: QueueItem, section: 'needs' | 'mine') => ({ title: `${i.title} · ${i.repo.split('/')[1]}#${i.number}`, route: `/${i.repo}/pull/${i.number}`, section, note: section === 'mine' ? stands(i) : null });
+    void setTray(menuBar ? [...forMe.map((i) => row(i, 'needs')), ...items.filter((i) => i.authored).map((i) => row(i, 'mine'))] : null);
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
     if (seen.current && notify) {

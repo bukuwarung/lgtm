@@ -1367,13 +1367,16 @@ function LaunchAtLogin() {
           <small>Start lgtm when you log in to your Mac, so the Dock badge and notifications are there from the start.</small>
         </span>
       </label>
-      <label class="set-row">
-        <input type="checkbox" checked={menuBar} onChange={toggleMenuBar} />
-        <span>
-          Show in the menu bar
-          <small>How many PRs wait on you, and a menu of them to open one.</small>
-        </span>
-      </label>
+      <div class="set-flag with-demo">
+        <label class="set-row">
+          <input type="checkbox" checked={menuBar} onChange={toggleMenuBar} />
+          <span>
+            Show in the menu bar
+            <small>How many PRs wait on your review, beside lgtm's icon; its menu lists them and your own PRs with where each stands, and starts review mode.</small>
+          </span>
+        </label>
+        <DemoPair k="menuBar" active={menuBar} />
+      </div>
     </div>
   );
 }

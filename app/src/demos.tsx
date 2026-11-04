@@ -1246,6 +1246,30 @@ Object.assign(DEMOS, {
   },
 } satisfies Record<string, Demo>);
 
+// Settings → App → Mac app: the menu bar item, and its menu.
+const MACBAR = (on: boolean) => (
+  <div class="demo-macbar">
+    <div class="demo-macbar-strip">
+      {on && <span class="demo-tray on"><img src="./tray-template.png" alt="" /> 2</span>}
+      <span>Wi-Fi</span> <span>Tue 14:05</span>
+    </div>
+    {on && (
+      <div class="demo-traymenu">
+        <div class="h">Needs your review (2)</div>
+        <div>Retry failed payments · shop#412</div>
+        <div>Cart: keep the promo code · shop#409</div>
+        <hr />
+        <div class="h">Your PRs (1)</div>
+        <div>Refund screen · app#85 — ready to merge</div>
+        <hr />
+        <div>Start Review Mode</div>
+        <div>Open lgtm</div>
+      </div>
+    )}
+  </div>
+);
+Object.assign(DEMOS, { menuBar: { title: 'In the menu bar', off: MACBAR(false), on: MACBAR(true) } } satisfies Record<string, Demo>);
+
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which
 // it's made of.
 SCENES.app = {

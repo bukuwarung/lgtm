@@ -413,7 +413,7 @@ export async function setBadge(count: number) {
 }
 
 // The app's menu bar item: the PRs waiting on me (null: none, it's turned off).
-export const setTray = (items: { title: string; route: string }[] | null) => isDesktop && command('set_tray', { items }).catch(() => {});
+export const setTray = (items: { title: string; route: string; section: 'needs' | 'mine'; note: string | null }[] | null) => isDesktop && command('set_tray', { items }).catch(() => {});
 
 // Launch at login (the app only).
 export async function launchAtLogin(): Promise<boolean> {
