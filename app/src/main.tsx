@@ -247,6 +247,7 @@ function App() {
   const [backTo, setBackTo] = useState('');
   const [failure, setFailure] = useState(''); // platform.ts reportError
   const [queueItems, setQueueItems] = useState<QueueItem[] | null>(null); // the list's, for the start page
+  const replies = (queueItems ?? []).reduce((n, i) => n + (i.thread?.awaiting ?? 0), 0); // threads waiting on my reply, for the inbox button
   const [, setPrTab] = useStoredValue('prTab', 'reviewing');
   useEffect(() => {
     const show = (e: Event) => setFailure((e as CustomEvent<string>).detail);
@@ -408,6 +409,16 @@ function App() {
             ⬆ {update}
           </a>
         )}
+        {/* The inbox: threads waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
+        <a
+          href="#/inbox"
+          class={`nav-btn nav-inbox${route === '#/inbox' ? ' on' : ''}`}
+          title="Threads waiting on your reply (in open PRs, and ones merged lately)"
+          aria-label={`Inbox${replies ? `: ${replies} waiting on your reply` : ''}`}
+        >
+          <Octicon name="inbox" />
+          {replies > 0 && <span class="nav-count">{replies}</span>}
+        </a>
         <button
           title="Keyboard shortcuts (?)"
           aria-label="Keyboard shortcuts"
