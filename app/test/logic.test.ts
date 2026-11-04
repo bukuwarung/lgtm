@@ -906,3 +906,32 @@ test('depChanges: gradle, catalog and npm; upgrades, adds, removes', async () =>
     ['preact', '^10.19.0', '^10.24.0', false],
   ]);
 });
+
+test('findHardcoded: UI text in layouts and code, not ids, resources, tests or previews', async () => {
+  const { findHardcoded } = await import('../src/hardcoded.ts');
+  const layout = ['@@ -1,1 +1,5 @@', '+    android:text="Simpan data"', '+    android:text="@string/save"', '+    tools:text="Preview only"', '+    android:hint="Nomor HP"'].join('\n');
+  const kt = [
+    '@@ -1,1 +1,12 @@',
+    '+        Text("Pindah ke BukuAgen")',
+    '+        Text(stringResource(R.string.cta))',
+    '+        Toast.makeText(context, "Gagal menyimpan", Toast.LENGTH_SHORT).show()',
+    '+        Log.d(TAG, "loaded items")',
+    '+        binding.title.text = "${user.name}"',
+    '+        analytics.track(event = "screen_view")',
+    '+@Preview',
+    '+@Composable',
+    '+fun CardPreview() { Text("Sample") }',
+    '+private val PREVIEW_STATE = State(',
+    '+    title = "Masukkan kode OTP",',
+    '+)',
+  ].join('\n');
+  const got = findHardcoded([
+    { filename: 'app/src/main/res/layout/activity_main.xml', patch: layout },
+    { filename: 'app/src/main/java/a/Screen.kt', patch: kt },
+    { filename: 'app/src/test/java/a/ScreenTest.kt', patch: kt },
+  ]);
+  assert.deepEqual(got.map((h) => [h.path.split('/').pop(), h.line, h.text]), [
+    ['activity_main.xml', 1, 'Simpan data'], ['activity_main.xml', 4, 'Nomor HP'],
+    ['Screen.kt', 1, 'Pindah ke BukuAgen'], ['Screen.kt', 3, 'Gagal menyimpan'],
+  ]);
+});

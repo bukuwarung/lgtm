@@ -57,6 +57,7 @@ const ICONS: Record<string, string> = {
   unsent: 'pencil',
   key: 'key',
   package: 'package',
+  text: 'typography',
   '🔔': 'bell',
   '⏱': 'stopwatch',
 };

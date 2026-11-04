@@ -2,6 +2,7 @@ import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { findSecrets, type Secret } from './secrets.ts';
 import { depChanges, type DepChange } from './deps.ts';
+import { findHardcoded, type Hardcoded } from './hardcoded.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
@@ -72,6 +73,7 @@ type Ctx = {
   codeIx: CodeIndex; // the PR's changed code files and what they declare, for specs naming them (specrefs.ts)
   specRefs: Map<string, SpecRef[]>; // where the specs name each changed file
   secrets: Map<string, Map<number, string>>; // added lines that look like a secret, per file: line → what (secrets.ts)
+  hardcoded: Map<string, Map<number, string>>; // added UI text written in code, not strings.xml: line → the text (hardcoded.ts)
 };
 type SinceComment = { kind: 'same' | 'gone' | 'unknown' } | { kind: 'changed'; lines: Line[] };
 type Saved = { sha: string; drafts: Draft[] };
@@ -801,10 +803,12 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
   const secrets = secretsOf(data.files);
   const deps = depsOf(data.files);
+  const texts = textsOf(data.files);
   const ctx: Ctx = {
     codeIx,
     specRefs: refs,
     secrets: secrets.byPath,
+    hardcoded: texts.byPath,
     untested: noTests,
     modules: undefined, // set below, once the shown files are known
     sinceComment,
@@ -1179,6 +1183,15 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
                 {secrets.list.map((x) => (
                   <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
                     <b>{x.kind}</b> <small>{base(x.path)}:{x.line}</small>
+                  </button>
+                ))}
+              </PillMenu>
+            )}
+            {texts.list.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="text" n={texts.list.length} t={`text${texts.list.length > 1 ? 's' : ''} not in strings.xml`} />} head="Text people see, written in the code instead of strings.xml, so never translated:">
+                {texts.list.map((x) => (
+                  <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                    <b>“{x.text}”</b> <small>{base(x.path)}:{x.line}</small>
                   </button>
                 ))}
               </PillMenu>
@@ -1876,6 +1889,19 @@ function secretsOf(files: File[]) {
   return s;
 }
 
+// UI text written in code (hardcoded.ts), once per file list.
+const textsSeen = new WeakMap<object, { list: Hardcoded[]; byPath: Map<string, Map<number, string>> }>();
+function textsOf(files: File[]) {
+  let t = textsSeen.get(files);
+  if (!t) {
+    const list = findHardcoded(files);
+    const byPath = new Map<string, Map<number, string>>();
+    for (const x of list) byPath.set(x.path, (byPath.get(x.path) ?? new Map()).set(x.line, x.text));
+    textsSeen.set(files, (t = { list, byPath }));
+  }
+  return t;
+}
+
 // Dependency changes (deps.ts), once per file list; and a library's page, where its versions and changelog are.
 const depsSeen = new WeakMap<object, DepChange[]>();
 const depsOf = (files: File[]) => depsSeen.get(files) ?? (depsSeen.set(files, depChanges(files)), depsSeen.get(files)!);
@@ -2245,6 +2271,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   };
   const mv = ctx.moved.get(path);
   const secretAt = ctx.secrets.get(path);
+  const textAt = ctx.hardcoded.get(path);
   // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
   const [foldImports] = useStoredFlag('foldImports', true);
   const folds = useMemo(() => (foldImports && importSyntax(path) ? importFolds(hunks, importSyntax(path)!) : []), [hunks, foldImports]);
@@ -2466,7 +2493,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : '')} data-k={`${hi}-${li}`} title={l.kind === '+' ? secretAt?.get(l.new!) && `Looks like a secret: ${secretAt.get(l.new!)}` : undefined}>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : '')} data-k={`${hi}-${li}`} title={l.kind !== '+' ? undefined : secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : undefined}>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />

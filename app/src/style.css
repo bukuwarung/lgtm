@@ -1177,3 +1177,4 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 .pill-pop .dep-row > button:hover, .pill-pop .dep-row > a:hover { background: var(--soft); }
 .pill-pop .dep-row > a { padding: 5px 8px; border-radius: 6px; color: var(--muted); }
 .dep-major { color: light-dark(#9a6700, #d29922); font-weight: 600; }
+.diff tr.ln.hardcoded td.code { box-shadow: inset 3px 0 0 light-dark(#bf8700, #d29922); }
