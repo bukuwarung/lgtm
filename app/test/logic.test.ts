@@ -890,3 +890,19 @@ test('manifest: permissions and exported components, before and after', async ()
   assert.deepEqual(c.nowExported.map((x) => x.name), ['.Sync']);
   assert.ok(isRisky('android.permission.BLUETOOTH_CONNECT') && !isRisky('android.permission.INTERNET'));
 });
+
+test('depChanges: gradle, catalog and npm; upgrades, adds, removes', async () => {
+  const { depChanges } = await import('../src/deps.ts');
+  const gradle = ['@@ -1,4 +1,4 @@', '-    implementation("com.squareup.okhttp3:okhttp:4.12.0")', '+    implementation("com.squareup.okhttp3:okhttp:5.0.0")', '+    implementation(libs.timber)', '-    testImplementation "junit:junit:4.13.2"', '     // implementation("x:y:1.0")'].join('\n');
+  const toml = ['@@ -1,3 +1,3 @@', '-retrofit = "2.9.0"', '+retrofit = "2.11.0"', '+room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }'].join('\n');
+  const npm = ['@@ -1,3 +1,3 @@', '-    "preact": "^10.19.0",', '+    "preact": "^10.24.0",', '     "build": "vite build"'].join('\n');
+  const got = depChanges([{ filename: 'app/build.gradle.kts', patch: gradle }, { filename: 'gradle/libs.versions.toml', patch: toml }, { filename: 'app/package.json', patch: npm }]);
+  assert.deepEqual(got.map((d) => [d.name, d.from ?? null, d.to ?? null, !!d.major]), [
+    ['com.squareup.okhttp3:okhttp', '4.12.0', '5.0.0', true],
+    ['libs.timber', null, null, false],
+    ['junit:junit', '4.13.2', null, false],
+    ['retrofit (version)', '2.9.0', '2.11.0', false],
+    ['androidx.room:room-runtime', null, null, false],
+    ['preact', '^10.19.0', '^10.24.0', false],
+  ]);
+});

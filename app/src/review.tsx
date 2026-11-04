@@ -1,6 +1,7 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { findSecrets, type Secret } from './secrets.ts';
+import { depChanges, type DepChange } from './deps.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
@@ -799,6 +800,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
   const secrets = secretsOf(data.files);
+  const deps = depsOf(data.files);
   const ctx: Ctx = {
     codeIx,
     specRefs: refs,
@@ -1178,6 +1180,23 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
                   <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
                     <b>{x.kind}</b> <small>{base(x.path)}:{x.line}</small>
                   </button>
+                ))}
+              </PillMenu>
+            )}
+            {deps.length > 0 && (
+              <PillMenu cls={deps.some((d) => d.major) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved to another version (major version jumps marked):">
+                {deps.map((d) => (
+                  <div class="dep-row">
+                    <button onClick={() => jumpToLine(d.path, d.removed ? undefined : d.line)} title={`${d.path}:${d.line}`}>
+                      <b>{d.name}</b>{' '}
+                      <small class={d.major ? 'dep-major' : ''}>
+                        {d.removed ? `removed${d.from ? ` (was ${d.from})` : ''}` : d.from && d.to ? `${d.from} → ${d.to}${d.major ? ' · major' : ''}` : `added${d.to ? ` ${d.to}` : ''}`}
+                        {d.test && ' · for tests'}
+                      </small>
+                      {new Set(deps.map((x) => x.path)).size > 1 && <small>{dir(d.path) || 'root'}</small>}
+                    </button>
+                    {depPage(d) && <a href={depPage(d)} target="_blank" rel="noopener" title="Its page: versions, changelog"><Octicon name="link-external" /></a>}
+                  </div>
                 ))}
               </PillMenu>
             )}
@@ -1856,6 +1875,12 @@ function secretsOf(files: File[]) {
   }
   return s;
 }
+
+// Dependency changes (deps.ts), once per file list; and a library's page, where its versions and changelog are.
+const depsSeen = new WeakMap<object, DepChange[]>();
+const depsOf = (files: File[]) => depsSeen.get(files) ?? (depsSeen.set(files, depChanges(files)), depsSeen.get(files)!);
+const depPage = (d: DepChange) =>
+  d.npm ? `https://www.npmjs.com/package/${d.name}?activeTab=versions` : /^[\w.-]+:[\w.-]+$/.test(d.name) ? `https://central.sonatype.com/artifact/${d.name.replace(':', '/')}/versions` : undefined;
 
 // A big PR's reading plan (files.ts reviewPlan): each step with how much of it is viewed, a click to its first file
 // not yet viewed; a switch puts the files in this order (review mode's next-file keys follow it too).
