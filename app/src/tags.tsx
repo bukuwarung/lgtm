@@ -56,6 +56,7 @@ const ICONS: Record<string, string> = {
   queue: 'git-merge-queue',
   unsent: 'pencil',
   key: 'key',
+  alert: 'alert',
   package: 'package',
   text: 'typography',
   '🔔': 'bell',

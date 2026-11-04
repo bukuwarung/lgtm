@@ -368,21 +368,21 @@ export function Settings() {
       <section>
         <h3>Checks</h3>
         <p class="note">What lgtm points out in a PR, each with a button to turn it into a comment. Switch off any that's noise in your repos.</p>
-        <Flag k="checkSecrets" initial={true} label="Possible secrets" hint="Added lines that look like a private key, a token (AWS, GitHub, Slack, Google, Stripe, JWT) or a password or key given a literal. Placeholders, environment lookups and tests' made-up passwords don't count." />
-        <Flag k="checkDeps" initial={true} label="Dependency changes" hint="Libraries added, removed or moved to another version (Gradle, version catalogs, package.json), major jumps marked." />
-        <Flag k="checkBinaries" initial={true} label="Binary files: what they are" hint="Kind, size before and after, in Git LFS or not; a warning for one over 1 MB straight in Git, or one .gitattributes puts in LFS that isn't." />
-        <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)." />
-        <Flag k="reviewPlan" initial={true} label="A review plan for big PRs" hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed." />
+        <Flag k="checkSecrets" initial={true} label="Possible secrets" hint="Added lines that look like a private key, a token (AWS, GitHub, Slack, Google, Stripe, JWT) or a password or key given a literal. Placeholders, environment lookups and tests' made-up passwords don't count."  demo />
+        <Flag k="checkDeps" initial={true} label="Dependency changes" hint="Libraries added, removed or moved to another version (Gradle, version catalogs, package.json), major jumps marked."  demo />
+        <Flag k="checkBinaries" initial={true} label="Binary files: what they are" hint="Kind, size before and after, in Git LFS or not; a warning for one over 1 MB straight in Git, or one .gitattributes puts in LFS that isn't."  demo />
+        <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)."  demo />
+        <Flag k="reviewPlan" initial={true} label="A review plan for big PRs" hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed."  demo />
       </section>
 
       <section>
         <h3>Android</h3>
-        <Flag k="checkHardcoded" initial={true} label="UI text not in strings.xml" hint="A layout's android:text, Compose's Text(“…”), toasts, dialogs: text written in code is never translated. Tests, debug code and previews don't count." />
-        <Flag k="checkRoom" initial={true} label="Room tables changed without a version bump" hint="An @Entity's columns changed while no @Database version goes up: installed apps would crash on update." />
-        <Flag k="manifestSummary" initial={true} label="What a manifest change means" hint="Above AndroidManifest.xml's diff: permissions asked for or dropped, components added, removed or now reachable by other apps." />
-        <Flag k="lintBaselines" initial={true} label="Lint baselines as suppressions" hint="lint-baseline.xml as the warnings it newly hides and the ones it no longer does; the XML a click away." />
-        <Flag k="stringsView" initial={true} label="strings.xml as names and texts" hint="The XML a click away.">
-          <Flag k="translationChecks" initial={true} label="Check the other languages" hint="A new or changed string missing in a values-xx folder, with different placeholders there, or not updated with it." />
+        <Flag k="checkHardcoded" initial={true} label="UI text not in strings.xml" hint="A layout's android:text, Compose's Text(“…”), toasts, dialogs: text written in code is never translated. Tests, debug code and previews don't count."  demo />
+        <Flag k="checkRoom" initial={true} label="Room tables changed without a version bump" hint="An @Entity's columns changed while no @Database version goes up: installed apps would crash on update."  demo />
+        <Flag k="manifestSummary" initial={true} label="What a manifest change means" hint="Above AndroidManifest.xml's diff: permissions asked for or dropped, components added, removed or now reachable by other apps."  demo />
+        <Flag k="lintBaselines" initial={true} label="Lint baselines as suppressions" hint="lint-baseline.xml as the warnings it newly hides and the ones it no longer does; the XML a click away."  demo />
+        <Flag k="stringsView" initial={true} label="strings.xml as names and texts" hint="The XML a click away." demo>
+          <Flag k="translationChecks" initial={true} label="Check the other languages" hint="A new or changed string missing in a values-xx folder, with different placeholders there, or not updated with it."  demo />
         </Flag>
       </section>
 

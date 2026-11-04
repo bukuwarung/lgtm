@@ -784,6 +784,170 @@ SCENES.strings = {
   ),
 };
 
+// Settings → Checks and → Android, previewed. Here, below `sx`, which the strings ones use.
+const pills = (...ps: [cls: string, content: ComponentChildren][]) => (
+  <div class="pills pr-status">
+    {ps.map(([cls, c]) => (
+      <span class={`pill ${cls}`}>{c}</span>
+    ))}
+  </div>
+);
+// XML (or any non-Kotlin) lines as rows, escaped.
+const xmlRows = (lines: string[], kind: '+' | '-' | ' ' = '+', from = 1, cls?: (i: number) => string | undefined): Row[] =>
+  lines.map((l, i) => [kind, kind === '+' ? '' : from + i, kind === '-' ? '' : from + i, `<span>${md.utils.escapeHtml(l) || ' '}</span>`, cls?.(i)] as Row);
+const KEY_ROWS = (cls?: string): Row[] => [
+  [' ', 11, 11, 'object Payments {'],
+  ['+', '', 12, '    val awsKey = "AKIAIOSFODNN7EXAMPLE"', cls],
+  [' ', 12, 13, '}'],
+];
+const TEXT_ROWS = (cls?: string): Row[] => [
+  [' ', 40, 40, 'Column {'],
+  ['+', '', 41, '    Text("Pindah ke BukuAgen")', cls],
+  ['+', '', 42, '    Text(stringResource(R.string.cta))'],
+  [' ', 41, 43, '}'],
+];
+const ENTITY_ROWS: Row[] = [
+  [' ', 3, 3, '@Entity(tableName = "card")'],
+  [' ', 4, 4, 'data class CardEntity('],
+  [' ', 5, 5, '    @PrimaryKey val id: String,'],
+  ['+', '', 6, '    val nickname: String?,'],
+  [' ', 6, 7, ')'],
+];
+const MANIFEST = ['<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />', '<receiver android:name=".sync.BootReceiver">', '    <intent-filter>', '        <action android:name="android.intent.action.BOOT_COMPLETED" />', '    </intent-filter>', '</receiver>'];
+const BASELINE = ['<issue', '    id="MissingPermission"', '    message="Call requires permission which may be rejected by user">', '    <location file="src/main/java/acme/BtScanner.kt" line="42"/>', '</issue>'];
+const FILES_BIG = ['openspec/changes/checkout/design.md', 'app/build.gradle.kts', 'app/src/main/java/acme/model/Order.kt', 'app/src/main/java/acme/CheckoutViewModel.kt', 'app/src/test/java/acme/CheckoutViewModelTest.kt'];
+
+Object.assign(DEMOS, {
+  checkSecrets: {
+    title: 'Possible secrets',
+    off: <File path="Payments.kt" add={1} del={0}><Rows rows={KEY_ROWS()} /></File>,
+    on: (
+      <>
+        {pills(['p-bad', <Tg i="key" n={1} t="possible secret" />])}
+        <File path="Payments.kt" add={1} del={0}><Rows rows={KEY_ROWS('secret')} /></File>
+      </>
+    ),
+  },
+  checkDeps: {
+    title: 'Dependency changes',
+    off: pills(['p-size', <><b class="a">+12</b> <b class="d">−3</b> · 2 files</>]),
+    on: (
+      <>
+        {pills(['p-warn', <Tg i="package" n={2} t="dependencies changed" />], ['p-size', <><b class="a">+12</b> <b class="d">−3</b> · 2 files</>])}
+        <div class="pill-pop demo-pop">
+          <p class="pill-head">Libraries added, removed or moved to another version:</p>
+          <div class="pill-row"><button><b>com.squareup.okhttp3:okhttp</b> <small class="dep-major">4.12.0 → 5.0.0 · major</small></button></div>
+          <div class="pill-row"><button><b>libs.mockk</b> <small>added · for tests</small></button></div>
+        </div>
+      </>
+    ),
+  },
+  checkBinaries: {
+    title: 'Binary files: what they are',
+    off: (
+      <File path="app/src/main/assets/fw_v3.06.bin" st="added" add={0} del={0}>
+        <p class="note pad">No diff to show (binary, too large, or renamed without changes). <a>View on GitHub</a></p>
+      </File>
+    ),
+    on: (
+      <File path="app/src/main/assets/fw_v3.06.bin" st="added" add={0} del={0}>
+        <div class="bin-info">
+          <p><Octicon name="file" /> Firmware or raw binary · <b>2.4 MB</b> · packed into the app <a>View on GitHub</a></p>
+          <p class="bin-warn"><Octicon name="alert" /> Over 1 MB, straight in Git: every clone downloads it, and every version of it, for good.</p>
+        </div>
+      </File>
+    ),
+  },
+  flagUntested: {
+    title: 'Code changed without test changes',
+    off: <File path="CheckoutViewModel.kt" add={36} del={4} />,
+    on: (
+      <>
+        {pills(['p-warn', <Tg i="notest" n={1} t="file without test changes" />])}
+        <File path="CheckoutViewModel.kt" add={36} del={4} untested />
+      </>
+    ),
+  },
+  reviewPlan: {
+    title: 'A review plan for big PRs',
+    off: <>{FILES_BIG.slice(0, 3).map((p) => <File path={p} add={12} del={2} />)}</>,
+    on: (
+      <details class="plan" open>
+        <summary><b>Review plan</b> · 64 files in 4 steps · 9/64 viewed</summary>
+        <ol>
+          {([['Specs and docs', 'what the change is meant to do', 4, 4], ['Build and config', 'dependencies, permissions, settings', 5, 3], ['Implementation', 'the change itself', 38, 2], ['Tests', 'what it promises', 17, 0]] as const).map(([t, why, n, seen]) => (
+            <li class={seen === n ? 'done' : ''}>
+              <span class="plan-t"><b>{t}</b> <small>{why}</small></span>
+              <span class="plan-bar"><i style={{ width: `${(100 * seen) / n}%` }} /></span>
+              <small class="plan-n">{seen}/{n}</small>
+              {seen === n ? <span class="plan-ok"><Octicon name="check" /></span> : <button class="link">{seen ? 'Continue' : 'Start'}</button>}
+            </li>
+          ))}
+        </ol>
+      </details>
+    ),
+  },
+  checkHardcoded: {
+    title: 'UI text not in strings.xml',
+    off: <File path="MigrationDrawer.kt" add={2} del={0}><Rows rows={TEXT_ROWS()} /></File>,
+    on: (
+      <>
+        {pills(['p-warn', <Tg i="text" n={1} t="text not in strings.xml" />])}
+        <File path="MigrationDrawer.kt" add={2} del={0}><Rows rows={TEXT_ROWS('hardcoded')} /></File>
+      </>
+    ),
+  },
+  checkRoom: {
+    title: 'Room tables changed without a version bump',
+    off: <File path="CardEntity.kt" add={1} del={0}><Rows rows={ENTITY_ROWS} /></File>,
+    on: (
+      <>
+        {pills(['p-bad', <Tg i="alert" t="table changed, database version not raised" />])}
+        <File path="CardEntity.kt" add={1} del={0}><Rows rows={ENTITY_ROWS} /></File>
+      </>
+    ),
+  },
+  manifestSummary: {
+    title: 'What a manifest change means',
+    off: <File path="AndroidManifest.xml" add={6} del={0}><Rows rows={xmlRows(MANIFEST, '+', 20)} /></File>,
+    on: (
+      <File path="AndroidManifest.xml" add={6} del={0}>
+        <div class="manifest-sum">
+          <p><b>Asks for</b> <code class="risky">BLUETOOTH_CONNECT</code></p>
+          <p><b>New</b> receiver <code>BootReceiver</code><b class="risky"> exported (by its intent-filter)</b></p>
+        </div>
+        <Rows rows={xmlRows(MANIFEST, '+', 20)} />
+      </File>
+    ),
+  },
+  lintBaselines: {
+    title: 'Lint baselines as suppressions',
+    off: <File path="app/lint-baseline.xml" add={5} del={0}><Rows rows={xmlRows(BASELINE, '+', 88)} /></File>,
+    on: (
+      <File path="app/lint-baseline.xml" add={5} del={0}>
+        <div class="lint-sum">
+          <p class="lint-new"><Octicon name="alert" /> <b>1 new suppression</b>: warnings lint will no longer report.</p>
+          <ul><li><code>MissingPermission</code> <a>BtScanner.kt:42</a> <span class="lint-msg">Call requires permission which may be rejected by user</span></li></ul>
+        </div>
+      </File>
+    ),
+  },
+  stringsView: {
+    title: 'strings.xml as names and texts',
+    off: <File path="res/values/strings.xml" add={1} del={1}><Rows rows={[...xmlRows([OTP_OLD], '-', 13), ...xmlRows([OTP_NEW], '+', 13)]} /></File>,
+    on: (
+      <File path="res/values/strings.xml" add={1} del={1}>
+        <Rows rows={[['-', 13, '', sx(OTP_OLD, '-', OTP_NEW)], ['+', '', 13, sx(OTP_NEW, '+', OTP_OLD)]]} />
+      </File>
+    ),
+  },
+  translationChecks: {
+    title: 'Check the other languages',
+    off: <File path="res/values/strings.xml" add={1} del={1}><Rows rows={[['+', '', 13, sx(OTP_NEW, '+', OTP_OLD)]]} /></File>,
+    on: <File path="res/values/strings.xml" add={1} del={1}><Rows rows={[['+', '', 13, sx(OTP_NEW, '+', OTP_OLD, ['values-in not updated'])]]} /></File>,
+  },
+} satisfies Record<string, Demo>);
+
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which
 // it's made of.
 SCENES.app = {

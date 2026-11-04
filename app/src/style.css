@@ -1181,3 +1181,6 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 /* A finding's "comment on it" button */
 .say-it { display: inline-flex; align-items: center; padding: 2px 6px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; vertical-align: middle; }
 .say-it:hover { color: var(--fg); background: var(--soft); }
+.demo-pop { position: static; display: grid; min-width: 0; max-width: 100%; overflow: visible; margin-top: 6px; box-shadow: none; }
+.demo-pop .pill-row > button, .demo-pop .pill-head { white-space: normal; flex-wrap: wrap; column-gap: 6px; row-gap: 0; }
+.demo-side .sx-warn { display: inline-block; white-space: normal; margin-left: 0; }
