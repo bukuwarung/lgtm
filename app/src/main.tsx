@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { closedPRs, forgetAllThreadStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
@@ -187,7 +187,7 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
   const needs = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts));
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
-  const replies = items.reduce((n, i) => n + (i.thread?.awaiting ?? 0), 0);
+  const replies = items.reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0);
   const cards: [string, number | string, string, string][] = [
     ['reviewing', needs.length, 'need your review', needs.length ? 'Open the Reviewing tab' : ''],
     ['reviewing', oldest ? ago(oldest).replace(/ ago$/, '') : '–', 'oldest wait', oldest ? `Since ${new Date(oldest).toLocaleString()}` : ''],
@@ -339,7 +339,7 @@ function App() {
   const [backTo, setBackTo] = useState('');
   const [failure, setFailure] = useState(''); // platform.ts reportError
   const [queueItems, setQueueItems] = useState<QueueItem[] | null>(null); // the list's, for the start page
-  const replies = (queueItems ?? []).reduce((n, i) => n + (i.thread?.awaiting ?? 0), 0); // threads waiting on my reply, for the inbox button
+  const replies = (queueItems ?? []).reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0); // threads and mentions waiting on my reply, for the inbox button
   const [, setPrTab] = useStoredValue('prTab', 'reviewing');
   useEffect(() => {
     const show = (e: Event) => setFailure((e as CustomEvent<string>).detail);
@@ -469,11 +469,11 @@ function App() {
           </>
         ) : (<>
         <button title="Toggle pull request list" onClick={togglePRs}><Octicon name="three-bars" /></button>
-        {/* The inbox: threads waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
+        {/* The inbox: threads and mentions waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
         <a
           href="#/inbox"
           class={`nav-btn nav-inbox${route === '#/inbox' ? ' on' : ''}`}
-          title="Threads waiting on your reply (in open PRs, and ones merged lately)"
+          title="Threads and mentions waiting on your reply (in open PRs, and ones merged lately)"
           aria-label={`Inbox${replies ? `: ${replies} waiting on your reply` : ''}`}
         >
           <Octicon name="inbox" />
@@ -1072,7 +1072,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     dispatchEvent(new Event('lgtm:list-refresh'));
   }, [agents]);
   const items = useMemo(
-    () => loaded && withAnswered(loaded, answered).map((i) => (muteApproved && i.myState === 'APPROVED' && i.thread?.awaiting ? { ...i, thread: { ...i.thread, awaiting: 0 } } : i)),
+    () => loaded && withAnswered(loaded, answered).map((i) => (muteApproved && i.myState === 'APPROVED' && (i.thread?.awaiting || i.mentionWaiting) ? { ...i, thread: i.thread && { ...i.thread, awaiting: 0 }, mentionWaiting: false } : i)),
     [loaded, answeredTick, muteApproved],
   );
   const [err, setErr] = useState('');
@@ -1131,8 +1131,8 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
       const items = [...queue, ...owned];
       setItems(items);
       // Secondary: the list works without them.
-      const [st, est] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items).catch(() => null)]);
-      const full = items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id) }));
+      const [st, est, ms] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items).catch(() => null), getMentionStatus(items).catch(() => null)]);
+      const full = items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id), mentionWaiting: ms?.get(i.id) }));
       setItems(full);
       setSettled(true);
       setFresh(true);

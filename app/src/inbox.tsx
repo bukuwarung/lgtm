@@ -10,7 +10,7 @@ import { Tg } from './tags.tsx';
 // suggestion committed. Also a PR conversation comment that @-mentions me, if I haven't written there since (in my
 // PRs and those the list has as mentioning me). Keys: j/k move, r reply, e done, x resolve, c commit the suggestion,
 // o open the PR.
-type Item = Pick<QueueItem, 'id' | 'repo' | 'number' | 'title' | 'authored' | 'updatedAt'> & { mergedAt?: string };
+type Item = Pick<QueueItem, 'id' | 'repo' | 'number' | 'title' | 'authored' | 'updatedAt'> & { mergedAt?: string; myState?: QueueItem['myState'] };
 type Waiting = { item: Item; threads: Thread[]; mention?: Comment };
 
 export function Inbox({ items }: { items: QueueItem[] | null }) {
@@ -20,7 +20,8 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   const [cur, setCur] = useState(0); // the thread the keys act on, in page order
   const asked = (items ?? []).filter((i) => (i.thread?.awaiting ?? 0) > 0);
   const [muteApproved] = useStoredFlag('muteApproved', false); // Settings: nothing from PRs I've approved
-  const named = (items ?? []).filter((i) => (i.mentioned || i.authored) && !(muteApproved && i.myState === 'APPROVED')); // asked for comments mentioning me
+  // Asked for comments mentioning me: the list's mentioning PRs and mine, unless the list already knows none waits.
+  const named = (items ?? []).filter((i) => (i.mentioned || i.authored) && i.mentionWaiting !== false && !(muteApproved && i.myState === 'APPROVED'));
   // A refresh asks again about the PRs that changed: until it knows, what's shown stays (and a reply being typed with it).
   const pending = !!items?.some((i) => (i.mine || i.myState) && !i.thread);
   const key = items ? [...asked, ...named].map((i) => `${i.id}@${i.updatedAt}`).join() + '|' + (pending ? 'pending' : '') : ''; // the list's arrival counts, even with nothing waiting in it
@@ -31,7 +32,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
     getViewer().then(async (login) => {
       const [merged, mentions] = await Promise.all([getMergedAwaiting(login).catch((): Item[] => []), getMentions(named.map((i) => i.id), login, readBots()).catch(() => new Map<string, Comment>())]);
       const look = (item: Item) => getThreads(item.repo, item.number).then((ts) => ({ item, threads: markBots(ts, readBots()).filter((t) => awaitsMe(t, login, item.authored)) }));
-      const threaded = [...asked, ...merged.filter((m) => !asked.some((a) => a.id === m.id))];
+      const threaded = [...asked, ...merged.filter((m) => !asked.some((a) => a.id === m.id) && !(muteApproved && m.myState === 'APPROVED'))];
       Promise.all(threaded.map(look)).then(
         (l) => {
           if (stop) return;
@@ -219,7 +220,7 @@ function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: 
         disabled={busy}
       />
       <div class="row">
-        <button disabled={busy} data-k="e" title="Take it off your list without replying. Nothing changes on GitHub." onClick={() => (markReplyDone(c.id!, c.databaseId), onDone())}>
+        <button disabled={busy} data-k="e" title="Take it off your list without replying. Nothing changes on GitHub." onClick={() => (markReplyDone(c.id!, c.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone())}>
           Done
         </button>
         <button class="primary" disabled={busy || !text.trim()} title="Send (⌘↵)" onClick={send}>

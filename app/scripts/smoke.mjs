@@ -205,6 +205,7 @@ try {
   const key = (k, opts = {}) => evaluate(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true, ...${JSON.stringify(opts)} }))`);
   await step('the inbox lists a mention and the threads waiting on me, with their code, and j moves', async () => {
     await evaluate(`location.hash = '/inbox'`);
+    await until('the inbox button counting both threads and the mention', `document.querySelector('.nav-inbox .nav-count')?.textContent === '3'`);
     await until('a mention and two threads', `document.querySelectorAll('.inbox-thread').length === 3 && document.querySelector('.inbox .note').textContent.startsWith('2 threads and 1 mention')`);
     if (!(await evaluate(`!!document.querySelector('.inbox-code .a')`))) throw new Error("the thread's code isn't shown");
     if (await evaluate(`document.querySelector('.inbox').innerText.includes('commits came after')`)) throw new Error("automation's comment (its marker) is listed as a mention");

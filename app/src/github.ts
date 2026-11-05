@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, fetchToken, recordError, repliesDone } from './platform.ts';
+import { agentsAsBots, fetchToken, readBots, recordError, repliesDone } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 
@@ -85,6 +85,7 @@ export type QueueItem = {
   authored: boolean; // I opened it
   codeOwner?: boolean; // a draft changing files I (or a team of mine) own: GitHub asks code owners only once it's ready
   thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
+  mentionWaiting?: boolean; // a conversation comment mentioning me waits on me (getMentionStatus; the inbox lists it)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
   noReviewers: boolean;
@@ -1282,12 +1283,12 @@ export function markBots<T extends { comments: { nodes: (Pick<Comment, 'author'>
 // PRs merged in the last 14 days that I opened or reviewed, where a review thread may wait on my reply: a reply after
 // the merge would otherwise go unseen (the PR has left the list). A light look at each PR's threads (the last few
 // comments) picks the candidates; the inbox then reads their threads in full and applies awaitsMe. Kept 10 minutes.
-export type MergedPR = { id: string; repo: string; number: number; title: string; authored: boolean; mergedAt: string; updatedAt: string };
+export type MergedPR = { id: string; repo: string; number: number; title: string; authored: boolean; mergedAt: string; updatedAt: string; myState: ReviewState | null };
 let mergedSeen: { at: number; list: Promise<MergedPR[]> } | null = null;
 export function getMergedAwaiting(me: string): Promise<MergedPR[]> {
   if (mergedSeen && Date.now() - mergedSeen.at < 10 * 60_000) return mergedSeen.list;
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
-  const F = `nodes{...on PullRequest{id number title mergedAt updatedAt repository{nameWithOwner} author{login}
+  const F = `nodes{...on PullRequest{id number title mergedAt updatedAt repository{nameWithOwner} author{login} latestOpinionatedReviews(first:30){nodes{state author{login}}}
     reviewThreads(last:30){nodes{isResolved isOutdated starter:comments(first:1){nodes{author{login}}} comments(last:5){nodes{author{__typename login}}}}}}}`;
   const list = graphql(
     `query($a:String!,$r:String!){a:search(query:$a,type:ISSUE,first:20){${F}} r:search(query:$r,type:ISSUE,first:20){${F}}}`,
@@ -1304,7 +1305,7 @@ export function getMergedAwaiting(me: string): Promise<MergedPR[]> {
           return mine || t.starter.nodes[0]?.author?.login === me || cs.some((c: any) => c.author?.login === me);
         });
       })
-      .map((p: any) => ({ id: p.id, repo: p.repository.nameWithOwner, number: p.number, title: p.title, authored: p.author?.login === me, mergedAt: p.mergedAt, updatedAt: p.updatedAt })),
+      .map((p: any) => ({ id: p.id, repo: p.repository.nameWithOwner, number: p.number, title: p.title, authored: p.author?.login === me, mergedAt: p.mergedAt, updatedAt: p.updatedAt, myState: p.latestOpinionatedReviews.nodes.find((r: any) => r.author?.login === me)?.state ?? null })),
   );
   mergedSeen = { at: Date.now(), list };
   list.catch(() => (mergedSeen = null));
@@ -1354,17 +1355,31 @@ export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean
 }
 // The list's extras, kept per PR until it changes (its updatedAt): a refresh asks GitHub only about the PRs that did,
 // which keeps the list's every-3-minutes refresh from spending GraphQL points on the ones that didn't.
-const extrasSeen = new Map<string, { at: string; estimate?: Estimate; thread?: ThreadStatus }>();
-const changed = <T extends { id: string; updatedAt: string }>(items: T[], k: 'estimate' | 'thread') => items.filter((i) => { const c = extrasSeen.get(i.id); return !c || c.at !== i.updatedAt || c[k] === undefined; });
-const keep = (i: { id: string; updatedAt: string }, part: { estimate?: Estimate; thread?: ThreadStatus }) => {
+type Extras = { estimate?: Estimate; thread?: ThreadStatus; mention?: boolean };
+const extrasSeen = new Map<string, { at: string } & Extras>();
+const changed = <T extends { id: string; updatedAt: string }>(items: T[], k: keyof Extras) => items.filter((i) => { const c = extrasSeen.get(i.id); return !c || c.at !== i.updatedAt || c[k] === undefined; });
+const keep = (i: { id: string; updatedAt: string }, part: Extras) => {
   const c = extrasSeen.get(i.id);
   extrasSeen.set(i.id, { ...(c && c.at === i.updatedAt ? c : {}), at: i.updatedAt, ...part });
 };
 
 // Every PR's thread status asked again at the next refresh (what counts as a bot changed).
-export const forgetAllThreadStatus = () => extrasSeen.forEach((v, k) => extrasSeen.set(k, { ...v, thread: undefined }));
-// A PR's thread status asked again at the next refresh (a thread marked done changes it; the PR itself didn't change).
-export const forgetThreadStatus = (id: string) => void extrasSeen.set(id, { ...(extrasSeen.get(id) ?? { at: '' }), thread: undefined });
+export const forgetAllThreadStatus = () => extrasSeen.forEach((v, k) => extrasSeen.set(k, { ...v, thread: undefined, mention: undefined }));
+// A PR's thread status (and mention) asked again at the next refresh (one marked done changes it; the PR didn't change).
+export const forgetThreadStatus = (id: string) => void extrasSeen.set(id, { ...(extrasSeen.get(id) ?? { at: '' }), thread: undefined, mention: undefined });
+
+// Per PR (mine, or one the list has as mentioning me): does a conversation comment mentioning me wait on me
+// (getMentions)? For the inbox button's count; only the PRs that changed are asked.
+export async function getMentionStatus(items: QueueItem[]): Promise<Map<string, boolean>> {
+  const me = await getViewer();
+  const all = items.filter((i) => i.mentioned || i.authored);
+  const ask = changed(all, 'mention');
+  if (ask.length) {
+    const found = await getMentions(ask.map((i) => i.id), me, readBots());
+    ask.forEach((i) => keep(i, { mention: found.has(i.id) }));
+  }
+  return new Map(all.flatMap((i) => { const m = extrasSeen.get(i.id)?.mention; return m === undefined ? [] : [[i.id, m] as const]; }));
+}
 
 // Each PR's rough time to review, asked after the list shows (its description and per-file line counts would slow the
 // list down).
