@@ -101,7 +101,7 @@ const asked = []; // the requests answered here, for a failure's report
 let failed = false;
 try {
   let target;
-  for (let i = 0; i < 50 && !target; i++) {
+  for (let i = 0; i < 150 && !target; i++) { // up to 30s: a cold Chrome on a CI runner can take over 10
     await sleep(200);
     target = await fetch('http://127.0.0.1:9334/json/list').then((r) => r.json()).then((l) => l.find((t) => t.type === 'page')).catch(() => null);
   }
