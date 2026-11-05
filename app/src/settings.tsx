@@ -1111,7 +1111,7 @@ function About() {
       {__DEV_BUILD__ && <b> dev{__COMMIT__ && ` (${__COMMIT__})`}</b>} · {isDesktop ? 'macOS app' : 'browser version'} · <i>Say LGTM and mean it.</i>
       {update && (
         <p class="notice">
-          lgtm {update} is out. Update with <code>{UPGRADE}</code>{!isDesktop && <> (or <code>git pull</code> and <code>npm run build</code> from source)</>}.
+          lgtm {update} is out. Update with <code>{UPGRADE}</code>{!isDesktop && ' (the browser version runs from source)'}.
           {isDesktop && (
             <>
               {' '}

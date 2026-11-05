@@ -25,7 +25,7 @@ cd desktop && npm install && npm run build         # → src-tauri/target/releas
 
 ## The browser version
 
-The same UI, served by Node 22+ in your browser: `brew install bukuwarung/lgtm/lgtm-cli`, or from source `cd app && npm install && npm run build && npm link`. Then `lgtm`, or `lgtm <PR link>`.
+For development and testing only (it isn't released): the same UI, served by Node 22+ in your browser. From source, `cd app && npm install && npm run build && npm link`, then `lgtm-web`, or `lgtm-web <PR link>`. (`lgtm` is the app's own command, installed by the cask: it opens the app.)
 
 | Variable | Effect |
 |---|---|
@@ -43,6 +43,6 @@ Needs both Mac targets (`rustup target add aarch64-apple-darwin x86_64-apple-dar
 scripts/release.sh X.Y.Z
 ```
 
-It sets the version everywhere, runs the tests, builds a universal `lgtm.app` and the browser version's tarball, points [`Casks/lgtm.rb`](../Casks/lgtm.rb) and [`Formula/lgtm-cli.rb`](../Formula/lgtm-cli.rb) at them, and prints the two publishing commands. This repo is its own Homebrew tap, so `brew upgrade` picks the release up once it's out.
+It sets the version everywhere, runs the tests, builds a universal `lgtm.app`, points [`Casks/lgtm.rb`](../Casks/lgtm.rb) at it, and prints the two publishing commands. This repo is its own Homebrew tap, so `brew upgrade` picks the release up once it's out.
 
 Design and specs: [`openspec/`](../openspec).

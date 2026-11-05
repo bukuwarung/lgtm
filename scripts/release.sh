@@ -1,6 +1,6 @@
 #!/bin/bash
-# Builds release X.Y.Z on this Mac: a universal lgtm.app (zip) and the browser version (tar.gz), and points
-# Casks/lgtm.rb and Formula/lgtm-cli.rb at them. Publishing is up to you; the script prints the commands.
+# Builds release X.Y.Z on this Mac: a universal lgtm.app (zip), and points Casks/lgtm.rb at it. Publishing is up to
+# you; the script prints the commands. (The browser version is for development only: it isn't released.)
 # Needs Rust with both Mac targets: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 set -euo pipefail
 v=${1:?usage: scripts/release.sh X.Y.Z}
@@ -19,16 +19,14 @@ export LGTM_RELEASE=1 # a release build: no DEV badge
 (cd desktop && npm ci && npm run build -- --target universal-apple-darwin) # builds app/ first
 (cd app && npm run smoke) # the built app, end to end on made-up GitHub data: list, PR, comment, submit
 ditto -c -k --keepParent desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/lgtm.app "$out/lgtm-$v.zip"
-tar -czf "$out/lgtm-cli-$v.tar.gz" -C app bin dist package.json claude-skill.md
 
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 sed -i '' -E "s/^  version \"[^\"]*\"/  version \"$v\"/; s/^  sha256 \"[^\"]*\"/  sha256 \"$(sha "$out/lgtm-$v.zip")\"/" Casks/lgtm.rb
-sed -i '' -E "s#/v[^/]*/lgtm-cli-[^/]*\.tar\.gz\"#/v$v/lgtm-cli-$v.tar.gz\"#; s/^  sha256 \"[^\"]*\"/  sha256 \"$(sha "$out/lgtm-cli-$v.tar.gz")\"/" Formula/lgtm-cli.rb
 
 cat <<MSG
 
-Built $out/lgtm-$v.zip and $out/lgtm-cli-$v.tar.gz. To publish:
+Built $out/lgtm-$v.zip. To publish:
   git commit -am "Release $v" && git push origin HEAD:main
-  gh release create v$v --repo bukuwarung/lgtm --title "lgtm $v" --generate-notes $out/lgtm-$v.zip $out/lgtm-cli-$v.tar.gz
+  gh release create v$v --repo bukuwarung/lgtm --title "lgtm $v" --generate-notes $out/lgtm-$v.zip
 Then check: brew update && brew upgrade --cask lgtm (or brew install, see the README).
 MSG

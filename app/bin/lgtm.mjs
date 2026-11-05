@@ -654,7 +654,7 @@ try {
   process.exit(1);
 }
 
-// lgtm https://github.com/o/r/pull/1[?claude=<session>]: the PR, and the Claude Code session that sent it (skill).
+// lgtm-web https://github.com/o/r/pull/1[?claude=<session>]: the PR, and the Claude Code session that sent it (skill).
 const pr = process.argv[2]?.match(/github\.com\/[^/]+\/[^/]+\/pull\/\d+/)?.[0];
 const from = process.argv[2]?.match(/[?&]claude=([\w-]{1,80})/)?.[1];
 const url = ORIGIN + '/' + (pr ? '#https://' + pr + (from ? '?claude=' + from : '') : '');

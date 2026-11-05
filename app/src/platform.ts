@@ -294,7 +294,7 @@ export type Integrations = { slack: { ok: boolean; error?: string; who?: string 
 export async function fetchIntegrations(): Promise<Integrations> {
   if (isDesktop) return command<Integrations>('integrations');
   const res = await fetch('/integrations').catch(() => {
-    throw new Error("lgtm isn't running. Start it with the lgtm command, then reload.");
+    throw new Error("lgtm isn't running. Start it with the lgtm-web command, then reload.");
   });
   // An lgtm started before this page existed doesn't know the route: the page is newer than the running server.
   if (!res.ok) throw new Error('the running lgtm is older than this page. Restart it (Ctrl-C, then lgtm) and reload.');
@@ -649,7 +649,7 @@ export async function claudeSkill(install = false): Promise<SkillStatus> {
 
 // The app: upgrade through Homebrew and restart (resolves only on failure: success restarts the app).
 export const selfUpdate = () => command<void>('self_update');
-export const UPGRADE = isDesktop ? 'brew upgrade --cask lgtm' : 'brew upgrade lgtm-cli';
+export const UPGRADE = isDesktop ? 'brew upgrade --cask lgtm' : 'git pull && npm run build'; // the browser version: development only, from source
 
 // --- Diagnostics (Help → Copy Diagnostics, Settings): what a bug report needs, with no tokens or PR text ---
 const errors: string[] = [];

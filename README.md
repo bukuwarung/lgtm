@@ -225,7 +225,7 @@ On by default, each with a switch and a preview in Settings:
 ## On your Mac
 
 - A menu bar item and Dock badge with what needs your review.
-- `lgtm://` links, and an offer to open a PR link you copy.
+- `lgtm <PR link>` in Terminal opens it in the app; so do `lgtm://` links, and lgtm offers to open a PR link you copy.
 - Several GitHub accounts, Launch at login, and updates through Homebrew.
 
 ## More

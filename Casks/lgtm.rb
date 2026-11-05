@@ -11,6 +11,7 @@ cask "lgtm" do
   depends_on macos: :ventura
 
   app "lgtm.app"
+  binary "#{appdir}/lgtm.app/Contents/Resources/bin/lgtm" # `lgtm [PR link]` opens the app (desktop/src-tauri/bin/lgtm)
 
   # Not notarized (no Apple Developer account): without this, macOS blocks the app until "Open Anyway" in
   # System Settings → Privacy & Security.

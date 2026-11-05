@@ -716,7 +716,7 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
       ) : (
         <>
           <p class="error">{error}</p>
-          <p class="note">The browser version needs the <code>lgtm</code> command running: start it in Terminal.</p>
+          <p class="note">The browser version needs the <code>lgtm-web</code> command running: start it in Terminal.</p>
         </>
       )}
       <button class="primary" disabled={busy} onClick={() => (setBusy(true), retry().finally(() => setBusy(false)))}>
