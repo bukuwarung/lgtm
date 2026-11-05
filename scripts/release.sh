@@ -21,6 +21,9 @@ export LGTM_RELEASE=1 # a release build: no DEV badge
 ditto -c -k --keepParent desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/lgtm.app "$out/lgtm-$v.zip"
 
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
+# The app's `lgtm` command (desktop/src-tauri/bin/lgtm), on the PATH through the cask; from 0.8.1, the first release with it.
+grep -q 'binary "#{appdir}/lgtm.app/Contents/Resources/bin/lgtm"' Casks/lgtm.rb || sed -i '' -E 's|^  app "lgtm.app"$|  app "lgtm.app"\
+  binary "#{appdir}/lgtm.app/Contents/Resources/bin/lgtm" # `lgtm [PR link]` opens the app|' Casks/lgtm.rb
 sed -i '' -E "s/^  version \"[^\"]*\"/  version \"$v\"/; s/^  sha256 \"[^\"]*\"/  sha256 \"$(sha "$out/lgtm-$v.zip")\"/" Casks/lgtm.rb
 
 cat <<MSG
