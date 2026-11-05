@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-channel"
+description = "Enables the slack_channel command without any pre-configured scope."
+commands.allow = ["slack_channel"]
+
+[[permission]]
+identifier = "deny-slack-channel"
+description = "Denies the slack_channel command without any pre-configured scope."
+commands.deny = ["slack_channel"]
