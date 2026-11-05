@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 const ran = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
 const run = (args: string) => ({ command: 'lgtm', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } }) as const
@@ -65,4 +65,32 @@ test('/lgtm opens the link given, else the last one in the conversation, with th
     ['open', 'lgtm://acme/shop/pull/7?claude=1b2c3d4e-0000-4000-8000-000000000000'],
     ['open', 'lgtm://acme/app/pull/90?claude=1b2c3d4e-0000-4000-8000-000000000000'],
   ])
+})
+
+test('what lgtm left for this session is handed to it once, then the file is gone', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, { HOME: '/home/me', CLAUDE_CODE_HOST_SESSION_ID: 'local_abc' })
+  const file = '/home/me/.config/lgtm/outbox/local_abc.md'
+  let left: string | null = '**Approved** acme/shop#412\n\n---\n\nPaymentService.kt:33: make the backoff configurable'
+  const sent: string[] = []
+  const runs: string[][] = []
+  const looked: string[] = []
+  on('fs.exists', (_, e) => (looked.push(e.path), { value: e.path === file && left != null }))
+  on('fs.read', () => ({ value: left ?? '' }))
+  on('process.run', (_, e) => (runs.push([...e.argv]), (left = null), { value: ran }))
+  on('prompt.submit', (_, e) => (sent.push(e.text), { text: e.text }))
+  on('command.register', () => ({ value: { command: 'lgtm' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.advance(3000)
+  expect(looked).toContain(file)
+  expect(runs).toEqual([['rm', '-f', file]])
+  expect(sent).toHaveLength(1)
+  expect(sent[0]).toContain('From lgtm')
+  expect(sent[0]).toContain('make the backoff configurable')
+
+  // Nothing waiting since: nothing more sent.
+  await clock.advance(9000)
+  expect(sent).toHaveLength(1)
 })

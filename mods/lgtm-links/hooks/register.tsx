@@ -6,10 +6,26 @@ export const prsIn = (text: string): string[] => [...new Set([...text.matchAll(P
 
 // lgtm (the Mac app) opens a PR from its own link. ?claude= names this session (the Claude app's ID when it hosts it,
 // else the CLI's), so the PR's ✳ Claude in lgtm comes back here, as the lgtm-review skill's links do.
+const sessionId = async ($: EngineInterface) => (await $.env.get('CLAUDE_CODE_HOST_SESSION_ID')) || (await $.session.id())
 const lgtmLink = async ($: EngineInterface, pr: string) => {
   const [repo, n] = pr.split('#')
-  const session = (await $.env.get('CLAUDE_CODE_HOST_SESSION_ID')) || (await $.session.id())
-  return `lgtm://${repo}/pull/${n}?claude=${encodeURIComponent(session)}`
+  return `lgtm://${repo}/pull/${n}?claude=${encodeURIComponent(await sessionId($))}`
+}
+
+// What you send this session from lgtm (your review, a comment to address) waits in a file of lgtm's,
+// ~/.config/lgtm/outbox/<session>.md, messages separated by ---. Checked every few seconds: once there, it's read,
+// deleted (so nothing is handled twice) and handed to the session, which takes it up as soon as it's free.
+const outboxOf = async ($: EngineInterface) =>
+  `${(await $.env.get('XDG_CONFIG_HOME')) || `${await $.env.get('HOME')}/.config`}/lgtm/outbox/${await sessionId($)}.md`
+const deliverOutbox = async ($: EngineInterface, file: string) => {
+  if (!(await $.fs.exists(file))) return false
+  const text = (await $.fs.read(file)).trim()
+  await $.process.run(['rm', '-f', file])
+  if (!text) return false
+  await $.prompt.submit({
+    text: `From lgtm, sent to this session (messages separated by ---). Act on each: a review lists the verdict and its comments; a single comment is one to address.\n\n${text}`,
+  })
+  return true
 }
 const openInLgtm = async ($: EngineInterface, pr: string) => $.process.run(['open', await lgtmLink($, pr)])
 
@@ -28,6 +44,13 @@ const OpenRow = ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolv
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    const file = await outboxOf($)
+    let busy = false
+    $.clock.every(3000, () => {
+      if (busy) return
+      busy = true
+      void deliverOutbox($, file).finally(() => (busy = false))
+    })
     await $.command.register({
       name: 'lgtm',
       description: "Open a pull request in lgtm: the link given, else the last one in this conversation, else this branch's",
