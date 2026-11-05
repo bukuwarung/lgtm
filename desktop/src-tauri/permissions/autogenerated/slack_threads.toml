@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-threads"
+description = "Enables the slack_threads command without any pre-configured scope."
+commands.allow = ["slack_threads"]
+
+[[permission]]
+identifier = "deny-slack-threads"
+description = "Denies the slack_threads command without any pre-configured scope."
+commands.deny = ["slack_threads"]
