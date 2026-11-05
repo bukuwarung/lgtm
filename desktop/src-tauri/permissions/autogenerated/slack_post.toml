@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-post"
+description = "Enables the slack_post command without any pre-configured scope."
+commands.allow = ["slack_post"]
+
+[[permission]]
+identifier = "deny-slack-post"
+description = "Denies the slack_post command without any pre-configured scope."
+commands.deny = ["slack_post"]
