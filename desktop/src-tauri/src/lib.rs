@@ -155,6 +155,7 @@ pub fn run() {
             commands::self_update,
             commands::claude_text,
             commands::claude_skill,
+            commands::claude_mod,
             commands::claude_outbox,
             commands::claude_session,
             commands::notify,

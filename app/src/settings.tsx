@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir, spentThisHour } from './github.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
-import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -1528,6 +1528,25 @@ function ClaudeSkill() {
   );
 }
 
+// The lgtm-links mod for Claude Code: installed or not; lgtm only gives the line that installs it.
+function ClaudeMod() {
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => void claudeMod().then((m) => setInstalled(m.installed), () => setInstalled(null)), []);
+  return (
+    <div class="set-row">
+      <span>
+        Claude Code mod
+        <small>
+          An Open in lgtm button under replies that link a PR and under <code>gh pr create</code>, <code>/lgtm</code>, and your reviews reaching the session by
+          themselves. {installed === false && <>Install it from a terminal: <code>{MOD_INSTALL}</code></>}
+        </small>
+      </span>
+      {installed ? <CheckMark state="success" title="Installed" /> : installed === false && <button onClick={() => copyText(MOD_INSTALL).then(() => setCopied(true))}>{copied ? 'Copied' : 'Copy the install command'}</button>}
+    </div>
+  );
+}
+
 // Claude Code: which local checkout a new session for each repo opens in (the ✳ Claude menu). Without one, Claude
 // asks for a folder itself.
 function ClaudeFolders() {
@@ -1557,6 +1576,7 @@ function ClaudeFolders() {
         out so the session starts there.
       </p>
       <ClaudeSkill />
+          <ClaudeMod />
       {!repos ? (
         <p class="note">Loading…</p>
       ) : (

@@ -647,6 +647,17 @@ export async function claudeSkill(install = false): Promise<SkillStatus> {
   return d;
 }
 
+// The lgtm-links mod for Claude Code (in lgtm's repo): whether it's installed, and the line that installs it. lgtm
+// only suggests it: installing changes the person's Claude Code setup.
+export const MOD_INSTALL = 'claude plugin install lgtm-links --marketplace bukuwarung/lgtm';
+export async function claudeMod(): Promise<{ installed: boolean }> {
+  if (isDesktop) return command<{ installed: boolean }>('claude_mod');
+  const res = await fetch('/claude-mod');
+  const d = await res.json().catch(() => ({ error: res.statusText }));
+  if (!res.ok) throw new Error(d.error ?? 'Could not check for the mod');
+  return d;
+}
+
 // The app: upgrade through Homebrew and restart (resolves only on failure: success restarts the app).
 export const selfUpdate = () => command<void>('self_update');
 export const UPGRADE = isDesktop ? 'brew upgrade --cask lgtm' : 'git pull && npm run build'; // the browser version: development only, from source

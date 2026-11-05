@@ -631,6 +631,14 @@ async function claudeSession(id) {
   return { id: found.sessionId, title: found.title ?? '', state };
 }
 
+// Is the lgtm-links mod (mods/lgtm-links in this repo) installed in Claude Code? Its record of installed plugins
+// (~/.claude, or CLAUDE_CONFIG_DIR) names it as lgtm-links@<marketplace>.
+async function claudeMod() {
+  const dir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
+  const d = JSON.parse(await readFile(join(dir, 'plugins', 'installed_plugins.json'), 'utf8').catch(() => '{}'));
+  return { installed: Object.keys(d?.plugins ?? {}).some((k) => k.startsWith('lgtm-links@')) };
+}
+
 async function claudeSkill(install) {
   const want = await skillText();
   if (install) await mkdir(dirname(SKILL), { recursive: true }).then(() => writeFile(SKILL, want));
@@ -667,7 +675,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-mod', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -694,6 +702,7 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/claude-outbox' && req.method === 'POST') return readJson(req).then(leaveForClaude).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-session') return claudeSession(new URL(req.url ?? '/', ORIGIN).searchParams.get('id')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
+  if (path === '/claude-mod') return claudeMod().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-skill') return claudeSkill(req.method === 'POST').then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-sessions') return claudeSessions().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/integrations') {

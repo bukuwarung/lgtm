@@ -31,7 +31,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
-import { qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -3940,6 +3940,8 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
   }, [menu]);
   const [offer, setOffer] = useState(false); // the lgtm-review skill isn't installed: offer it
   const [offerSkill, noOffer] = useStoredFlag('offerSkill', true);
+  const [offerMod, setOfferMod] = useState(false); // the lgtm-links mod isn't installed: suggest it
+  const [suggestMod, noModOffer] = useStoredFlag('offerMod', true);
   const [session, setSession] = useState<SessionState>(null);
   const title = session?.title ?? '';
   const [, setTick] = useState(0);
@@ -3975,7 +3977,8 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
     if (from && !e.altKey) return flash(await backToClaude(from.id, label ? '' : prompt));
     await openClaude(claudeNewLink(prompt, claudeFolder(repo)));
     linkNewClaude(pr.repo, pr.n, prUrl);
-    if (offerSkill && !(await claudeSkill().catch(() => null))?.installed) setOffer(true);
+    if (offerSkill && !(await claudeSkill().catch(() => null))?.installed) return setOffer(true);
+    if (suggestMod && (await claudeMod().catch(() => null))?.installed === false) setOfferMod(true);
   };
   const install = () => claudeSkill(true).then(() => (setOffer(false), flash('Skill installed: Claude can now send PRs here')), (e) => flash(`Couldn't install it: ${e.message}`));
   const what = label ? 'this PR' : 'this comment';
@@ -4010,6 +4013,13 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
         </div>
       )}
       {note && <span class="claude-note">{note}</span>}
+      {offerMod && !offer && !note && (
+        <span class="claude-note">
+          Add the lgtm-links mod to Claude Code: an Open in lgtm button under PR links, and your reviews reach the session by themselves.{' '}
+          <button class="link" onClick={() => (setOfferMod(false), copyText(MOD_INSTALL).then(() => flash(`Copied: paste it in a terminal (${MOD_INSTALL})`), () => flash(MOD_INSTALL)))}>Copy the install command</button> ·{' '}
+          <button class="link" onClick={() => (setOfferMod(false), noModOffer())}>Don't ask again</button>
+        </span>
+      )}
       {offer && !note && (
         <span class="claude-note">
           Add the lgtm skill so Claude sends PRs ready for review here, linked to its session.{' '}

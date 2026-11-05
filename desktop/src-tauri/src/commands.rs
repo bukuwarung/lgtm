@@ -950,6 +950,16 @@ pub async fn claude_session(id: String) -> Result<Value, String> {
 /// Where each polled session's record was found last time.
 static SESSION_FILES: std::sync::Mutex<Vec<(String, std::path::PathBuf)>> = std::sync::Mutex::new(Vec::new());
 
+/// Is the lgtm-links mod (mods/lgtm-links in the repo) installed in Claude Code? Its record of installed plugins
+/// (~/.claude, or CLAUDE_CONFIG_DIR) names it as lgtm-links@<marketplace>; as the server's claudeMod().
+#[tauri::command]
+pub async fn claude_mod() -> Value {
+    let dir = std::env::var("CLAUDE_CONFIG_DIR").map(std::path::PathBuf::from).unwrap_or_else(|_| home().join(".claude"));
+    let d: Value = std::fs::read_to_string(dir.join("plugins").join("installed_plugins.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
+    let installed = d["plugins"].as_object().is_some_and(|p| p.keys().any(|k| k.starts_with("lgtm-links@")));
+    json!({ "installed": installed })
+}
+
 /// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md, built in by build.rs),
 /// installed for the user in ~/.claude/skills; as the server's claudeSkill().
 const SKILL: &str = include_str!(concat!(env!("OUT_DIR"), "/claude-skill.md"));
