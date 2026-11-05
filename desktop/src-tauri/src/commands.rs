@@ -366,6 +366,33 @@ fn mentions(text: &str, r: &Recipient, users: &Value) -> String {
         .into_owned()
 }
 
+/// The PRs' Slack threads (slack-threads.json), for Settings → Backup: all of them, or a backup's merged in (its
+/// entries replace ones with the same key).
+#[tauri::command]
+pub async fn slack_threads(merge: Option<HashMap<String, Value>>) -> Result<Value, String> {
+    let mut threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
+    let Some(incoming) = merge else { return Ok(threads) };
+    let (key, ch, ts) = (re(r"^[\w.-]+/[\w.-]+#\d+:(#qa|[\w-]{1,39})$"), re(r"^[CDG][A-Z0-9]+$"), re(r"^\d+\.\d+$"));
+    let text = |v: &Value| v.is_null() || v.as_str().is_some_and(|s| s.chars().count() <= 200);
+    if incoming.len() > 5000 || !incoming.iter().all(|(k, v)| key.is_match(k) && v["channel"].as_str().is_some_and(|c| ch.is_match(c)) && v["ts"].as_str().is_some_and(|t| ts.is_match(t)) && text(&v["user"]) && text(&v["name"])) {
+        return Err("Bad request".into());
+    }
+    if !threads.is_object() {
+        threads = json!({});
+    }
+    for (k, v) in incoming {
+        let mut t = json!({ "channel": v["channel"], "ts": v["ts"] });
+        for f in ["user", "name"] {
+            if v[f].is_string() {
+                t[f] = v[f].clone();
+            }
+        }
+        threads[&k] = t;
+    }
+    config::write("slack-threads.json", &threads)?;
+    Ok(threads)
+}
+
 /// A #name as its channel (Slack's channel search, exact name): slackcli's own lookup by name pages through every
 /// channel, slower than its time limit. An ID or link as it is. Ok((id, name when known)).
 fn channel_id(channel: &str) -> Result<(String, Option<String>), String> {

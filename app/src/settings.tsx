@@ -1464,6 +1464,7 @@ function LaunchAtLogin() {
         </label>
         <DemoPair k="menuBar" active={menuBar} />
       </div>
+      <Flag k="badgeInbox" initial={false} label="Count your inbox on the Dock badge" hint="Replies and mentions waiting on you join the PRs waiting for your review (and Claude sessions waiting on you) in the badge's number." demo />
     </div>
   );
 }
@@ -1490,9 +1491,9 @@ function BackupSection() {
             if (!f) return;
             try {
               const text = await f.text();
-              if (!(await ask('Import these settings and drafts? Ones with the same name here are replaced; the page reloads.', 'Import'))) return;
-              const n = restoreBackup(text);
-              setMsg({ ok: true, text: `Imported ${n} entries. Reloading…` });
+              if (!(await ask('Import these settings, drafts and Slack people and threads? Ones with the same name here are replaced; the page reloads.', 'Import'))) return;
+              const n = await restoreBackup(text);
+              setMsg({ ok: true, text: `Imported ${n.entries} entries${n.people || n.threads ? `, ${n.people} Slack people and ${n.threads} Slack threads` : ''}. Reloading…` });
               setTimeout(() => location.reload(), 600);
             } catch (err: any) {
               setMsg({ ok: false, text: err instanceof SyntaxError ? "This isn't an lgtm settings file." : err.message });

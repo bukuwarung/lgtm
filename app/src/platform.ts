@@ -705,20 +705,26 @@ export async function diagnostics(): Promise<string> {
 
 // --- Export / import: everything lgtm keeps in this browser (or app) — preferences and pending drafts — as one
 // JSON file, to move to the app or another machine. ---
-export type Backup = { lgtm: 1; version: string; exportedAt: string; storage: Record<string, string> };
+// slack: the Slack people mapping and the PRs' Slack threads (QA requests too), kept in ~/.config/lgtm, not here.
+export type Backup = { lgtm: 1; version: string; exportedAt: string; storage: Record<string, string>; slack?: { people: Record<string, string>; threads: Record<string, unknown> } };
+type Threads = Record<string, unknown>;
+const slackThreadsFile = (merge?: Threads): Promise<Threads> =>
+  isDesktop ? command<Threads>('slack_threads', { merge: merge ?? null })
+  : fetch('/slack-threads', merge ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ threads: merge }) } : {}).then(async (r) => (r.ok ? r.json() : Promise.reject(new Error((await r.json().catch(() => null))?.error ?? 'Slack threads failed'))));
 
-export function makeBackup(): Backup {
+export async function makeBackup(): Promise<Backup> {
   const storage: Record<string, string> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i)!;
     storage[k] = localStorage.getItem(k) ?? '';
   }
-  return { lgtm: 1, version: __APP_VERSION__, exportedAt: new Date().toISOString(), storage };
+  const [people, threads] = await Promise.all([getSlackPeople().then((p) => p.mine, () => null), slackThreadsFile().catch(() => null)]);
+  return { lgtm: 1, version: __APP_VERSION__, exportedAt: new Date().toISOString(), storage, ...(people && threads ? { slack: { people, threads } } : {}) };
 }
 
 // Browser: a download. App: saved to ~/Downloads by the app (the page never names a path). Returns where it went.
 export async function saveBackup(): Promise<string> {
-  const text = JSON.stringify(makeBackup(), null, 2);
+  const text = JSON.stringify(await makeBackup(), null, 2);
   const date = new Date().toISOString().slice(0, 10);
   if (isDesktop) return command<string>('export_settings', { json: text, date });
   const a = document.createElement('a');
@@ -729,13 +735,18 @@ export async function saveBackup(): Promise<string> {
   return `your downloads (${a.download})`;
 }
 
-// Adds the file's settings and drafts, replacing ones with the same name; returns how many entries.
-export function restoreBackup(text: string): number {
+// Adds the file's settings and drafts, replacing ones with the same name, and its Slack people and threads the same
+// way (in ~/.config/lgtm); returns how many of each.
+export async function restoreBackup(text: string): Promise<{ entries: number; people: number; threads: number }> {
   const b = JSON.parse(text) as Partial<Backup>;
   if (b?.lgtm !== 1 || typeof b.storage !== 'object' || !b.storage) throw new Error("This isn't an lgtm settings file.");
   const entries = Object.entries(b.storage).filter(([k, v]) => typeof k === 'string' && typeof v === 'string');
   for (const [k, v] of entries) localStorage.setItem(k, v);
-  return entries.length;
+  const people = Object.entries(b.slack?.people ?? {}).filter(([, id]) => typeof id === 'string' && id);
+  for (let i = 0; i < people.length; i += 100) await saveSlackPeople(Object.fromEntries(people.slice(i, i + 100))); // 100 a request
+  const threads = b.slack?.threads && typeof b.slack.threads === 'object' ? b.slack.threads : {};
+  if (Object.keys(threads).length) await slackThreadsFile(threads);
+  return { entries: entries.length, people: people.length, threads: Object.keys(threads).length };
 }
 
 export const slackEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

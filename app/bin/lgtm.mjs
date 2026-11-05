@@ -293,6 +293,20 @@ async function mentions(text, recipient, users) {
   return text.replace(/<@gh:([A-Za-z0-9-]{1,39}|\*)>/g, (_, who) => found.get(who));
 }
 
+// The PRs' Slack threads (slack-threads.json), for Settings → Backup: all of them, or a backup's merged in (its
+// entries replace ones with the same key).
+const THREAD_KEY = /^[\w.-]+\/[\w.-]+#\d+:(#qa|[\w-]{1,39})$/;
+async function backupThreads(incoming) {
+  const threads = await readThreads();
+  if (incoming === undefined) return threads;
+  const ok = (v) => v && /^[CDG][A-Z0-9]+$/.test(v.channel) && /^\d+\.\d+$/.test(v.ts) && ['user', 'name'].every((k) => v[k] == null || (typeof v[k] === 'string' && v[k].length <= 200));
+  const entries = Object.entries(incoming ?? {});
+  if (entries.length > 5000 || !entries.every(([k, v]) => THREAD_KEY.test(k) && ok(v))) throw new Error('Bad request');
+  for (const [k, v] of entries) threads[k] = { channel: v.channel, ts: v.ts, ...(v.user ? { user: v.user } : {}), ...(v.name ? { name: v.name } : {}) };
+  await saveThreads(threads);
+  return threads;
+}
+
 // A #name as its channel (Slack's channel search, exact name): slackcli's own lookup by name pages through every channel,
 // slower than its time limit. An ID or link as it is.
 async function channelId(channel) {
@@ -653,7 +667,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -702,6 +716,7 @@ const server = createServer(async (req, res) => {
       (e) => json(res, 500, { error: e.message }),
     );
   }
+  if (path === '/slack-threads') return (req.method === 'POST' ? readJson(req).then((b) => backupThreads(b?.threads)) : backupThreads()).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-qa') return qaThreads((new URL(req.url ?? '/', ORIGIN).searchParams.get('prs') ?? '').split(',').filter(Boolean).slice(0, 100)).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-channel') return checkChannel(new URL(req.url ?? '/', ORIGIN).searchParams.get('c') ?? '').then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-post' && req.method === 'POST') return readJson(req).then(postToChannel).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));

@@ -1069,6 +1069,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   // Settings → "Mute replies and mentions on PRs you've approved": their threads wait on no one here (no pill, count,
   // bell entry or inbox thread), until my latest verdict is something else.
   const [muteApproved] = useStoredFlag('muteApproved', false);
+  const [badgeInbox] = useStoredFlag('badgeInbox', false); // Settings → App: the inbox counts on the Dock badge too
   const [agents] = useStoredFlag('agentsAsBots', false); // 🤖 comments as a bot's: thread counts asked again
   const rules = `${muteApproved}${agents}`;
   const rulesWas = useRef(rules); // as the last notifications saw them
@@ -1223,8 +1224,10 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   useEffect(() => {
     if (!items || !settled) return;
     const waiting = items.filter(needsMyReview);
-    // The badge also counts PRs whose Claude Code session is waiting for you.
-    const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length;
+    // The badge also counts PRs whose Claude Code session is waiting for you, and (Settings) the inbox: threads and
+    // mentions waiting on your reply, as the inbox button counts them.
+    const inbox = badgeInbox ? items.reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0) : 0;
+    const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length + inbox;
     document.title = count ? `(${count}) lgtm` : 'lgtm';
     void setBadge(count); // the app's Dock icon
     const forMe = [...waiting, ...items.filter((i) => !waiting.includes(i) && claudeWaiting(i))];
@@ -1260,7 +1263,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     seen.current = new Set(waiting.map((i) => i.id));
     rulesWas.current = rules;
     before.current = new Map(items.map((i) => [i.id, i]));
-  }, [items, settled, claude, menuBar]);
+  }, [items, settled, claude, menuBar, badgeInbox]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;

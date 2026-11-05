@@ -22,6 +22,7 @@
     "allow-slack-post",
     "allow-slack-channel",
     "allow-slack-qa",
+    "allow-slack-threads",
     "allow-slack-people-get",
     "allow-slack-people-find",
     "allow-slack-people-save",

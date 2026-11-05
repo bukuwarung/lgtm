@@ -1345,3 +1345,7 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .merge-qa.qa-issue { color: var(--modfg); }
 .merge-qa a { margin-left: auto; }
 .scene-claude { min-height: 170px; }
+.demo-dock { display: flex; align-items: center; gap: 12px; padding: 14px; }
+.demo-dock-icon { position: relative; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 12px; font-weight: 700; color: #fff; background: linear-gradient(#3b82f6, #1d4ed8); }
+.demo-dock-icon b { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font-size: 12px; line-height: 20px; text-align: center; background: #ef4444; box-sizing: border-box; }
+.demo-dock small { color: var(--muted); }

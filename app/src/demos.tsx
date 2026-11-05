@@ -1364,6 +1364,14 @@ const MACBAR = (on: boolean) => (
   </div>
 );
 Object.assign(DEMOS, { menuBar: { title: 'In the menu bar', off: MACBAR(false), on: MACBAR(true) } } satisfies Record<string, Demo>);
+// The Dock icon's badge: 2 PRs to review, then those and 3 threads waiting on your reply.
+const DOCK = (n: number, inbox: boolean) => (
+  <div class="demo-dock">
+    <span class="demo-dock-icon">lgtm<b>{n}</b></span>
+    <small>2 to review{inbox ? ' + 3 waiting on your reply' : ''}</small>
+  </div>
+);
+DEMOS.badgeInbox = { title: 'The Dock badge', off: DOCK(2, false), on: DOCK(5, true) };
 // A PR waiting for your review, opened: with the index, or without it (the showIndex scenes, the other way round).
 DEMOS.hideIndexToReview = { title: 'A PR waiting for your review, opened', off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
 
