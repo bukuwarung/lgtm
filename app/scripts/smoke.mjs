@@ -46,6 +46,8 @@ const laterNode = { ...node, id: 'PR_4', number: 4, title: 'Log declined cards' 
 let later = false;
 const comment = (databaseId, login, body) => ({ id: `C${databaseId}`, databaseId, url: '', body, bodyHTML: `<p>${body}</p>`, bodyText: body, createdAt: now, state: 'SUBMITTED', author: { __typename: 'User', login, avatarUrl: '', databaseId: 7 }, originalCommit: { oid: HEAD } });
 const mention = { ...comment(41, 'wawan', 'Can you check the tax?'), bodyHTML: '<p><a class="user-mention notranslate" data-hovercard-type="user" href="https://github.com/tester">@tester</a> can you check the tax?</p>' };
+// Automation's, from a person's account (its hidden marker): not a mention for the inbox.
+const automated = { ...mention, ...comment(42, 'wawan', '<!-- review-check -->\n@tester commits came after your approval'), bodyHTML: '<p><a class="user-mention notranslate" data-hovercard-type="user" href="https://github.com/tester">@tester</a> commits came after your approval</p>' };
 const threads2 = [
   { id: 'T21', path: 'src/Cart.kt', line: 5, startLine: null, originalLine: 5, originalStartLine: null, diffSide: 'RIGHT', subjectType: 'LINE', isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: false, comments: { nodes: [comment(21, 'rina', 'Why not cache the cart?')] }, hunk: { nodes: [{ diffHunk: '@@ -1,3 +1,5 @@\n fun total(c: Cart) =\n-    c.items.sum()\n+    cache.getOrPut(c.id) {\n+        c.items.sum()\n+    }' }] } },
   { id: 'T31', path: 'src/Cart.kt', line: 9, startLine: null, originalLine: 9, originalStartLine: null, diffSide: 'RIGHT', subjectType: 'LINE', isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: false, comments: { nodes: [comment(31, 'eko', 'Nit: rename to total')] } },
@@ -65,7 +67,7 @@ function graphql(body) {
   if (/p0:repository/.test(query)) return { data: Object.fromEntries(Object.keys(variables).filter((k) => k[0] === 'n').map((k) => ['p' + k.slice(1), { pullRequest: { state: variables[k] === 3 ? 'CLOSED' : 'OPEN' } }])) };
   if (query.includes('is:merged')) return { data: { a: { nodes: [] }, r: { nodes: [] } } };
   if (query.includes('reviewThreads(first:100') && variables.n === 2) return { data: { repository: { pullRequest: { reviewThreads: { ...empty, nodes: threads2 } } } } };
-  if (query.includes('nodes(ids:') && query.includes('comments(last:30)')) return { data: { nodes: [{ id: 'PR_2', comments: { nodes: [mention] }, reviews: { nodes: [] } }] } };
+  if (query.includes('nodes(ids:') && query.includes('comments(last:30)')) return { data: { nodes: [{ id: 'PR_2', comments: { nodes: [mention, automated] }, reviews: { nodes: [] } }] } };
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
   const pullRequest = { reviewThreads: empty, reviews: { nodes: [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty };
   if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest } } };
@@ -205,6 +207,7 @@ try {
     await evaluate(`location.hash = '/inbox'`);
     await until('a mention and two threads', `document.querySelectorAll('.inbox-thread').length === 3 && document.querySelector('.inbox .note').textContent.startsWith('2 threads and 1 mention')`);
     if (!(await evaluate(`!!document.querySelector('.inbox-code .a')`))) throw new Error("the thread's code isn't shown");
+    if (await evaluate(`document.querySelector('.inbox').innerText.includes('commits came after')`)) throw new Error("automation's comment (its marker) is listed as a mention");
     await key('j');
     await key('j');
     await until('the third current', `document.querySelectorAll('.inbox-thread')[2].classList.contains('cur')`, 2000);

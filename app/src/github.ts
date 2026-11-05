@@ -879,12 +879,13 @@ export const commentOnPR = (repo: string, n: number, body: string) => json(`/rep
 
 // Per PR (by id), the latest conversation comment that @-mentions me, from someone (not a bot), unless I've commented
 // or reviewed there since or marked it done (the inbox). GitHub's own mention link in the rendered comment decides:
-// not a team's mention, not "@me" in code.
+// not a team's mention, not "@me" in code. A comment that starts with a hidden <!-- marker --> is automation's (the
+// marker is how it finds its comment to update), even posted from a person's account: left out.
 export async function getMentions(ids: string[], me: string, bots: Set<string> = new Set()): Promise<Map<string, Comment>> {
   const out = new Map<string, Comment>();
   if (!ids.length || !me) return out;
   const d = await graphql(
-    `query($ids:[ID!]!){nodes(ids:$ids){...on PullRequest{id comments(last:30){nodes{id databaseId url bodyHTML bodyText createdAt author{__typename login avatarUrl(size:40)}}} reviews(last:30){nodes{author{login} submittedAt}}}}}`,
+    `query($ids:[ID!]!){nodes(ids:$ids){...on PullRequest{id comments(last:30){nodes{id databaseId url body bodyHTML bodyText createdAt author{__typename login avatarUrl(size:40)}}} reviews(last:30){nodes{author{login} submittedAt}}}}}`,
     { ids: ids.slice(0, 100) },
   );
   const link = new RegExp(`class="user-mention[^"]*"[^>]*>@${me}<`, 'i');
@@ -892,7 +893,7 @@ export async function getMentions(ids: string[], me: string, bots: Set<string> =
     if (!p?.id) continue;
     const cs: Comment[] = p.comments.nodes;
     const since = [...cs.filter((c) => c.author?.login === me).map((c) => c.createdAt), ...p.reviews.nodes.filter((r: any) => r.author?.login === me && r.submittedAt).map((r: any) => r.submittedAt as string)].sort().at(-1) ?? '';
-    const c = cs.filter((c) => c.author && c.author.login !== me && c.author.__typename !== 'Bot' && !bots.has(c.author.login) && c.createdAt > since && link.test(c.bodyHTML)).at(-1);
+    const c = cs.filter((c) => c.author && c.author.login !== me && c.author.__typename !== 'Bot' && !bots.has(c.author.login) && !/^\s*<!--/.test(c.body ?? '') && c.createdAt > since && link.test(c.bodyHTML)).at(-1);
     if (c && repliesDone()[c.id!] !== c.databaseId) out.set(p.id, c);
   }
   return out;
