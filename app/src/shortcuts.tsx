@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, reportError, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
-import { codeWithoutTests, inTests, moduleLabel, moduleName } from './files.ts';
+import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep } from './files.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
@@ -302,6 +302,7 @@ type IndexProps = {
   me: string;
   ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
   modules?: Map<string, string>; // each file's Gradle module (files.ts gradleModules), when grouping by them
+  steps?: PlanStep[]; // the reading order's steps (files.ts reviewPlan), when the files are in it
   // On my own PR, with Slack: ask a reviewer there (one I have no Slack thread with about it yet); false if it failed.
   slackAsk?: (login: string) => Promise<boolean>;
   slackWith?: Set<string>; // reviewers I already have a Slack thread with about this PR
@@ -312,7 +313,8 @@ type IndexProps = {
 };
 
 // The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
-export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+  const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
   const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
@@ -496,8 +498,27 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
         )}
       </Section>
 
-      <Section title="Files" count={files.length} extra={viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}>
-        {modules?.size ? (
+      <Section
+        title="Files"
+        count={files.length}
+        extra={
+          <>
+            {viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}
+            {steps && (
+              <button
+                class="link ix-files-view"
+                title={byStep ? 'Show the files as folders' : 'Show the files by reading step, in the diff’s order'}
+                onClick={(e) => (e.preventDefault(), e.stopPropagation(), toggleByStep())}
+              >
+                <Octicon name={byStep ? 'file-directory' : 'list-ordered'} /> {byStep ? 'Folders' : 'Steps'}
+              </button>
+            )}
+          </>
+        }
+      >
+        {steps && byStep ? (
+          <StepGroups files={files} steps={steps} counts={counts} viewed={viewed} onViewed={onViewed} />
+        ) : modules?.size ? (
           <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} onViewed={onViewed} />
         ) : (
           <FileTree files={files} counts={counts} viewed={viewed} onViewed={onViewed} />
@@ -533,6 +554,41 @@ function ModuleTrees({ files, modules, counts, viewed, onViewed }: { files: File
           <FileTree files={fs} counts={counts} viewed={viewed} onViewed={onViewed} base={m === '' ? undefined : m === '.' ? '' : m} />
         </details>
       ))}
+    </>
+  );
+}
+
+// The files by reading step, in the diff's order (Settings → Files in reading order), each step with its icon; files
+// outside the steps (generated, renamed only… once shown) after them, as a tree.
+function StepGroups({ files, steps, counts, viewed, onViewed }: { files: File[]; steps: PlanStep[]; counts: Counts; viewed: Set<string>; onViewed: OnViewed }) {
+  const byPath = new Map(files.map((f) => [f.filename, f]));
+  const inSteps = new Set(steps.flatMap((s) => s.paths));
+  const rest = files.filter((f) => !inSteps.has(f.filename));
+  return (
+    <>
+      {steps.map((s) => {
+        const fs = s.paths.map((p) => byPath.get(p)).filter((f): f is File => !!f);
+        return (
+          fs.length > 0 && (
+            <details open class="tree-dir mod-group" key={s.key}>
+              <summary title={s.why}>
+                <span class="tree-dir-name"><Octicon name={stepIcon(s.key)} /> {s.title}</span> <span class="count">{fs.length}</span>
+                <ViewedMark paths={fs.map((f) => f.filename)} viewed={viewed} onViewed={onViewed} what="this step" />
+              </summary>
+              {fs.map((f) => <FileRow f={f} depth={1} counts={counts} viewed={viewed} onViewed={onViewed} folder />)}
+            </details>
+          )
+        );
+      })}
+      {rest.length > 0 && (
+        <details open class="tree-dir mod-group">
+          <summary>
+            <span class="tree-dir-name">Other files</span> <span class="count">{rest.length}</span>
+            <ViewedMark paths={rest.map((f) => f.filename)} viewed={viewed} onViewed={onViewed} what="these files" />
+          </summary>
+          <FileTree files={rest} counts={counts} viewed={viewed} onViewed={onViewed} />
+        </details>
+      )}
     </>
   );
 }
@@ -604,25 +660,29 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
       {[...node.dirs.values()].sort((a, b) => byName(a.name, b.name)).map((d) => (
         <TreeDir key={d.name} node={d} depth={depth} counts={counts} viewed={viewed} onViewed={onViewed} />
       ))}
-      {[...node.files].sort((a, b) => byName(a.filename, b.filename)).map((f) => {
-        const c = counts(f.filename);
-        return (
-          <div key={f.filename} class={viewed.has(f.filename) ? 'tree-row dim' : 'tree-row'}>
-            <button
-              class="tree-file"
-              style={{ paddingLeft: `${8 + depth * 14}px` }}
-              title={f.filename}
-              onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}
-            >
-              <FileIcon path={f.filename} status={f.status} untested={f.untested} />
-              <span class="tree-name">{f.filename.split('/').pop()}</span>
-              {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
-            </button>
-            <ViewedMark paths={[f.filename]} viewed={viewed} onViewed={onViewed} what="this file" />
-          </div>
-        );
-      })}
+      {[...node.files].sort((a, b) => byName(a.filename, b.filename)).map((f) => (
+        <FileRow f={f} depth={depth} counts={counts} viewed={viewed} onViewed={onViewed} />
+      ))}
     </>
+  );
+}
+
+// A file's row: a click goes to it. `folder`: its folder after the name, faint (a list by step has no tree to show it).
+function FileRow({ f, depth, counts, viewed, onViewed, folder }: { f: File; depth: number; counts: Counts; viewed: Set<string>; onViewed: OnViewed; folder?: boolean }) {
+  const c = counts(f.filename);
+  const dir = f.filename.split('/').slice(0, -1);
+  return (
+    <div key={f.filename} class={viewed.has(f.filename) ? 'tree-row dim' : 'tree-row'}>
+      <button class="tree-file" style={{ paddingLeft: `${8 + depth * 14}px` }} title={f.filename} onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}>
+        <FileIcon path={f.filename} status={f.status} untested={f.untested} />
+        <span class="tree-name">
+          {f.filename.split('/').pop()}
+          {folder && dir.length > 0 && <small class="tree-folder"> {dir.length > 2 ? '…/' + dir.slice(-2).join('/') : dir.join('/')}</small>}
+        </span>
+        {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
+      </button>
+      <ViewedMark paths={[f.filename]} viewed={viewed} onViewed={onViewed} what="this file" />
+    </div>
   );
 }
 

@@ -1320,3 +1320,8 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .set-grip { color: var(--muted); }
 .set-steps .octicon, .plan-t .octicon { color: var(--muted); flex: none; }
 fieldset:disabled .set-steps li { cursor: default; opacity: 0.6; }
+
+/* The index's Files by reading step: a file's folder after its name; the switch to folders in the header */
+.tree-folder { color: var(--muted); font-size: .9em; }
+.ix-files-view { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+.mod-group > summary .tree-dir-name .octicon { color: var(--muted); }

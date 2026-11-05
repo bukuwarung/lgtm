@@ -1244,6 +1244,7 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
               addMe={!!me && pr.user.login !== me ? () => requestReview(repo, n, me).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
               me={me}
               modules={view === 'all' ? shownModules : undefined}
+              steps={readingOrder ? steps : undefined}
               ask={
                 !!me && pr.user.login === me && (
                   <AskReviewer
