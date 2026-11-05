@@ -1,0 +1,14 @@
+{
+  "name": "lgtm",
+  "description": "Claude Code mods for lgtm, the GitHub PR review app for your Mac",
+  "owner": {
+    "name": "BukuWarung"
+  },
+  "plugins": [
+    {
+      "name": "lgtm-links",
+      "source": "./mods/lgtm-links",
+      "description": "Open GitHub pull requests in lgtm from Claude Code: a button under replies that link one, and /lgtm"
+    }
+  ]
+}

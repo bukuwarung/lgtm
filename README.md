@@ -212,6 +212,11 @@ On by default, each with a switch and a preview in Settings:
 
 - ✳ Claude opens a PR's Claude Code session, or starts one with the PR in the prompt; you see whether it's working or waiting for you. Its menu also asks a question about the PR, no session needed.
 - Claude sends PRs here for review, and gets your review back to act on.
+- The `lgtm-links` mod for Claude Code puts an **Open in lgtm** button under replies that link a PR, and adds `/lgtm` (the PR given, else the last one linked, else this branch's). At the prompt of a terminal session:
+
+  ```
+  /plugin install lgtm-links --marketplace bukuwarung/lgtm
+  ```
 
 ## Themes
 
