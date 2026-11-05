@@ -321,6 +321,16 @@ export async function notifySlack(recipients: { login: string; emails: string[] 
   return d;
 }
 
+// A message in a Slack channel (an ID, #name or channel link): the QA request. Its link back, when Slack gives one.
+export async function postSlack(channel: string, text: string): Promise<{ url: string | null }> {
+  if (isDesktop) return command<{ url: string | null }>('slack_post', { channel, text });
+  const res = await fetch('/slack-post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel, text }) });
+  const d = await res.json();
+  if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
+  return d;
+}
+export const SLACK_CHANNEL = /^([CG][A-Z0-9]+|#[\w.-]+|https:\/\/[\w-]+\.slack\.com\/archives\/[CG][A-Z0-9]+\/?)$/;
+
 // Last lines of a failed GitHub Actions job's log, fetched by the local server with gh.
 export async function fetchJobLog(repo: string, job: number): Promise<string> {
   if (isDesktop) return command<string>('job_log', { repo, job, user: ghAccount() });

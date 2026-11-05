@@ -1325,3 +1325,9 @@ fieldset:disabled .set-steps li { cursor: default; opacity: 0.6; }
 .tree-folder { color: var(--muted); font-size: .9em; }
 .ix-files-view { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .mod-group > summary .tree-dir-name .octicon { color: var(--muted); }
+
+/* Ask QA (Settings → Slack): the request, editable, before it's posted */
+dialog.qa-dialog { max-width: min(640px, calc(100vw - 32px)); width: 640px; }
+dialog.qa-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; margin-bottom: 12px; }
+.qa-asked { display: inline-flex; align-items: center; gap: 4px; color: var(--addfg); }
+.demo-bar { display: flex; gap: 6px; justify-content: flex-end; padding: 8px; }

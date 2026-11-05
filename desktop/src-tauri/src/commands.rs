@@ -364,6 +364,38 @@ fn mentions(text: &str, r: &Recipient, users: &Value) -> String {
         .into_owned()
 }
 
+/// A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
+#[tauri::command]
+pub async fn slack_post(channel: String, text: String) -> Result<Value, String> {
+    if !re(r"^([CG][A-Z0-9]+|#[\w.-]+|https://[\w-]+\.slack\.com/archives/[CG][A-Z0-9]+/?)$").is_match(&channel) || text.trim().is_empty() || text.chars().count() > 4000 {
+        return Err("Bad Slack request".into());
+    }
+    let users = config::read("config.json", true)?["slackUsers"].clone();
+    let body = mentions(&text, &Recipient { login: String::new(), emails: vec![] }, &users);
+    let recipient = format!("--recipient-id={channel}");
+    let mut args = vec!["messages", "send", recipient.as_str(), "--message-file", "-", "--json"];
+    if dry_run() {
+        args.push("--dry-run");
+    }
+    let r = slackcli(&args, Some(&body));
+    if !r.ok {
+        return Err(r.error);
+    }
+    if dry_run() {
+        return Ok(json!({ "url": null, "dryRun": r.stdout.trim() }));
+    }
+    let sent = parse_json(&r.stdout).unwrap_or(Value::Null);
+    let base = cached(&SLACK_URL, || {
+        let r = slackcli(&["team", "info", "--json"], None);
+        if r.ok { parse_json(&r.stdout).and_then(|v| v["url"].as_str().map(String::from)) } else { None }
+    });
+    let url = match (base, sent["channel_id"].as_str(), sent["ts"].as_str()) {
+        (Some(b), Some(ch), Some(ts)) => json!(format!("{b}archives/{ch}/p{}", ts.replace('.', ""))),
+        _ => Value::Null,
+    };
+    Ok(json!({ "url": url }))
+}
+
 #[derive(Deserialize)]
 pub struct Recipient {
     login: String,

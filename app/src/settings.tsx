@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir, spentThisHour } from './github.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
-import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, SLACK_CHANNEL, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -13,7 +13,7 @@ import { ThemeThumb } from './themecard.tsx';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
-import { COMMON_FIELDS, fillSlack, prValues, slackParts, SLACK_MESSAGES, type SlackKind } from './slackmsg.ts';
+import { COMMON_FIELDS, fillSlack, prValues, QA_CHANNEL, slackParts, SLACK_MESSAGES, type SlackKind } from './slackmsg.ts';
 
 // Shows every token the themes colour: keywords, annotations, types, strings, numbers, properties, named arguments,
 // `it`, constants, comments, and ligatures (->, !=, ===).
@@ -367,6 +367,9 @@ export function Settings() {
         <div class="set-group">
           <h4>Slack</h4>
           {ints?.slack.ok && <SlackPeople team={team} />}
+          <Flag k="qaRequest" initial={false} label="A button to ask QA, on your PRs" hint="Ask QA posts your QA request to the channel below, filled in from the PR: you read and can change it before it goes. Its wording is under Messages." demo>
+            <QaChannel />
+          </Flag>
           <SlackMessages />
         </div>
         <ClaudeFolders />
@@ -863,6 +866,21 @@ function JiraAfterMerge() {
   );
 }
 
+// Where Ask QA posts: a channel's ID, #name or link (Slack → the channel → Copy link).
+function QaChannel() {
+  const [channel, setChannel] = useStoredValue('qaChannel', QA_CHANNEL);
+  return (
+    <label class="set-row">
+      <span>
+        QA channel
+        <small>Its ID, #name or link.{!SLACK_CHANNEL.test(channel) && <b class="warn"> Not a channel ID, #name or link.</b>}</small>
+      </span>
+      <input type="text" value={channel} spellcheck={false} onInput={(e) => setChannel(e.currentTarget.value.trim())} />
+      {channel !== QA_CHANNEL && <button class="md-reset" title="Back to #qa-task-requests" onClick={() => setChannel(QA_CHANNEL)}>↺</button>}
+    </label>
+  );
+}
+
 // The messages lgtm sends on Slack, each yours to word (slackmsg.ts); {…} fills in, {@…} tags someone.
 function SlackMessages() {
   const { names, emoji } = useSlackEmoji(); // for the previews and the suggestions
@@ -887,6 +905,8 @@ const SLACK_SAMPLE = {
   comments: ' · 3 comments on PaymentService.kt, RetryPolicy.kt',
   note: '>Looks good, two small nits.',
   days: '2 days',
+  jira: ' (Jira: <https://acme.atlassian.net/browse/APP-77|APP-77>)',
+  description: 'Card payments that fail on a network error are retried three times, with backoff. Declines are not retried.',
 };
 function SlackPreview({ text, emoji }: { text: string; emoji: (name: string) => string | undefined }) {
   return (

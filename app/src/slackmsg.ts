@@ -3,7 +3,7 @@ import { slackEscape } from './platform.ts';
 // The messages lgtm sends on Slack, as templates you can change (Settings → Slack → Messages). {name} fills in a value;
 // {@recipient} (who gets it; {@them}, its first name, too), {@author} and {@any-github-login} tag that person on Slack (the sender turns <@gh:…> into a Slack mention,
 // through the Slack people mapping; someone it can't place stays @login).
-export type SlackKind = 'review' | 'nudge' | 'ask' | 'again';
+export type SlackKind = 'review' | 'nudge' | 'ask' | 'again' | 'qa';
 export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string; fields: string }> = {
   review: {
     label: 'After your review, to the author and assignees',
@@ -25,7 +25,26 @@ export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string;
     initial: 'Addressed your comments 🙏 Could you take another look at {pr}?',
     fields: '',
   },
+  qa: {
+    label: 'Asking QA to test your PR, in the QA channel (editable when you ask)',
+    initial: '<!subteam^S04KBV8DQJK> Need bandwidth to test: *{title}*{jira}\n*What changed:* {description}\nPR: {pr}',
+    fields: '{jira} " (Jira: BUKU-123)", linked, from the title or branch · {description} the PR description\'s first paragraph · <!subteam^ID> tags a Slack group',
+  },
 };
+// The PR description's first paragraph, as plain text for Slack: hidden <!-- comments -->, headings, images, quotes and
+// tables out; a paragraph that only names Jira tickets skipped (the request links them); [text](url) as its text.
+export function firstParagraph(body: string | null | undefined): string {
+  const paras = (body ?? '').replace(/<!--[\s\S]*?-->/g, '').replace(/\r\n/g, '\n').split(/\n\s*\n/);
+  const plain = (x: string) =>
+    x.split('\n').filter((l) => !/^\s*(#{1,6}\s|!\[|<img\b|>|\||[-*_]{3,}\s*$)/.test(l)).join(' ').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim();
+  const onlyTickets = (x: string) => /^(jira|tickets?)\b[:\s]*/i.test(x) || /^([A-Z][A-Z0-9]+-\d+[\s,;()]*)+$/.test(x);
+  const p = paras.map(plain).find((x) => x && !onlyTickets(x)) ?? '';
+  return p.length > 600 ? p.slice(0, 600).replace(/\s+\S*$/, '') + '…' : p;
+}
+
+// Where the QA request goes, unless Settings says another channel (#qa-task-requests).
+export const QA_CHANNEL = 'https://bukuwarung.slack.com/archives/C0B8FLVRSCQ';
+
 // A Slack status that says someone is away for now: out sick, vacation, out of office (OOO), any "… leave", or the
 // emoji people set for those. One that has expired doesn't count.
 const AWAY = /\b(out sick|sick|vacation|holiday|out of (the )?office|ooo|on leave|\w+ leave|cuti|day off|pto)\b/i;
@@ -84,11 +103,11 @@ export function slackParts(message: string, emoji: (name: string) => string | un
     const parts: SlackPart[] = [];
     let last = 0;
     const body = quote ? line.slice(1) : line;
-    for (const m of body.matchAll(/<([^>|]+)\|([^>]+)>|<@gh:([^>]+)>|:([a-z0-9_+'-]+):/g)) {
-      const src = m[4] ? emoji(m[4]) : undefined;
-      if (m[4] && !src) continue; // not an emoji Slack knows here: left as text
+    for (const m of body.matchAll(/<!subteam\^\w+(?:\|@?([^>]+))?>|<([^>|]+)\|([^>]+)>|<@gh:([^>]+)>|:([a-z0-9_+'-]+):/g)) {
+      const src = m[5] ? emoji(m[5]) : undefined;
+      if (m[5] && !src) continue; // not an emoji Slack knows here: left as text
       if (m.index! > last) parts.push({ text: unescape(body.slice(last, m.index)) });
-      parts.push(m[1] ? { link: unescape(m[2]) } : m[3] ? { tag: m[3] === '*' ? 'recipient' : m[3] } : { emoji: m[4], src: src! });
+      parts.push(m[0].startsWith('<!subteam') ? { tag: m[1] ?? 'group' } : m[2] ? { link: unescape(m[3]) } : m[4] ? { tag: m[4] === '*' ? 'recipient' : m[4] } : { emoji: m[5], src: src! });
       last = m.index! + m[0].length;
     }
     if (last < body.length) parts.push({ text: unescape(body.slice(last)) });

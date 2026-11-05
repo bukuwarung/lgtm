@@ -1012,3 +1012,14 @@ test('agentSays: a comment opening with 🤖, after any hidden markers', async (
   assert.ok(!agentSays('<!-- marker -->\nCommits added after approval'));
   assert.ok(!agentSays(undefined));
 });
+
+test('firstParagraph: the PR description for the QA request', async () => {
+  const { firstParagraph } = await import('../src/slackmsg.ts');
+  assert.equal(firstParagraph('<!-- template -->\n## Summary\nRetries failed charges\nthree times.\n\nMore.'), 'Retries failed charges three times.');
+  assert.equal(firstParagraph('![shot](x.png)\n\nFixes the PIN pad.'), 'Fixes the PIN pad.');
+  assert.equal(firstParagraph(null), '');
+  assert.ok(firstParagraph('word '.repeat(200)).endsWith('…'));
+  // Jira-only openings, headings and quotes skipped; links as their text.
+  assert.equal(firstParagraph('JIRA: [BUKU-1](https://x/browse/BUKU-1) (phases 1–3)\n\n## Summary\n\nRemoves the [blanket](https://x) keeps.'), 'Removes the blanket keeps.');
+  assert.equal(firstParagraph('## JIRA\n[BUKU-2](https://x/browse/BUKU-2)\n\n> **Draft.**\n\n## Problem\nKey loading truncates the TMK.'), 'Key loading truncates the TMK.');
+});

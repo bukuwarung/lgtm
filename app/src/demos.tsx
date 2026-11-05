@@ -1156,6 +1156,11 @@ const GLASS = (on: boolean) => (
 );
 
 Object.assign(DEMOS, {
+  qaRequest: {
+    title: 'Ask QA, on your PR',
+    off: <div class="demo-bar"><button>Merge</button><button class="primary">Comment</button></div>,
+    on: <div class="demo-bar"><button>Ask QA</button><button>Merge</button><button class="primary">Comment</button></div>,
+  },
   agentsAsBots: {
     title: 'A comment that opens with 🤖',
     off: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-reply', <Tg i="reply" n={1} t="awaiting your reply" />]])}</div>,

@@ -27,11 +27,11 @@ import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action 
 import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
-import { fillSlack, isAway, prValues, slackTemplate } from './slackmsg.ts';
+import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
-import { slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -119,6 +119,69 @@ const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
 type Notice = { text: string; ok: boolean };
 // onReviewed: the review is in and the user chose to move on (with the Slack result, if any, to show next).
+
+// On my own PR (Settings → Slack → "A button to ask QA"): the QA request, filled in from the PR and yours to edit, then
+// posted to the QA channel. Once posted, the button opens it (remembered on this machine).
+let jiraSite: Promise<string | undefined> | undefined;
+function AskQA({ pr, repo, n }: { pr: PR; repo: string; n: number }) {
+  const [channel] = useStoredValue('qaChannel', QA_CHANNEL);
+  const [posted, setPosted] = useStoredValue(`qaAsked:${repo}#${n}`, '');
+  const [text, setText] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const box = useRef<HTMLDialogElement>(null);
+  useEffect(() => void (text != null && !box.current?.open && box.current?.showModal()), [text]);
+  const open = async () => {
+    // The Jira site, for the ticket's link: asked once, and not waited on past a moment (its check can be slow).
+    jiraSite ??= fetchIntegrations().then((i) => i.jira.site, () => undefined);
+    const site = await Promise.race([jiraSite, new Promise<undefined>((r) => setTimeout(r, 1500))]);
+    const keys = jiraKeys(pr.title, pr.head.ref);
+    const jira = keys.length ? ` (Jira: ${keys.map((k) => (site ? `<https://${site}/browse/${k}|${k}>` : k)).join(', ')})` : '';
+    setErr('');
+    setText(fillSlack(slackTemplate('qa'), { ...prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }), jira, description: slackEscape(firstParagraph(pr.body)) }));
+  };
+  const close = () => (box.current?.close(), setText(null));
+  const send = () => {
+    if (!text?.trim()) return;
+    setBusy(true);
+    postSlack(channel, text).then(
+      (r) => (setPosted(r.url ?? 'sent'), close()),
+      (e) => setErr(e.message),
+    ).finally(() => setBusy(false));
+  };
+  if (posted && text == null)
+    return posted.startsWith('https://') ? (
+      <a class="button qa-asked" href={posted} target="_blank" rel="noopener" title="Your QA request on Slack">
+        <Octicon name="check" /> QA asked
+      </a>
+    ) : (
+      <span class="qa-asked" title="Your QA request went to Slack"><Octicon name="check" /> QA asked</span>
+    );
+  return (
+    <>
+      <button title={`Post a QA request for this PR to ${channel} on Slack (you see it first)`} onClick={open}>
+        Ask QA
+      </button>
+      {text != null && (
+        <dialog ref={box} class="ask qa-dialog" onClose={() => setText(null)}>
+          <p>
+            <b>Ask QA</b> in <code>{channel}</code>
+          </p>
+          <textarea rows={12} value={text} onInput={(e) => setText(e.currentTarget.value)} disabled={busy} />
+          {!SLACK_CHANNEL.test(channel) && <p class="warn">The QA channel in Settings isn't a channel ID, #name or link.</p>}
+          {err && <p class="warn">{err}</p>}
+          <form method="dialog" onSubmit={(e) => e.preventDefault()}>
+            <button type="button" onClick={close} disabled={busy}>Cancel</button>
+            <button type="button" class="primary" onClick={send} disabled={busy || !text.trim() || !SLACK_CHANNEL.test(channel)}>
+              {busy ? 'Posting…' : 'Post to Slack'}
+            </button>
+          </form>
+        </dialog>
+      )}
+    </>
+  );
+}
+
 // On my own PR, in the index's Reviewers: who to ask (this repo's recent reviewers, else the PR list's team), least
 // busy first. A click asks them on GitHub and, unless unticked, on Slack too.
 // On a draft, asking someone first marks it ready for review (GitHub doesn't tell reviewers about drafts).
@@ -759,6 +822,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   });
 
   const [readingOrder] = useStoredFlag('readingOrder', true); // files in the plan's order, else GitHub's
+  const [qaRequest] = useStoredFlag('qaRequest', false); // Settings → Slack: the Ask QA button on my PRs
   const [stepsSaved] = useStoredValue('readingSteps', ''); // its steps' order, if dragged into another
   const [paused, setPaused] = useState(''); // GraphQL's limit used up: the threads couldn't load
   // Settings → Checks and → Android: what lgtm points out.
@@ -1311,6 +1375,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
+            {mine && qaRequest && <AskQA pr={pr} repo={repo} n={n} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} stillOpen={stillOpen} />
           </div>

@@ -140,6 +140,7 @@ pub fn run() {
             commands::slack_presence,
             commands::slack_status,
             commands::slack_notify,
+            commands::slack_post,
             commands::slack_people_get,
             commands::slack_people_find,
             commands::slack_people_save,
