@@ -451,7 +451,7 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
   </tr>
 );
 
-const Bar = ({ linked }: { linked?: boolean }) => (
+const Bar = ({ linked, menu }: { linked?: boolean; menu?: boolean }) => (
   <div class="bar">
     <button class="bar-index">⇤</button>
     <h1>
@@ -463,6 +463,13 @@ const Bar = ({ linked }: { linked?: boolean }) => (
         <button class={linked ? 'claude-btn linked' : 'claude-btn'}>
           ✳ Claude{linked && <span class="claude-dot" />}
         </button>
+        {menu && (
+          <div class="account-menu claude-pop" role="menu">
+            <button role="menuitem">✳ Open its Claude Code session <small>Retry payments</small></button>
+            <button role="menuitem">✳ New Claude Code session <small>⌥-click</small></button>
+            <button role="menuitem"><Octicon name="comment-discussion" /> Ask a question about this PR <small>no session</small></button>
+          </div>
+        )}
       </span>
     </div>
     <div class="bar-group bar-actions">
@@ -623,7 +630,7 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
       </File>
     ),
   },
-  claude: { title: 'Claude Code', width: 860, body: <Bar linked /> },
+  claude: { title: 'Claude Code', width: 860, body: <div class="scene-claude"><Bar linked menu /></div> },
   themes: {
     title: 'Themes',
     width: 760,
@@ -667,9 +674,67 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
           <button class="primary" disabled>Squash and merge</button>
           <button>Enable auto-merge</button>
         </div>
+        <div class="merge-row merge-qa qa-signed">
+          <Octicon name="beaker" /> QA signed off <a>Open on Slack</a>
+        </div>
       </div>
     ),
   },
+};
+
+// The inbox: a thread on its code with its earlier comment folded, and a PR comment that mentions you.
+SCENES.inbox = {
+  title: 'Inbox',
+  width: 760,
+  body: (
+    <div class="page history inbox">
+      <h2>Waiting on your reply</h2>
+      <p class="note">
+        1 thread and 1 mention in 2 PRs.
+        <span class="inbox-keys"><kbd>j</kbd> <kbd>k</kbd> move · <kbd>r</kbd> reply · <kbd>e</kbd> done · <kbd>x</kbd> resolve · <kbd>o</kbd> open the PR</span>
+      </p>
+      <section>
+        <h4><a>Retry failed payments with backoff</a> <small>shop#412</small></h4>
+        <div class="inbox-thread cur">
+          <div class="inbox-where">
+            <a>PaymentService.kt:33</a>
+            <small>rina · 20 minutes ago · 2 comments</small>
+          </div>
+          <pre class="inbox-code">
+            <div>{'suspend fun charge(order: Order): Result<Receipt> {'}</div>
+            <div class="d">{'-    return api.charge(order.id)'}</div>
+            <div class="a">{'+    return retry(times = 3, backoff = 2.seconds) {'}</div>
+            <div class="a">{'+        api.charge(order.id)'}</div>
+          </pre>
+          <details class="inbox-earlier">
+            <summary>1 earlier comment</summary>
+          </details>
+          <div class="md inbox-last"><p>Made the backoff configurable. Does 2 seconds still look right to you?</p></div>
+          <textarea rows={2} placeholder="Reply to @rina" />
+          <div class="row">
+            <button>Done</button>
+            <button>Resolve</button>
+            <button class="primary" disabled>Reply</button>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h4><a>Add the refund screen</a> <small>app#85</small></h4>
+        <div class="inbox-thread">
+          <div class="inbox-where">
+            <a>mentioned you</a>
+            <small>dewi · 1 hour ago</small>
+          </div>
+          <div class="md inbox-last"><p><a>@you</a> can refunds over the daily limit go through, or should the screen stop them?</p></div>
+          <textarea rows={2} placeholder="Reply to @dewi on the PR" />
+          <div class="row">
+            <button>Done</button>
+            <button class="primary" disabled>Reply</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  ),
 };
 
 // Review mode: only the PR, the queue's place in the bar, and the submit panel saying what goes out.

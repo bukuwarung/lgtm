@@ -1337,10 +1337,11 @@ dialog.qa-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; 
 dialog.qa-dialog .slack-preview { max-height: 50vh; overflow: auto; margin-bottom: 12px; white-space: pre-wrap; }
 dialog.qa-dialog .slack-preview code { font-size: .9em; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--fg) 8%, transparent); }
 dialog.qa-dialog .qa-edit { margin-right: auto; }
-.claude-pop { left: 0; right: auto; min-width: 280px; }
+.claude-pop { min-width: 280px; }
 .claude-pop > button small { margin-left: auto; }
 .claude-pop > button { white-space: nowrap; }
 .merge-qa { color: var(--muted); }
 .merge-qa.qa-signed { color: var(--addfg); }
 .merge-qa.qa-issue { color: var(--modfg); }
 .merge-qa a { margin-left: auto; }
+.scene-claude { min-height: 170px; }

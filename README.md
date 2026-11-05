@@ -45,6 +45,11 @@ gh auth login   # once, if you haven't
 
 ## Inbox
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-inbox-dark.png">
+  <img alt="The inbox: a review thread on its code with an earlier comment folded, and a PR comment that mentions you, each with Done and Reply" src="docs/features/scene-inbox-light.png" width="620">
+</picture>
+
 - Review threads and PR comments that mention you, wherever they wait on your reply: open PRs, and ones merged lately.
 - Each shows the code it's on and the earlier comments; reply, resolve, or mark it Done until someone writes again.
 - On your own PR, commit a reviewer's suggested change from there.
@@ -109,6 +114,11 @@ On by default, each with a switch and a preview in Settings:
 - **Bot comments** from CI and AI reviewers folded.
 
 <details><summary>See each one, off and on</summary>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/readingOrder-dark.png">
+  <img alt="Files in reading order, off (GitHub's order) and on" src="docs/features/readingOrder-light.png" width="760">
+</picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/sinceFirst-dark.png">
@@ -185,7 +195,7 @@ On by default, each with a switch and a preview in Settings:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-merge-dark.png">
-  <img alt="The merge box: what is blocking, update branch, merge method, merge and auto-merge" src="docs/features/scene-merge-light.png" width="760">
+  <img alt="The merge box: what is blocking, update branch, merge method, merge and auto-merge, and QA signed off" src="docs/features/scene-merge-light.png" width="760">
 </picture>
 
 - Reviewers suggested by who wrote the code and who's free (and who's away on Slack); one click asks on GitHub and Slack.
@@ -197,7 +207,7 @@ On by default, each with a switch and a preview in Settings:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-claude-dark.png">
-  <img alt="✳ Claude with a linked session (the green dot)" src="docs/features/scene-claude-light.png" width="760">
+  <img alt="✳ Claude with a linked session (the green dot), its menu open: the session, a new one, and a question about the PR" src="docs/features/scene-claude-light.png" width="760">
 </picture>
 
 - ✳ Claude opens a PR's Claude Code session, or starts one with the PR in the prompt; you see whether it's working or waiting for you. Its menu also asks a question about the PR, no session needed.
