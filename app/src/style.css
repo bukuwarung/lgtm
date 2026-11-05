@@ -1329,5 +1329,14 @@ fieldset:disabled .set-steps li { cursor: default; opacity: 0.6; }
 /* Ask QA (Settings → Slack): the request, editable, before it's posted */
 dialog.qa-dialog { max-width: min(640px, calc(100vw - 32px)); width: 640px; }
 dialog.qa-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; margin-bottom: 12px; }
-.bar-qa { color: var(--muted); }
+.bar-qa { position: relative; color: var(--muted); }
+.bar-qa.qa-signed { color: var(--addfg); }
+.bar-qa.qa-issue { color: var(--modfg); }
+.qa-new { position: absolute; top: -4px; right: -6px; min-width: 14px; padding: 0 3px; border-radius: 7px; font-size: 10px; line-height: 14px; text-align: center; color: #fff; background: var(--accent); }
 .demo-bar { display: flex; gap: 6px; justify-content: flex-end; padding: 8px; }
+dialog.qa-dialog .slack-preview { max-height: 50vh; overflow: auto; margin-bottom: 12px; white-space: pre-wrap; }
+dialog.qa-dialog .slack-preview code { font-size: .9em; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--fg) 8%, transparent); }
+dialog.qa-dialog .qa-edit { margin-right: auto; }
+.claude-pop { left: 0; right: auto; min-width: 280px; }
+.claude-pop > button small { margin-left: auto; }
+.claude-pop > button { white-space: nowrap; }

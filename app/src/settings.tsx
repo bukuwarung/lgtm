@@ -6,6 +6,7 @@ import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
+import { SlackPreview } from './emojibox.tsx';
 import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes, saveTheme, setTrial } from './look.ts';
 import { fromVSCode, fromVSCodeSet, fromZedFile, parseThemeFile, pickVariant, vsAppearance, withIncludes, type AppTheme } from './themes.ts';
@@ -923,20 +924,6 @@ const SLACK_SAMPLE = {
   jira: ' (Jira: <https://acme.atlassian.net/browse/APP-77|APP-77>)',
   description: 'Card payments that fail on a network error are retried three times, with backoff. Declines are not retried.',
 };
-function SlackPreview({ text, emoji }: { text: string; emoji: (name: string) => string | undefined }) {
-  return (
-    <div class="slack-preview" aria-label="How it looks on Slack">
-      {slackParts(fillSlack(text, SLACK_SAMPLE), emoji).map((l) => (
-        <div class={l.quote ? 'slack-quote' : ''}>
-          {l.parts.map((p) =>
-            'link' in p ? <a>{p.link}</a> : 'tag' in p ? <span class="slack-tag">@{p.tag}</span> : 'emoji' in p ? <img src={p.src} alt={`:${p.emoji}:`} title={`:${p.emoji}:`} /> : p.text,
-          ) }
-          {!l.parts.length && '\u00a0'}
-        </div>
-      ))}
-    </div>
-  );
-}
 function SlackMessage({ k, emoji, names }: { k: SlackKind; emoji: (name: string) => string | undefined; names: string[] }) {
   const m = SLACK_MESSAGES[k];
   const [text, setText] = useStoredValue('slackMsg.' + k, m.initial);
@@ -951,7 +938,7 @@ function SlackMessage({ k, emoji, names }: { k: SlackKind; emoji: (name: string)
         )}
       </span>
       <EmojiTextarea value={text} onInput={setText} names={names} emoji={emoji} />
-      <SlackPreview text={text} emoji={emoji} />
+      <SlackPreview message={fillSlack(text, SLACK_SAMPLE)} emoji={emoji} />
       {m.fields && <small>Also: {m.fields}</small>}
     </label>
   );

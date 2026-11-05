@@ -325,6 +325,31 @@ async function postToChannel({ channel, text, pr }) {
   return { url: base && sent?.channel_id && sent?.ts ? `${base}archives/${sent.channel_id}/p${String(sent.ts).replace('.', '')}` : null };
 }
 
+// The QA requests' replies, per PR asked ("owner/repo#n", ones with a request): the times of replies from others, and
+// the latest that signs it off ("signed off", "sign-off", "signoff"…) or raises an issue ("bug", "error", "crash"),
+// which says so; a reply's forwarded message counts as its text. Read from Slack each time.
+const SIGNED = /\bsign(?:ed)?[\s-]?off\b/i;
+const ISSUE = /\b(bugs?|errors?|crash(?:es|ed|ing)?)\b/i;
+async function qaThreads(prs) {
+  const threads = await readThreads();
+  slackMe ??= slackcli(['auth', 'whoami', '--json']).then((r) => parseJson(r.stdout)?.user_id);
+  const me = await slackMe;
+  const out = {};
+  await Promise.all(
+    prs.filter((pr) => /^[\w.-]+\/[\w.-]+#\d+$/.test(pr) && threads[`${pr}:#qa`]).map(async (pr) => {
+      const t = threads[`${pr}:#qa`];
+      if (!/^[CG][A-Z0-9]+$/.test(t.channel) || !/^\d+\.\d+$/.test(t.ts)) return;
+      const r = await slackcli(['conversations', 'read', t.channel, '--thread-ts', t.ts, '--json', '--limit', '200']);
+      if (!r.ok) return;
+      const replies = (parseJson(r.stdout)?.messages ?? []).filter((m) => m.ts !== t.ts && m.user !== me);
+      const said = (m) => [m.text ?? '', ...(m.attachments ?? []).map((a) => a.fallback ?? a.text ?? '')].join('\n');
+      const last = [...replies].reverse().find((m) => SIGNED.test(said(m)) || ISSUE.test(said(m)));
+      out[pr] = { replies: replies.map((m) => m.ts), status: last ? (SIGNED.test(said(last)) ? 'signed' : 'issue') : null };
+    }),
+  );
+  return out;
+}
+
 // Does the channel exist (Settings → Slack → QA channel)? A dry run of a message names it; an ID it can't name is read
 // (one message) to tell. Nothing is sent.
 async function checkChannel(channel) {
@@ -628,7 +653,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/slack-channel', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -677,6 +702,7 @@ const server = createServer(async (req, res) => {
       (e) => json(res, 500, { error: e.message }),
     );
   }
+  if (path === '/slack-qa') return qaThreads((new URL(req.url ?? '/', ORIGIN).searchParams.get('prs') ?? '').split(',').filter(Boolean).slice(0, 100)).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-channel') return checkChannel(new URL(req.url ?? '/', ORIGIN).searchParams.get('c') ?? '').then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-post' && req.method === 'POST') return readJson(req).then(postToChannel).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack') {

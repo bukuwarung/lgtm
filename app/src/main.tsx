@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { addNotice, dropNotices, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -938,6 +938,14 @@ function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon:
 const UpdateBase = ({ i }: { i: QueueItem }) => (
   <QuickPill icon="behind" tone="p-warn" idle="behind base" action="Update branch" busy="updating…" done="branch updated" title="Behind its base branch: Update branch merges the base in" run={() => updateBranch({ id: i.id })} />
 );
+// My PR's QA request (Ask QA): signed off, an issue raised, or how many replies are new since I last looked.
+function QaPill({ i }: { i: QueueItem }) {
+  const fresh = i.qa!.replies.filter((ts) => ts > qaSeen(`${i.repo}#${i.number}`)).length;
+  if (i.qa!.status === 'signed') return <span class="pill p-ok" title="A reply to your QA request signs it off"><Tg i="qa" t="QA signed off" /></span>;
+  if (i.qa!.status === 'issue') return <span class="pill p-warn" title="A reply to your QA request mentions a bug, an error or a crash"><Tg i="qa" t="QA: issue raised" /></span>;
+  return fresh ? <span class="pill p-reply" title="New replies to your QA request on Slack"><Tg i="qa" n={fresh} t={fresh === 1 ? 'QA reply' : 'QA replies'} /></span> : <span class="pill" title="Your QA request on Slack, no new replies"><Tg i="qa" t="QA asked" /></span>;
+}
+
 // Auto-merge with the repo's usual method and GitHub's default message, as the merge box would.
 async function autoMerge(i: QueueItem) {
   const s = await getMergeState(i.repo, i.number);
@@ -1131,8 +1139,13 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
       const items = [...queue, ...owned];
       setItems(items);
       // Secondary: the list works without them.
-      const [st, est, ms] = await Promise.all([getThreadStatus(items, readBots()).catch(() => null), getEstimates(items).catch(() => null), getMentionStatus(items).catch(() => null)]);
-      const full = items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id), mentionWaiting: ms?.get(i.id) }));
+      const [st, est, ms, qa] = await Promise.all([
+        getThreadStatus(items, readBots()).catch(() => null),
+        getEstimates(items).catch(() => null),
+        getMentionStatus(items).catch(() => null),
+        qaThreads(items.filter((i) => i.authored).map((i) => `${i.repo}#${i.number}`)).catch(() => null), // only PRs with a QA request are read
+      ]);
+      const full = items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id), mentionWaiting: ms?.get(i.id), qa: qa?.[`${i.repo}#${i.number}`] }));
       setItems(full);
       setSettled(true);
       setFresh(true);
@@ -1239,6 +1252,9 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           const wanted = new Set(queueNews(was, i, mine));
           for (const n of queueNews(was, i, all)) tell(n, i, wanted.has(n));
         } else if (mentionNew(i)) tell('Mentioned you', i, notifyMentions);
+        // QA's reply to my request: what it says, else that they replied.
+        if (was?.qa && i.qa && i.qa.replies.length > was.qa.replies.length)
+          tell(i.qa.status !== was.qa.status && i.qa.status ? (i.qa.status === 'signed' ? 'QA signed off' : 'QA raised an issue') : 'QA replied', i, notifyReplies);
       }
     }
     seen.current = new Set(waiting.map((i) => i.id));
@@ -1342,6 +1358,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && i.mergeState === 'BLOCKED' && i.canAutoMerge && !i.autoMerge && !i.queue && (
           <QuickPill icon="auto" tone="" idle={i.ci === 'PENDING' || i.ci === 'EXPECTED' ? 'checks running' : 'blocked'} action="Enable auto-merge" busy="enabling…" done="auto-merge on" title="Approved, but can't merge yet: Enable auto-merge merges it once it can (the repo's usual method)" run={() => autoMerge(i)} />
         )}
+        {kind === MINE && i.qa && <QaPill i={i} />}
         {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}><Tg i={MERGE_PILL[i.mergeState]![2]} t={MERGE_PILL[i.mergeState]![0]} /></span>}
         {i.queue ? (
           <span class={i.queue.state === 'UNMERGEABLE' ? 'pill p-bad' : 'pill p-ok'} title={QUEUE_STATE[i.queue.state]}>

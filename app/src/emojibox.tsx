@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis } from './github.ts';
 import { getSlackEmoji } from './platform.ts';
+import { slackParts } from './slackmsg.ts';
 
 // Slack emoji, to draw and suggest: the workspace's custom ones (aliases followed), then GitHub's standard set, whose
 // names mostly match Slack's. `names` puts the workspace's own first.
@@ -77,3 +78,24 @@ export function EmojiTextarea({ value, onInput, names, emoji, rows = 3, label }:
   );
 }
 
+
+// A message the way Slack shows it (slackmsg.ts slackParts): links as their text, tags, emoji, *bold*, `code`, quotes.
+export function SlackPreview({ message, emoji }: { message: string; emoji: (name: string) => string | undefined }) {
+  return (
+    <div class="slack-preview" aria-label="How it looks on Slack">
+      {slackParts(message, emoji).map((l) => (
+        <div class={l.quote ? 'slack-quote' : ''}>
+          {l.parts.map((p) =>
+            'link' in p ? <a>{p.link}</a>
+            : 'tag' in p ? <span class="slack-tag">@{p.tag}</span>
+            : 'emoji' in p ? <img src={p.src} alt={`:${p.emoji}:`} title={`:${p.emoji}:`} />
+            : 'bold' in p ? <b>{p.bold}</b>
+            : 'code' in p ? <code>{p.code}</code>
+            : p.text,
+          )}
+          {!l.parts.length && '\u00a0'}
+        </div>
+      ))}
+    </div>
+  );
+}

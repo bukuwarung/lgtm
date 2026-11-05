@@ -4,7 +4,7 @@ import { useEffect, useState } from 'preact/hooks';
 // drafts, what you'd seen of a PR, Claude session links, the PR list's team, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:)/;
 let account = '';
 export const lastLogin = () => {
   try {
@@ -339,6 +339,30 @@ export async function checkSlackChannel(channel: string): Promise<ChannelCheck> 
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;
 }
+// The QA request's replies on Slack, per PR ("owner/repo#n") that has one: when others replied, and what the latest
+// telling reply says (signed off, or an issue raised).
+export type QaThread = { replies: string[]; status: 'signed' | 'issue' | null };
+export async function qaThreads(prs: string[]): Promise<Record<string, QaThread>> {
+  if (!prs.length) return {};
+  if (isDesktop) return command<Record<string, QaThread>>('slack_qa', { prs });
+  const res = await fetch(`/slack-qa?prs=${encodeURIComponent(prs.join(','))}`);
+  const d = await res.json();
+  if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
+  return d;
+}
+// Replies to it seen here (the newest one's time), per PR: the rest count as new.
+export const qaSeen = (pr: string) => {
+  try {
+    return localStorage.getItem(own(`qaSeen:${pr}`)) ?? '';
+  } catch {
+    return '';
+  }
+};
+export const seeQa = (pr: string, ts: string) => {
+  try {
+    localStorage.setItem(own(`qaSeen:${pr}`), ts);
+  } catch {}
+};
 export const SLACK_CHANNEL = /^([CG][A-Z0-9]+|#[\w.-]+|https:\/\/[\w-]+\.slack\.com\/archives\/[CG][A-Z0-9]+\/?)$/;
 
 // Last lines of a failed GitHub Actions job's log, fetched by the local server with gh.

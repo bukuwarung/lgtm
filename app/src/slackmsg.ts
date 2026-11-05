@@ -93,9 +93,10 @@ export function fillSlack(template: string, values: Record<string, string>): str
     .trim();
 }
 
-// What a filled message looks like on Slack, for the Settings preview: links as their text, tags as @login, :emoji:
-// as images (the workspace's own first, then the standard ones by GitHub's names, which mostly match), quoted lines.
-export type SlackPart = { text: string } | { link: string } | { tag: string } | { emoji: string; src: string };
+// What a filled message looks like on Slack, for the previews: links as their text, tags as @login, :emoji: as images
+// (the workspace's own first, then the standard ones by GitHub's names, which mostly match), *bold*, `code`, quoted
+// lines.
+export type SlackPart = { text: string } | { link: string } | { tag: string } | { emoji: string; src: string } | { bold: string } | { code: string };
 export function slackParts(message: string, emoji: (name: string) => string | undefined): { quote: boolean; parts: SlackPart[] }[] {
   const unescape = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
   return message.split('\n').map((line) => {
@@ -103,11 +104,18 @@ export function slackParts(message: string, emoji: (name: string) => string | un
     const parts: SlackPart[] = [];
     let last = 0;
     const body = quote ? line.slice(1) : line;
-    for (const m of body.matchAll(/<!subteam\^\w+(?:\|@?([^>]+))?>|<([^>|]+)\|([^>]+)>|<@gh:([^>]+)>|:([a-z0-9_+'-]+):/g)) {
+    for (const m of body.matchAll(/<!subteam\^\w+(?:\|@?([^>]+))?>|<([^>|]+)\|([^>]+)>|<@gh:([^>]+)>|:([a-z0-9_+'-]+):|`([^`]+)`|\*([^*\s][^*]*)\*/g)) {
       const src = m[5] ? emoji(m[5]) : undefined;
       if (m[5] && !src) continue; // not an emoji Slack knows here: left as text
       if (m.index! > last) parts.push({ text: unescape(body.slice(last, m.index)) });
-      parts.push(m[0].startsWith('<!subteam') ? { tag: m[1] ?? 'group' } : m[2] ? { link: unescape(m[3]) } : m[4] ? { tag: m[4] === '*' ? 'recipient' : m[4] } : { emoji: m[5], src: src! });
+      parts.push(
+        m[0].startsWith('<!subteam') ? { tag: m[1] ?? 'group' }
+        : m[2] ? { link: unescape(m[3]) }
+        : m[4] ? { tag: m[4] === '*' ? 'recipient' : m[4] }
+        : m[6] != null ? { code: unescape(m[6]) }
+        : m[7] != null ? { bold: unescape(m[7]) }
+        : { emoji: m[5], src: src! },
+      );
       last = m.index! + m[0].length;
     }
     if (last < body.length) parts.push({ text: unescape(body.slice(last)) });

@@ -25,6 +25,7 @@ export const CheckMark = ({ state, title }: { state: 'success' | 'failure' | 'pe
 
 // Each tag's or pill's Octicon (a "/" suffix strikes it through). A name that isn't here is shown as it is (✳).
 const ICONS: Record<string, string> = {
+  qa: 'beaker',
   added: 'diff-added',
   modified: 'diff-modified',
   changed: 'diff-modified',

@@ -28,10 +28,10 @@ import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePr
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
-import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
+import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
-import { fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -129,6 +129,8 @@ function AskQA({ pr, repo, n, onPosted }: { pr: PR; repo: string; n: number; onP
   const [text, setText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [editing, setEditing] = useState(false); // the Slack markup itself, else the message as Slack shows it
+  const { emoji } = useSlackEmoji();
   const box = useRef<HTMLDialogElement>(null);
   useEffect(() => void (text != null && !box.current?.open && box.current?.showModal()), [text]);
   const open = async () => {
@@ -138,6 +140,7 @@ function AskQA({ pr, repo, n, onPosted }: { pr: PR; repo: string; n: number; onP
     const keys = jiraKeys(pr.title, pr.head.ref);
     const jira = keys.length ? ` (Jira: ${keys.map((k) => (site ? `<https://${site}/browse/${k}|${k}>` : k)).join(', ')})` : '';
     setErr('');
+    setEditing(false);
     setText(fillSlack(slackTemplate('qa'), { ...prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }), jira, description: slackEscape(firstParagraph(pr.body)) }));
   };
   const close = () => (box.current?.close(), setText(null));
@@ -159,10 +162,17 @@ function AskQA({ pr, repo, n, onPosted }: { pr: PR; repo: string; n: number; onP
           <p>
             <b>Ask QA</b> in <code>{channel}</code>
           </p>
-          <textarea rows={12} value={text} onInput={(e) => setText(e.currentTarget.value)} disabled={busy} />
+          {editing ? (
+            <textarea rows={12} value={text} onInput={(e) => setText(e.currentTarget.value)} disabled={busy} />
+          ) : (
+            <SlackPreview message={text} emoji={emoji} />
+          )}
           {!SLACK_CHANNEL.test(channel) && <p class="warn">The QA channel in Settings isn't a channel ID, #name or link.</p>}
           {err && <p class="warn">{err}</p>}
           <form method="dialog" onSubmit={(e) => e.preventDefault()}>
+            <button type="button" class="link qa-edit" onClick={() => setEditing(!editing)} disabled={busy}>
+              {editing ? 'Preview' : 'Edit'}
+            </button>
             <button type="button" onClick={close} disabled={busy}>Cancel</button>
             <button type="button" class="primary" onClick={send} disabled={busy || !text.trim() || !SLACK_CHANNEL.test(channel)}>
               {busy ? 'Posting…' : 'Post to Slack'}
@@ -514,6 +524,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const slackTo = slackPeople && slackPeople.filter((l) => !bots.has(l)); // never message an account marked as a bot
   const [slackNote, setSlackNote] = useState('Checking Slack…'); // why there's no Slack option, if there isn't
   const [slackThreads, setSlackThreads] = useState<SlackThread[]>([]);
+  // The QA request's replies (when there's one), and the newest seen here: opening it from the beaker sees them.
+  const [qa, setQa] = useState<QaThread | null>(null);
+  const [qaSeenAt, setQaSeenAt] = useState(() => qaSeen(`${repo}#${n}`));
+  const hasQa = slackThreads.some((t) => t.login === '#qa');
+  useEffect(() => void (hasQa && qaThreads([`${repo}#${n}`]).then((r) => setQa(r[`${repo}#${n}`] ?? null), () => {})), [hasQa]);
   const [notice, setNotice] = useState<Notice | null>(flash ?? null);
   const [viewed, setViewedPaths] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
@@ -1357,8 +1372,16 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           <div class="bar-group">
             {slackThreads.map((t) =>
               t.login === '#qa' ? (
-                <a class="bar-slack bar-qa" href={t.url} target="_blank" rel="noopener" title={`Your QA request${t.name ? ` in ${t.name}` : ''}, on Slack`}>
+                <a
+                  class={`bar-slack bar-qa${qa?.status ? ' qa-' + qa.status : ''}`}
+                  href={t.url}
+                  target="_blank"
+                  rel="noopener"
+                  title={`Your QA request${t.name ? ` in ${t.name}` : ''}, on Slack${qa?.status === 'signed' ? ': signed off' : qa?.status === 'issue' ? ': a reply mentions a bug, an error or a crash' : ''}${qa?.replies.length ? ` · ${qa.replies.length} repl${qa.replies.length === 1 ? 'y' : 'ies'}` : ''}`}
+                  onClick={() => { const last = qa?.replies.at(-1); if (last) seeQa(`${repo}#${n}`, last), setQaSeenAt(last); }}
+                >
                   <Octicon name="beaker" />
+                  {!!qa && qa.replies.filter((ts) => ts > qaSeenAt).length > 0 && <span class="qa-new">{qa.replies.filter((ts) => ts > qaSeenAt).length}</span>}
                 </a>
               ) : (
                 <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this PR`}>
@@ -1367,9 +1390,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               ),
             )}
             <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
-            <button class="claude-btn" title="Ask Claude a question about the whole PR (Claude Code, no session)" onClick={() => dispatchEvent(new Event('lgtm:ask-pr'))}>
-              <Octicon name="comment-discussion" /> Ask
-            </button>
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
@@ -3905,9 +3925,19 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
 // "✳ Claude": this PR's Claude Code session, one click away. With one linked (a dot: the session that sent the PR here,
 // or one this button started), it opens it; a comment's ✳ copies that comment as a prompt to paste. Without one, it
 // starts a session with the PR or comment in the prompt (in the repo's folder, if set in Settings) and links it once
-// the Claude app records it. ⌥-click starts a new one anyway.
+// the Claude app records it. ⌥-click starts a new one anyway. The bar's (`label`) opens a menu: that, a new session,
+// and a question about the whole PR (Ask, answered by the claude CLI without a session).
 function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: string; prUrl: string; label?: string }) {
   const [note, setNote] = useState('');
+  const [menu, setMenu] = useState(false);
+  useEffect(() => {
+    if (!menu) return;
+    const away = (e: Event) => !(e.target as Element).closest?.('.claude-menu') && setMenu(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(false);
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', esc);
+    return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
+  }, [menu]);
   const [offer, setOffer] = useState(false); // the lgtm-review skill isn't installed: offer it
   const [offerSkill, noOffer] = useStoredFlag('offerSkill', true);
   const [session, setSession] = useState<SessionState>(null);
@@ -3940,7 +3970,8 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
     setNote(text);
     setTimeout(() => setNote(''), 4000);
   };
-  const go = async (e: MouseEvent) => {
+  const go = async (e: { altKey: boolean }) => {
+    setMenu(false);
     if (from && !e.altKey) return flash(await backToClaude(from.id, label ? '' : prompt));
     await openClaude(claudeNewLink(prompt, claudeFolder(repo)));
     linkNewClaude(pr.repo, pr.n, prUrl);
@@ -3952,14 +3983,32 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
     <span class="claude-menu">
       <button
         class={`${label ? 'claude-btn' : 'copy-link'}${from ? ' linked' : ''}`}
-        title={from ? `Open its Claude Code session${title ? `, “${title}”` : ''}${label ? '' : ', with this comment left for it'} (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
-        onClick={go}
+        title={label ? 'Claude: its Claude Code session, or a question about this PR' : from ? `Open its Claude Code session${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
+        aria-haspopup={label ? 'menu' : undefined}
+        aria-expanded={label ? menu : undefined}
+        onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e))}
       >
         ✳{label ? ` ${label}` : ''}
         {from && <span class={`claude-dot${session?.state === 'waiting' ? ' waiting' : ''}`} aria-label="linked to a session" />}
         {label && session?.state === 'working' && <span class="claude-state"> working…</span>}
         {label && session?.state === 'waiting' && <span class="claude-state waiting"> waiting for you</span>}
       </button>
+      {menu && (
+        <div class="account-menu claude-pop" role="menu">
+          <button role="menuitem" onClick={() => go({ altKey: false })}>
+            ✳ {from ? 'Open its Claude Code session' : 'Start a Claude Code session'}
+            {from && title && <small>{title}</small>}
+          </button>
+          {from && (
+            <button role="menuitem" onClick={() => go({ altKey: true })}>
+              ✳ New Claude Code session <small>⌥-click</small>
+            </button>
+          )}
+          <button role="menuitem" onClick={() => (setMenu(false), dispatchEvent(new Event('lgtm:ask-pr')))}>
+            <Octicon name="comment-discussion" /> Ask a question about this PR <small>no session</small>
+          </button>
+        </div>
+      )}
       {note && <span class="claude-note">{note}</span>}
       {offer && !note && (
         <span class="claude-note">
@@ -3992,7 +4041,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
         setSel({ path: file.id.slice(2), text: text.slice(0, 4000), x: Math.min(r.right, innerWidth - 140), y: r.bottom + 4 });
       });
     const away = () => setSel(null);
-    const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setAnswer(null)); // the bar's Ask
+    const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setAnswer(null)); // the Claude menu's Ask
     addEventListener('lgtm:ask-pr', whole);
     addEventListener('mouseup', up);
     addEventListener('scroll', away, { passive: true });
@@ -4004,7 +4053,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
     setAnswer(null);
     try {
       let prompt: string;
-      if (!panel.path) prompt = prAskPrompt(pr, files, q.trim()); // the whole PR (the bar's Ask)
+      if (!panel.path) prompt = prAskPrompt(pr, files, q.trim()); // the whole PR (the Claude menu's Ask)
       else {
         const f = files.find((f) => f.filename === panel.path);
         const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);

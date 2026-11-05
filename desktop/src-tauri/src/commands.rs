@@ -420,6 +420,45 @@ pub async fn slack_post(channel: String, text: String, pr: String) -> Result<Val
     Ok(json!({ "url": url }))
 }
 
+/// The QA requests' replies, per PR asked ("owner/repo#n", ones with a request): the times of replies from others, and
+/// the latest that signs it off ("signed off", "sign-off", "signoff"…) or raises an issue ("bug", "error", "crash"),
+/// which says so; a reply's forwarded message counts as its text. Read from Slack each time.
+#[tauri::command]
+pub async fn slack_qa(prs: Vec<String>) -> Value {
+    let threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
+    let me = cached(&SLACK_ME, || {
+        let r = slackcli(&["auth", "whoami", "--json"], None);
+        parse_json(&r.stdout).and_then(|v| v["user_id"].as_str().map(String::from))
+    });
+    let (signed, issue) = (re(r"(?i)\bsign(?:ed)?[\s-]?off\b"), re(r"(?i)\b(bugs?|errors?|crash(?:es|ed|ing)?)\b"));
+    let mut out = json!({});
+    for pr in prs.iter().take(100).filter(|p| re(PR_REF).is_match(p)) {
+        let t = &threads[&format!("{pr}:#qa")];
+        let (Some(ch), Some(ts)) = (t["channel"].as_str(), t["ts"].as_str()) else { continue };
+        if !re(r"^[CG][A-Z0-9]+$").is_match(ch) || !re(r"^\d+\.\d+$").is_match(ts) {
+            continue;
+        }
+        let r = slackcli(&["conversations", "read", ch, "--thread-ts", ts, "--json", "--limit", "200"], None);
+        if !r.ok {
+            continue;
+        }
+        let msgs = parse_json(&r.stdout).and_then(|v| v["messages"].as_array().cloned()).unwrap_or_default();
+        let replies: Vec<&Value> = msgs.iter().filter(|m| m["ts"].as_str() != Some(ts) && m["user"].as_str() != me.as_deref()).collect();
+        let said = |m: &Value| {
+            let mut s = m["text"].as_str().unwrap_or("").to_string();
+            for a in m["attachments"].as_array().into_iter().flatten() {
+                s.push('\n');
+                s.push_str(a["fallback"].as_str().or(a["text"].as_str()).unwrap_or(""));
+            }
+            s
+        };
+        let last = replies.iter().rev().map(|m| said(m)).find(|s| signed.is_match(s) || issue.is_match(s));
+        let status = last.map(|s| if signed.is_match(&s) { "signed" } else { "issue" });
+        out[pr.as_str()] = json!({ "replies": replies.iter().map(|m| m["ts"].clone()).collect::<Vec<_>>(), "status": status });
+    }
+    out
+}
+
 /// Does the channel exist (Settings → Slack → QA channel)? A dry run of a message names it; an ID it can't name is read
 /// (one message) to tell. Nothing is sent.
 #[tauri::command]
