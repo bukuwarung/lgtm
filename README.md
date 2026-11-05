@@ -26,8 +26,9 @@ gh auth login   # once, if you haven't
 - **One page per PR.** Every changed file in reading order, with imports, generated files, whitespace and bot chatter folded away.
 - **It points things out.** Possible secrets, edited database migrations, text that won't be translated, a lockfile left behind, and more, each with a comment drafted for you.
 - **Review mode.** Your PRs to review, one after another, with nothing else on screen.
+- **An inbox.** Every thread and mention waiting on your reply, answered or put away without opening the PR.
 - **The right reviewers.** Suggested by who wrote the code you changed and who's least busy, asked on GitHub and Slack in one click.
-- **Your whole loop.** Merge box, Jira tickets moved on merge, Slack nudges, and Claude Code linked to your PRs.
+- **Your whole loop.** Merge box, Jira tickets moved on merge, Slack nudges, QA requests, and Claude Code linked to your PRs.
 
 ## Your queue
 
@@ -39,7 +40,15 @@ gh auth login   # once, if you haven't
 - PRs to review, your own, and your team's, grouped by where they stand.
 - Pills for what needs you: `CI failing`, `conflicts`, `↻ re-review`, replies waiting, commits since you approved. On your PRs, a pill's menu fixes what it names.
 - Drafts you're a code owner of, before GitHub asks you.
-- Notifications for replies, verdicts, mentions, CI and your PR ready to merge; a click opens the PR.
+- The bell keeps what needs you (review requested, replies, verdicts, mentions, CI, ready to merge, QA) until you open the PR; desktop notifications are a switch.
+- Optional mutes: replies and mentions on PRs you've approved, and comments that open with 🤖 (agents posting from people's accounts).
+
+## Inbox
+
+- Review threads and PR comments that mention you, wherever they wait on your reply: open PRs, and ones merged lately.
+- Each shows the code it's on and the earlier comments; reply, resolve, or mark it Done until someone writes again.
+- On your own PR, commit a reviewer's suggested change from there.
+- `j`/`k` move, `r` reply, `e` done, `x` resolve, `c` commit the suggestion, `o` open the PR.
 
 ## Review mode
 
@@ -58,9 +67,10 @@ gh auth login   # once, if you haven't
   <img alt="A PR: the bar with ✳ Claude and Finish review, the Jira ticket, status pills, changes since your last review, and a diff" src="docs/features/scene-review-light.png" width="760">
 </picture>
 
-- Markdown first, tests right after their source; files grouped by module, with code changed but no test.
+- Files in reading order: specs and docs, build and config, models, the implementation (each test right below its class), other tests, then resources. Drag the steps into your own order; the index groups files by step, or as folders.
+- Files grouped by module, with code changed but no test.
 - Re-reviews show only what changed since your last one, and your threads say whether their lines moved.
-- An index of comments, reviewers, checks (failed-job logs, and whether `main` fails them too) and files; big PRs get a review plan.
+- An index of comments, reviewers, checks (failed-job logs, and whether `main` fails them too) and files; big PRs get a review plan. It can start hidden on PRs waiting for your review.
 - Side-by-side or unified, centred or full width, in your pick of themes and fonts.
 - Android `strings.xml` as texts, with the other languages checked.
 
@@ -181,6 +191,7 @@ On by default, each with a switch and a preview in Settings:
 - Reviewers suggested by who wrote the code and who's free (and who's away on Slack); one click asks on GitHub and Slack.
 - Commit suggested changes, rerun failed jobs, and merge from a box that says what's blocking.
 - Merging moves the Jira ticket on; a PR waiting a day can nudge its reviewers on Slack.
+- **Ask QA** posts your QA request to the QA channel on Slack, filled in from the PR and yours to edit first. When QA replies, the PR, the list and the merge box say whether they signed off or raised an issue.
 
 ## Claude Code
 
@@ -189,7 +200,7 @@ On by default, each with a switch and a preview in Settings:
   <img alt="✳ Claude with a linked session (the green dot)" src="docs/features/scene-claude-light.png" width="760">
 </picture>
 
-- ✳ Claude opens a PR's Claude Code session, or starts one with the PR in the prompt; you see whether it's working or waiting for you.
+- ✳ Claude opens a PR's Claude Code session, or starts one with the PR in the prompt; you see whether it's working or waiting for you. Its menu also asks a question about the PR, no session needed.
 - Claude sends PRs here for review, and gets your review back to act on.
 
 ## Themes

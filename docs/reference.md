@@ -24,6 +24,17 @@ Change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 | `⌘+` / `⌘−` / `⌘0` | Bigger / smaller / default text |
 | `?` | All shortcuts |
 
+In the inbox (fixed keys):
+
+| Key | Action |
+|---|---|
+| `j` / `k` | Next / previous thread |
+| `r` | Reply (`⌘↵` sends, `Esc` leaves the box) |
+| `e` | Done: off your list until someone writes again |
+| `x` | Resolve |
+| `c` | Commit the suggested change (your PRs) |
+| `o` | Open the PR |
+
 ## Install notes
 
 - The app isn't notarized, so the cask clears macOS's quarantine on install. Downloading the zip from [Releases](https://github.com/bukuwarung/lgtm/releases) instead, allow it in System Settings → Privacy & Security → Open Anyway.
@@ -38,3 +49,7 @@ Change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 ## Slack people
 
 lgtm messages people as you through slackcli, so it needs each GitHub account's Slack user. Settings → Slack → People finds them (company email, then name) and you confirm each; with several matches you pick, or search by name, handle, email or a Slack link (their profile, or your DM with them). Mappings are saved in `~/.config/lgtm/config.json` (`{ "slackUsers": { "github-login": "U012ABC" } }`). Mark automation accounts as bots so they're never messaged.
+
+## QA requests
+
+Settings → Slack → "A button to ask QA" puts **Ask QA** on your PRs. It posts to the QA channel set there (an ID, `#name` or link, checked on Slack as you type), in the wording under Messages; a `<!subteam^ID>` in it tags a Slack group. The request is saved with the PR's Slack threads in `~/.config/lgtm/slack-threads.json`. Its replies are read from Slack: the latest one that says "signed off" (or "sign-off", "signoff") marks it signed off, and one that mentions a bug, an error or a crash marks an issue.
