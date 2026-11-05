@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
-import { ago, markReplyDone, readBots, reportError } from './platform.ts';
+import { ago, markReplyDone, readBots, reportError, useStoredFlag } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
 import { Tg } from './tags.tsx';
 
@@ -19,7 +19,8 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   const [done, setDone] = useState<Set<string>>(new Set()); // replied to or resolved here
   const [cur, setCur] = useState(0); // the thread the keys act on, in page order
   const asked = (items ?? []).filter((i) => (i.thread?.awaiting ?? 0) > 0);
-  const named = (items ?? []).filter((i) => i.mentioned || i.authored); // asked for comments mentioning me
+  const [muteApproved] = useStoredFlag('muteApproved', false); // Settings: nothing from PRs I've approved
+  const named = (items ?? []).filter((i) => (i.mentioned || i.authored) && !(muteApproved && i.myState === 'APPROVED')); // asked for comments mentioning me
   // A refresh asks again about the PRs that changed: until it knows, what's shown stays (and a reply being typed with it).
   const pending = !!items?.some((i) => (i.mine || i.myState) && !i.thread);
   const key = items ? [...asked, ...named].map((i) => `${i.id}@${i.updatedAt}`).join() + '|' + (pending ? 'pending' : '') : ''; // the list's arrival counts, even with nothing waiting in it

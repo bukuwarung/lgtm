@@ -190,6 +190,14 @@ export function useStoredValue(key: string, initial: string) {
 }
 
 // GitHub accounts you've marked as bots (automation users GitHub sees as people): treated like GitHub's own bots.
+// Settings → "Comments that open with 🤖 are a bot's": agents posting from people's accounts say so that way.
+export const agentsAsBots = () => {
+  try {
+    return localStorage.getItem('agentsAsBots') === '1';
+  } catch {
+    return false;
+  }
+};
 export const readBots = (): Set<string> => {
   try {
     return new Set(JSON.parse(localStorage.getItem('bots') ?? '[]'));

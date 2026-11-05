@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { closedPRs, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { closedPRs, forgetAllThreadStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
@@ -1058,7 +1058,23 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     }
   });
   const [fresh, setFresh] = useState(false);
-  const items = useMemo(() => loaded && withAnswered(loaded, answered), [loaded, answeredTick]);
+  // Settings → "Mute replies and mentions on PRs you've approved": their threads wait on no one here (no pill, count,
+  // bell entry or inbox thread), until my latest verdict is something else.
+  const [muteApproved] = useStoredFlag('muteApproved', false);
+  const [agents] = useStoredFlag('agentsAsBots', false); // 🤖 comments as a bot's: thread counts asked again
+  const rules = `${muteApproved}${agents}`;
+  const rulesWas = useRef(rules); // as the last notifications saw them
+  const agentsWas = useRef(agents);
+  useEffect(() => {
+    if (agentsWas.current === agents) return;
+    agentsWas.current = agents;
+    forgetAllThreadStatus();
+    dispatchEvent(new Event('lgtm:list-refresh'));
+  }, [agents]);
+  const items = useMemo(
+    () => loaded && withAnswered(loaded, answered).map((i) => (muteApproved && i.myState === 'APPROVED' && i.thread?.awaiting ? { ...i, thread: { ...i.thread, awaiting: 0 } } : i)),
+    [loaded, answeredTick, muteApproved],
+  );
   const [err, setErr] = useState('');
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
   const showDraftsRef = useRef(showDrafts); // the refresh timer closes over the first render
@@ -1212,8 +1228,10 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         if (what === 'Ready to merge') sessionStorage.setItem('openMerge', `${i.repo}#${i.number}`); // its merge box opens (merge.tsx)
         void notifyNative(`${what}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, `/${i.repo}/pull/${i.number}`);
       };
-      const all = { replies: true, verdicts: true, ci: true, queue: true, ready: true };
-      const mine = { replies: notifyReplies, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, ready: notifyReady };
+      // The mute or what counts as a bot just switched: replies hidden or shown again by it aren't new.
+      const flipped = rulesWas.current !== rules;
+      const all = { replies: !flipped, verdicts: true, ci: true, queue: true, ready: true };
+      const mine = { replies: notifyReplies && !flipped, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, ready: notifyReady };
       for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i, true);
       for (const i of items) {
         const was = before.current.get(i.id);
@@ -1224,6 +1242,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
       }
     }
     seen.current = new Set(waiting.map((i) => i.id));
+    rulesWas.current = rules;
     before.current = new Map(items.map((i) => [i.id, i]));
   }, [items, settled, claude, menuBar]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.

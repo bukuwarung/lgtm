@@ -1156,6 +1156,16 @@ const GLASS = (on: boolean) => (
 );
 
 Object.assign(DEMOS, {
+  agentsAsBots: {
+    title: 'A comment that opens with 🤖',
+    off: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-reply', <Tg i="reply" n={1} t="awaiting your reply" />]])}</div>,
+    on: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [])}</div>,
+  },
+  muteApproved: {
+    title: "Replies on a PR you've approved",
+    off: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />], ['p-reply', <Tg i="reply" n={2} t="awaiting your reply" />]])}</div>,
+    on: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />]])}</div>,
+  },
   showDrafts: {
     title: "Other people's draft PRs",
     off: <div class="demo-list">{LIST_ONE}</div>,

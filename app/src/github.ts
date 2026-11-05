@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { fetchToken, recordError, repliesDone } from './platform.ts';
+import { agentsAsBots, fetchToken, recordError, repliesDone } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 
@@ -542,7 +542,7 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
     paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`, FULL),
   ]);
   return [
-    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', avatar: c.user?.avatar_url, html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' })),
+    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', avatar: c.user?.avatar_url, html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' || (agentsAsBots() && agentSays(c.body)) })),
     ...reviews
       .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
       .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', avatar: r.user?.avatar_url, html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot', commit: r.commit_id })),
@@ -893,7 +893,7 @@ export async function getMentions(ids: string[], me: string, bots: Set<string> =
     if (!p?.id) continue;
     const cs: Comment[] = p.comments.nodes;
     const since = [...cs.filter((c) => c.author?.login === me).map((c) => c.createdAt), ...p.reviews.nodes.filter((r: any) => r.author?.login === me && r.submittedAt).map((r: any) => r.submittedAt as string)].sort().at(-1) ?? '';
-    const c = cs.filter((c) => c.author && c.author.login !== me && c.author.__typename !== 'Bot' && !bots.has(c.author.login) && !/^\s*<!--/.test(c.body ?? '') && c.createdAt > since && link.test(c.bodyHTML)).at(-1);
+    const c = cs.filter((c) => c.author && c.author.login !== me && c.author.__typename !== 'Bot' && !bots.has(c.author.login) && !/^\s*<!--/.test(c.body ?? '') && !(agentsAsBots() && agentSays(c.body)) && c.createdAt > since && link.test(c.bodyHTML)).at(-1);
     if (c && repliesDone()[c.id!] !== c.databaseId) out.set(p.id, c);
   }
   return out;
@@ -1265,11 +1265,15 @@ export const markReady = (id: string) =>
   graphql(`mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 
 // Comments by accounts marked as bots count as bot comments (folded, never awaiting a reply, bot threads).
-export function markBots<T extends { comments: { nodes: Pick<Comment, 'author'>[] } }>(threads: T[], bots: Set<string>): T[] {
-  if (!bots.size) return threads;
+// A comment that opens with 🤖 (after any hidden <!-- markers -->): an agent's, by its own say, posted from a person's
+// account. A bot's when Settings says so (agentsAsBots).
+export const agentSays = (body?: string | null) => /^\s*(<!--[\s\S]*?-->\s*)*\u{1F916}/u.test(body ?? '');
+export function markBots<T extends { comments: { nodes: (Pick<Comment, 'author'> & { body?: string })[] } }>(threads: T[], bots: Set<string>): T[] {
+  const agents = agentsAsBots();
+  if (!bots.size && !agents) return threads;
   return threads.map((t) => ({
     ...t,
-    comments: { ...t.comments, nodes: t.comments.nodes.map((c) => (c.author && bots.has(c.author.login) ? { ...c, author: { ...c.author, __typename: 'Bot' } } : c)) },
+    comments: { ...t.comments, nodes: t.comments.nodes.map((c) => (c.author && (bots.has(c.author.login) || (agents && agentSays(c.body))) ? { ...c, author: { ...c.author, __typename: 'Bot' } } : c)) },
   }));
 }
 
@@ -1357,6 +1361,8 @@ const keep = (i: { id: string; updatedAt: string }, part: { estimate?: Estimate;
   extrasSeen.set(i.id, { ...(c && c.at === i.updatedAt ? c : {}), at: i.updatedAt, ...part });
 };
 
+// Every PR's thread status asked again at the next refresh (what counts as a bot changed).
+export const forgetAllThreadStatus = () => extrasSeen.forEach((v, k) => extrasSeen.set(k, { ...v, thread: undefined }));
 // A PR's thread status asked again at the next refresh (a thread marked done changes it; the PR itself didn't change).
 export const forgetThreadStatus = (id: string) => void extrasSeen.set(id, { ...(extrasSeen.get(id) ?? { at: '' }), thread: undefined });
 
@@ -1381,7 +1387,7 @@ export async function getThreadStatus(items: QueueItem[], bots: Set<string> = ne
   const vars = Object.fromEntries(ask.map((i, k) => [`i${k}`, i.id]));
   const d = await graphql(
     `query(${ask.map((_, k) => `$i${k}:ID!`).join(',')}){${ask
-      .map((_, k) => `p${k}:node(id:$i${k}){...on PullRequest{reviewThreads(last:100){nodes{id isResolved isOutdated starter:comments(first:1){nodes{author{login}}} comments(last:20){nodes{databaseId author{__typename login}}}}}}}`)
+      .map((_, k) => `p${k}:node(id:$i${k}){...on PullRequest{reviewThreads(last:100){nodes{id isResolved isOutdated starter:comments(first:1){nodes{author{login}}} comments(last:20){nodes{databaseId ${agentsAsBots() ? 'body ' : ''}author{__typename login}}}}}}}`)
       .join(' ')}}`,
     vars,
   );

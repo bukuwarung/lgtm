@@ -376,6 +376,7 @@ export function Settings() {
       <section>
         <h3>Pull request list</h3>
         <Flag k="showDrafts" initial={false} label="Show other people's draft PRs" hint="Your own drafts always show."  demo />
+        <Flag k="muteApproved" initial={false} label="Mute replies and mentions on PRs you've approved" hint="No “awaiting your reply”, no inbox entry, no notification, while your latest review is an approval. New commits that dismiss it, or another verdict, bring them back. The PR itself still shows its threads." demo />
         <label class="set-row">
           <input
             type="checkbox"
@@ -469,6 +470,7 @@ export function Settings() {
         <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo>
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
         </Flag>
+        <Flag k="agentsAsBots" initial={false} label="Comments that open with 🤖 are a bot's" hint="Agents posting from people's accounts often say so that way (“🤖 Posted by an agent”). They then fold like bots', and don't wait on your reply or count as mentions." demo />
         <Flag k="hideSettled" initial={true} label="Hide resolved and outdated conversations" hint="Unless you commented in them. The index offers to show them per PR."  demo />
         <Flag k="resumePosition" initial={false} label="Reopen a PR where you left off" hint="Off: every PR opens at its top." />
       </section>

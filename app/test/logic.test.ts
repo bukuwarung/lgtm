@@ -1002,3 +1002,13 @@ test('expertise: who wrote the lines a PR touches', async () => {
   const k = whoKnows([{ path: 'Pay.kt', lines: 4, by }, { path: 'Cart.kt', lines: 4, by: new Map([['rina', 4]]) }]);
   assert.deepEqual(k.map((x) => [x.login, x.share, x.file]), [['rina', 0.75, 'Cart.kt'], ['budi', 0.25, 'Pay.kt']]);
 });
+
+test('agentSays: a comment opening with 🤖, after any hidden markers', async () => {
+  const { agentSays } = await import('../src/github.ts');
+  assert.ok(agentSays('🤖 Posted by an agent.'));
+  assert.ok(agentSays('<!-- pr-human-review-check -->\n🤖 Posted by an agent.\n\n### Commits added after approval'));
+  assert.ok(agentSays('  \n🤖 Follow-up on the detekt config'));
+  assert.ok(!agentSays('Looks good 🤖'));
+  assert.ok(!agentSays('<!-- marker -->\nCommits added after approval'));
+  assert.ok(!agentSays(undefined));
+});
