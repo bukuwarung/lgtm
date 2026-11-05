@@ -27,8 +27,8 @@ export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string;
   },
   qa: {
     label: 'Asking QA to test your PR, in the QA channel (editable when you ask)',
-    initial: '<!subteam^S04KBV8DQJK> Need bandwidth to test: *{title}*{jira}\n*What changed:* {description}\nPR: {pr}',
-    fields: '{jira} " (Jira: BUKU-123)", linked, from the title or branch · {description} the PR description\'s first paragraph · <!subteam^ID> tags a Slack group',
+    initial: 'Need bandwidth to test: *{title}*{jira}\n*What changed:* {description}\nPR: {pr}',
+    fields: '{jira} " (Jira: BUKU-123)", linked, from the title or branch · {description} the PR description\'s first paragraph · <!subteam^ID> tags a Slack group (its ID: on Slack, the group → ⋯ → Copy group ID)',
   },
 };
 // The PR description's first paragraph, as plain text for Slack: hidden <!-- comments -->, headings, images, quotes and
