@@ -1,6 +1,6 @@
 {
   "name": "lgtm-links",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Open GitHub pull requests in lgtm: a button under Claude's messages that link one, and /lgtm",
   "author": {
     "name": "BukuWarung"
