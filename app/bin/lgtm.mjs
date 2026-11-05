@@ -112,8 +112,9 @@ async function prThreads(pr) {
     mine.map(async ([k, t]) => {
       const login = k.slice(pr.length + 1);
       // Who it's with: as saved with the thread, else the Slack people mapping (threads from before it was saved).
-      const who = await slackProfile(t.user ?? users[login]);
-      return { login, url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}`, name: who?.name, image: who?.image };
+      // "#qa": the QA request, in a channel: its name, no one's picture.
+      const who = login.startsWith('#') ? null : await slackProfile(t.user ?? users[login]);
+      return { login, url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}`, name: who?.name ?? t.name, image: who?.image };
     }),
   );
 }
@@ -304,8 +305,8 @@ async function channelId(channel) {
 
 // A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
 const SLACK_CHANNEL = /^([CG][A-Z0-9]+|#[\w.-]+|https:\/\/[\w-]+\.slack\.com\/archives\/[CG][A-Z0-9]+\/?)$/;
-async function postToChannel({ channel, text }) {
-  if (typeof channel !== 'string' || !SLACK_CHANNEL.test(channel) || typeof text !== 'string' || !text.trim() || text.length > 4000) throw new Error('Bad Slack request');
+async function postToChannel({ channel, text, pr }) {
+  if (typeof channel !== 'string' || !SLACK_CHANNEL.test(channel) || typeof text !== 'string' || !text.trim() || text.length > 4000 || typeof pr !== 'string' || !/^[\w.-]+\/[\w.-]+#\d+$/.test(pr)) throw new Error('Bad Slack request');
   const to = await channelId(channel);
   if (to.error) throw new Error(to.error);
   const body = await mentions(text, { login: '', emails: [] }, (await readConfig()).slackUsers ?? {});
@@ -313,6 +314,12 @@ async function postToChannel({ channel, text }) {
   if (!r.ok) throw new Error(r.error);
   if (DRY_RUN) return { url: null, dryRun: r.stdout.trim() };
   const sent = parseJson(r.stdout);
+  // Kept with the PR's DM threads (slack-threads.json, as "<pr>:#qa": no GitHub login has a #), shown beside its title.
+  if (sent?.channel_id && sent?.ts) {
+    const threads = await readThreads();
+    threads[`${pr}:#qa`] = { channel: sent.channel_id, ts: sent.ts, name: to.name ?? channel };
+    await saveThreads(threads);
+  }
   slackUrl ??= slackcli(['team', 'info', '--json']).then((x) => (x.ok ? parseJson(x.stdout)?.url ?? null : null));
   const base = await slackUrl;
   return { url: base && sent?.channel_id && sent?.ts ? `${base}archives/${sent.channel_id}/p${String(sent.ts).replace('.', '')}` : null };

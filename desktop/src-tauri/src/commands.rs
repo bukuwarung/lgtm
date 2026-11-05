@@ -335,8 +335,10 @@ fn pr_threads(pr: &str) -> Vec<Value> {
             let (channel, ts) = (t["channel"].as_str()?, t["ts"].as_str()?);
             let login = &k[prefix.len()..];
             // Who it's with: as saved with the thread, else the Slack people mapping (threads from before it was saved).
-            let who = t["user"].as_str().or(users[login].as_str()).and_then(slack_profile).unwrap_or(Value::Null);
-            Some(json!({ "login": login, "url": format!("{base}archives/{channel}/p{}", ts.replace('.', "")), "name": who["name"], "image": who["image"] }))
+            // "#qa": the QA request, in a channel: its name, no one's picture.
+            let who = if login.starts_with('#') { Value::Null } else { t["user"].as_str().or(users[login].as_str()).and_then(slack_profile).unwrap_or(Value::Null) };
+            let name = if who["name"].is_null() { t["name"].clone() } else { who["name"].clone() };
+            Some(json!({ "login": login, "url": format!("{base}archives/{channel}/p{}", ts.replace('.', "")), "name": name, "image": who["image"] }))
         })
         .collect()
 }
@@ -381,11 +383,11 @@ fn channel_id(channel: &str) -> Result<(String, Option<String>), String> {
 
 /// A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
 #[tauri::command]
-pub async fn slack_post(channel: String, text: String) -> Result<Value, String> {
-    if !re(r"^([CG][A-Z0-9]+|#[\w.-]+|https://[\w-]+\.slack\.com/archives/[CG][A-Z0-9]+/?)$").is_match(&channel) || text.trim().is_empty() || text.chars().count() > 4000 {
+pub async fn slack_post(channel: String, text: String, pr: String) -> Result<Value, String> {
+    if !re(r"^([CG][A-Z0-9]+|#[\w.-]+|https://[\w-]+\.slack\.com/archives/[CG][A-Z0-9]+/?)$").is_match(&channel) || text.trim().is_empty() || text.chars().count() > 4000 || !re(PR_REF).is_match(&pr) {
         return Err("Bad Slack request".into());
     }
-    let (id, _) = channel_id(&channel)?;
+    let (id, name) = channel_id(&channel)?;
     let users = config::read("config.json", true)?["slackUsers"].clone();
     let body = mentions(&text, &Recipient { login: String::new(), emails: vec![] }, &users);
     let recipient = format!("--recipient-id={id}");
@@ -401,6 +403,12 @@ pub async fn slack_post(channel: String, text: String) -> Result<Value, String> 
         return Ok(json!({ "url": null, "dryRun": r.stdout.trim() }));
     }
     let sent = parse_json(&r.stdout).unwrap_or(Value::Null);
+    // Kept with the PR's DM threads (slack-threads.json, as "<pr>:#qa": no GitHub login has a #), shown beside its title.
+    if let (Some(ch), Some(ts)) = (sent["channel_id"].as_str(), sent["ts"].as_str()) {
+        let mut threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
+        threads[&format!("{pr}:#qa")] = json!({ "channel": ch, "ts": ts, "name": name.unwrap_or(channel.clone()) });
+        config::write("slack-threads.json", &threads)?;
+    }
     let base = cached(&SLACK_URL, || {
         let r = slackcli(&["team", "info", "--json"], None);
         if r.ok { parse_json(&r.stdout).and_then(|v| v["url"].as_str().map(String::from)) } else { None }

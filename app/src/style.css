@@ -1329,5 +1329,5 @@ fieldset:disabled .set-steps li { cursor: default; opacity: 0.6; }
 /* Ask QA (Settings → Slack): the request, editable, before it's posted */
 dialog.qa-dialog { max-width: min(640px, calc(100vw - 32px)); width: 640px; }
 dialog.qa-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; margin-bottom: 12px; }
-.qa-asked { display: inline-flex; align-items: center; gap: 4px; color: var(--addfg); }
+.bar-qa { color: var(--muted); }
 .demo-bar { display: flex; gap: 6px; justify-content: flex-end; padding: 8px; }

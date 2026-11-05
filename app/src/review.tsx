@@ -121,11 +121,11 @@ type Notice = { text: string; ok: boolean };
 // onReviewed: the review is in and the user chose to move on (with the Slack result, if any, to show next).
 
 // On my own PR (Settings → Slack → "A button to ask QA"): the QA request, filled in from the PR and yours to edit, then
-// posted to the QA channel. Once posted, the button opens it (remembered on this machine).
+// posted to the QA channel. Once posted it's one of the PR's Slack threads (login "#qa"), beside the title, and the
+// button goes.
 let jiraSite: Promise<string | undefined> | undefined;
-function AskQA({ pr, repo, n }: { pr: PR; repo: string; n: number }) {
+function AskQA({ pr, repo, n, onPosted }: { pr: PR; repo: string; n: number; onPosted: () => void }) {
   const [channel] = useStoredValue('qaChannel', QA_CHANNEL);
-  const [posted, setPosted] = useStoredValue(`qaAsked:${repo}#${n}`, '');
   const [text, setText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -144,19 +144,11 @@ function AskQA({ pr, repo, n }: { pr: PR; repo: string; n: number }) {
   const send = () => {
     if (!text?.trim()) return;
     setBusy(true);
-    postSlack(channel, text).then(
-      (r) => (setPosted(r.url ?? 'sent'), close()),
+    postSlack(channel, text, `${repo}#${n}`).then(
+      () => (close(), onPosted()),
       (e) => setErr(e.message),
     ).finally(() => setBusy(false));
   };
-  if (posted && text == null)
-    return posted.startsWith('https://') ? (
-      <a class="button qa-asked" href={posted} target="_blank" rel="noopener" title="Your QA request on Slack">
-        <Octicon name="check" /> QA asked
-      </a>
-    ) : (
-      <span class="qa-asked" title="Your QA request went to Slack"><Octicon name="check" /> QA asked</span>
-    );
   return (
     <>
       <button title={`Post a QA request for this PR to ${channel} on Slack (you see it first)`} onClick={open}>
@@ -1363,19 +1355,25 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             </a>
           </h1>
           <div class="bar-group">
-            {slackThreads.map((t) => (
-              <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this PR`}>
-                {t.image ? <img src={t.image} alt={t.name ?? t.login} /> : <Octicon name="comment" />}
-              </a>
-            ))}
+            {slackThreads.map((t) =>
+              t.login === '#qa' ? (
+                <a class="bar-slack bar-qa" href={t.url} target="_blank" rel="noopener" title={`Your QA request${t.name ? ` in ${t.name}` : ''}, on Slack`}>
+                  <Octicon name="beaker" />
+                </a>
+              ) : (
+                <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this PR`}>
+                  {t.image ? <img src={t.image} alt={t.name ?? t.login} /> : <Octicon name="comment" />}
+                </a>
+              ),
+            )}
             <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
             <button class="claude-btn" title="Ask Claude a question about the whole PR (Claude Code, no session)" onClick={() => dispatchEvent(new Event('lgtm:ask-pr'))}>
-              ✳ Ask
+              <Octicon name="comment-discussion" /> Ask
             </button>
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
-            {mine && qaRequest && <AskQA pr={pr} repo={repo} n={n} />}
+            {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} stillOpen={stillOpen} />
           </div>
@@ -3973,7 +3971,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
   );
 }
 
-// Select code in a file, then "✳ Ask Claude": a question about it, answered by the claude CLI with the file, its diff in this PR and the selection.
+// Select code in a file, then "Ask Claude": a question about it, answered by the claude CLI with the file, its diff in this PR and the selection.
 function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
   const [sel, setSel] = useState<{ path: string; text: string; x: number; y: number } | null>(null);
   const [panel, setPanel] = useState<{ path: string; text: string } | null>(null);
@@ -3994,7 +3992,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
         setSel({ path: file.id.slice(2), text: text.slice(0, 4000), x: Math.min(r.right, innerWidth - 140), y: r.bottom + 4 });
       });
     const away = () => setSel(null);
-    const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setAnswer(null)); // the bar's ✳ Ask
+    const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setAnswer(null)); // the bar's Ask
     addEventListener('lgtm:ask-pr', whole);
     addEventListener('mouseup', up);
     addEventListener('scroll', away, { passive: true });
@@ -4006,7 +4004,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
     setAnswer(null);
     try {
       let prompt: string;
-      if (!panel.path) prompt = prAskPrompt(pr, files, q.trim()); // the whole PR (the bar's ✳ Ask)
+      if (!panel.path) prompt = prAskPrompt(pr, files, q.trim()); // the whole PR (the bar's Ask)
       else {
         const f = files.find((f) => f.filename === panel.path);
         const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
@@ -4028,7 +4026,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => (setPanel({ path: sel.path, text: sel.text }), setSel(null), setQ(''), setAnswer(null))}
         >
-          ✳ Ask Claude
+          <Octicon name="comment-discussion" /> Ask Claude
         </button>
       )}
       {panel && (
