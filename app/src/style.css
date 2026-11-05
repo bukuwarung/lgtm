@@ -1013,7 +1013,7 @@ html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
 .rb2 { color: var(--rb2); }
 /* A narrow file header: the name area clips instead of running over the counts and buttons, the module chip giving
    way first. */
-.file-name { overflow: hidden; }
+.file-name { overflow: hidden; padding: 0 0 3px 3px; margin: 0 0 -3px -3px; } /* room for the icon's test badge, which overhangs it by 3px */
 .file-name .file-mod { flex-shrink: 1; min-width: 0; overflow: hidden; }
 .ticket-wait { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 12px; color: var(--muted); font-size: calc(13px * var(--ts)); }
 .ticket-wait .sk-line { width: 40%; }
