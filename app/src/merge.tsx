@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon } from './tags.tsx';
-import { reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus } from './platform.ts';
+import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -29,7 +29,8 @@ export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) =>
 // confirming. Once merged, the branch and the Jira ticket.
 // open: the PR's unresolved review threads, the ones waiting on my reply first.
 export type OpenThread = { id: string; path: string; awaiting: boolean; bot: boolean };
-export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThreads = [] }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[] }) {
+// qa: the PR's QA request (Ask QA) — its link, and its replies once read — when it has one.
+export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThreads = [], qa }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[]; qa?: { url: string; thread: QaThread | null } }) {
   const [s, setS] = useState<MergeState | null>(null);
   const [err, setErr] = useState('');
   const fail = (text: string) => (setErr(text), reportError(text)); // in the box, and in the bar at the top
@@ -159,6 +160,16 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
           </div>
         );
       })()}
+      {qa && (
+        <div class={`merge-row merge-qa${qa.thread?.status ? ' qa-' + qa.thread.status : ''}`}>
+          <Octicon name="beaker" />{' '}
+          {qa.thread?.status === 'signed' ? 'QA signed off'
+            : qa.thread?.status === 'issue' ? <b>QA raised an issue</b>
+            : qa.thread?.replies.length ? `QA replied, no sign-off yet (${qa.thread.replies.length} repl${qa.thread.replies.length === 1 ? 'y' : 'ies'})`
+            : 'QA asked, no reply yet'}
+          <a href={qa.url} target="_blank" rel="noopener">Open on Slack</a>
+        </div>
+      )}
       {s.autoMergeRequest && (
         <div class="merge-row">
           Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{s.autoMergeRequest.enabledBy ? `, enabled by ${s.autoMergeRequest.enabledBy.login}` : ''}: it merges once requirements are met.

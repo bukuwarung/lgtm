@@ -1394,7 +1394,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
-            {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} />}
+            {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} stillOpen={stillOpen} />
           </div>
         </div>

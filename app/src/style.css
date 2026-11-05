@@ -1340,3 +1340,7 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .claude-pop { left: 0; right: auto; min-width: 280px; }
 .claude-pop > button small { margin-left: auto; }
 .claude-pop > button { white-space: nowrap; }
+.merge-qa { color: var(--muted); }
+.merge-qa.qa-signed { color: var(--addfg); }
+.merge-qa.qa-issue { color: var(--modfg); }
+.merge-qa a { margin-left: auto; }
