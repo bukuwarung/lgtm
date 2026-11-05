@@ -364,15 +364,31 @@ fn mentions(text: &str, r: &Recipient, users: &Value) -> String {
         .into_owned()
 }
 
+/// A #name as its channel (Slack's channel search, exact name): slackcli's own lookup by name pages through every
+/// channel, slower than its time limit. An ID or link as it is. Ok((id, name when known)).
+fn channel_id(channel: &str) -> Result<(String, Option<String>), String> {
+    let Some(name) = channel.strip_prefix('#') else { return Ok((channel.to_string(), None)) };
+    let r = slackcli(&["search", "channels", name, "--json", "--limit", "20"], None);
+    if !r.ok {
+        return Err(r.error);
+    }
+    let found = parse_json(&r.stdout).and_then(|v| v["channels"].as_array().and_then(|cs| cs.iter().find(|c| c["name"].as_str() == Some(name)).cloned()));
+    match found.and_then(|c| c["id"].as_str().map(String::from)) {
+        Some(id) => Ok((id, Some(channel.to_string()))),
+        None => Err(format!("no channel named {channel}")),
+    }
+}
+
 /// A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
 #[tauri::command]
 pub async fn slack_post(channel: String, text: String) -> Result<Value, String> {
     if !re(r"^([CG][A-Z0-9]+|#[\w.-]+|https://[\w-]+\.slack\.com/archives/[CG][A-Z0-9]+/?)$").is_match(&channel) || text.trim().is_empty() || text.chars().count() > 4000 {
         return Err("Bad Slack request".into());
     }
+    let (id, _) = channel_id(&channel)?;
     let users = config::read("config.json", true)?["slackUsers"].clone();
     let body = mentions(&text, &Recipient { login: String::new(), emails: vec![] }, &users);
-    let recipient = format!("--recipient-id={channel}");
+    let recipient = format!("--recipient-id={id}");
     let mut args = vec!["messages", "send", recipient.as_str(), "--message-file", "-", "--json"];
     if dry_run() {
         args.push("--dry-run");
@@ -394,6 +410,32 @@ pub async fn slack_post(channel: String, text: String) -> Result<Value, String> 
         _ => Value::Null,
     };
     Ok(json!({ "url": url }))
+}
+
+/// Does the channel exist (Settings → Slack → QA channel)? A dry run of a message names it; an ID it can't name is read
+/// (one message) to tell. Nothing is sent.
+#[tauri::command]
+pub async fn slack_channel(channel: String) -> Value {
+    if !re(r"^([CG][A-Z0-9]+|#[\w.-]+|https://[\w-]+\.slack\.com/archives/[CG][A-Z0-9]+/?)$").is_match(&channel) {
+        return json!({ "ok": false, "error": "not a channel ID, #name or link" });
+    }
+    let channel = match channel_id(&channel) {
+        Ok((id, Some(name))) => return json!({ "ok": true, "name": name, "id": id }),
+        Ok((id, None)) => id,
+        Err(e) => return json!({ "ok": false, "error": e }),
+    };
+    let recipient = format!("--recipient-id={channel}");
+    let r = slackcli(&["messages", "send", recipient.as_str(), "--message-file", "-", "--json", "--dry-run"], Some("."));
+    if !r.ok {
+        return json!({ "ok": false, "error": r.error });
+    }
+    let target = parse_json(&r.stdout).map(|v| v["target"].clone()).unwrap_or(Value::Null);
+    if let Some(name) = target["name"].as_str() {
+        return json!({ "ok": true, "name": name, "id": target["id"] });
+    }
+    let id = target["id"].as_str().unwrap_or(&channel).to_string();
+    let read = slackcli(&["conversations", "read", &id, "--limit", "1", "--json", "--fields", "ts"], None);
+    if read.ok { json!({ "ok": true, "id": id }) } else { json!({ "ok": false, "error": read.error }) }
 }
 
 #[derive(Deserialize)]

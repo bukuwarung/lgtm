@@ -329,6 +329,15 @@ export async function postSlack(channel: string, text: string): Promise<{ url: s
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;
 }
+// Does a channel exist (nothing is sent)? Its name when Slack gives one.
+export type ChannelCheck = { ok: boolean; name?: string; id?: string; error?: string };
+export async function checkSlackChannel(channel: string): Promise<ChannelCheck> {
+  if (isDesktop) return command<ChannelCheck>('slack_channel', { channel });
+  const res = await fetch(`/slack-channel?c=${encodeURIComponent(channel)}`);
+  const d = await res.json();
+  if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
+  return d;
+}
 export const SLACK_CHANNEL = /^([CG][A-Z0-9]+|#[\w.-]+|https:\/\/[\w-]+\.slack\.com\/archives\/[CG][A-Z0-9]+\/?)$/;
 
 // Last lines of a failed GitHub Actions job's log, fetched by the local server with gh.

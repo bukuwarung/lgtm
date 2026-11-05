@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir, spentThisHour } from './github.ts';
 import { CheckMark, Octicon, Tg } from './tags.tsx';
-import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, SLACK_CHANNEL, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -867,13 +867,28 @@ function JiraAfterMerge() {
 }
 
 // Where Ask QA posts: a channel's ID, #name or link (Slack → the channel → Copy link).
+// Checked on Slack as you type (a moment after you stop): its name when it's there, or why it isn't.
 function QaChannel() {
   const [channel, setChannel] = useStoredValue('qaChannel', QA_CHANNEL);
+  const [check, setCheck] = useState<ChannelCheck | 'checking' | null>(null);
+  useEffect(() => {
+    if (!SLACK_CHANNEL.test(channel)) return setCheck(null);
+    setCheck('checking');
+    let stop = false;
+    const t = setTimeout(() => checkSlackChannel(channel).then((r) => !stop && setCheck(r), (e) => !stop && setCheck({ ok: false, error: e.message })), 600);
+    return () => ((stop = true), clearTimeout(t));
+  }, [channel]);
   return (
     <label class="set-row">
       <span>
         QA channel
-        <small>Its ID, #name or link.{!SLACK_CHANNEL.test(channel) && <b class="warn"> Not a channel ID, #name or link.</b>}</small>
+        <small>
+          Its ID, #name or link.{' '}
+          {!SLACK_CHANNEL.test(channel) ? <b class="warn">Not a channel ID, #name or link.</b>
+            : check === 'checking' ? 'Checking on Slack…'
+            : check?.ok ? <span class="ok"><CheckMark state="success" /> {check.name ?? check.id} exists</span>
+            : check && <b class="warn">Not found on Slack: {check.error}</b>}
+        </small>
       </span>
       <input type="text" value={channel} spellcheck={false} onInput={(e) => setChannel(e.currentTarget.value.trim())} />
       {channel !== QA_CHANNEL && <button class="md-reset" title="Back to #qa-task-requests" onClick={() => setChannel(QA_CHANNEL)}>↺</button>}

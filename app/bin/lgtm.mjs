@@ -292,18 +292,45 @@ async function mentions(text, recipient, users) {
   return text.replace(/<@gh:([A-Za-z0-9-]{1,39}|\*)>/g, (_, who) => found.get(who));
 }
 
+// A #name as its channel (Slack's channel search, exact name): slackcli's own lookup by name pages through every channel,
+// slower than its time limit. An ID or link as it is.
+async function channelId(channel) {
+  if (!channel.startsWith('#')) return { id: channel };
+  const r = await slackcli(['search', 'channels', channel.slice(1), '--json', '--limit', '20']);
+  if (!r.ok) return { error: r.error };
+  const c = parseJson(r.stdout)?.channels?.find((x) => x.name === channel.slice(1));
+  return c ? { id: c.id, name: '#' + c.name } : { error: `no channel named ${channel}` };
+}
+
 // A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
 const SLACK_CHANNEL = /^([CG][A-Z0-9]+|#[\w.-]+|https:\/\/[\w-]+\.slack\.com\/archives\/[CG][A-Z0-9]+\/?)$/;
 async function postToChannel({ channel, text }) {
   if (typeof channel !== 'string' || !SLACK_CHANNEL.test(channel) || typeof text !== 'string' || !text.trim() || text.length > 4000) throw new Error('Bad Slack request');
+  const to = await channelId(channel);
+  if (to.error) throw new Error(to.error);
   const body = await mentions(text, { login: '', emails: [] }, (await readConfig()).slackUsers ?? {});
-  const r = await slackcli(['messages', 'send', `--recipient-id=${channel}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], body);
+  const r = await slackcli(['messages', 'send', `--recipient-id=${to.id}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], body);
   if (!r.ok) throw new Error(r.error);
   if (DRY_RUN) return { url: null, dryRun: r.stdout.trim() };
   const sent = parseJson(r.stdout);
   slackUrl ??= slackcli(['team', 'info', '--json']).then((x) => (x.ok ? parseJson(x.stdout)?.url ?? null : null));
   const base = await slackUrl;
   return { url: base && sent?.channel_id && sent?.ts ? `${base}archives/${sent.channel_id}/p${String(sent.ts).replace('.', '')}` : null };
+}
+
+// Does the channel exist (Settings → Slack → QA channel)? A dry run of a message names it; an ID it can't name is read
+// (one message) to tell. Nothing is sent.
+async function checkChannel(channel) {
+  if (typeof channel !== 'string' || !SLACK_CHANNEL.test(channel)) return { ok: false, error: "not a channel ID, #name or link" };
+  const to = await channelId(channel);
+  if (to.error) return { ok: false, error: to.error };
+  if (to.name) return { ok: true, name: to.name, id: to.id };
+  const r = await slackcli(['messages', 'send', `--recipient-id=${to.id}`, '--message-file', '-', '--json', '--dry-run'], '.');
+  if (!r.ok) return { ok: false, error: r.error };
+  const target = parseJson(r.stdout)?.target;
+  if (target?.name) return { ok: true, name: target.name, id: target.id };
+  const read = await slackcli(['conversations', 'read', target?.id ?? channel, '--limit', '1', '--json', '--fields', 'ts']);
+  return read.ok ? { ok: true, id: target?.id ?? channel } : { ok: false, error: read.error };
 }
 
 async function notify({ recipients, text, thread }) {
@@ -594,7 +621,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/slack-channel', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -643,6 +670,7 @@ const server = createServer(async (req, res) => {
       (e) => json(res, 500, { error: e.message }),
     );
   }
+  if (path === '/slack-channel') return checkChannel(new URL(req.url ?? '/', ORIGIN).searchParams.get('c') ?? '').then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-post' && req.method === 'POST') return readJson(req).then(postToChannel).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack') {
     try {
