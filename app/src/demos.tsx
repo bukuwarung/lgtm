@@ -1284,6 +1284,8 @@ const MACBAR = (on: boolean) => (
   </div>
 );
 Object.assign(DEMOS, { menuBar: { title: 'In the menu bar', off: MACBAR(false), on: MACBAR(true) } } satisfies Record<string, Demo>);
+// A PR waiting for your review, opened: with the index, or without it (the showIndex scenes, the other way round).
+DEMOS.hideIndexToReview = { title: 'A PR waiting for your review, opened', off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
 
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which
 // it's made of.

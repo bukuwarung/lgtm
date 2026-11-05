@@ -555,6 +555,7 @@ function App() {
             key={route}
             repo={r.repo}
             n={r.n}
+            toReview={queueItems ? queueItems.some((i) => i.repo === r.repo && i.number === r.n && needsMyReview(i)) : undefined}
             onOpened={() => noteOpened(r.repo, r.n)}
             onSubmitted={(event?: ReviewEvent) => {
               if (!event) return setQueueVersion((v) => v + 1); // the merge box changed something: reload now
@@ -816,6 +817,8 @@ const backToMe = (i: QueueItem) => !i.requested && !!i.myState && i.myState !== 
 // Back on my plate after I reviewed it: re-requested, or my threads all resolved. Shown as one pill, and the PR-wide
 // verdict is hidden then, since it's usually my own earlier one.
 const reReview = (i: QueueItem) => (i.requested && (!!i.myState || i.reviewedBefore)) || backToMe(i);
+// Waiting for my review: the list's "Needs your review" (the badge counts these).
+const needsMyReview = (i: QueueItem) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft;
 const groupOf = (i: QueueItem): Group =>
   !i.reviewing && i.mentioned ? 'mentioned'
   : i.requested || backToMe(i) ? 'needs'
@@ -1190,7 +1193,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   }, [items]);
   useEffect(() => {
     if (!items || !settled) return;
-    const waiting = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft);
+    const waiting = items.filter(needsMyReview);
     // The badge also counts PRs whose Claude Code session is waiting for you.
     const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length;
     document.title = count ? `(${count}) lgtm` : 'lgtm';

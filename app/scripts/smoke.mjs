@@ -168,10 +168,16 @@ try {
   await step('the PR list shows the PR', () => until('the list', `[...document.querySelectorAll('.pr-item')].some((a) => a.textContent.includes('Retry failed payments'))`));
   await step("the bell drops a closed PR's entry", () => until('the entry gone', `localStorage.getItem('@tester/notices') === '[]'`));
   await step('a PR opens with its diff, docs first', async () => {
-    await evaluate(`location.hash = '/acme/shop/pull/1'`);
+    await evaluate(`localStorage.setItem('hideIndexToReview', '1'); location.hash = '/acme/shop/pull/1'`);
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
     const first = await evaluate(`document.querySelector('[id^="f-"]')?.id`);
     if (first !== 'f-web/docs/retry.md') throw new Error(`files not in reading order: ${first} first`);
+  });
+  await step('waiting for my review, it opens without the index (the switch on); i shows it', async () => {
+    await until('no index', `document.querySelector('.review:not(.skel)')?.classList.contains('no-index')`, 3000);
+    await evaluate(`document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', bubbles: true, cancelable: true }))`);
+    await until('the index', `!document.querySelector('.review:not(.skel)').classList.contains('no-index')`, 2000);
+    await evaluate(`localStorage.removeItem('hideIndexToReview')`);
   });
   await step('a line comment goes into the review', async () => {
     await evaluate(`document.querySelector('[id="f-src/Pay.kt"] tr.ln.a td.num:nth-child(2)').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);

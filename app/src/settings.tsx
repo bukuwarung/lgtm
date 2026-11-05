@@ -419,6 +419,7 @@ export function Settings() {
       <section>
         <h3>Reviewing</h3>
         <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)}  demo />
+        <Flag k="hideIndexToReview" initial={false} label="Hide the index on PRs waiting for your review" hint={`They open with just the diff; ${keys.index ? keyLabel(keys.index) + ' or the index button' : 'the index button'} shows it, on that PR only. Your own PRs and the rest keep it.`} demo />
         <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
         <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation"  demo />
         <Flag k="jiraOnMerge" initial={false} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge."  demo />

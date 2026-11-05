@@ -386,7 +386,8 @@ function pruneVisits() {
 
 // focus: review mode (main.tsx), where the index starts hidden and a review always moves on.
 // practice: review mode's practice run, where finishing a review only moves on (github.ts refuses every write).
-export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focus, practice }: { repo: string; n: number; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null; focus?: boolean; practice?: boolean }) {
+// toReview: the list has it as waiting for my review (undefined until the list is in).
+export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onReviewed, flash, focus, practice }: { repo: string; n: number; toReview?: boolean; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null; focus?: boolean; practice?: boolean }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
@@ -435,7 +436,13 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   const [dimMoved] = useStoredFlag('dimMoved', true);
   const index = useStoredFlag('showIndex', true);
   const focusIndex = useStoredFlag('reviewModeIndex', false);
-  const [showIndex, toggleIndex] = focus ? focusIndex : index;
+  // Settings → "Hide the index on PRs waiting for your review": such a PR opens without it; i (or the button) shows it,
+  // on this PR only. Decided once the PR and I are known (until then, without), so a review sent doesn't bring it back.
+  const [hideToReview] = useStoredFlag('hideIndexToReview', false);
+  const [toReview, setToReview] = useState<boolean | null>(null);
+  const [peek, setPeek] = useState(false);
+  const quiet = !focus && hideToReview && toReview !== false && index[0];
+  const [showIndex, toggleIndex] = focus ? focusIndex : quiet ? ([peek, () => setPeek((p) => !p)] as const) : index;
   const [centered, toggleCentered] = useStoredFlag('centerDiff', false);
   const [split, toggleSplit] = useStoredFlag('splitDiff', false);
   const [fit] = useStoredFlag('centerFit', true);
@@ -475,6 +482,14 @@ export function Review({ repo, n, onOpened, onSubmitted, onReviewed, flash, focu
   useEffect(() => void (data && getBuildRoots(data.headRepo, data.pr.head.sha).then(setRoots, () => setRoots(null))), [rootsAt]);
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
+  // As the list has it ("Needs your review"); opened before the list is in, whether my review is requested.
+  useEffect(() => {
+    if (toReview !== null) return;
+    if (listed !== undefined) return setToReview(listed);
+    if (!data) return;
+    // The signed-in login, known already (not `me`, which waits for the PR's refresh from GitHub).
+    getViewer().then((login) => setToReview(data.pr.user.login !== login && (data.pr.requested_reviewers ?? []).some((u) => u.login === login)), () => setToReview(false));
+  }, [data, listed]);
   const [stale, setStale] = useState<number | null>(null); // showing the copy loaded at this time, while refreshing
   const [early, setEarly] = useState<PR | null>(null); // the PR, before its files (PRSkeleton shows its title)
   const threadCursor = useRef(-1);
