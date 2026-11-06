@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { QueueItem } from './github.ts';
-import { recentPRs } from './platform.ts';
+import { recentPRs, repoLabel } from './platform.ts';
 
 // Go to: a PR in your queue, or within the open PR a file or anything in its index (comments, checks, threads).
 // Index entries are read from the page and clicked, so they jump exactly like the index does.
@@ -11,14 +11,14 @@ function entries(queue: QueueItem[]): Entry[] {
   const recent = recentPRs().filter((r) => `/${r.repo}/pull/${r.n}` !== here).map((r) => ({
     kind: 'Recent',
     label: r.title,
-    sub: `${r.repo}#${r.n} · ${r.author}`,
+    sub: `${repoLabel(r.repo)}#${r.n} · ${r.author}`,
     run: () => (location.hash = `/${r.repo}/pull/${r.n}`),
   }));
   const seen = new Set(recentPRs().map((r) => `${r.repo}#${r.n}`));
   const prs = queue.filter((i) => !seen.has(`${i.repo}#${i.number}`)).map((i) => ({
     kind: 'PR',
     label: i.title,
-    sub: `${i.repo}#${i.number} · ${i.author}`,
+    sub: `${repoLabel(i.repo)}#${i.number} · ${i.author}`,
     run: () => (location.hash = `/${i.repo}/pull/${i.number}`),
   }));
   const index = [...document.querySelectorAll<HTMLElement>('.ix-item')].map((el) => ({
@@ -70,7 +70,7 @@ export function CommandBar({ queue, parse }: { queue: () => QueueItem[]; parse: 
   const shown = !list
     ? []
     : [
-        ...(pr ? [{ kind: 'Open', label: `${pr.repo}#${pr.n}`, sub: 'Pull request from the link', run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
+        ...(pr ? [{ kind: 'Open', label: `${repoLabel(pr.repo)}#${pr.n}`, sub: 'Pull request from the link', run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
         ...(pr ? [] : list.filter((e) => matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50)),
       ];
   const go = (e?: Entry) => {

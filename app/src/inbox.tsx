@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
-import { ago, markReplyDone, readBots, reportError, useStoredFlag } from './platform.ts';
+import { ago, markReplyDone, readBots, reportError, useStoredFlag, repoLabel } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
 import { Tg, Who, Time } from './tags.tsx';
 
@@ -88,7 +88,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
       {open.map(({ item, threads, mention }) => (
         <section key={item.id}>
           <h4>
-            <a href={`#/${item.repo}/pull/${item.number}`}>{item.title}</a> <small>{item.repo.split('/')[1]}#{item.number}</small>
+            <a href={`#/${item.repo}/pull/${item.number}`}>{item.title}</a> <small>{repoLabel(item.repo)}#{item.number}</small>
             {item.mergedAt && <small class="inbox-merged"> · merged <Time at={item.mergedAt} /></small>}
           </h4>
           {mention && (() => {

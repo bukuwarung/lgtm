@@ -1095,6 +1095,14 @@ test('earlierVerdicts: a person\'s replaced verdicts fold under their latest', a
   assert.deepEqual([...got], [['r4', ['r1']]]); // comments, other people and bots untouched
 });
 
+test('repoLabel: the repo name alone, unless two owners have one by that name', async () => {
+  const { knowRepos, repoLabel } = await import('../src/platform.ts');
+  knowRepos(['bukuwarung/bukuwarung-app', 'bukuwarung/lgtm', 'someone/lgtm']);
+  assert.equal(repoLabel('bukuwarung/bukuwarung-app'), 'bukuwarung-app');
+  assert.equal(repoLabel('bukuwarung/lgtm'), 'bukuwarung/lgtm');
+  assert.equal(repoLabel('someone/lgtm'), 'someone/lgtm');
+});
+
 test('merge box: do-not-merge signs, and required checks that never ran', async () => {
   const { holdSigns, neverRan } = await import('../src/github.ts');
   assert.deepEqual(holdSigns('[WIP] Payment retries', ['bug', 'do-not-merge', 'On Hold'], 'wip: halfway'), ['the “do-not-merge” label', 'the “On Hold” label', 'its title', 'the last commit (“wip: halfway”)']);

@@ -30,11 +30,24 @@ export function setAccount(login: string) {
 }
 
 // The page is served by bin/lgtm.mjs on a fixed 127.0.0.1 port, so localStorage persists drafts across runs.
+// "owner/repo" as lgtm shows it: just the repo's name, unless two owners in sight (the PR list, PRs opened lately) have a
+// repo of that name. ponytail: a clash learned after something drew keeps its short name until it draws again.
+const owners = new Map<string, Set<string>>();
+export function knowRepos(full: string[]) {
+  for (const f of full) {
+    const [o, name] = f.split('/');
+    owners.set(name, (owners.get(name) ?? new Set()).add(o));
+  }
+}
+export const repoLabel = (full: string) => ((owners.get(full.split('/')[1])?.size ?? 0) > 1 ? full : full.split('/')[1] ?? full);
+
 // PRs opened lately, newest first, kept across launches (the clock by Back, the start page, ⌘K): the last 30.
 export type RecentPR = { repo: string; n: number; title: string; author: string; state?: 'merged' | 'closed' | 'draft'; at: number };
 export function recentPRs(): RecentPR[] {
   try {
-    return JSON.parse(localStorage.getItem(own('recent')) ?? '[]');
+    const list: RecentPR[] = JSON.parse(localStorage.getItem(own('recent')) ?? '[]');
+    knowRepos(list.map((r) => r.repo));
+    return list;
   } catch {
     return [];
   }

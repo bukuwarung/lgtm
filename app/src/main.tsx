@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -71,7 +71,7 @@ function ReviewLog({ log }: { log: { repo: string; n: number; title: string; how
     <div class="review-log">
       {log.map((l) => (
         <a href={`#/${l.repo}/pull/${l.n}`} class={`rl-${l.how.toLowerCase()}`}>
-          <Tg i={VERB[l.how][0]} t={VERB[l.how][1]} /> <b>{l.title}</b> <small>{l.repo}#{l.n}</small>
+          <Tg i={VERB[l.how][0]} t={VERB[l.how][1]} /> <b>{l.title}</b> <small>{repoLabel(l.repo)}#{l.n}</small>
         </a>
       ))}
       <button class="link" onClick={copy}>{copied ? 'Copied' : 'Copy as text'}</button>
@@ -98,7 +98,7 @@ function StaleBranches() {
       {step === 'confirm' ? (
         <>
           <p>Delete these branches on GitHub? Their PRs are merged.</p>
-          <ul>{list.map((b) => <li><code>{b.headRefName}</code> <small>{b.repo}#{b.number}</small></li>)}</ul>
+          <ul>{list.map((b) => <li><code>{b.headRefName}</code> <small>{repoLabel(b.repo)}#{b.number}</small></li>)}</ul>
           <button class="primary" onClick={go}>Delete {list.length} branch{list.length > 1 ? 'es' : ''}</button> <button onClick={() => setStep('')}>Cancel</button>
         </>
       ) : (
@@ -177,7 +177,7 @@ function BellMenu() {
                     <span class="bell-title">
                       <b>{n.what}</b> · {n.title}
                     </span>
-                    <small>{n.pr.split('/')[1]} · <Time at={n.at} /></small>
+                    <small>{repoLabel(n.pr.split('#')[0])}#{n.pr.split('#')[1]} · <Time at={n.at} /></small>
                   </button>
                   <button class="bell-x" title="Dismiss" aria-label="Dismiss" onClick={() => dropNotices((x) => x.id === n.id)}>
                     <Octicon name="x" />
@@ -243,7 +243,7 @@ function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
       <Octicon name={r.state ? STATE_ICON[r.state] : 'git-pull-request'} class={`recent-${r.state ?? 'open'}`} />
       <span class="recent-title">{r.title}</span>
       <small>
-        {r.repo.split('/')[1]}#{r.n} · <Who login={r.author} /> · <Time at={r.at} />
+        {repoLabel(r.repo)}#{r.n} · <Who login={r.author} /> · <Time at={r.at} />
       </small>
     </a>
   );
@@ -1206,6 +1206,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
       // Drafts showing: also the ones changing files I own, before GitHub asks me (it does once they're ready).
       const owned = showDraftsRef.current ? await getOwnedDrafts([...new Set(queue.map((i) => i.repo))], new Set(queue.map((i) => i.id))).catch(() => []) : [];
       const items = [...queue, ...owned];
+      knowRepos(items.map((i) => i.repo));
       setItems(items);
       // Secondary: the list works without them.
       const [st, est, ms, qa] = await Promise.all([
@@ -1300,7 +1301,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     void setBadge(count); // the app's Dock icon
     const forMe = [...waiting, ...items.filter((i) => !waiting.includes(i) && claudeWaiting(i))];
     // The menu bar: what waits on my review, then my own PRs and where each stands.
-    const row = (i: QueueItem, section: 'needs' | 'mine') => ({ title: `${i.title} · ${i.repo.split('/')[1]}#${i.number}`, route: `/${i.repo}/pull/${i.number}`, section, note: section === 'mine' ? standing(i) : null });
+    const row = (i: QueueItem, section: 'needs' | 'mine') => ({ title: `${i.title} · ${repoLabel(i.repo)}#${i.number}`, route: `/${i.repo}/pull/${i.number}`, section, note: section === 'mine' ? standing(i) : null });
     void setTray(menuBar ? [...forMe.map((i) => row(i, 'needs')), ...items.filter((i) => i.authored).map((i) => row(i, 'mine'))] : null);
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
     // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
@@ -1310,7 +1311,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         addNotice(what, i.title, `${i.repo}#${i.number}`);
         if (!notify || !desktop) return;
         if (what === 'Ready to merge') sessionStorage.setItem('openMerge', `${i.repo}#${i.number}`); // its merge box opens (merge.tsx)
-        void notifyNative(`${what}: ${i.title}`, `${i.repo}#${i.number} by ${i.author}`, `/${i.repo}/pull/${i.number}`);
+        void notifyNative(`${what}: ${i.title}`, `${repoLabel(i.repo)}#${i.number} by ${i.author}`, `/${i.repo}/pull/${i.number}`);
       };
       // The mute or what counts as a bot just switched: replies hidden or shown again by it aren't new.
       const flipped = rulesWas.current !== rules;
@@ -1375,7 +1376,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
       <span class="meta">
         {i.face !== who && <><span class="person-link" onClick={toPerson(i.face)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span> ·{' '}</>}
         {layer && <b class="layer">{layer} </b>}
-        {i.repo}#{i.number} ·{' '}
+        {repoLabel(i.repo)}#{i.number} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>
           active <Time at={i.updatedAt} />
         </span>
