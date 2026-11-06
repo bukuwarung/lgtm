@@ -1311,6 +1311,27 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     }
   };
 
+  // The dependency pill: with the amber findings when a major jump or an unpinned version is marked, else with the info.
+  const depsPill = deps.length > 0 && (
+    <PillMenu cls={deps.some((d) => d.major || d.unpinned) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved to another version (major jumps and versions not pinned marked):">
+      {deps.map((d) => (
+        <div class="pill-row">
+          <button onClick={() => jumpToLine(d.path, d.removed ? undefined : d.line)} title={`${d.path}:${d.line}`}>
+            <b>{d.name}</b>{' '}
+            <small class={d.major ? 'dep-major' : ''}>
+              {d.removed ? `removed${d.from ? ` (was ${d.from})` : ''}` : d.from && d.to ? `${d.from} → ${d.to}${d.major ? ' · major' : ''}` : `added${d.to ? ` ${d.to}` : ''}`}
+              {d.test && ' · for tests'}
+            </small>
+            {d.unpinned && <small class="dep-major">not pinned · {d.unpinned}</small>}
+            {new Set(deps.map((x) => x.path)).size > 1 && <small>{dir(d.path) || 'root'}</small>}
+          </button>
+          {depPage(d) && <a href={depPage(d)} target="_blank" rel="noopener" title="Its page: versions, changelog"><Octicon name="link-external" /></a>}
+          {d.unpinned && <SayIt onClick={() => ctx.suggest(d.path, d.line, `${d.name} isn't pinned (${d.to}, ${d.unpinned}), so the same commit can build with different code tomorrow. Could it be pinned to a release${d.npm && /#/.test(d.to ?? '') ? ', or a commit' : ''}?`)} />}
+          {d.major && !d.unpinned && <SayIt onClick={() => ctx.suggest(d.path, d.line, `${d.name} goes from ${d.from} to ${d.to}, a major version. Have its breaking changes been checked?${depPage(d) ? ` ${depPage(d)}` : ''}`)} />}
+        </div>
+      ))}
+    </PillMenu>
+  );
   return (
     <div class={`review${showIndex ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}`}>
       {/* Always there, so showing and hiding can slide (style.css); hidden, it's out of reach of the keyboard. */}
@@ -1437,19 +1458,21 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 <Tg i={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
               </span>
             )}
-            {unsafe.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="alert" n={unsafe.length} t={`protection${unsafe.length > 1 ? 's' : ''} switched off`} />} head="Safeguards the PR turns off:">
-                {unsafe.map((x) => (
-                  <div class="pill-row">
-                    <button onClick={() => jumpToLine(x.path, x.line)} title={`${x.path}: ${x.why}`}>
-                      <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
-                      <small>{x.why}</small>
-                    </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `${x.what}: ${x.why.charAt(0).toLowerCase() + x.why.slice(1)} Is that meant for this build? If it's only for debugging, could it go in a debug-only config instead?`)} />
-                  </div>
+            {/* What needs you, or blocks the merge */}
+            {waitingOnMe > 0 && <span class="pill p-reply"><Tg i="reply" n={waitingOnMe} t="awaiting your reply" /></span>}
+            {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad"><Tg i="conflict" t="conflicts" /></span>}
+            {failingChecks > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="ci" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
+                {checks!.filter((c) => c.state === 'failure').map((c) => (
+                  <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary}>
+                    <CheckMark state="failure" /> {c.name}
+                    {c.summary && <small>{c.summary}</small>}
+                    <OnBase c={c} branch={pr.base.ref} />
+                  </a>
                 ))}
               </PillMenu>
             )}
+            {/* Red findings */}
             {secrets.list.length > 0 && (
               <PillMenu cls="p-bad" label={<Tg i="key" n={secrets.list.length} t={`possible secret${secrets.list.length > 1 ? 's' : ''}`} />} head="Added lines that look like a secret (a key, a token, a password in the code):">
                 {secrets.list.map((x) => (
@@ -1462,14 +1485,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
-            {texts.list.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="text" n={texts.list.length} t={`text${texts.list.length > 1 ? 's' : ''} not in strings.xml`} />} head="Text people see, written in the code instead of strings.xml, so never translated:">
-                {texts.list.map((x) => (
+            {unsafe.length > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="alert" n={unsafe.length} t={`protection${unsafe.length > 1 ? 's' : ''} switched off`} />} head="Safeguards the PR turns off:">
+                {unsafe.map((x) => (
                   <div class="pill-row">
-                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
-                      <b>“{x.text}”</b> <small>{base(x.path)}:{x.line}</small>
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={`${x.path}: ${x.why}`}>
+                      <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
+                      <small>{x.why}</small>
                     </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `“${x.text}” is written in the code, so it won't be translated. Could it go in strings.xml?`)} />
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `${x.what}: ${x.why.charAt(0).toLowerCase() + x.why.slice(1)} Is that meant for this build? If it's only for debugging, could it go in a debug-only config instead?`)} />
                   </div>
                 ))}
               </PillMenu>
@@ -1490,18 +1514,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                             : `This version is older than ${m.newest}, already on the base branch: where that one has run, Flyway refuses this one (unless outOfOrder is on). Could it take a newer version?`)
                       }
                     />
-                  </div>
-                ))}
-              </PillMenu>
-            )}
-            {backend.ent.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="alert" t="entity changed, no migration" />} head="These change a JPA entity's columns, and this PR adds no migration: the database won't have them (unless something else creates them).">
-                {backend.ent.map((x) => (
-                  <div class="pill-row">
-                    <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
-                      <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
-                    </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table's columns, but the PR adds no migration. Where does the database get the change?`, x.side)} />
                   </div>
                 ))}
               </PillMenu>
@@ -1530,18 +1542,19 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
-            {html.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="alert" n={html.length} t="raw HTML" />} head="HTML put in as is: safe only if none of it comes from users (else it's an XSS hole):">
-                {html.map((x) => (
+            {room.length > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="alert" t="table changed, database version not raised" />} head="These change a Room table's columns, but no @Database version is raised in this PR: installed apps keep the old table and crash when they update, until the version goes up (with a migration).">
+                {room.map((x) => (
                   <div class="pill-row">
-                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
-                      <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
+                    <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
+                      <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
                     </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `${x.what} puts this HTML in as is. Can any of it come from a user? If so it needs sanitizing (DOMPurify or the like), or rendering as text.`)} />
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table, but the database version isn't raised in this PR. Installed apps would keep the old table, and Room would crash on update: could the @Database version go up, with a migration?`, x.side)} />
                   </div>
                 ))}
               </PillMenu>
             )}
+            {/* Amber findings */}
             {supp.length > 0 && (
               <PillMenu
                 cls={supp.some((x) => x.test || x.ci) ? 'p-warn' : ''}
@@ -1558,63 +1571,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
-            {txs.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="alert" n={txs.length} t="@Transactional on a private method" />} head="Spring's proxy never sees a call to a private method, so it runs without a transaction:">
-                {txs.map((x) => (
-                  <div class="pill-row">
-                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
-                      <b>{base(x.path)}</b> <small>line {x.line}</small>
-                    </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, "@Transactional does nothing on a private method: Spring's proxy never sees the call, so this runs without a transaction. Could it be public, or the transaction start in the caller?")} />
-                  </div>
-                ))}
-              </PillMenu>
-            )}
-            {room.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="alert" t="table changed, database version not raised" />} head="These change a Room table's columns, but no @Database version is raised in this PR: installed apps keep the old table and crash when they update, until the version goes up (with a migration).">
-                {room.map((x) => (
-                  <div class="pill-row">
-                    <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
-                      <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
-                    </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table, but the database version isn't raised in this PR. Installed apps would keep the old table, and Room would crash on update: could the @Database version go up, with a migration?`, x.side)} />
-                  </div>
-                ))}
-              </PillMenu>
-            )}
-            {deps.length > 0 && (
-              <PillMenu cls={deps.some((d) => d.major || d.unpinned) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved to another version (major jumps and versions not pinned marked):">
-                {deps.map((d) => (
-                  <div class="pill-row">
-                    <button onClick={() => jumpToLine(d.path, d.removed ? undefined : d.line)} title={`${d.path}:${d.line}`}>
-                      <b>{d.name}</b>{' '}
-                      <small class={d.major ? 'dep-major' : ''}>
-                        {d.removed ? `removed${d.from ? ` (was ${d.from})` : ''}` : d.from && d.to ? `${d.from} → ${d.to}${d.major ? ' · major' : ''}` : `added${d.to ? ` ${d.to}` : ''}`}
-                        {d.test && ' · for tests'}
-                      </small>
-                      {d.unpinned && <small class="dep-major">not pinned · {d.unpinned}</small>}
-                      {new Set(deps.map((x) => x.path)).size > 1 && <small>{dir(d.path) || 'root'}</small>}
-                    </button>
-                    {depPage(d) && <a href={depPage(d)} target="_blank" rel="noopener" title="Its page: versions, changelog"><Octicon name="link-external" /></a>}
-                    {d.unpinned && <SayIt onClick={() => ctx.suggest(d.path, d.line, `${d.name} isn't pinned (${d.to}, ${d.unpinned}), so the same commit can build with different code tomorrow. Could it be pinned to a release${d.npm && /#/.test(d.to ?? '') ? ', or a commit' : ''}?`)} />}
-                    {d.major && !d.unpinned && <SayIt onClick={() => ctx.suggest(d.path, d.line, `${d.name} goes from ${d.from} to ${d.to}, a major version. Have its breaking changes been checked?${depPage(d) ? ` ${depPage(d)}` : ''}`)} />}
-                  </div>
-                ))}
-              </PillMenu>
-            )}
-            {failingChecks > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="ci" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
-                {checks!.filter((c) => c.state === 'failure').map((c) => (
-                  <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary}>
-                    <CheckMark state="failure" /> {c.name}
-                    {c.summary && <small>{c.summary}</small>}
-                    <OnBase c={c} branch={pr.base.ref} />
-                  </a>
-                ))}
-              </PillMenu>
-            )}
-            {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad"><Tg i="conflict" t="conflicts" /></span>}
-            {waitingOnMe > 0 && <span class="pill p-reply"><Tg i="reply" n={waitingOnMe} t="awaiting your reply" /></span>}
             {goneTests.length > 0 && (
               <PillMenu cls="p-warn" label={<Tg i="removed" n={goneTests.length} t={`test file${goneTests.length > 1 ? 's' : ''} deleted`} />} head="Tests this PR deletes (not moved or renamed):">
                 {goneTests.map((p) => (
@@ -1633,7 +1589,64 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
+            {backend.ent.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="alert" t="entity changed, no migration" />} head="These change a JPA entity's columns, and this PR adds no migration: the database won't have them (unless something else creates them).">
+                {backend.ent.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
+                      <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table's columns, but the PR adds no migration. Where does the database get the change?`, x.side)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {texts.list.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="text" n={texts.list.length} t={`text${texts.list.length > 1 ? 's' : ''} not in strings.xml`} />} head="Text people see, written in the code instead of strings.xml, so never translated:">
+                {texts.list.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>“{x.text}”</b> <small>{base(x.path)}:{x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `“${x.text}” is written in the code, so it won't be translated. Could it go in strings.xml?`)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {html.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="alert" n={html.length} t="raw HTML" />} head="HTML put in as is: safe only if none of it comes from users (else it's an XSS hole):">
+                {html.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `${x.what} puts this HTML in as is. Can any of it come from a user? If so it needs sanitizing (DOMPurify or the like), or rendering as text.`)} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {txs.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="alert" n={txs.length} t="@Transactional on a private method" />} head="Spring's proxy never sees a call to a private method, so it runs without a transaction:">
+                {txs.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
+                      <b>{base(x.path)}</b> <small>line {x.line}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, "@Transactional does nothing on a private method: Spring's proxy never sees the call, so this runs without a transaction. Could it be public, or the transaction start in the caller?")} />
+                  </div>
+                ))}
+              </PillMenu>
+            )}
+            {deps.some((d) => d.major || d.unpinned) && depsPill}
+            {/* Info */}
+            {!deps.some((d) => d.major || d.unpinned) && depsPill}
             <ModulesPill modules={view !== 'none' ? shownModules : undefined} />
+            {pr.additions != null && (
+              <span class="pill p-size">
+                <b class="a">+{pr.additions}</b> <b class="d">−{pr.deletions}</b> · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
+              </span>
+            )}
+            {/* View */}
             {ignoreWs && (
               <button
                 class="pill"
@@ -1657,11 +1670,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   </button>
                 ))}
               </PillMenu>
-            )}
-            {pr.additions != null && (
-              <span class="pill p-size">
-                <b class="a">+{pr.additions}</b> <b class="d">−{pr.deletions}</b> · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
-              </span>
             )}
           </div>
           {notice && (
