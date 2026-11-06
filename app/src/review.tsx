@@ -1371,6 +1371,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             <Octicon name={centered ? 'screen-full' : 'screen-normal'} />
           </button>
           {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
+          {(pr.merged || pr.state === 'closed' || pr.draft) && (
+            <span class={`state-chip ${pr.merged ? 'merged' : pr.state === 'closed' ? 'closed' : 'draft'}`} title={pr.merged ? `Merged${pr.merged_by ? ` by @${pr.merged_by.login}` : ''} into ${pr.base.ref}${pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}` : pr.state === 'closed' ? `Closed without merging${pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}` : 'A draft: not ready for review yet'}>
+              <Octicon name={pr.merged ? 'git-merge' : pr.state === 'closed' ? 'git-pull-request-closed' : 'git-pull-request-draft'} />
+              {pr.merged ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Draft'}
+            </span>
+          )}
           <h1>
             <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on GitHub`}>
               <span class="pr-num">#{n}</span> {pr.title}
