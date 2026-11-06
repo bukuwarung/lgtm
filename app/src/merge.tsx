@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who } from './tags.tsx';
+import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
@@ -74,7 +75,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
   // The bar's button and its panel.
   const bar = (label: preact.ComponentChildren, cls: string, title: string, body: preact.ComponentChildren, onOpen?: () => void) => (
     <div class="submit merge-bar">
-      <button class={cls} title={title} aria-expanded={shown} onClick={() => (!shown && onOpen?.(), setShown(!shown))}>{label} <span class="caret" aria-hidden="true" /></button>
+      <button class={cls} title={`${title}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').merge)}`} aria-expanded={shown} onClick={() => (!shown && onOpen?.(), setShown(!shown))}>{label} <span class="caret" aria-hidden="true" /></button>
       {shown && body}
     </div>
   );

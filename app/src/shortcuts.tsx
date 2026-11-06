@@ -287,6 +287,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
 
 type IndexProps = {
   repo: string;
+  hidden?: { label: string; show: () => void }[]; // files waiting behind a row in the diff (generated, archived…)
   pr: PR;
   conversation: ConversationItem[];
   threads: Thread[];
@@ -314,7 +315,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -345,7 +346,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
     return (
       <Entry
         key={t.id}
-        label={<><Octicon name={waiting ? 'comment' : 'file'} /> {`${base(t.path)}${t.line ? ':' + t.line : ''}`}</>}
+        label={<><Octicon name={waiting ? 'comment' : 'file'} /> <FileName path={t.path} />{t.line ? ':' + t.line : ''}</>}
         meta={(() => {
           const rest = [waiting && 'awaiting your reply', inGroup !== 'resolved' && t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ');
           const who = inGroup !== 'bot' && first?.author?.login !== me && first?.author; // a thread I started: no name
@@ -359,6 +360,30 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
     );
   };
   useEffect(() => void reviewersShown(), []);
+  // The file you're reading, marked in the files' list and kept in sight in the index as you scroll.
+  useEffect(() => {
+    let raf = 0;
+    const mark = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const at = [...document.querySelectorAll<HTMLElement>('main section.file[id^="f-"]')].find((s) => s.getBoundingClientRect().bottom > 120)?.id.slice(2);
+        const row = at ? document.querySelector<HTMLElement>(`.index .tree-file[title="${CSS.escape(at)}"]`)?.closest<HTMLElement>('.tree-row') : null;
+        const was = document.querySelector('.index .tree-row.cur');
+        if (row === was) return;
+        was?.classList.remove('cur');
+        if (!row) return;
+        row.classList.add('cur');
+        let box = row.parentElement;
+        while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+        if (!box) return;
+        const r = row.getBoundingClientRect(), b = box.getBoundingClientRect();
+        if (r.top < b.top + 40 || r.bottom > b.bottom - 8) box.scrollTop += r.top - b.top - b.height / 3;
+      });
+    };
+    addEventListener('scroll', mark, { passive: true });
+    mark();
+    return () => (removeEventListener('scroll', mark), cancelAnimationFrame(raf));
+  }, [files]);
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
   // Who's reviewing: each person's latest verdict, "waiting" for ones asked who haven't answered (again).
   const reviewers = new Map<string, { meta: string; icon: string; tone: string; id?: string }>();
@@ -412,7 +437,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
             {drafts.map((d) => (
               <Entry
                 key={d.id}
-                label={<><Octicon name="file" /> {`${base(d.path)}${d.line ? ':' + d.line : ''}`}</>}
+                label={<><Octicon name="file" /> <FileName path={d.path} />{d.line ? ':' + d.line : ''}</>}
                 meta="pending"
                 sub={oneLine(d.body)}
                 inline
@@ -518,6 +543,11 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
         ) : (
           <FileTree files={files} counts={counts} viewed={viewed} onViewed={onViewed} />
         )}
+        {hidden.map((h) => (
+          <button class="ix-item dim ix-hidden-row" onClick={() => h.show()} title="Shown in the diff when you open them">
+            {h.label} hidden · show
+          </button>
+        ))}
       </Section>
     </div>
   );
@@ -662,6 +692,22 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
   );
 }
 
+// A file's name as shown (files.ts fileLabel), cut in the middle when too long: the first folder and the folder and name
+// at its end stay, what's between gives way first ("2026-09-22-buku-…/payment-out-idempotency/spec.md"). Its path on hover.
+export function FileName({ path }: { path: string }) {
+  const segs = fileLabel(path).split('/');
+  const leaf = segs.pop()!;
+  if (!segs.length) return <span class="fname" title={path}>{leaf}</span>;
+  const head = segs[0] + '/', mid = segs.slice(1, -1).map((s) => s + '/').join(''), tail = (segs.length > 1 ? segs.at(-1) + '/' : '') + leaf;
+  return (
+    <span class="fname" title={path}>
+      <span class="fn-head">{head}</span>
+      {mid && <span class="fn-mid">{mid}</span>}
+      <span class="fn-tail">{tail}</span>
+    </span>
+  );
+}
+
 // A file's row: a click goes to it. `folder`: its folder after the name, faint (a list by step has no tree to show it).
 function FileRow({ f, depth, counts, viewed, onViewed, folder }: { f: File; depth: number; counts: Counts; viewed: Set<string>; onViewed: OnViewed; folder?: boolean }) {
   const c = counts(f.filename);
@@ -671,7 +717,7 @@ function FileRow({ f, depth, counts, viewed, onViewed, folder }: { f: File; dept
       <button class="tree-file" style={{ paddingLeft: `${8 + depth * 14}px` }} title={f.filename} onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}>
         <FileIcon path={f.filename} status={f.status} untested={f.untested} />
         <span class="tree-name">
-          {fileLabel(f.filename)}
+          {folder ? <FileName path={f.filename} /> : f.filename.slice(f.filename.lastIndexOf('/') + 1)}
           {folder && dir.length > 0 && <small class="tree-folder"> {dir.length > 2 ? '…/' + dir.slice(-2).join('/') : dir.join('/')}</small>}
         </span>
         {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}

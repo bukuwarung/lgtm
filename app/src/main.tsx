@@ -21,7 +21,7 @@ import { DemoPage } from './demos.tsx';
 import { CODE_SIZE, TEXT_SIZE, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
-import { keyLabel, useBindings, type Action } from './keys.ts';
+import { hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { movePending } from './merge.tsx';
 
 // A link to a GitHub PR in what people wrote (descriptions, comments, threads, Jira tickets, Slack previews) opens it
@@ -630,7 +630,7 @@ function App() {
         )}
         <button
           class="help-btn"
-          title="Keyboard shortcuts (?)"
+          title={`Keyboard shortcuts${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').help)}`}
           aria-label="Keyboard shortcuts"
           onClick={() => (r ? dispatchEvent(new Event('lgtm:help')) : ((location.hash = '/settings'), jumpTo('set-keyboard-shortcuts')))}
         >

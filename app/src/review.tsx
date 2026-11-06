@@ -39,7 +39,7 @@ import { toPerson } from './person.tsx';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
-import { OnBase, below, jumpTo, noteJump, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File } from './shortcuts.tsx';
+import { OnBase, below, jumpTo, noteJump, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File, FileName } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -630,7 +630,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         setSaved(stored ?? { sha: d.pr.head.sha, drafts: [] });
         setData({ pr: d.pr, headRepo, files: prepare(d.files, rules), rules });
         knowJiraKeys([d.pr.title, d.pr.head.ref]);
-        knowFiles(d.files.map((f) => f.filename));
         rememberPR({ repo, n, title: d.pr.title, author: d.pr.user.login, state: d.pr.merged ? 'merged' : d.pr.state === 'closed' ? 'closed' : d.pr.draft ? 'draft' : undefined });
       };
       if (first)
@@ -1209,6 +1208,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const rank = readingOrder ? new Map(steps.flatMap((s) => s.paths).map((p, i) => [p, i])) : null;
   const inOrder = rank ? [...visible].sort((a, b) => rank.get(a.filename)! - rank.get(b.filename)!) : visible;
   const shown = [...inOrder, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : []), ...(showArchived ? archived : [])];
+  knowFiles(shown.map((f) => f.filename)); // names unique among the files on show (files.ts fileLabel), before they draw
+  // What waits behind a row, for the index to say so too.
+  const hiddenRows = [
+    [generated.length && !genOpen, `${generated.length} generated file${generated.length > 1 ? 's' : ''}`, () => setShowGenerated(true)],
+    [noDiff.length && !noDiffOpen, `${noDiff.length} file${noDiff.length > 1 ? 's' : ''} with no content change`, () => setShowNoDiff(true)],
+    [wsOnly.length && !showWsOnly, `${wsOnly.length} whitespace-only`, () => setShowWsOnly(true)],
+    [importOnly.length && !showImportsOnly, `${importOnly.length} imports-only`, () => setShowImportsOnly(true)],
+    [archived.length && !showArchived, `${archived.length} archived spec${archived.length > 1 ? 's' : ''}`, () => setShowArchived(true)],
+  ].filter(([on]) => on).map(([, label, show]) => ({ label: label as string, show: show as () => void }));
   // Centred, a changed line too wide for it: the PR fills the window instead (Settings → Diff); tabs count as 4.
   const tooWide = centered && (split || (fit && visible.some((f) => f.patch?.split('\n').some((l) => l[0] !== '@' && l.length > Number(cols) + 1 && l.replace(/\t/g, '    ').length > Number(cols) + 1))));
   // Modules as the files on show have them (not the ones waiting behind a row).
@@ -1373,6 +1381,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <aside class={showIndex ? 'side tree' : 'side tree collapsed'} aria-hidden={!showIndex}>
           <div class="side-scroll">
             <ShortcutIndex
+              hidden={hiddenRows}
               repo={repo}
               pr={pr}
               conversation={conv}
@@ -1417,7 +1426,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       <div>
         {/* Where you are (index, stack), what it is, who it's with, then what you can do. */}
         <div class="bar">
-          <button class="bar-index" title={showIndex ? 'Hide the PR index' : 'Show the PR index'} aria-label={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
+          <button class="bar-index" title={`${showIndex ? 'Hide the PR index' : 'Show the PR index'}${hint(bindings.index)}`} aria-label={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
             <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
           </button>
           <button class="bar-index" title={split ? 'One column: removed lines above added ones' : 'Side by side: old and new next to each other'} aria-label="Side by side" aria-pressed={split} onClick={toggleSplit}>
@@ -1684,7 +1693,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {ignoreWs && (
               <button
                 class="pill"
-                title={`Whitespace-only changes are hidden: ${wsOnlySet.size} file${wsOnlySet.size === 1 ? '' : 's'} and ${wsFolded} section${wsFolded === 1 ? '' : 's'} in others. Click to show them (w)`}
+                title={`Whitespace-only changes are hidden: ${wsOnlySet.size} file${wsOnlySet.size === 1 ? '' : 's'} and ${wsFolded} section${wsFolded === 1 ? '' : 's'} in others. Click to show them${hint(bindings.whitespace)}`}
                 onClick={toggleWs}
               >
                 <Tg i="ws" t="whitespace ignored" />
@@ -1991,7 +2000,7 @@ function OpenInEditor({ headRepo, sha, path, line }: { headRepo: string; sha: st
   return (
     <button
       class="icon-btn"
-      title={`Open on github.dev, at the PR's commit${line ? `, line ${line}` : ''} (.)`}
+      title={`Open on github.dev, at the PR's commit${line ? `, line ${line}` : ''}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').githubDev)}`}
       onClick={() => openExternal(githubDev(headRepo, sha, path, line))}
     >
       <Octicon name="link-external" />
@@ -2197,7 +2206,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           <FileIcon path={path} big untested={ctx.untested.has(file.filename)} />
           <b>
             {file.previous_filename && leaf(file.previous_filename) !== leaf(path) && <>{leaf(file.previous_filename)} → </>}
-            {base(path)}
+            <FileName path={path} />
           </b>
           {mod && (
             <span class="file-mod" title={mod === '.' ? 'The root project' : `Module ${moduleName(mod)}, in ${mod}/`}>
@@ -3573,7 +3582,7 @@ function DocCodeJump({ files }: { files: File[] }) {
   }, [both, files.length]);
   if (!at) return null;
   return (
-    <button class="doc-code-jump" title="Jump between the specs and the code (g)" onClick={() => dispatchEvent(new Event('lgtm:doc-code'))}>
+    <button class="doc-code-jump" title={`Jump between the specs and the code${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').docCode)}`} onClick={() => dispatchEvent(new Event('lgtm:doc-code'))}>
       {at.doc ? 'Code' : 'Specs'} {at.up ? '↑' : '↓'}
     </button>
   );
@@ -4067,7 +4076,7 @@ function ReviewThreads({ review, threads, reveal }: { review: ConversationItem; 
           href={c.url}
           onClick={(e) => (e.preventDefault(), document.getElementById('t-' + t.id) || reveal(), jumpTo('t-' + t.id, 'f-' + t.path))}
         >
-          <Octicon name="file" /> <b>{fileLabel(t.path)}{t.line ?? t.originalLine ? `:${t.line ?? t.originalLine}` : ''}</b>
+          <Octicon name="file" /> <b><FileName path={t.path} />{t.line ?? t.originalLine ? `:${t.line ?? t.originalLine}` : ''}</b>
           <span class="review-thread-text">{c.bodyText.replace(/\s+/g, ' ').trim()}</span>
           {(t.isResolved || t.isOutdated) && <small>{t.isResolved ? 'resolved' : 'outdated'}</small>}
         </a>

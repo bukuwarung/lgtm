@@ -541,6 +541,13 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 code.copyable { cursor: copy; }
 code.copyable:hover { outline: 1px solid var(--border); }
 code.copyable.copied { color: var(--addfg); }
+.fname { display: inline-flex; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
+.fn-head, .fn-mid { overflow: hidden; text-overflow: ellipsis; }
+.fn-head { flex-shrink: 1; min-width: 5ch; }
+.fn-mid { flex-shrink: 1000; min-width: 1ch; }
+.fn-tail { flex-shrink: 0; }
+.tree-row.cur > .tree-file { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+.ix-hidden-row { font-style: italic; }
 .bots-hidden { border-top: 1px solid var(--border); }
 .bots-hidden > summary { padding: 8px 0; color: var(--muted); font-size: calc(13px * var(--ts)); cursor: pointer; }
 .bots-hidden > summary:hover { color: var(--fg); }
