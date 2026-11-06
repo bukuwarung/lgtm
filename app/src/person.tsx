@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem } from './github.ts';
 import { ago, usePresence } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
-import { Tg, Who } from './tags.tsx';
+import { Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
 
 // Someone's page (#/person/<login>), from their picture or name anywhere: their open PRs, the PRs waiting on their
@@ -32,7 +32,7 @@ function Row({ i, waiting }: { i: QueueItem; waiting?: boolean }) {
       </span>
       <b>{i.title}</b>
       <small>
-        {i.repo}#{i.number}{waiting ? <> · <Who login={i.author} /> · waiting {ago(i.waitingSince).replace(/ ago$/, '')}</> : ` · active ${ago(i.updatedAt)}`}
+        {i.repo}#{i.number}{waiting ? <> · <Who login={i.author} /> · waiting {ago(i.waitingSince).replace(/ ago$/, '')}</> : <> · active <Time at={i.updatedAt} /></>}
       </small>
     </a>
   );
@@ -85,7 +85,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
             <a class="history-row" href={`#/${r.repo}/pull/${r.number}`}>
               <span class={`ix-meta v-${r.state}`}><Tg i={VERDICT[r.state][0]} t={VERDICT[r.state][1]} /></span>
               <b>{r.title}</b>
-              <small>{r.repo}#{r.number} · <Who login={r.author} />{r.waited != null ? ` · ${hours(r.waited)} after being asked` : ''} · {ago(r.at)}</small>
+              <small>{r.repo}#{r.number} · <Who login={r.author} />{r.waited != null ? ` · ${hours(r.waited)} after being asked` : ''} · <Time at={r.at} /></small>
             </a>
           ))
         ) : (

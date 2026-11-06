@@ -5,7 +5,7 @@ import { closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, d
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
-import { CheckMark, DECISION, Octicon, Tg, Who } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -22,6 +22,20 @@ import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 import { keyLabel, useBindings, type Action } from './keys.ts';
 import { movePending } from './merge.tsx';
+
+// A link to a GitHub PR in what people wrote (descriptions, comments, threads, Jira tickets, Slack previews) opens it
+// here; ⌘- or Ctrl-click still goes to GitHub. Registered before the app's "web links open in the browser" (initDesktop).
+addEventListener(
+  'click',
+  (e) => {
+    const a = (e.target as Element | null)?.closest?.('.md a[href], .slack-preview a[href]') as HTMLAnchorElement | null;
+    const m = a?.href.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/);
+    if (!m || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.defaultPrevented) return;
+    e.preventDefault();
+    location.hash = `/${m[1]}/pull/${m[2]}`;
+  },
+  true,
+);
 
 // Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
 export function parseRoute(s: string) {
@@ -160,7 +174,7 @@ function BellMenu() {
                     <span class="bell-title">
                       <b>{n.what}</b> · {n.title}
                     </span>
-                    <small>{n.pr.split('/')[1]} · {ago(new Date(n.at).toISOString())}</small>
+                    <small>{n.pr.split('/')[1]} · <Time at={n.at} /></small>
                   </button>
                   <button class="bell-x" title="Dismiss" aria-label="Dismiss" onClick={() => dropNotices((x) => x.id === n.id)}>
                     <Octicon name="x" />
@@ -226,7 +240,7 @@ function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
       <Octicon name={r.state ? STATE_ICON[r.state] : 'git-pull-request'} class={`recent-${r.state ?? 'open'}`} />
       <span class="recent-title">{r.title}</span>
       <small>
-        {r.repo.split('/')[1]}#{r.n} · <Who login={r.author} /> · {ago(new Date(r.at).toISOString())}
+        {r.repo.split('/')[1]}#{r.n} · <Who login={r.author} /> · <Time at={r.at} />
       </small>
     </a>
   );
@@ -1357,7 +1371,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         {layer && <b class="layer">{layer} </b>}
         {i.repo}#{i.number} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>
-          active {ago(i.updatedAt)}
+          active <Time at={i.updatedAt} />
         </span>
       </span>
       <span class="pills">

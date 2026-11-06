@@ -23,7 +23,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { CheckMark, DECISION, Octicon, Tg, Who } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -1440,11 +1440,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <main>
           {pr.merged ? (
             <p class="pr-state merged">
-              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <code>{pr.base.ref}</code>{pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}. A review now can only comment.</span>
+              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <code>{pr.base.ref}</code>{pr.merged_at && <> <Time at={pr.merged_at} /></>}. A review now can only comment.</span>
             </p>
           ) : pr.state === 'closed' ? (
             <p class="pr-state closed">
-              <Octicon name="git-pull-request-closed" size={16} /> <span><b>Closed without merging</b>{pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}. A review now can only comment.</span>
+              <Octicon name="git-pull-request-closed" size={16} /> <span><b>Closed without merging</b>{pr.closed_at && <> <Time at={pr.closed_at} /></>}. A review now can only comment.</span>
             </p>
           ) : pr.draft ? (
             <p class="pr-state draft">
@@ -1661,12 +1661,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <PillMenu label={<Tg i="history" t="changes since…" />} head="Show only what changed after:">
                 {lastReviewed && (
                   <button onClick={() => showSince(null)}>
-                    <b>Your last review</b> <small>{ago(lastReviewAt)}</small>
+                    <b>Your last review</b> <small><Time at={lastReviewAt} /></small>
                   </button>
                 )}
                 {points.filter((p) => p.sha !== pr.head.sha).map((p) => (
                   <button onClick={() => showSince(p.sha)} title={p.sha}>
-                    <Octicon name={p.force ? 'repo-push' : 'git-commit'} /> <b>{p.label}</b> <small>{ago(p.at)}</small>
+                    <Octicon name={p.force ? 'repo-push' : 'git-commit'} /> <b>{p.label}</b> <small><Time at={p.at} /></small>
                   </button>
                 ))}
               </PillMenu>
@@ -3736,7 +3736,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId}>
-          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost')}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.createdAt).toLocaleString()}</time></a> <CopyLink url={c.url} />
+          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost')}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
           {c.state === 'PENDING' && c.id ? (
@@ -4399,7 +4399,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         const head = (
           <>
             <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
-            <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
+            <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
             {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
           </>
         );
@@ -4420,7 +4420,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
                 <details class="earlier-verdict" key={id} id={'cv-' + id}>
                   <summary>
                     Earlier: <span class={'rstate r-' + e.state}><Tg i={STATE_ICON[e.state!] ?? ''} t={STATE_LABEL[e.state!] ?? e.state} /></span>{' '}
-                    <time>{new Date(e.at).toLocaleString()}</time>
+                    <Time at={e.at} />
                     {n > 0 && ` · ${n} comment${n === 1 ? '' : 's'} on the code`}
                   </summary>
                   {e.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: e.html }} />}
@@ -4440,7 +4440,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             <details class="comment bot" key={c.id} id={'cv-' + c.id}>
               <summary>
                 <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author)}>{c.author}</b>{' '}
-                <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
+                <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
                 {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}{' '}
                 <span class="bot-excerpt">{botExcerpt(c.html)}</span>
               </summary>

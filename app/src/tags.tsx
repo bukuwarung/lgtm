@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 
 import { OCTICONS } from './octicons.ts';
+import { ago, useStoredFlag } from './platform.ts';
 
 // An Octicon, in the text's colour; `slash` strikes it through (no person, no test change).
 export function Octicon({ name, size = 12, slash, class: cls }: { name: string; size?: number; slash?: boolean; class?: string }) {
@@ -95,3 +96,11 @@ export const Who = ({ login, src }: { login: string; src?: string }) => (
     {login}
   </span>
 );
+
+// When something happened: "2 hours ago", or the date and time (Settings → Appearance → Relative times); the other on hover.
+export const exactTime = (at: string | number) => new Date(at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+export function Time({ at }: { at: string | number }) {
+  const [relative] = useStoredFlag('relativeTimes', true);
+  const iso = new Date(at).toISOString();
+  return <time dateTime={iso} title={relative ? exactTime(at) : ago(at)}>{relative ? ago(at) : exactTime(at)}</time>;
+}

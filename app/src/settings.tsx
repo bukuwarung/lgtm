@@ -519,6 +519,7 @@ export function Settings() {
         <h3>Appearance</h3>
         <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency."  demo />
         <TagStyle />
+        <Flag k="relativeTimes" initial={true} label="Relative times" hint="“2 hours ago”, “yesterday”. Off: the date and time. Either way, the other shows when you point at it." demo />
         <div class="set-row">
           <span>
             Colour theme
