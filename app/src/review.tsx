@@ -1003,6 +1003,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     ...(focusHits.length ? [{ text: `${plural(focusHits.length, 'focused test or debugger', 'focused tests or debuggers')} left in (${[...new Set(focusHits.map((f) => f.what))].join(', ')})`, go: () => jumpToLine(focusHits[0].path, focusHits[0].line) }] : []),
     ...(html.length ? [{ text: `${plural(html.length, 'place')} rendering raw HTML (${[...new Set(html.map((f) => f.what))].join(', ')})`, go: () => jumpToLine(html[0].path, html[0].line) }] : []),
     ...(txs.length ? [{ text: `${plural(txs.length, '@Transactional on a private method')}: it runs without a transaction`, go: () => jumpToLine(txs[0].path, txs[0].line) }] : []),
+    ...(deps.some((d) => d.unpinned) ? [{ text: `${plural(deps.filter((d) => d.unpinned).length, 'dependency', 'dependencies')} not pinned`, go: () => jumpToLine(deps.find((d) => d.unpinned)!.path, deps.find((d) => d.unpinned)!.line) }] : []),
     ...(majors.length ? [{ text: `${plural(majors.length, 'major dependency jump')} (${majors.map((d) => d.name.split(':').pop()).join(', ')})`, go: () => jumpToLine(majors[0].path, majors[0].line) }] : []),
   ];
   const ctx: Ctx = {
@@ -1547,7 +1548,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {deps.length > 0 && (
-              <PillMenu cls={deps.some((d) => d.major) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved to another version (major version jumps marked):">
+              <PillMenu cls={deps.some((d) => d.major || d.unpinned) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved to another version (major jumps and versions not pinned marked):">
                 {deps.map((d) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(d.path, d.removed ? undefined : d.line)} title={`${d.path}:${d.line}`}>
@@ -1556,10 +1557,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                         {d.removed ? `removed${d.from ? ` (was ${d.from})` : ''}` : d.from && d.to ? `${d.from} → ${d.to}${d.major ? ' · major' : ''}` : `added${d.to ? ` ${d.to}` : ''}`}
                         {d.test && ' · for tests'}
                       </small>
+                      {d.unpinned && <small class="dep-major">not pinned · {d.unpinned}</small>}
                       {new Set(deps.map((x) => x.path)).size > 1 && <small>{dir(d.path) || 'root'}</small>}
                     </button>
                     {depPage(d) && <a href={depPage(d)} target="_blank" rel="noopener" title="Its page: versions, changelog"><Octicon name="link-external" /></a>}
-                    {d.major && <SayIt onClick={() => ctx.suggest(d.path, d.line, `${d.name} goes from ${d.from} to ${d.to}, a major version. Have its breaking changes been checked?${depPage(d) ? ` ${depPage(d)}` : ''}`)} />}
+                    {d.unpinned && <SayIt onClick={() => ctx.suggest(d.path, d.line, `${d.name} isn't pinned (${d.to}, ${d.unpinned}), so the same commit can build with different code tomorrow. Could it be pinned to a release${d.npm && /#/.test(d.to ?? '') ? ', or a commit' : ''}?`)} />}
+                    {d.major && !d.unpinned && <SayIt onClick={() => ctx.suggest(d.path, d.line, `${d.name} goes from ${d.from} to ${d.to}, a major version. Have its breaking changes been checked?${depPage(d) ? ` ${depPage(d)}` : ''}`)} />}
                   </div>
                 ))}
               </PillMenu>

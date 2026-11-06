@@ -83,7 +83,7 @@ gh auth login   # once, if you haven't
 
 lgtm reads the diff for what's easy to miss, and says so in a pill with a comment drafted for you. Each one can be switched off in Settings.
 
-- **Any repo:** possible secrets, dependency changes (major jumps marked), binaries that belong in Git LFS, code changed without tests, test files deleted, tests and checks switched off (`@Ignore`, `.skip`, `@Suppress`, `eslint-disable`, `noqa`, `nolint`…).
+- **Any repo:** possible secrets, dependency changes (major jumps and versions not pinned marked), binaries that belong in Git LFS, code changed without tests, test files deleted, tests and checks switched off (`@Ignore`, `.skip`, `@Suppress`, `eslint-disable`, `noqa`, `nolint`…).
 - **Android:** UI text not in `strings.xml`, Room tables changed without a version bump, what a manifest change means, new lint suppressions.
 - **Java backend:** Flyway migrations edited or out of order, JPA entities changed with no migration, `@Transactional` on a private method.
 - **Web:** a lockfile not updated, `.only` and `debugger` left in, raw HTML (`v-html`, `dangerouslySetInnerHTML`).

@@ -908,11 +908,12 @@ Object.assign(DEMOS, {
     off: pills(['p-size', <><b class="a">+12</b> <b class="d">−3</b> · 2 files</>]),
     on: (
       <>
-        {pills(['p-warn', <Tg i="package" n={2} t="dependencies changed" />], ['p-size', <><b class="a">+12</b> <b class="d">−3</b> · 2 files</>])}
+        {pills(['p-warn', <Tg i="package" n={3} t="dependencies changed" />], ['p-size', <><b class="a">+12</b> <b class="d">−3</b> · 2 files</>])}
         <div class="pill-pop demo-pop">
-          <p class="pill-head">Libraries added, removed or moved to another version:</p>
+          <p class="pill-head">Libraries added, removed or moved to another version (major jumps and versions not pinned marked):</p>
           <div class="pill-row"><button><b>com.squareup.okhttp3:okhttp</b> <small class="dep-major">4.12.0 → 5.0.0 · major</small></button></div>
           <div class="pill-row"><button><b>libs.mockk</b> <small>added · for tests</small></button></div>
+          <div class="pill-row"><button><b>com.mixpanel.android:mixpanel-android</b> <small>added 7.+</small> <small class="dep-major">not pinned · dynamic, the newest that matches</small></button></div>
         </div>
       </>
     ),

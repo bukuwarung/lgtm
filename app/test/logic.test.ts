@@ -927,6 +927,20 @@ test('depChanges: gradle, catalog and npm; upgrades, adds, removes', async () =>
   ]);
 });
 
+test('depChanges: versions not pinned (snapshot, dynamic, latest, git branch), pinned ones not', async () => {
+  const { depChanges } = await import('../src/deps.ts');
+  const gradle = ['@@ -1,1 +1,6 @@', '+    implementation("com.acme:pay:2.1.0-SNAPSHOT")', '+    implementation("com.acme:ui:1.+")', '+    implementation("com.acme:log:latest.release")', '+    implementation("com.acme:net:[1.0,2.0)")', '+    implementation("com.acme:ok:1.2.3")'].join('\n');
+  const toml = ['@@ -1,1 +1,2 @@', '+acme = "3.+"', '+core = "1.4.0"'].join('\n');
+  const npm = ['@@ -1,1 +1,8 @@', '+    "left-pad": "*",', '+    "kit": "latest",', '+    "ui": "github:acme/ui#main",', '+    "sdk": "git+https://github.com/acme/sdk.git",', '+    "fmt": "acme/fmt#3f2a9c1",', '+    "lib": "github:acme/lib#v2.1.0",', '+    "preact": "^10.24.0",', '+    "dev": "vite"'].join('\n');
+  const got = depChanges([{ filename: 'build.gradle.kts', patch: gradle }, { filename: 'gradle/libs.versions.toml', patch: toml }, { filename: 'package.json', patch: npm }]);
+  assert.deepEqual(got.map((d) => [d.name, !!d.unpinned]), [
+    ['com.acme:pay', true], ['com.acme:ui', true], ['com.acme:log', true], ['com.acme:net', true], ['com.acme:ok', false],
+    ['acme (version)', true], ['core (version)', false],
+    ['left-pad', true], ['kit', true], ['ui', true], ['sdk', true], ['fmt', false], ['lib', false], ['preact', false],
+  ]);
+  assert.equal(got.find((d) => d.name === 'ui')!.unpinned, 'git branch main');
+});
+
 test('findHardcoded: UI text in layouts and code, not ids, resources, tests or previews', async () => {
   const { findHardcoded } = await import('../src/hardcoded.ts');
   const layout = ['@@ -1,1 +1,5 @@', '+    android:text="Simpan data"', '+    android:text="@string/save"', '+    tools:text="Preview only"', '+    android:hint="Nomor HP"'].join('\n');
@@ -1021,13 +1035,14 @@ test('switchedOff: tests skipped and checks silenced, in any language; moved lin
     p('pay/pay.go', '+\tdefer f.Close() //nolint:errcheck'),
     p('app/src/main/res/layout/a.xml', '+    tools:ignore="HardcodedText"'),
     p('src/moved.ts', '-// @ts-ignore', '+  // @ts-ignore'),
+    { ...p('app/src/main/java/a/New.kt', '+@Suppress("MagicNumber")', '+// @ts-ignore'), status: 'added' }, // @Suppress in a new file doesn't count
     p('README.md', '+Use `@Suppress("X")` sparingly.'),
   ]).map((x) => [x.what, x.test]);
   assert.deepEqual(got, [
     ['@Ignore("flaky")', true], ['it.skip(', true], ['xit(', true], ['pending', true], ['@pytest.mark.skip', true], ['t.Skip(', true],
     ['@Suppress("UNCHECKED_CAST")', false], // @Ignore and skip outside tests aren't tests
     ['@ts-ignore', false], ['eslint-disable-next-line no-console', false], ['# noqa: F401', false], ['# type: ignore[assignment]', false],
-    ['//nolint:errcheck', false], ['tools:ignore="HardcodedText"', false],
+    ['//nolint:errcheck', false], ['tools:ignore="HardcodedText"', false], ['@ts-ignore', false],
   ]);
 });
 
