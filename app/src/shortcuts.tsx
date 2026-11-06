@@ -329,9 +329,9 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
   const myConv = conversation.filter((c) => !c.bot && !!me && c.author === me && !replaced.has(c.id)).length;
   const othersConv = conversation.filter((c) => !c.bot && c.author !== me && !replaced.has(c.id)).length;
   const convEntry = (c: ConversationItem, i: number) => (
-    // Under "yours" it's me: the verdict (or "comment") says which, without my name again.
-    c.author === me ? (
-      <Entry key={c.id} label={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : 'comment'} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+    // Under "yours", a plain comment of mine reads "comment", without my name again; a verdict keeps it, as everyone's.
+    c.author === me && !c.state ? (
+      <Entry key={c.id} label="comment" sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
     ) : (
       <Entry key={c.id} label={<Who login={c.author} src={c.avatar} />} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
     )
