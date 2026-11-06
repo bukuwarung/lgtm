@@ -329,7 +329,12 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
   const myConv = conversation.filter((c) => !c.bot && !!me && c.author === me && !replaced.has(c.id)).length;
   const othersConv = conversation.filter((c) => !c.bot && c.author !== me && !replaced.has(c.id)).length;
   const convEntry = (c: ConversationItem, i: number) => (
-    <Entry key={c.id} label={<Who login={c.author} src={c.avatar} />} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+    // Under "yours" it's me: the verdict (or "comment") says which, without my name again.
+    c.author === me ? (
+      <Entry key={c.id} label={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : 'comment'} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+    ) : (
+      <Entry key={c.id} label={<Who login={c.author} src={c.avatar} />} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+    )
   );
   const tiers = threadTiers(sortedThreads, me);
   const waitsOnMe = (t: Thread) => !!me && awaitsMe(t, me, pr.user.login === me); // listed first in its group
@@ -343,7 +348,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
         label={<><Octicon name={waiting ? 'comment' : 'file'} /> {`${base(t.path)}${t.line ? ':' + t.line : ''}`}</>}
         meta={(() => {
           const rest = [waiting && 'awaiting your reply', inGroup !== 'resolved' && t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ');
-          const who = inGroup !== 'bot' && first?.author;
+          const who = inGroup !== 'bot' && first?.author?.login !== me && first?.author; // a thread I started: no name
           return who ? <><Who login={who.login} src={who.avatarUrl} />{rest && ` · ${rest}`}</> : rest;
         })()}
         sub={oneLine(first?.bodyText ?? '')}
