@@ -8,6 +8,32 @@ export const jiraKeys = (...texts: string[]) => {
   return [];
 };
 
+// Jira keys in rendered text (comments, threads, descriptions) as links to the ticket, for projects lgtm has seen in PR
+// titles and branches (so UTF-8 or SHA-256 never is one); not inside links or code.
+const projects = new Set<string>();
+export const knowJiraKeys = (texts: string[]) => texts.forEach((t) => jiraKeys(t).forEach((k) => projects.add(k.split('-')[0])));
+export function linkJiraKeys(root: Element, site: string) {
+  if (!projects.size) return;
+  const base = /^https?:\/\//.test(site) ? site.replace(/\/$/, '') : `https://${site}`; // acli gives the host alone
+  const re = new RegExp(`\\b(?:${[...projects].join('|')})-\\d+\\b`, 'g');
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement?.closest('a, code, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+  const hits: Text[] = [];
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) if (new RegExp(re.source).test(n.textContent ?? '')) hits.push(n as Text);
+  for (const t of hits) {
+    const text = t.textContent!;
+    const frag = document.createDocumentFragment();
+    let at = 0;
+    for (const m of text.matchAll(re)) {
+      frag.append(text.slice(at, m.index));
+      const a = Object.assign(document.createElement('a'), { href: `${base}/browse/${m[0]}`, textContent: m[0], target: '_blank', rel: 'noopener', className: 'jira-link' });
+      frag.append(a);
+      at = m.index! + m[0].length;
+    }
+    frag.append(text.slice(at));
+    t.replaceWith(frag);
+  }
+}
+
 type Node = { type: string; text?: string; content?: Node[]; attrs?: Record<string, any>; marks?: { type: string; attrs?: Record<string, any> }[] };
 
 function inline(n: Node): string {

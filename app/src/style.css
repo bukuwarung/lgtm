@@ -620,13 +620,13 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .review-log > button { justify-self: end; }
 .top kbd { margin-left: 4px; padding: 0 4px; font-size: calc(11px * var(--ts)); }
 /* Android vector drawable preview: on a checkerboard so transparency shows */
-.vector-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px; }
+.vector-preview { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px; padding: 12px; }
 .vector-preview figure { margin: 0; display: grid; gap: 4px; justify-items: center; }
 .vector-preview img { max-width: 100%; border: 1px solid var(--border); border-radius: 4px;
   background: repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
 .vector-preview figcaption { font-size: calc(11px * var(--ts)); color: var(--muted); }
 .vector-preview .vp-arrow { color: var(--muted); font-size: calc(20px * var(--ts)); }
-.vector-preview .note { flex-basis: 100%; margin: 0; }
+.vector-preview .note { flex-basis: 100%; margin: 0; text-align: center; }
 /* Settings page */
 .nav-btn { padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-size: calc(13px * var(--ts)); }
 .nav-btn:hover { text-decoration: none; }
@@ -1124,8 +1124,8 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .doc-render.doc-one { margin: 0; padding: 0 8px; background: none; border-left-width: 2px; color: var(--muted); }
 .doc-render.doc-one .doc-source { margin-bottom: 0; }
 /* A changed image swiped: old and new stacked on a checkerboard (for transparency), the new cut at the slider. */
-.img-modes { flex-basis: 100%; }
-.swipe-preview { flex-direction: column; align-items: flex-start; }
+.img-modes { flex-basis: 100%; justify-content: center; }
+.swipe-preview { flex-direction: column; align-items: center; }
 .img-swipe { position: relative; display: grid; max-width: 100%; background: conic-gradient(var(--soft) 25%, transparent 0 50%, var(--soft) 0 75%, transparent 0) 0 0 / 16px 16px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .img-swipe img { grid-area: 1 / 1; display: block; width: auto; max-width: 100%; object-fit: contain; border: 0; border-radius: 0; }
 .img-swipe-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }

@@ -11,6 +11,7 @@ import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
 import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos } from './platform.ts';
 import { CommandBar } from './palette.tsx';
+import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { History } from './history.tsx';
@@ -39,6 +40,23 @@ addEventListener(
   },
   true,
 );
+
+// Jira keys in anything rendered (descriptions, comments, threads, the inbox) link to the ticket, once Jira is set up
+// (jira.ts linkJiraKeys): what's there now, and what's drawn later.
+try {
+  knowJiraKeys(Object.keys(JSON.parse(localStorage.getItem('jiraSeen') ?? '{}'))); // tickets shown before
+} catch {}
+fetchIntegrations().then(({ jira }) => {
+  if (!jira.site) return;
+  const link = (el: Element | null) => el && linkJiraKeys(el, jira.site!);
+  document.querySelectorAll('.md').forEach(link);
+  new MutationObserver((ms) => {
+    for (const m of ms) {
+      link((m.target as Element).closest?.('.md') ?? null);
+      for (const n of m.addedNodes) if (n instanceof Element) (n.matches('.md') ? [n] : [...n.querySelectorAll('.md')]).forEach(link);
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+}, () => {});
 
 // Menus from the keyboard: Enter or Space on a menu's button opens it (they're buttons); ↓ / ↑ (Home, End) go into it and
 // through its items; Esc closes it (each menu's own handler) and puts the focus back on its button.
@@ -1231,6 +1249,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
       const owned = showDraftsRef.current ? await getOwnedDrafts([...new Set(queue.map((i) => i.repo))], new Set(queue.map((i) => i.id))).catch(() => []) : [];
       const items = [...queue, ...owned];
       knowRepos(items.map((i) => i.repo));
+      knowJiraKeys(items.map((i) => i.title));
       setItems(items);
       // Secondary: the list works without them.
       const [st, est, ms, qa] = await Promise.all([
