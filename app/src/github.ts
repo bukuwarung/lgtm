@@ -38,7 +38,7 @@ export type PRFile = {
   blob_url: string;
 };
 // bodyHTML is GitHub's own rendering: sanitized, hidden <!-- --> markers dropped, <details>/<sub> etc. kept.
-export type Comment = { id?: string; databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number; avatarUrl?: string } | null; originalCommit?: { oid: string } | null; state?: string }; // state PENDING: in my review not yet sent
+export type Comment = { id?: string; databaseId: number; url: string; body?: string; bodyHTML: string; bodyText: string; createdAt: string; author: { login: string; __typename?: string; databaseId?: number; avatarUrl?: string } | null; originalCommit?: { oid: string } | null; state?: string; pullRequestReview?: { databaseId: number } | null }; // state PENDING: in my review not yet sent; pullRequestReview: the review it came with
 export type Thread = {
   id: string;
   path: string;
@@ -879,7 +879,7 @@ export function signRelativeImages(root: ParentNode | null, repo: string, ref: s
 const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
   reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
     nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve hunk:comments(first:1){nodes{diffHunk}}
-      comments(first:100){nodes{id databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid}}}}}}}}`;
+      comments(first:100){nodes{id databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid} pullRequestReview{databaseId}}}}}}}}`;
 
 // A comment on the PR's conversation (not on a line), as my own: answers someone there.
 export const commentOnPR = (repo: string, n: number, body: string) => json(`/repos/${repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body }) });

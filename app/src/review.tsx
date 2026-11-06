@@ -1738,7 +1738,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
-          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} />
+          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} />
           {inOrder.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
@@ -4013,6 +4013,28 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
   );
 }
 
+// A review's comments on the code, under its verdict: each its thread's place and first words, a click away (a resolved
+// or outdated one hidden here is shown first: reveal).
+function ReviewThreads({ review, threads, reveal }: { review: ConversationItem; threads: Thread[]; reveal: () => void }) {
+  const id = review.id.startsWith('r') ? Number(review.id.slice(1)) : NaN;
+  const mine = threads.flatMap((t) => t.comments.nodes.filter((c) => c.pullRequestReview?.databaseId === id).map((c) => ({ t, c })));
+  if (!mine.length) return null;
+  return (
+    <div class="review-threads">
+      {mine.map(({ t, c }) => (
+        <a
+          href={c.url}
+          onClick={(e) => (e.preventDefault(), document.getElementById('t-' + t.id) || reveal(), jumpTo('t-' + t.id, 'f-' + t.path))}
+        >
+          <Octicon name="file" /> <b>{t.path.split('/').pop()}{t.line ?? t.originalLine ? `:${t.line ?? t.originalLine}` : ''}</b>
+          <span class="review-thread-text">{c.bodyText.replace(/\s+/g, ' ').trim()}</span>
+          {(t.isResolved || t.isOutdated) && <small>{t.isResolved ? 'resolved' : 'outdated'}</small>}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 // "✳ Claude": this PR's Claude Code session, one click away. With one linked (a dot: the session that sent the PR here,
 // or one this button started), it opens it; a comment's ✳ copies that comment as a prompt to paste. Without one, it
 // starts a session with the PR or comment in the prompt (in the repo's folder, if set in Settings) and links it once
@@ -4327,7 +4349,7 @@ function ShotCompare({ p }: { p: ShotPair }) {
 }
 
 // folded: review mode starts with it closed, the diff first.
-function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean; ix: CodeIndex }) {
+function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads, reveal }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean; ix: CodeIndex; threads: Thread[]; reveal: () => void }) {
   const [editing, setEditing] = useState(false);
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const [mdStyle] = useMdStyle();
@@ -4378,7 +4400,12 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr:
             {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
           </>
         );
-        const body = c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />;
+        const body = (
+          <>
+            {c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />}
+            <ReviewThreads review={c} threads={threads} reveal={reveal} />
+          </>
+        );
         return (
           <div class="comment" key={c.id} id={'cv-' + c.id}>
             {head}
