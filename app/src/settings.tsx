@@ -486,6 +486,7 @@ export function Settings() {
         <Flag k="checkSecrets" initial={true} label="Possible secrets" hint="Added lines that look like a private key, a token (AWS, GitHub, Slack, Google, Stripe, JWT) or a password or key given a literal. Placeholders, environment lookups and tests' made-up passwords don't count."  demo />
         <Flag k="checkDeps" initial={true} label="Dependency changes" hint="Libraries added, removed or moved to another version (Gradle, version catalogs, package.json), major jumps marked."  demo />
         <Flag k="checkBinaries" initial={true} label="Binary files: what they are" hint="Kind, size before and after, in Git LFS or not; a warning for one over 1 MB straight in Git, or one .gitattributes puts in LFS that isn't."  demo />
+        <Flag k="checkSuppressions" initial={true} label="Tests and checks switched off" hint="Tests skipped or ignored (@Ignore, @Disabled, .skip, xit, pytest.mark.skip, t.Skip…), and checks silenced: @Suppress, @SuppressLint, @ts-ignore, eslint-disable, noqa, type: ignore, nolint, NOSONAR, coverage ignores and the like. Lines moved as they were don't count." demo />
         <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)."  demo />
         <Flag k="reviewPlan" initial={true} label="A review plan for big PRs" hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed."  demo />
         <div class="set-group">
@@ -509,7 +510,6 @@ export function Settings() {
         <Flag k="checkLockfile" initial={true} label="Lockfile not updated" hint="package.json's dependencies change but its package-lock.json, yarn.lock or pnpm-lock.yaml doesn't: a clean install (npm ci) fails." demo />
         <Flag k="checkFocused" initial={true} label="Focused tests and debugger left in" hint="it.only, describe.only, test.only (CI runs only those, and passes), and debugger statements." demo />
         <Flag k="checkRawHtml" initial={true} label="Raw HTML rendering" hint="v-html, dangerouslySetInnerHTML, innerHTML = and document.write: an XSS hole if any of it comes from users." demo />
-        <Flag k="checkSuppressions" initial={true} label="Type and lint checks switched off" hint="New @ts-ignore, @ts-nocheck and eslint-disable lines (@ts-expect-error doesn't count: it says when it's no longer needed)." demo />
         </div>
       </section>
 

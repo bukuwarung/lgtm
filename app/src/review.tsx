@@ -4,7 +4,8 @@ import { findSecrets, type Secret } from './secrets.ts';
 import { depChanges, type DepChange } from './deps.ts';
 import { findHardcoded, type Hardcoded } from './hardcoded.ts';
 import { roomCheck, type SchemaChange } from './room.ts';
-import { focused, lockfileDrift, rawHtml, suppressions, type WebHit } from './web.ts';
+import { focused, lockfileDrift, rawHtml, type WebHit } from './web.ts';
+import { switchedOff } from './switchedoff.ts';
 import { entityWithoutMigration, isMigration, migrationIssues, privateTransactional, type MigrationIssue } from './spring.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
@@ -971,6 +972,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 
   const mainLang = majorityLanguage(data.files.filter((f) => !f.generated).map((f) => f.filename));
   const [flagUntested] = useStoredFlag('flagUntested', true);
+  const supp = useMemo(() => (chkSupp ? switchedOff(data.files.filter((f) => !f.generated)) : []), [data.files, chkSupp]);
   const goneTests = useMemo(() => deletedTests(data.files), [data.files]);
   const noTests = useMemo(() => new Set(flagUntested ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested]);
   // Modules (Settings → Reviewing), from where the repo's build files sit: with 2+ touched the index groups files by
@@ -988,7 +990,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const majors = deps.filter((d) => d.major);
   const txs = chkTx ? privateTransactional(data.files) : [];
   const web = webOf(data.files);
-  const focusHits = chkFocus ? web.focus : [], supp = chkSupp ? web.supp : [], html = chkHtml ? web.html : [];
+  const focusHits = chkFocus ? web.focus : [], html = chkHtml ? web.html : [];
   const migText = (m: MigrationIssue) =>
     m.kind === 'edited' ? 'an applied migration changed: Flyway refuses to start where it already ran' : m.kind === 'duplicate' ? 'the same version as one already on the base branch' : `older than ${m.newest}, the newest on the base branch: Flyway refuses it where that one ran`;
   const findings: { text: string; go: () => void }[] = [
@@ -1505,13 +1507,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {supp.length > 0 && (
-              <PillMenu label={<Tg i="alert" n={supp.length} t={`check${supp.length > 1 ? 's' : ''} switched off`} />} head="Type and lint checks switched off by the PR:">
+              <PillMenu
+                cls={supp.some((x) => x.test) ? 'p-warn' : ''}
+                label={<Tg i="alert" n={supp.length} t={supp.every((x) => x.test) ? `test${supp.length > 1 ? 's' : ''} switched off` : supp.some((x) => x.test) ? 'tests and checks switched off' : `check${supp.length > 1 ? 's' : ''} switched off`} />}
+                head="Tests skipped, and checks (types, lint, warnings, coverage) silenced by the PR:"
+              >
                 {supp.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
                       <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
                     </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `${x.what} switches a check off here. Could the code satisfy it instead${/ts-/.test(x.what) ? ' (or @ts-expect-error with the reason, so it shows when it\u2019s no longer needed)' : ''}?`)} />
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, x.test ? `${x.what} switches this test off. Should it stay off? If it's broken or flaky, could it be fixed here, or tracked in a ticket so it comes back?` : `${x.what} switches a check off here. Could the code satisfy it instead${/ts-/.test(x.what) ? ' (or @ts-expect-error with the reason, so it shows when it\u2019s no longer needed)' : ''}?`)} />
                   </div>
                 ))}
               </PillMenu>
@@ -2297,8 +2303,8 @@ function textsOf(files: File[]) {
 }
 
 // The web checks (web.ts), once per file list.
-const webSeen = new WeakMap<object, { focus: WebHit[]; supp: WebHit[]; html: WebHit[] }>();
-const webOf = (files: File[]) => webSeen.get(files) ?? (webSeen.set(files, { focus: focused(files), supp: suppressions(files), html: rawHtml(files) }), webSeen.get(files)!);
+const webSeen = new WeakMap<object, { focus: WebHit[]; html: WebHit[] }>();
+const webOf = (files: File[]) => webSeen.get(files) ?? (webSeen.set(files, { focus: focused(files), html: rawHtml(files) }), webSeen.get(files)!);
 
 // Dependency changes (deps.ts), once per file list; and a library's page, where its versions and changelog are.
 const depsSeen = new WeakMap<object, DepChange[]>();

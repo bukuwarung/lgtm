@@ -993,17 +993,42 @@ test('spring: Flyway edits and order, private @Transactional, JPA entity without
   assert.deepEqual(await entityWithoutMigration([entity, { filename: `${dir}/v20250501__fee.sql`, status: 'added', patch: '' }], async () => jpa), []);
 });
 
-test('web: focused tests, debugger, suppressions, raw HTML, lockfile drift', async () => {
-  const { focused, suppressions, rawHtml, lockfileDrift } = await import('../src/web.ts');
+test('web: focused tests, debugger, raw HTML, lockfile drift', async () => {
+  const { focused, rawHtml, lockfileDrift } = await import('../src/web.ts');
   const spec = { filename: 'src/cart.test.ts', status: 'modified', patch: ['@@ -1,1 +1,4 @@', "+describe.only('cart', () => {", "+  it('adds', () => {})", '+  // it.only is fine in a comment', '+  debugger'].join('\n') };
   const app = { filename: 'src/Cart.vue', status: 'modified', patch: ['@@ -1,1 +1,5 @@', '+  <div v-html="note"></div>', '+  // @ts-ignore', '+  el.innerHTML = html', '+  if (el.innerHTML == "") {}', '+  // eslint-disable-next-line no-console'].join('\n') };
   assert.deepEqual(focused([spec, app]).map((h) => [h.line, h.what]), [[1, 'describe.only'], [4, 'debugger']]);
-  assert.deepEqual(suppressions([app]).map((h) => h.what), ['@ts-ignore', 'eslint-disable-next-line no-console']);
   assert.deepEqual(rawHtml([app, spec]).map((h) => [h.line, h.what]), [[1, 'v-html'], [3, '.innerHTML =']]);
   const pkg = { filename: 'web/package.json', status: 'modified', patch: ['@@ -5,3 +5,3 @@', '-    "vue": "^3.4.0",', '+    "vue": "^3.5.0",'].join('\n') };
   assert.deepEqual(await lockfileDrift([pkg], async () => ['package.json', 'package-lock.json']), [{ path: 'web/package.json', line: 5, lock: 'package-lock.json' }]);
   assert.deepEqual(await lockfileDrift([pkg, { filename: 'web/package-lock.json', status: 'modified' }], async () => ['package-lock.json']), []);
   assert.deepEqual(await lockfileDrift([pkg], async () => ['package.json']), []); // no lockfile there: nothing to drift
+});
+
+test('switchedOff: tests skipped and checks silenced, in any language; moved lines and docs ignored', async () => {
+  const { switchedOff } = await import('../src/switchedoff.ts');
+  const p = (filename: string, ...lines: string[]) => ({ filename, patch: ['@@ -1,1 +1,9 @@', ...lines].join('\n') });
+  const got = switchedOff([
+    p('app/src/test/java/a/CartTest.kt', '+    @Ignore("flaky")', '+    @Test fun adds() {}'),
+    p('src/cart.test.ts', "+  it.skip('adds', () => {})", "+  xit('removes', () => {})", "+  await load('t', { skip: true })"),
+    p('app/src/test/java/a/PayTest.kt', '+        pending?.onResult(ok)'),
+    p('spec/cart_spec.rb', "+  pending 'needs the new API'"),
+    p('tests/test_pay.py', '+@pytest.mark.skip(reason="later")'),
+    p('pay/pay_test.go', '+\tt.Skip("needs db")'),
+    p('app/src/main/java/a/Cart.kt', '+@Suppress("UNCHECKED_CAST")', '+    @Ignore val cached: Int = 0', '+    val skip: Boolean'),
+    p('src/cart.ts', '+  // @ts-ignore', '+  // eslint-disable-next-line no-console', '+  // @ts-expect-error: typed later'),
+    p('lib/pay.py', '+import os  # noqa: F401', '+x = y  # type: ignore[assignment]'),
+    p('pay/pay.go', '+\tdefer f.Close() //nolint:errcheck'),
+    p('app/src/main/res/layout/a.xml', '+    tools:ignore="HardcodedText"'),
+    p('src/moved.ts', '-// @ts-ignore', '+  // @ts-ignore'),
+    p('README.md', '+Use `@Suppress("X")` sparingly.'),
+  ]).map((x) => [x.what, x.test]);
+  assert.deepEqual(got, [
+    ['@Ignore("flaky")', true], ['it.skip(', true], ['xit(', true], ['pending', true], ['@pytest.mark.skip', true], ['t.Skip(', true],
+    ['@Suppress("UNCHECKED_CAST")', false], // @Ignore and skip outside tests aren't tests
+    ['@ts-ignore', false], ['eslint-disable-next-line no-console', false], ['# noqa: F401', false], ['# type: ignore[assignment]', false],
+    ['//nolint:errcheck', false], ['tools:ignore="HardcodedText"', false],
+  ]);
 });
 
 test('expertise: who wrote the lines a PR touches', async () => {

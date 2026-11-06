@@ -17,12 +17,6 @@ export const focused = (files: F[]) =>
     added(f, (t) => (/^\s*(\/\/|\*)/.test(t) ? null : /\b(it|test|describe|context|suite)\.only\s*\(/.test(t) && inTests(f.filename) ? t.match(/\b(\w+)\.only/)![0] : /^\s*debugger\s*;?\s*$/.test(t) ? 'debugger' : null)),
   );
 
-// Type and lint checks switched off: @ts-ignore, @ts-nocheck, @ts-expect-error (named, not a fault), eslint-disable.
-export const suppressions = (files: F[]) =>
-  files.filter((f) => WEB.test(f.filename)).flatMap((f) =>
-    added(f, (t) => t.match(/@ts-(ignore|nocheck)\b/)?.[0] ?? t.match(/eslint-disable(-next-line|-line)?(\s+[\w@/-]+(,\s*[\w@/-]+)*)?/)?.[0].trim() ?? null),
-  );
-
 // HTML put in as is: Vue's v-html, React's dangerouslySetInnerHTML, innerHTML/outerHTML assigned, document.write.
 export const rawHtml = (files: F[]) =>
   files.filter((f) => WEB.test(f.filename) && !inTests(f.filename)).flatMap((f) =>

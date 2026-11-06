@@ -73,7 +73,7 @@ gh auth login   # once, if you haven't
 </picture>
 
 - Files in reading order: specs and docs, build and config, models, the implementation (each test right below its class), other tests, then resources. Drag the steps into your own order; the index groups files by step, or as folders.
-- Files grouped by module, with code changed but no test, and test files deleted outright.
+- Files grouped by module, with code changed but no test.
 - Re-reviews show only what changed since your last one, and your threads say whether their lines moved.
 - An index of comments, reviewers, checks (failed-job logs, and whether `main` fails them too) and files; big PRs get a review plan. It can start hidden on PRs waiting for your review.
 - Side-by-side or unified, centred or full width, in your pick of themes and fonts.
@@ -83,10 +83,10 @@ gh auth login   # once, if you haven't
 
 lgtm reads the diff for what's easy to miss, and says so in a pill with a comment drafted for you. Each one can be switched off in Settings.
 
-- **Any repo:** possible secrets, dependency changes (major jumps marked), binaries that belong in Git LFS, code changed without tests.
+- **Any repo:** possible secrets, dependency changes (major jumps marked), binaries that belong in Git LFS, code changed without tests, test files deleted, tests and checks switched off (`@Ignore`, `.skip`, `@Suppress`, `eslint-disable`, `noqa`, `nolint`…).
 - **Android:** UI text not in `strings.xml`, Room tables changed without a version bump, what a manifest change means, new lint suppressions.
 - **Java backend:** Flyway migrations edited or out of order, JPA entities changed with no migration, `@Transactional` on a private method.
-- **Web:** a lockfile not updated, `.only` and `debugger` left in, raw HTML (`v-html`, `dangerouslySetInnerHTML`), checks switched off.
+- **Web:** a lockfile not updated, `.only` and `debugger` left in, raw HTML (`v-html`, `dangerouslySetInnerHTML`).
 - On your own PR, lgtm shows what it found before you ask anyone to review.
 
 ## Specs and code

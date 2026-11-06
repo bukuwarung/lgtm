@@ -1318,6 +1318,7 @@ const PKG_ROWS: Row[] = [['-', 12, '', sql('    "vue": "^3.4.0",')], ['+', '', 1
 const ONLY_ROWS = tsRows([['+', 8, "describe.only('cart', () => {"], ['+', 9, "  it('adds an item', () => {"]]);
 const HTML_ROWS: Row[] = [['+', '', 21, sql('<div class="note" v-html="order.note"></div>')]];
 const SUPP_ROWS = tsRows([['+', 30, '// @ts-ignore'], ['+', 31, 'const total = cart.items.reduce(sum)']]);
+const IGNORE_ROWS: Row[] = [[' ', 14, 14, `<span>${kt('    @Test')}</span>`], ['+', '', 15, `<span>${kt('    @Ignore("flaky on CI")')}</span>`], [' ', 15, 16, `<span>${kt('    fun appliesPromoCode() {')}</span>`]];
 Object.assign(DEMOS, {
   checkLockfile: {
     title: 'Lockfile not updated',
@@ -1335,9 +1336,15 @@ Object.assign(DEMOS, {
     on: <>{pills(['p-warn', <Tg i="alert" n={1} t="raw HTML" />])}<File path="OrderNote.vue" add={1} del={0}><Rows rows={HTML_ROWS} /></File></>,
   },
   checkSuppressions: {
-    title: 'Type and lint checks switched off',
-    off: <File path="cart.ts" add={2} del={0}><Rows rows={SUPP_ROWS} /></File>,
-    on: <>{pills(['', <Tg i="alert" n={1} t="check switched off" />])}<File path="cart.ts" add={2} del={0}><Rows rows={SUPP_ROWS} /></File></>,
+    title: 'Tests and checks switched off',
+    off: <><File path="cart.ts" add={2} del={0}><Rows rows={SUPP_ROWS} /></File><File path="CartTest.kt" add={1} del={0}><Rows rows={IGNORE_ROWS} /></File></>,
+    on: (
+      <>
+        {pills(['p-warn', <Tg i="alert" n={2} t="tests and checks switched off" />])}
+        <File path="cart.ts" add={2} del={0}><Rows rows={SUPP_ROWS} /></File>
+        <File path="CartTest.kt" add={1} del={0}><Rows rows={IGNORE_ROWS} /></File>
+      </>
+    ),
   },
 } satisfies Record<string, Demo>);
 
