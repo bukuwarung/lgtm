@@ -31,7 +31,7 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
-import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
+import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
 import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
@@ -310,8 +310,14 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
 }
 
 // A path's file name, and its folder ('' at the root).
-const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+const base = fileLabel; // a file's name as shown: unique among the PR's (files.ts)
+const leaf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const dir = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf('/')));
+// A file's folder as shown beside its name: without the folders its name (base) already carries.
+const rest = (folder: string, p: string) => {
+  const shown = dir(base(p));
+  return shown && (folder === shown || folder.endsWith('/' + shown)) ? folder.slice(0, folder.length - shown.length).replace(/\/$/, '') : folder;
+};
 
 // How many modules the PR touches (or the one); a click lists them, each with its files, and goes to its first.
 function ModulesPill({ modules }: { modules?: Map<string, string> }) {
@@ -624,6 +630,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         setSaved(stored ?? { sha: d.pr.head.sha, drafts: [] });
         setData({ pr: d.pr, headRepo, files: prepare(d.files, rules), rules });
         knowJiraKeys([d.pr.title, d.pr.head.ref]);
+        knowFiles(d.files.map((f) => f.filename));
         rememberPR({ repo, n, title: d.pr.title, author: d.pr.user.login, state: d.pr.merged ? 'merged' : d.pr.state === 'closed' ? 'closed' : d.pr.draft ? 'draft' : undefined });
       };
       if (first)
@@ -1602,7 +1609,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <PillMenu cls="p-warn" label={<Tg i="removed" n={goneTests.length} t={`test file${goneTests.length > 1 ? 's' : ''} deleted`} />} head="Tests this PR deletes (not moved or renamed):">
                 {goneTests.map((p) => (
                   <button onClick={() => jumpTo('f-' + p)} title={p}>
-                    <b>{base(p)}</b> <small>{dir(p)}</small>
+                    <b>{base(p)}</b> <small>{rest(dir(p), p)}</small>
                   </button>
                 ))}
               </PillMenu>
@@ -1611,7 +1618,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <PillMenu cls="p-warn" label={<Tg i="notest" n={noTests.size} t={`file${noTests.size > 1 ? 's' : ''} without test changes`} />} head="Code changed, but no test for it changed in this PR:">
                 {[...noTests].map((p) => (
                   <button onClick={() => jumpTo('f-' + p)} title={p}>
-                    <b>{base(p)}</b> <small>{dir(p)}</small>
+                    <b>{base(p)}</b> <small>{rest(dir(p), p)}</small>
                   </button>
                 ))}
               </PillMenu>
@@ -1932,7 +1939,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
               {stillOpen.slice(0, 4).map((t, i) => (
                 <>
                   {i ? ', ' : ''}
-                  <button class="link" onClick={() => jumpTo(t.id, 'f-' + t.path)}>{t.path.split('/').pop()}{t.line ? `:${t.line}` : ''}</button>
+                  <button class="link" onClick={() => jumpTo(t.id, 'f-' + t.path)}>{fileLabel(t.path)}{t.line ? `:${t.line}` : ''}</button>
                 </>
               ))}
               {stillOpen.length > 4 && ` and ${stillOpen.length - 4} more`}. You can still approve.
@@ -2147,7 +2154,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   }, [file.patch, ctx.ignoreWs, threads.length, drafts.length]);
   const path = file.filename;
   const mod = ctx.modules?.get(path) ?? '';
-  const folder = mod ? dir(below(path, mod === '.' ? '' : mod)) : dir(path);
+  const folder = rest(mod ? dir(below(path, mod === '.' ? '' : mod)) : dir(path), path);
   const t = ctx.target;
   const body: BodyProps = { file, hunks, ctx, threads: threads.filter((x) => !isFileLevel(x)), drafts: drafts.filter((d) => d.line) };
   // Until it's first drawn, a file stands in at about its height (style.css content-visibility): its rows at a code
@@ -2189,7 +2196,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         >
           <FileIcon path={path} big untested={ctx.untested.has(file.filename)} />
           <b>
-            {file.previous_filename && base(file.previous_filename) !== base(path) && <>{base(file.previous_filename)} → </>}
+            {file.previous_filename && leaf(file.previous_filename) !== leaf(path) && <>{leaf(file.previous_filename)} → </>}
             {base(path)}
           </b>
           {mod && (
@@ -2259,7 +2266,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
       )}
           <Notes ctx={ctx} threads={[]} drafts={[]} form={t?.path === path && !!t.atEnd} />
           {!hideDeleted && <footer class="file-f">
-            <span class="file-f-name" title={path}>{path.split('/').pop()}</span>
+            <span class="file-f-name" title={path}>{fileLabel(path)}</span>
             <button class="icon-btn" title="Comment on this file" aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT', atEnd: true })}>
               <Octicon name="comment" />
             </button>
@@ -2482,7 +2489,7 @@ function ManifestSummary({ file, ctx }: { file: File; ctx: Ctx }) {
 function LintBaselineView({ file, ctx }: { file: File; ctx: Ctx }) {
   const { added, removed } = useMemo(() => baselineChanges(file.filename, file.patch ?? ''), [file.patch]);
   const at = (x: Suppression) => {
-    const where = `${x.file.split('/').pop()}${x.line ? `:${x.line}` : ''}`;
+    const where = `${fileLabel(x.file)}${x.line ? `:${x.line}` : ''}`;
     return ctx.codeIx.patches.has(x.file) ? (
       <a href={'#'} onClick={(e) => (e.preventDefault(), jumpToLine(x.file, x.line))} title={x.file}>{where}</a>
     ) : (
@@ -3188,7 +3195,7 @@ function SpecPeek({ p, ix, onEnter, onLeave, onGo }: { p: PeekAt; ix: CodeIndex;
     <div class={doc ? 'spec-peek doc' : 'spec-peek'} style={style} onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={onGo} title="Go there">
       <div class="spec-peek-h">
         <b>{base(p.path)}</b>
-        {p.line ? `:${p.line}` : ''} <small>{dir(p.path)}</small>
+        {p.line ? `:${p.line}` : ''} <small>{rest(dir(p.path), p.path)}</small>
       </div>
       {doc ? (
         ((look) => <div class={`rich ${look.class}`} style={look.style} dangerouslySetInnerHTML={{ __html: md.render(docSnippet(ix.patches.get(p.path) ?? '', p.line!)) }} />)(mdStyleProps(mdStyle))
@@ -4060,7 +4067,7 @@ function ReviewThreads({ review, threads, reveal }: { review: ConversationItem; 
           href={c.url}
           onClick={(e) => (e.preventDefault(), document.getElementById('t-' + t.id) || reveal(), jumpTo('t-' + t.id, 'f-' + t.path))}
         >
-          <Octicon name="file" /> <b>{t.path.split('/').pop()}{t.line ?? t.originalLine ? `:${t.line ?? t.originalLine}` : ''}</b>
+          <Octicon name="file" /> <b>{fileLabel(t.path)}{t.line ?? t.originalLine ? `:${t.line ?? t.originalLine}` : ''}</b>
           <span class="review-thread-text">{c.bodyText.replace(/\s+/g, ' ').trim()}</span>
           {(t.isResolved || t.isOutdated) && <small>{t.isResolved ? 'resolved' : 'outdated'}</small>}
         </a>
@@ -4238,7 +4245,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
       {panel && (
         <div class="ask-panel" role="dialog" aria-label="Ask Claude">
           <div class="row">
-            <b>Ask Claude about {panel.path ? panel.path.split('/').pop() : 'this PR'}</b>
+            <b>Ask Claude about {panel.path ? fileLabel(panel.path) : 'this PR'}</b>
             <span class="spacer" />
             <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
           </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, reportError, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
-import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep } from './files.ts';
+import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
@@ -70,7 +70,7 @@ export function threadOrder(threads: Thread[], drafts: Draft[], files: File[]) {
 
 const textOf = (html: string) => new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '';
 const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, 90);
-const base = (path: string) => path.split('/').pop()!;
+const base = fileLabel; // a file's name as shown: unique among the PR's (files.ts)
 
 // A review's verdict: its tag icon (tags.tsx) and words.
 const VERDICT: Record<string, [string, string]> = { APPROVED: ['approved', 'approved'], CHANGES_REQUESTED: ['changes', 'changes requested'], COMMENTED: ['reply', 'reviewed'], DISMISSED: ['', 'dismissed'] };
@@ -671,7 +671,7 @@ function FileRow({ f, depth, counts, viewed, onViewed, folder }: { f: File; dept
       <button class="tree-file" style={{ paddingLeft: `${8 + depth * 14}px` }} title={f.filename} onClick={() => document.getElementById('f-' + f.filename)?.scrollIntoView()}>
         <FileIcon path={f.filename} status={f.status} untested={f.untested} />
         <span class="tree-name">
-          {f.filename.split('/').pop()}
+          {fileLabel(f.filename)}
           {folder && dir.length > 0 && <small class="tree-folder"> {dir.length > 2 ? '…/' + dir.slice(-2).join('/') : dir.join('/')}</small>}
         </span>
         {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}

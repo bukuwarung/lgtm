@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
 import { recentPRs, repoLabel } from './platform.ts';
 
@@ -30,7 +31,7 @@ function entries(queue: QueueItem[]): Entry[] {
   // Files from the page itself (there even with the index hidden).
   const files = [...document.querySelectorAll<HTMLElement>('[id^="f-"]')].map((el) => {
     const path = el.id.slice(2);
-    return { kind: 'File', label: path.split('/').pop()!, sub: path, run: () => el.scrollIntoView() };
+    return { kind: 'File', label: fileLabel(path), sub: path, run: () => el.scrollIntoView() };
   });
   return [...recent.slice(0, 8), ...files, ...index, ...recent.slice(8), ...prs]; // the latest few first, as a browser's box has them
 }

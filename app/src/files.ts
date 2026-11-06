@@ -12,6 +12,23 @@ const isTest = (path: string) => subject(path) !== path;
 export const inTests = (path: string) =>
   isTest(path) || /(^|\/)(tests?|__tests__|spec|e2e|fixtures)\//.test(path) || /(^|\/)test_[^/]+$/.test(path);
 
+// A file as lgtm names it: its name alone, with as many parent folders as it takes to tell it from the other files of
+// the PR with that name (payment-out-idempotency/spec.md, payment-pin-analytics/spec.md); as repos drop their owner.
+export function uniqueNames(paths: string[]): Map<string, string> {
+  const all = [...new Set(paths)];
+  const depth = new Map(all.map((p) => [p, 1]));
+  const label = (p: string) => p.split('/').slice(-depth.get(p)!).join('/');
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const group of Map.groupBy(all, label).values())
+      if (group.length > 1) for (const p of group) if (depth.get(p)! < p.split('/').length) (depth.set(p, depth.get(p)! + 1), (grew = true));
+  }
+  return new Map(all.map((p) => [p, label(p)]));
+}
+let labels = new Map<string, string>();
+export const knowFiles = (paths: string[]) => void (labels = uniqueNames(paths)); // the open PR's files
+export const fileLabel = (p: string) => labels.get(p) ?? p.slice(p.lastIndexOf('/') + 1);
+
 // A spec, doc or its metadata kept in an archive folder (archive/, archives/, archived/, _archive/), as OpenSpec keeps a
 // change's proposal, design, tasks and .openspec.yaml: what was, not what this change does. Code there still shows.
 export const isArchivedSpec = (path: string) => !CODE.test(path) && /(^|\/)_?archive[ds]?\//i.test(path);

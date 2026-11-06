@@ -4,7 +4,7 @@ import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, range
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
 import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
+import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, uniqueNames, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, rainbow, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -337,6 +337,11 @@ test('untested: code changed without a matching test change', () => {
     ]),
     ['app/src/main/java/a/Bar.kt'],
   );
+});
+
+test('uniqueNames: the name alone, with parent folders until it\'s unique', () => {
+  const got = uniqueNames(['a/specs/out/spec.md', 'a/specs/pin/spec.md', 'a/b/Store.kt', 'x/y/README.md', 'z/y/README.md', 'docs/x.md', 'docs/sub/docs/x.md']);
+  assert.deepEqual([...got.values()], ['out/spec.md', 'pin/spec.md', 'Store.kt', 'x/y/README.md', 'z/y/README.md', 'docs/x.md', 'sub/docs/x.md']);
 });
 
 test('isArchivedSpec: markdown in an archive folder', () => {

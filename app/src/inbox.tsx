@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { uniqueNames } from './files.ts';
 import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
 import { ago, markReplyDone, readBots, reportError, useStoredFlag, repoLabel } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
@@ -95,9 +96,9 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
             const n = k++;
             return <InboxMention key={mention.id} c={mention} item={item} current={n === at} onPick={() => setCur(n)} onDone={() => setDone((s) => new Set(s).add(mention.id!))} />;
           })()}
-          {threads.map((t) => {
+          {threads.map((t, _, all) => {
             const n = k++;
-            return <InboxThread key={t.id} t={t} item={item} me={me} current={n === at} onPick={() => setCur(n)} onDone={() => setDone((s) => new Set(s).add(t.id))} />;
+            return <InboxThread key={t.id} t={t} names={uniqueNames(all.map((x) => x.path))} item={item} me={me} current={n === at} onPick={() => setCur(n)} onDone={() => setDone((s) => new Set(s).add(t.id))} />;
           })}
         </section>
       ))}
@@ -107,11 +108,11 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
 
 const FAILED: Record<string, string> = { reply: 'send the reply', resolve: 'resolve it', commit: 'commit the suggestion' };
 
-function InboxThread({ t, item, me, current, onPick, onDone }: { t: Thread; item: Item; me: string; current: boolean; onPick: () => void; onDone: () => void }) {
+function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Thread; names: Map<string, string>; item: Item; me: string; current: boolean; onPick: () => void; onDone: () => void }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState('');
   const last = t.comments.nodes[t.comments.nodes.length - 1];
-  const where = `${t.path.split('/').pop()}${t.line ? `:${t.line}` : ''}`;
+  const where = `${names.get(t.path) ?? t.path}${t.line ? `:${t.line}` : ''}`;
   // On my own open PR, the last word a current suggested change: committed to the branch, the thread resolved (as the
   // PR view's "Commit suggestion" does).
   const sug = item.authored && !item.mergedAt && !t.isOutdated && last && last.author?.login !== me ? suggestionOf(t, last) : null;
