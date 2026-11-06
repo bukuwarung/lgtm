@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who } from './tags.tsx';
-import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus } from './platform.ts';
+import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -65,6 +65,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
   }, [s?.state]);
   // A "ready to merge" notification (main.tsx) brought you here: the box opens.
   const [shown, setShown] = useState(() => sessionStorage.getItem('openMerge') === `${repo}#${n}` && (sessionStorage.removeItem('openMerge'), true));
+  useDismiss(shown, () => setShown(false), '.merge-bar');
   useEffect(() => {
     const toggle = () => setShown((x) => !x);
     addEventListener('lgtm:merge', toggle); // the m shortcut

@@ -243,6 +243,19 @@ export function useBots() {
   return { bots, toggleBot };
 }
 
+// A pop-up's way out, the same everywhere: Esc, or a press outside it (`inside`: a selector for what counts as part of it,
+// its own button included).
+export function useDismiss(open: boolean, close: () => void, inside: string) {
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => !(e.target as Element).closest?.(inside) && close();
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', esc);
+    return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
+  }, [open]);
+}
+
 export function useStoredFlag(key: string, initial: boolean) {
   const [v, set] = useStoredValue(key, initial ? '1' : '0');
   return [v === '1', () => set(v === '1' ? '0' : '1')] as const;

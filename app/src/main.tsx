@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -24,13 +24,16 @@ import { keyLabel, useBindings, type Action } from './keys.ts';
 import { movePending } from './merge.tsx';
 
 // A link to a GitHub PR in what people wrote (descriptions, comments, threads, Jira tickets, Slack previews) opens it
-// here; ⌘- or Ctrl-click still goes to GitHub. Registered before the app's "web links open in the browser" (initDesktop).
+// here; one into the open PR (a comment, a thread, a file of it) goes there in place (review.tsx, "lgtm:link"). ⌘- or
+// Ctrl-click still goes to GitHub. Registered before the app's "web links open in the browser" (initDesktop).
 addEventListener(
   'click',
   (e) => {
     const a = (e.target as Element | null)?.closest?.('.md a[href], .slack-preview a[href]') as HTMLAnchorElement | null;
-    const m = a?.href.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/);
-    if (!m || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.defaultPrevented) return;
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.defaultPrevented) return;
+    if (!dispatchEvent(new CustomEvent('lgtm:link', { detail: a.href, cancelable: true }))) return e.preventDefault();
+    const m = a.href.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/);
+    if (!m) return;
     e.preventDefault();
     location.hash = `/${m[1]}/pull/${m[2]}`;
   },
@@ -574,6 +577,7 @@ function App() {
           </a>
         )}
         <button
+          class="help-btn"
           title="Keyboard shortcuts (?)"
           aria-label="Keyboard shortcuts"
           onClick={() => (r ? dispatchEvent(new Event('lgtm:help')) : ((location.hash = '/settings'), jumpTo('set-keyboard-shortcuts')))}
@@ -685,13 +689,14 @@ function SetupCheck() {
     claudeSkill().then(setSkill, () => setSkill(null));
   };
   useEffect(() => void (open && check()), []);
-  if (!open) return null;
   const done = () => {
     try {
       localStorage.setItem('setupSeen', '1');
     } catch {}
     setOpen(false);
   };
+  useDismiss(open, done, '.whats-new');
+  if (!open) return null;
   const row = (ok: boolean | null, name: string, what: string, fix: preact.ComponentChildren) => (
     <div class="set-int">
       <CheckMark state={ok == null ? 'pending' : ok ? 'success' : 'neutral'} />
@@ -742,8 +747,9 @@ function WhatsNew() {
       .then((r) => renderGfm(r.body ?? '', 'bukuwarung/lgtm')) // GitHub sanitizes the HTML
       .then(setNotes, seen); // no notes to show: don't ask again
   }, []);
-  if (!notes) return null;
   const close = () => (seen(), setNotes(null));
+  useDismiss(!!notes, close, '.whats-new');
+  if (!notes) return null;
   return (
     <div class="whats-new-back" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div class="whats-new" role="dialog" aria-label={`What's new in lgtm ${__APP_VERSION__}`}>

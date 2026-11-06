@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
-import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
+import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -159,7 +159,7 @@ function AskQA({ pr, repo, n, onPosted }: { pr: PR; repo: string; n: number; onP
         Ask QA
       </button>
       {text != null && (
-        <dialog ref={box} class="ask qa-dialog" onClose={() => setText(null)}>
+        <dialog ref={box} class="ask qa-dialog" onClose={() => setText(null)} onClick={(e) => e.target === box.current && box.current?.close()}>
           <p>
             <b>Ask QA</b> in <code>{channel}</code>
           </p>
@@ -819,6 +819,27 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const settled = (t: Thread) => (t.isResolved || t.isOutdated) && !t.comments.nodes.some((c) => c.author?.login === me);
   const settledCount = hideSettled ? allThreads.filter(settled).length : 0;
   const hiddenThreads = showSettled ? 0 : settledCount;
+  // A link into this PR (main.tsx "lgtm:link"): a comment, review or review thread of it goes there (hidden resolved
+  // threads shown first); a file of it, from its blob URL, goes to that file, at the line when the link is of the head.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const url = (e as CustomEvent<string>).detail;
+      const here = url.startsWith(`https://github.com/${repo}/pull/${n}`) && url.match(/#(discussion_r|issuecomment-|pullrequestreview-|r)(\d+)$/); // #r…: the files tab's links
+      if (here) {
+        const id = ({ discussion_r: 'rc-', r: 'rc-', 'issuecomment-': 'cv-c', 'pullrequestreview-': 'cv-r' } as Record<string, string>)[here[1]] + here[2];
+        e.preventDefault();
+        if (!document.getElementById(id) && hiddenThreads) setShowSettled();
+        return jumpTo(id);
+      }
+      const blob = url.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/blob\/([^/]+)\/([^#?]+)[^#]*(?:#L(\d+)(?:-L\d+)?)?$/);
+      const path = blob && decodeURIComponent(blob[3]);
+      if (!blob || !data || ![repo, data.headRepo].includes(blob[1]) || !data.files.some((f) => f.filename === path)) return;
+      e.preventDefault();
+      jumpToLine(path!, [data.pr.head.sha, data.pr.head.ref].includes(blob[2]) && blob[4] ? Number(blob[4]) : undefined);
+    };
+    addEventListener('lgtm:link', on);
+    return () => removeEventListener('lgtm:link', on);
+  }, [repo, n, data, hiddenThreads]);
   const shownThreads = (since && sinceData ? allThreads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : allThreads).filter((t) => !hiddenThreads || !settled(t));
   const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
   useEffect(() => {
@@ -1806,6 +1827,7 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 
 function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, onSubmit, saveAs, repo, mentions, authored, stillOpen = [] }: SubmitProps) {
   const [open, setOpen] = useState(false);
+  useDismiss(open, () => setOpen(false), '.review-submit');
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
   const [body, setBody] = useState('');
@@ -1859,7 +1881,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   }
 
   return (
-    <div class="submit">
+    <div class="submit review-submit">
       <button class="primary" aria-expanded={open} onClick={() => setOpen(!open)}>
         {authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" />
       </button>
@@ -3735,7 +3757,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       </summary>
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
-        <div class="comment" key={c.databaseId}>
+        <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId}>
           <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost')}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
@@ -4372,7 +4394,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
       <div class="comment" id="pr-description">
         <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b class="person-link" onClick={toPerson(pr.user.login)}>{pr.user.login}</b> <CopyLink url={pr.html_url} />
         {me === pr.user.login && !editing && (
-          <button class="icon-btn" title="Edit the title and description" onClick={() => setEditing(true)}>
+          <button class="icon-btn" title="Edit the title and description" aria-label="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />
           </button>
         )}
@@ -4454,6 +4476,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
 }
 
 function Help({ onClose, ignoreWs, toggleWs }: { onClose: () => void; ignoreWs: boolean; toggleWs: () => void }) {
+  useDismiss(true, onClose, '.help, .help-btn');
   const [bindings] = useBindings();
   return (
     <div class="help" role="dialog" aria-label="Keyboard shortcuts">

@@ -1243,7 +1243,7 @@ function Shortcuts() {
           {ACTIONS.map(([a, d]) => (
             <tr key={a}>
               <td>
-                <button class={editing === a ? 'key-btn on' : 'key-btn'} onClick={() => (setMsg(''), setEditing(editing === a ? null : a))}>
+                <button class={editing === a ? 'key-btn on' : 'key-btn'} title={`Change the key for: ${d}`} aria-label={`${keyLabel(b[a])}: change the key for ${d}`} onClick={() => (setMsg(''), setEditing(editing === a ? null : a))}>
                   {editing === a ? 'Press a key…' : <kbd>{keyLabel(b[a])}</kbd>}
                 </button>
               </td>

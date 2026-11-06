@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { useDismiss } from './platform.ts';
 import { getStackStatus, mergeLayer, type LayerStatus, type StackLayer } from './github.ts';
 import { canMerge } from './merge.tsx';
 import { CheckMark, Tg } from './tags.tsx';
@@ -29,6 +30,7 @@ const VERDICT: Record<string, string> = { APPROVED: 'approved', CHANGES_REQUESTE
 export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: StackLayer[] }) {
   const k = stack.findIndex((l) => l.number === n);
   const [open, setOpen] = useState(false);
+  useDismiss(open, () => setOpen(false), '.stack-nav');
   useEffect(() => {
     const toggle = () => setOpen((x) => !x);
     addEventListener('lgtm:stack', toggle); // the s shortcut

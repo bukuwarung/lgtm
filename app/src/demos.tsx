@@ -1060,7 +1060,7 @@ const proseRow = (n: number, html: string): Row => ['+', '', n, `<div class="doc
 const footer = (name: string) => (
   <footer class="file-f">
     <span class="file-f-name">{name}</span>
-    <button class="icon-btn"><Octicon name="comment" /></button>
+    <button class="icon-btn" title="Comment on this file" aria-label="Comment on this file"><Octicon name="comment" /></button>
     <label class="viewed-box"><Octicon name="eye" /></label>
   </footer>
 );
