@@ -5,7 +5,7 @@ import { closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, d
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -36,6 +36,30 @@ addEventListener(
     if (!m) return;
     e.preventDefault();
     location.hash = `/${m[1]}/pull/${m[2]}`;
+  },
+  true,
+);
+
+// Menus from the keyboard: Enter or Space on a menu's button opens it (they're buttons); ↓ / ↑ (Home, End) go into it and
+// through its items; Esc closes it (each menu's own handler) and puts the focus back on its button.
+const MENU_WRAP = '.bell, .recent-menu, .account, .claude-menu, .pill-menu, .pill-drop';
+const MENU_POP = '.account-menu, .pill-pop, .quick-menu';
+addEventListener(
+  'keydown',
+  (e) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(e.key)) return;
+    const at = document.activeElement as HTMLElement | null;
+    const wrap = at?.closest<HTMLElement>(MENU_WRAP);
+    const pop = wrap?.querySelector<HTMLElement>(MENU_POP);
+    const toggle = wrap?.querySelector<HTMLElement>(':scope > summary, [aria-expanded]');
+    if (!wrap || !pop?.getClientRects().length) return; // no menu here, or it's closed
+    if (e.key === 'Escape') return void (pop.contains(at) && setTimeout(() => toggle?.focus()));
+    const items = (pop.matches('a, button') ? [pop] : [...pop.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, select')]).filter((x) => x.getClientRects().length);
+    if (!items.length) return;
+    e.preventDefault();
+    const i = items.indexOf(at!);
+    const down = e.key === 'ArrowDown';
+    items[e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : i < 0 ? (down ? 0 : items.length - 1) : (i + (down ? 1 : -1) + items.length) % items.length].focus();
   },
   true,
 );
@@ -841,7 +865,7 @@ function AccountMenu() {
         <div class="account-menu" role="menu">
           <div class="account-head">GitHub accounts in gh</div>
           {accounts == null ? (
-            <p class="note">Loading…</p>
+            <Lines n={2} />
           ) : (
             accounts.map((a) => (
               <button role="menuitemradio" aria-checked={a.login === me} class={a.login === me ? 'on' : ''} onClick={() => use(a)}>

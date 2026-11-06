@@ -537,6 +537,7 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .review-threads a:hover b { color: var(--accent); }
 .review-thread-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
 .review-threads small { margin-left: auto; color: var(--muted); }
+.account-menu :focus-visible, .pill-pop :focus-visible, .quick-menu:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .bots-hidden { border-top: 1px solid var(--border); }
 .bots-hidden > summary { padding: 8px 0; color: var(--muted); font-size: calc(13px * var(--ts)); cursor: pointer; }
 .bots-hidden > summary:hover { color: var(--fg); }
@@ -929,7 +930,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .file-mod { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(11px * var(--ts)); white-space: nowrap; }
 /* Viewed marks in the index's file list: a small box, ✓ when viewed (– when some are); empty ones show on hover. Clear of
    the index's scrollbar. */
-.vmark { flex: none; display: inline-grid; place-items: center; width: 14px; height: 14px; margin: 0 16px 0 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 10px; line-height: 1; color: #fff; cursor: pointer; visibility: hidden; }
+.vmark { flex: none; display: inline-grid; place-items: center; width: calc(14px * var(--ts)); height: calc(14px * var(--ts)); margin: 0 16px 0 6px; border: 1px solid var(--border); border-radius: 4px; font-size: calc(10px * var(--ts)); line-height: 1; color: #fff; cursor: pointer; visibility: hidden; }
 :is(.tree-row, .tree-dir > summary):hover > .vmark, .vmark:focus-visible, .vmark.on, .vmark.some { visibility: visible; }
 .vmark:hover { border-color: var(--accent); }
 .vmark.on { background: var(--pill-ok); border-color: var(--pill-ok); }
@@ -939,6 +940,8 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .skel .side { display: grid; gap: 10px; align-content: start; padding: 14px 12px; }
 .skel main { display: grid; gap: 12px; align-content: start; padding-top: 14px; }
 .sk { display: block; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--soft) 30%, color-mix(in srgb, var(--soft) 40%, var(--bg)) 50%, var(--soft) 70%) 0 0 / 300% 100%; animation: sk-sweep 1.4s linear infinite; }
+.sk-lines { display: grid; gap: 8px; padding: 6px 0; }
+.sk-lines .sk:nth-child(3n + 1) { width: 92%; } .sk-lines .sk:nth-child(3n + 2) { width: 78%; } .sk-lines .sk:nth-child(3n) { width: 56%; }
 .sk-title { width: 55%; height: 20px; }
 .skel-h1 { margin: 0; font-size: calc(18px * var(--ts)); }
 .skel-h1 .pr-num { color: var(--muted); font-weight: 400; }
@@ -1362,7 +1365,7 @@ dialog.qa-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; 
 .bar-qa { position: relative; color: var(--muted); }
 .bar-qa.qa-signed { color: var(--addfg); }
 .bar-qa.qa-issue { color: var(--modfg); }
-.qa-new { position: absolute; top: -4px; right: -6px; min-width: 14px; padding: 0 3px; border-radius: 7px; font-size: 10px; line-height: 14px; text-align: center; color: #fff; background: var(--accent); }
+.qa-new { position: absolute; top: -4px; right: -6px; min-width: calc(14px * var(--ts)); padding: 0 3px; border-radius: calc(7px * var(--ts)); font-size: calc(10px * var(--ts)); line-height: calc(14px * var(--ts)); text-align: center; color: #fff; background: var(--accent); }
 .demo-bar { display: flex; gap: 6px; justify-content: flex-end; padding: 8px; }
 dialog.qa-dialog .slack-preview { max-height: 50vh; overflow: auto; margin-bottom: 12px; white-space: pre-wrap; }
 dialog.qa-dialog .slack-preview code { font-size: .9em; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--fg) 8%, transparent); }

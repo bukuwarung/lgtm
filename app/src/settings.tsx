@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir, spentThisHour } from './github.ts';
-import { CheckMark, Octicon, Tg, Who } from './tags.tsx';
+import { CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
 import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
@@ -814,7 +814,7 @@ function ThemeGallery({ look }: { look: Look }) {
         </div>
       ) : (
         <div class="tg-list">
-          {!list && <p class="note">Loading…</p>}
+          {!list && <Lines />}
           {list?.length === 0 && <p class="note">No themes match.</p>}
           {list?.map((x) => (
             <div class="tg-item">
@@ -1377,7 +1377,7 @@ function SlackPeople({ team }: { team: string }) {
       </div>
       {err && <p class="error">{err}</p>}
       {!logins || !map ? (
-        <p class="note">Loading…</p>
+        <Lines />
       ) : (
         <table class="set-people">
           <tbody>
@@ -1580,7 +1580,7 @@ function ClaudeFolders() {
       <ClaudeSkill />
           <ClaudeMod />
       {!repos ? (
-        <p class="note">Loading…</p>
+        <Lines />
       ) : (
         <table class="set-people">
           <tbody>

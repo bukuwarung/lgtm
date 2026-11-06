@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, reportError, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep } from './files.ts';
-import { CheckMark, Octicon, Tg, Who } from './tags.tsx';
+import { CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, earlierVerdicts, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
@@ -280,7 +280,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
           </>
         )}
       </div>
-      {open && <pre class="ix-log">{log ?? 'Loading…'}</pre>}
+      {open && (log == null ? <Lines n={4} /> : <pre class="ix-log">{log}</pre>)}
     </>
   );
 }
@@ -469,7 +469,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
         }
       >
         {!checks ? (
-          <p class="note ix-pad">Loading…</p>
+          <div class="ix-pad"><Lines /></div>
         ) : !checks.length ? (
           <p class="note ix-pad">No checks.</p>
         ) : (

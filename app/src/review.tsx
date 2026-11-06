@@ -23,7 +23,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -3253,7 +3253,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const [openRuns, setOpenRuns] = useState<Set<number>>(new Set());
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
-  if (src === undefined) return <p class="note pad" style={{ minHeight: stand }}>Loading…</p>;
+  if (src === undefined) return <div class="pad" style={{ minHeight: stand }}><Lines n={6} /></div>;
   if (src === null) return <p class="note pad">Couldn't load this file. The {'<>'} button in its header shows the source diff.</p>;
 
   const t = ctx.target?.path === path ? ctx.target : null;

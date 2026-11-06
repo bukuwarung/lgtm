@@ -104,3 +104,10 @@ export function Time({ at }: { at: string | number }) {
   const iso = new Date(at).toISOString();
   return <time dateTime={iso} title={relative ? exactTime(at) : ago(at)}>{relative ? ago(at) : exactTime(at)}</time>;
 }
+
+// Something still loading: grey lines where it will be, as the rest of the app's placeholders (never a "Loading…").
+export const Lines = ({ n = 3 }: { n?: number }) => (
+  <div class="sk-lines" aria-busy="true" aria-label="Loading">
+    {Array.from({ length: n }, (_, i) => <span class="sk" key={i} />)}
+  </div>
+);

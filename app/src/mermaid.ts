@@ -31,6 +31,11 @@ export async function renderMermaid(root: ParentNode | null) {
   for (const el of todo) {
     try {
       el.innerHTML = (await m.render(`mermaid-${++seq}`, el.dataset.code!)).svg;
+      // Its own size, scaled with Settings → Text size (mermaid draws at a fixed 16px), never wider than the page.
+      const svg = el.querySelector('svg');
+      const w = svg?.viewBox.baseVal?.width;
+      if (svg && w) svg.style.width = `calc(${w}px * var(--ts))`;
+      svg?.style.setProperty('max-width', '100%');
     } catch (e) {
       el.classList.add('mermaid-error');
       el.textContent = `Couldn't draw this diagram: ${(e as Error).message}`;
