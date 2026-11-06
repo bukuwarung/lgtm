@@ -1035,14 +1035,14 @@ test('switchedOff: tests skipped and checks silenced, in any language; moved lin
     p('pay/pay.go', '+\tdefer f.Close() //nolint:errcheck'),
     p('app/src/main/res/layout/a.xml', '+    tools:ignore="HardcodedText"'),
     p('src/moved.ts', '-// @ts-ignore', '+  // @ts-ignore'),
-    { ...p('app/src/main/java/a/New.kt', '+@Suppress("MagicNumber")', '+// @ts-ignore'), status: 'added' }, // @Suppress in a new file doesn't count
+    { ...p('app/src/main/java/a/New.kt', '+@Suppress("MagicNumber")', '+// @ts-ignore'), status: 'added' }, // in a new file too
     p('README.md', '+Use `@Suppress("X")` sparingly.'),
   ]).map((x) => [x.what, x.test]);
   assert.deepEqual(got, [
     ['@Ignore("flaky")', true], ['it.skip(', true], ['xit(', true], ['pending', true], ['@pytest.mark.skip', true], ['t.Skip(', true],
     ['@Suppress("UNCHECKED_CAST")', false], // @Ignore and skip outside tests aren't tests
     ['@ts-ignore', false], ['eslint-disable-next-line no-console', false], ['# noqa: F401', false], ['# type: ignore[assignment]', false],
-    ['//nolint:errcheck', false], ['tools:ignore="HardcodedText"', false], ['@ts-ignore', false],
+    ['//nolint:errcheck', false], ['tools:ignore="HardcodedText"', false], ['@Suppress("MagicNumber")', false], ['@ts-ignore', false],
   ]);
 });
 

@@ -48,10 +48,6 @@ const CHECK: RegExp[] = [
   /\btools:ignore="[^"]*"/, // Android lint, in XML
 ];
 
-// Not in a file the PR adds: Kotlin, Java and Android code is full of these from the start (written as it was
-// written, all there to read); added to code that's already there, they hide something that used to be reported.
-const ONLY_IN_EXISTING = /^(@(file:)?Suppress(Warnings|Lint|FBWarnings)?\(|tools:ignore=)/;
-
 // CI let off: a step or job that can fail without failing the build, or never runs; tests skipped on the command line.
 const CI_FILE = /(^|\/)(\.github\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.ya?ml|\.circleci\/config\.ya?ml|azure-pipelines\.ya?ml|bitrise\.ya?ml|codemagic\.ya?ml|Jenkinsfile|\.buildkite\/[^/]+\.ya?ml)$/;
 const SCRIPT_FILE = /(^|\/)(Makefile|package\.json|Fastfile|[^/]+\.(sh|bash|gradle|gradle\.kts))$/;
@@ -82,7 +78,6 @@ export function switchedOff(files: F[]): Off[] {
         continue;
       }
       const m = t ?? CHECK.map((re) => l.text.match(re)).find(Boolean);
-      if (m && !t && f.status === 'added' && ONLY_IN_EXISTING.test(m[0])) continue;
       if (m) out.push({ path: f.filename, line: l.new, what: m[0].trim(), test: !!t });
     }
   }
