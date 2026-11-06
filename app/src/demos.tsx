@@ -3,7 +3,7 @@ import { highlightCode, rainbow, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
 import { FileIcon, ModuleIcon } from './shortcuts.tsx';
 import { folderIcon } from './fileicons.ts';
-import { CheckMark, Octicon, Tg } from './tags.tsx';
+import { CheckMark, Octicon, Tg, Who } from './tags.tsx';
 import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
@@ -1258,11 +1258,11 @@ Object.assign(DEMOS, {
     on: (
       <div class="demo-with-index">
         <div class="demo-index">
+          <b>Conversation 2</b>
+          <div class="demo-idx">OrderNotifier.kt:41 <small>you</small></div>
           <b>Files 2</b>
           <div class="demo-idx">OrderNotifier.kt</div>
           <div class="demo-idx">OrderNotifierTest.kt</div>
-          <b>Review threads 1</b>
-          <div class="demo-idx">OrderNotifier.kt:41 <small>you</small></div>
         </div>
         {SHORT_FILE}
       </div>
@@ -1435,22 +1435,25 @@ SCENES.app = {
           <aside class="side">
             <div class="index">
               <details open class="ix-sec">
-                <summary>Conversation <span class="count">3</span></summary>
-                <button class="ix-item"><span class="ix-label">Description</span></button>
-                <button class="ix-item"><span class="ix-label">budi <span class="ix-meta"><Tg i="approved" t="approved" /></span></span><span class="ix-sub">Nice, much safer.</span></button>
-              </details>
-              <details open class="ix-sec">
                 <summary>Reviewers <span class="count">2</span></summary>
                 <button class="ix-item ix-person"><span class="ix-label"><img src={face('budi')} alt="" />budi <span class="ix-meta v-APPROVED"><Tg i="approved" t="approved" /></span></span></button>
                 <button class="ix-item ix-person"><span class="ix-label"><img src={face('you')} alt="" />you <span class="ix-meta v-WAITING"><Tg i="waiting" t="waiting" /></span></span></button>
               </details>
               <details open class="ix-sec">
-                <summary>Checks <span class="count">6</span></summary>
-                <details class="ix-ckgroup"><summary><CheckMark state="success" /> 6 passed</summary></details>
+                <summary>Conversation <span class="count">3</span></summary>
+                <button class="ix-item"><span class="ix-label">Description</span></button>
+                <details open class="ix-ckgroup">
+                  <summary><Octicon name="person" /> 1 yours</summary>
+                  <button class="ix-item"><span class="ix-label"><Octicon name="file" /> retries.md:5 <span class="ix-meta"><Who login="you" src={face('you')} /></span> <span class="ix-sub ix-inline">Does this cover expired cards too?</span></span></button>
+                </details>
+                <details open class="ix-ckgroup">
+                  <summary><Octicon name="comment-discussion" /> 1 from others</summary>
+                  <button class="ix-item"><span class="ix-label"><Who login="budi" src={face('budi')} /> <span class="ix-meta"><Tg i="approved" t="approved" /></span></span><span class="ix-sub">Nice, much safer.</span></button>
+                </details>
               </details>
               <details open class="ix-sec">
-                <summary>Review threads <span class="count">1</span></summary>
-                <button class="ix-item"><span class="ix-label">retries.md:5 <span class="ix-meta">you</span></span><span class="ix-sub">Does this cover expired cards too?</span></button>
+                <summary>Checks <span class="count">6</span></summary>
+                <details class="ix-ckgroup"><summary><CheckMark state="success" /> 6 passed</summary></details>
               </details>
               <details open class="ix-sec">
                 <summary>Files <span class="count">5</span> <span class="ck-sum">1/5 viewed</span></summary>

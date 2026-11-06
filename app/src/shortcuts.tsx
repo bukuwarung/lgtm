@@ -312,7 +312,8 @@ type IndexProps = {
   onViewed: OnViewed;
 };
 
-// The PR Shortcut Index: jump to the description, any comment or review, CI checks, review threads, or a file.
+// The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
+// how much they concern me); CI checks; the files.
 export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
@@ -330,6 +331,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
     <Entry key={c.id} label={<Who login={c.author} src={c.avatar} />} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
   );
   const tiers = threadTiers(sortedThreads, me);
+  const waitsOnMe = (t: Thread) => !!me && awaitsMe(t, me, pr.user.login === me); // listed first in its group
   // In the bots' and the resolved group, their author and "resolved" go without saying.
   const threadEntry = (t: Thread, inGroup?: 'bot' | 'resolved') => {
     const first = t.comments.nodes[0];
@@ -337,7 +339,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
     return (
       <Entry
         key={t.id}
-        label={<>{waiting && <Octicon name="comment" />} {`${base(t.path)}${t.line ? ':' + t.line : ''}`}</>}
+        label={<><Octicon name={waiting ? 'comment' : 'file'} /> {`${base(t.path)}${t.line ? ':' + t.line : ''}`}</>}
         meta={(() => {
           const rest = [waiting && 'awaiting your reply', inGroup !== 'resolved' && t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ');
           const who = inGroup !== 'bot' && first?.author;
@@ -363,28 +365,6 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
 
   return (
     <div class="index">
-      <Section title="Conversation" count={conversation.length + 1}>
-        <Entry label="Description" onClick={() => jumpTo('pr-description')} />
-        {myConv > 0 && (
-          <details class="ix-ckgroup" open>
-            <summary><Octicon name="person" /> {myConv} yours</summary>
-            {conversation.map((c, i) => !c.bot && c.author === me && convEntry(c, i))}
-          </details>
-        )}
-        {othersConv > 0 && (
-          <details class="ix-ckgroup" open={minePR}>
-            <summary><Octicon name="comment-discussion" /> {othersConv} from others</summary>
-            {conversation.map((c, i) => !c.bot && c.author !== me && convEntry(c, i))}
-          </details>
-        )}
-        {bots.length > 0 && (
-          <details class="ix-ckgroup" open={!foldBots}>
-            <summary><Octicon name="dependabot" /> {bots.length} from bots</summary>
-            {conversation.map((c, i) => c.bot && convEntry(c, i))}
-          </details>
-        )}
-      </Section>
-
       <Section id="ix-reviewers" title="Reviewers" count={reviewers.size}>
         {[...reviewers].map(([who, r]) => (
           <div class="ix-check">
@@ -414,6 +394,54 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
           ))}
         {!ask && !reviewers.size && <p class="note ix-pad">Nobody yet.</p>}
         {addMe && !reviewers.has(me) && <AddMe add={addMe} />}
+      </Section>
+
+      <Section title="Conversation" count={conversation.length + 1 + threads.length + drafts.length}>
+        <Entry label="Description" onClick={() => jumpTo('pr-description')} />
+        {myConv + drafts.length + tiers.mine.length > 0 && (
+          <details class="ix-ckgroup" open>
+            <summary><Octicon name="person" /> {myConv + drafts.length + tiers.mine.length} yours</summary>
+            {tiers.mine.filter(waitsOnMe).map((t) => threadEntry(t))}
+            {conversation.map((c, i) => !c.bot && c.author === me && convEntry(c, i))}
+            {drafts.map((d) => (
+              <Entry
+                key={d.id}
+                label={<><Octicon name="file" /> {`${base(d.path)}${d.line ? ':' + d.line : ''}`}</>}
+                meta="pending"
+                sub={oneLine(d.body)}
+                inline
+                onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
+              />
+            ))}
+            {tiers.mine.filter((t) => !waitsOnMe(t)).map((t) => threadEntry(t))}
+          </details>
+        )}
+        {othersConv + tiers.human.length > 0 && (
+          <details class="ix-ckgroup" open={minePR}>
+            <summary><Octicon name="comment-discussion" /> {othersConv + tiers.human.length} from others</summary>
+            {tiers.human.filter(waitsOnMe).map((t) => threadEntry(t))}
+            {conversation.map((c, i) => !c.bot && c.author !== me && convEntry(c, i))}
+            {tiers.human.filter((t) => !waitsOnMe(t)).map((t) => threadEntry(t))}
+          </details>
+        )}
+        {bots.length + tiers.bot.length > 0 && (
+          <details class="ix-ckgroup" open={!foldBots}>
+            <summary><Octicon name="dependabot" /> {bots.length + tiers.bot.length} from bots</summary>
+            {conversation.map((c, i) => c.bot && convEntry(c, i))}
+            {tiers.bot.map((t) => threadEntry(t, 'bot'))}
+          </details>
+        )}
+        {tiers.resolved.length > 0 && (
+          <details class="ix-ckgroup">
+            <summary><Octicon name="check" /> {tiers.resolved.length} resolved</summary>
+            {tiers.resolved.map((t) => threadEntry(t, 'resolved'))}
+          </details>
+        )}
+        {settled > 0 && (
+          <button class="link ix-pad ix-hidden" onClick={onToggleSettled}>
+            {settledShown ? `Hide ${settled} resolved or outdated` : `${settled} resolved or outdated hidden · show`}
+          </button>
+        )}
       </Section>
 
       <Section
@@ -456,49 +484,6 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
               );
             })}
           </>
-        )}
-      </Section>
-
-      <Section title="Review threads" count={threads.length + drafts.length}>
-        {drafts.length + tiers.mine.length > 0 && (
-          <details class="ix-ckgroup" open>
-            <summary><Octicon name="person" /> {drafts.length + tiers.mine.length} yours</summary>
-            {drafts.map((d) => (
-              <Entry
-                key={d.id}
-                label={`${base(d.path)}${d.line ? ':' + d.line : ''}`}
-                meta="pending"
-                sub={oneLine(d.body)}
-                inline
-                onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
-              />
-            ))}
-            {tiers.mine.map((t) => threadEntry(t))}
-          </details>
-        )}
-        {tiers.human.length > 0 && (
-          <details class="ix-ckgroup" open={minePR}>
-            <summary><Octicon name="comment-discussion" /> {tiers.human.length} from others</summary>
-            {tiers.human.map((t) => threadEntry(t))}
-          </details>
-        )}
-        {tiers.bot.length > 0 && (
-          <details class="ix-ckgroup" open={minePR}>
-            <summary><Octicon name="dependabot" /> {tiers.bot.length} from bots</summary>
-            {tiers.bot.map((t) => threadEntry(t, 'bot'))}
-          </details>
-        )}
-        {tiers.resolved.length > 0 && (
-          <details class="ix-ckgroup">
-            <summary><Octicon name="check" /> {tiers.resolved.length} resolved</summary>
-            {tiers.resolved.map((t) => threadEntry(t, 'resolved'))}
-          </details>
-        )}
-        {!threads.length && !drafts.length && !(settled && !settledShown) && <p class="note ix-pad">No review threads.</p>}
-        {settled > 0 && (
-          <button class="link ix-pad ix-hidden" onClick={onToggleSettled}>
-            {settledShown ? `Hide ${settled} resolved or outdated` : `${settled} resolved or outdated hidden · show`}
-          </button>
         )}
       </Section>
 
