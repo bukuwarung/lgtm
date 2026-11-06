@@ -340,7 +340,7 @@ test('untested: code changed without a matching test change', () => {
 });
 
 test('isArchivedSpec: markdown in an archive folder', () => {
-  assert.deepEqual(['docs/specs/archive/v1.md', 'specs/Archived/old.md', 'docs/_archive/x.md', 'docs/specs/now.md', 'src/archive/Store.kt', 'docs/archives/x.md'].map(isArchivedSpec), [true, true, true, false, false, true]);
+  assert.deepEqual(['docs/specs/archive/v1.md', 'specs/Archived/old.md', 'docs/_archive/x.md', 'docs/specs/now.md', 'src/archive/Store.kt', 'docs/archives/x.md', 'openspec/changes/archive/2026-09-22-x/.openspec.yaml'].map(isArchivedSpec), [true, true, true, false, false, true, true]);
 });
 
 test('deletedTests: tests deleted outright, not renamed or moved', () => {

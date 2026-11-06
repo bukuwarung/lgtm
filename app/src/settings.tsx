@@ -443,7 +443,7 @@ export function Settings() {
         <h3>Diff</h3>
         <Flag k="sinceFirst" initial={true} label="On a re-review, show only what changed since your last review" demo />
         <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New outside packages are still named. Files whose only changes are imports wait behind one row." demo />
-        <Flag k="hideArchivedSpecs" initial={true} label="Hide archived specs" hint="Markdown files in an archive folder (archive/, archives/, archived/), behind one row: what was, not what this change does." demo />
+        <Flag k="hideArchivedSpecs" initial={true} label="Hide archived specs" hint="Specs, docs and their metadata (OpenSpec's .openspec.yaml, say) in an archive folder (archive/, archives/, archived/), behind one row: what was, not what this change does. Code there still shows." demo />
         <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated or linguist-binary in .gitattributes." demo />
         <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />

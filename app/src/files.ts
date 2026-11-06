@@ -12,8 +12,9 @@ const isTest = (path: string) => subject(path) !== path;
 export const inTests = (path: string) =>
   isTest(path) || /(^|\/)(tests?|__tests__|spec|e2e|fixtures)\//.test(path) || /(^|\/)test_[^/]+$/.test(path);
 
-// A spec or doc kept in an archive folder (archive/, archives/, archived/, _archive/): what was, not what this change does.
-export const isArchivedSpec = (path: string) => isMarkdown(path) && /(^|\/)_?archive[ds]?\//i.test(path);
+// A spec, doc or its metadata kept in an archive folder (archive/, archives/, archived/, _archive/), as OpenSpec keeps a
+// change's proposal, design, tasks and .openspec.yaml: what was, not what this change does. Code there still shows.
+export const isArchivedSpec = (path: string) => !CODE.test(path) && /(^|\/)_?archive[ds]?\//i.test(path);
 
 // Reading order: markdown (the intent) first, then each source file followed by its tests.
 export const reviewOrder = (paths: string[]) =>
