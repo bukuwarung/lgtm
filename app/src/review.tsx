@@ -30,7 +30,7 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
-import { inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
+import { deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
 import { claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread } from './platform.ts';
 import { adfToMarkdown, jiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
@@ -971,6 +971,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 
   const mainLang = majorityLanguage(data.files.filter((f) => !f.generated).map((f) => f.filename));
   const [flagUntested] = useStoredFlag('flagUntested', true);
+  const goneTests = useMemo(() => deletedTests(data.files), [data.files]);
   const noTests = useMemo(() => new Set(flagUntested ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested]);
   // Modules (Settings → Reviewing), from where the repo's build files sit: with 2+ touched the index groups files by
   // them and files are tagged; with one, a pill names it.
@@ -1570,6 +1571,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             )}
             {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad"><Tg i="conflict" t="conflicts" /></span>}
             {waitingOnMe > 0 && <span class="pill p-reply"><Tg i="reply" n={waitingOnMe} t="awaiting your reply" /></span>}
+            {goneTests.length > 0 && (
+              <PillMenu cls="p-warn" label={<Tg i="removed" n={goneTests.length} t={`test file${goneTests.length > 1 ? 's' : ''} deleted`} />} head="Tests this PR deletes (not moved or renamed):">
+                {goneTests.map((p) => (
+                  <button onClick={() => jumpTo('f-' + p)} title={p}>
+                    <b>{base(p)}</b> <small>{dir(p)}</small>
+                  </button>
+                ))}
+              </PillMenu>
+            )}
             {noTests.size > 0 && (
               <PillMenu cls="p-warn" label={<Tg i="notest" n={noTests.size} t={`file${noTests.size > 1 ? 's' : ''} without test changes`} />} head="Code changed, but no test for it changed in this PR:">
                 {[...noTests].map((p) => (

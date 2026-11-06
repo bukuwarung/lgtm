@@ -73,7 +73,7 @@ gh auth login   # once, if you haven't
 </picture>
 
 - Files in reading order: specs and docs, build and config, models, the implementation (each test right below its class), other tests, then resources. Drag the steps into your own order; the index groups files by step, or as folders.
-- Files grouped by module, with code changed but no test.
+- Files grouped by module, with code changed but no test, and test files deleted outright.
 - Re-reviews show only what changed since your last one, and your threads say whether their lines moved.
 - An index of comments, reviewers, checks (failed-job logs, and whether `main` fails them too) and files; big PRs get a review plan. It can start hidden on PRs waiting for your review.
 - Side-by-side or unified, centred or full width, in your pick of themes and fonts.

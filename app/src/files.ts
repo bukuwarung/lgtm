@@ -157,6 +157,11 @@ export function moduleView(modules: Map<string, string>): 'all' | 'pill' | 'none
 // A module's name: Gradle's (core/network → :core:network; the root project ':'), else its folder.
 export const moduleName = (m: string) => (plainRoots.has(m) ? (m === '.' ? '(root)' : m) : m === '.' ? ':' : ':' + m.replaceAll('/', ':'));
 // As a heading: the root spelled out.
+// Test files the PR deletes outright: not renamed, and no file of the same name added elsewhere (a move git didn't pair).
+export function deletedTests(files: Changed[]): string[] {
+  const added = new Set(files.filter((f) => f.status === 'added').map((f) => base(f.filename)));
+  return files.filter((f) => f.status === 'removed' && (isTest(f.filename) || /(^|\/)test_[^/]+$/.test(f.filename)) && !added.has(base(f.filename))).map((f) => f.filename);
+}
 export const moduleLabel = (m: string) => (m === '.' && !plainRoots.has(m) ? ': (root)' : moduleName(m));
 
 // Whether a set of changed files (a module's) changes code but none of its tests: code changed and added to (not
