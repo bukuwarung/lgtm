@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
@@ -209,8 +209,55 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
       <p class="note">
         Pick a pull request from the list, or paste a PR link in the box at the top (⌘K). <a href="#/history">Your reviews this month →</a>
       </p>
+      <RecentList max={8} />
       <StaleBranches />
     </div>
+  );
+}
+
+// The PRs you opened lately (platform.ts recentPRs), newest first: on the start page, and in the clock's menu.
+const STATE_ICON = { merged: 'git-merge', closed: 'git-pull-request-closed', draft: 'git-pull-request-draft' } as const;
+function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
+  const here = location.hash.slice(1);
+  const list = useRecentPRs().filter((r) => `/${r.repo}/pull/${r.n}` !== here).slice(0, max);
+  if (!list.length) return onGo ? <p class="note bell-empty">PRs you open show here, and stay after a relaunch.</p> : null;
+  const row = (r: RecentPR) => (
+    <a class="recent-row" href={`#/${r.repo}/pull/${r.n}`} onClick={onGo}>
+      <Octicon name={r.state ? STATE_ICON[r.state] : 'git-pull-request'} class={`recent-${r.state ?? 'open'}`} />
+      <span class="recent-title">{r.title}</span>
+      <small>
+        {r.repo.split('/')[1]}#{r.n} · {r.author} · {ago(new Date(r.at).toISOString())}
+      </small>
+    </a>
+  );
+  return onGo ? <>{list.map(row)}</> : (
+    <section class="recent">
+      <h3>Recently viewed</h3>
+      {list.map(row)}
+    </section>
+  );
+}
+function RecentMenu() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => !(e.target as Element).closest?.('.recent-menu') && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', esc);
+    return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
+  }, [open]);
+  return (
+    <span class="recent-menu">
+      <button class={'nav-hist' + (open ? ' on' : '')} title="Recently viewed PRs" aria-label="Recently viewed PRs" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Octicon name="history" />
+      </button>
+      {open && (
+        <div class="account-menu recent-pop" role="menu">
+          <RecentList max={30} onGo={() => setOpen(false)} />
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -498,6 +545,7 @@ function App() {
             {backTo && <span class="back-hint">{backTo}</span>}
           </button>
           <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}><Octicon name="arrow-right" /></button>
+          <RecentMenu />
           <CommandBar queue={() => queue.current} parse={parseRoute} />
         </span>
         <span class="spacer" />

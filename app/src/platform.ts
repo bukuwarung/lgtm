@@ -4,7 +4,7 @@ import { useEffect, useState } from 'preact/hooks';
 // drafts, what you'd seen of a PR, Claude session links, the PR list's team, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$)/;
 let account = '';
 export const lastLogin = () => {
   try {
@@ -30,6 +30,34 @@ export function setAccount(login: string) {
 }
 
 // The page is served by bin/lgtm.mjs on a fixed 127.0.0.1 port, so localStorage persists drafts across runs.
+// PRs opened lately, newest first, kept across launches (the clock by Back, the start page, ⌘K): the last 30.
+export type RecentPR = { repo: string; n: number; title: string; author: string; state?: 'merged' | 'closed' | 'draft'; at: number };
+export function recentPRs(): RecentPR[] {
+  try {
+    return JSON.parse(localStorage.getItem(own('recent')) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+export function rememberPR(p: Omit<RecentPR, 'at'>) {
+  try {
+    const list = [{ ...p, at: Date.now() }, ...recentPRs().filter((r) => r.repo !== p.repo || r.n !== p.n)].slice(0, 30);
+    localStorage.setItem(own('recent'), JSON.stringify(list));
+    dispatchEvent(new Event('lgtm:recent'));
+  } catch {
+    // not kept
+  }
+}
+export function useRecentPRs() {
+  const [list, setList] = useState(recentPRs);
+  useEffect(() => {
+    const h = () => setList(recentPRs());
+    addEventListener('lgtm:recent', h);
+    return () => removeEventListener('lgtm:recent', h);
+  }, []);
+  return list;
+}
+
 export const storage = {
   get: async <T>(key: string): Promise<T | undefined> => {
     const v = localStorage.getItem(own(key));

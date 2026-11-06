@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { QueueItem } from './github.ts';
+import { recentPRs } from './platform.ts';
 
 // Go to: a PR in your queue, or within the open PR a file or anything in its index (comments, checks, threads).
 // Index entries are read from the page and clicked, so they jump exactly like the index does.
 type Entry = { kind: string; label: string; sub: string; run: () => void };
 
 function entries(queue: QueueItem[]): Entry[] {
-  const prs = queue.map((i) => ({
+  const here = location.hash.slice(1);
+  const recent = recentPRs().filter((r) => `/${r.repo}/pull/${r.n}` !== here).map((r) => ({
+    kind: 'Recent',
+    label: r.title,
+    sub: `${r.repo}#${r.n} · ${r.author}`,
+    run: () => (location.hash = `/${r.repo}/pull/${r.n}`),
+  }));
+  const seen = new Set(recentPRs().map((r) => `${r.repo}#${r.n}`));
+  const prs = queue.filter((i) => !seen.has(`${i.repo}#${i.number}`)).map((i) => ({
     kind: 'PR',
     label: i.title,
     sub: `${i.repo}#${i.number} · ${i.author}`,
@@ -23,7 +32,7 @@ function entries(queue: QueueItem[]): Entry[] {
     const path = el.id.slice(2);
     return { kind: 'File', label: path.split('/').pop()!, sub: path, run: () => el.scrollIntoView() };
   });
-  return [...files, ...index, ...prs];
+  return [...recent.slice(0, 8), ...files, ...index, ...recent.slice(8), ...prs]; // the latest few first, as a browser's box has them
 }
 
 // Every word of the query, in any order, somewhere in the entry.

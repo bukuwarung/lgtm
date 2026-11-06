@@ -19,7 +19,7 @@ Change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 | `.` | Open the file in view on github.dev |
 | `i` | Show / hide the index |
 | `⌘↵` | Finish review |
-| `⌘K` | Go to a PR, file, thread or check |
+| `⌘K` | Go to a PR (the ones you opened lately first), file, thread or check |
 | `⌘F` | Find in every file |
 | `⌘+` / `⌘−` / `⌘0` | Bigger / smaller / default text |
 | `?` | All shortcuts |
