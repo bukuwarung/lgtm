@@ -341,7 +341,7 @@ export const DEMOS: Record<string, Demo> = {
     ),
   },
   foldBots: {
-    title: 'Fold bot comments',
+    title: 'Bot comments behind one line',
     off: (
       <div class="conversation">
         <div class="comment">
@@ -354,10 +354,8 @@ export const DEMOS: Record<string, Demo> = {
     ),
     on: (
       <div class="conversation">
-        <details class="comment bot">
-          <summary>
-            <b>coverage-bot</b> <time>2 hours ago</time> <span class="bot-excerpt">{BOT_TEXT.slice(0, 60)}</span>
-          </summary>
+        <details class="bots-hidden">
+          <summary><Octicon name="dependabot" /> 1 comment from bots</summary>
         </details>
       </div>
     ),

@@ -4370,6 +4370,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr:
         )}
       </div>
       {items.map((c) => {
+        if (c.bot && foldBots) return null; // below, behind one line
         const head = (
           <>
             <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
@@ -4378,19 +4379,31 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix }: { pr:
           </>
         );
         const body = c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />;
-        // Bot reports (CI summaries, AI reviewers, coverage) fold to one line; click to read.
-        return c.bot && foldBots ? (
-          <details class="comment bot" key={c.id} id={'cv-' + c.id}>
-            <summary>{head} <span class="bot-excerpt">{botExcerpt(c.html)}</span></summary>
-            {body}
-          </details>
-        ) : (
+        return (
           <div class="comment" key={c.id} id={'cv-' + c.id}>
             {head}
             {body}
           </div>
         );
       })}
+      {/* Bot reports (CI summaries, AI reviewers, coverage): all behind one line, each a line of its own inside; the
+          index's jump to one opens them. */}
+      {foldBots && items.some((c) => c.bot) && (
+        <details class="bots-hidden">
+          <summary><Octicon name="dependabot" /> {items.filter((c) => c.bot).length} comment{items.filter((c) => c.bot).length === 1 ? '' : 's'} from bots</summary>
+          {items.filter((c) => c.bot).map((c) => (
+            <details class="comment bot" key={c.id} id={'cv-' + c.id}>
+              <summary>
+                <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author)}>{c.author}</b>{' '}
+                <a href={c.url} target="_blank" rel="noopener"><time>{new Date(c.at).toLocaleString()}</time></a> <CopyLink url={c.url} />
+                {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}{' '}
+                <span class="bot-excerpt">{botExcerpt(c.html)}</span>
+              </summary>
+              {c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />}
+            </details>
+          ))}
+        </details>
+      )}
     </details>
   );
 }

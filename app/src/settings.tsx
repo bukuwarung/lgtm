@@ -471,7 +471,7 @@ export function Settings() {
           <Flag k="strikeRemoved" initial={false} label="Strike through removed text" hint="Removed passages show in a red box, as their source."  demo />
         </Flag>
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
-        <Flag k="foldBots" initial={true} label="Fold bot comments and bot-only threads" demo>
+        <Flag k="foldBots" initial={true} label="Bot comments behind one line, bot-only threads folded" hint="In the conversation, all the bots' comments (CI reports, AI reviewers) sit behind one “N comments from bots” line; open it for one line each." demo>
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
         </Flag>
         <Flag k="agentsAsBots" initial={false} label="Comments that open with 🤖 are a bot's" hint="Agents posting from people's accounts often say so that way (“🤖 Posted by an agent”). They then fold like bots', and don't wait on your reply or count as mentions." demo />
