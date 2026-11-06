@@ -4,7 +4,7 @@ import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, range
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
 import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
-import { addsLogic, codeWithoutTests, deletedTests, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
+import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, rainbow, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
@@ -337,6 +337,10 @@ test('untested: code changed without a matching test change', () => {
     ]),
     ['app/src/main/java/a/Bar.kt'],
   );
+});
+
+test('isArchivedSpec: markdown in an archive folder', () => {
+  assert.deepEqual(['docs/specs/archive/v1.md', 'specs/Archived/old.md', 'docs/_archive/x.md', 'docs/specs/now.md', 'src/archive/Store.kt', 'docs/archives/x.md'].map(isArchivedSpec), [true, true, true, false, false, true]);
 });
 
 test('deletedTests: tests deleted outright, not renamed or moved', () => {

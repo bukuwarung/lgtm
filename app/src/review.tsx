@@ -31,7 +31,7 @@ import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
-import { deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
+import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep } from './files.ts';
 import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
@@ -492,11 +492,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [showNoDiff, setShowNoDiff] = useState(false);
   const [showWsOnly, setShowWsOnly] = useState(false);
   const [showImportsOnly, setShowImportsOnly] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [foldImports] = useStoredFlag('foldImports', true);
   // Feature switches (Settings → Diff).
   const { bots } = useBots();
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
   const [foldNoDiff] = useStoredFlag('hideNoDiff', true);
+  const [foldArchived] = useStoredFlag('hideArchivedSpecs', true);
   const [startSince] = useStoredFlag('sinceFirst', true);
   const [resumeOn] = useStoredFlag('resumePosition', false);
   const [dimMoved] = useStoredFlag('dimMoved', true);
@@ -1183,12 +1185,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const importsOnlySet = new Set(
     foldImports ? files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && onlyImports(f, ignoreWs)).map((f) => f.filename) : [],
   );
-  const visible = files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && !importsOnlySet.has(f.filename));
+  // Specs in an archive folder (docs/archive/…, specs/archived/…): history, not this change (Settings → Diff).
+  const archivedSet = new Set(foldArchived ? files.filter((f) => !f.generated && !f.noDiff && isArchivedSpec(f.filename)).map((f) => f.filename) : []);
+  const visible = files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && !importsOnlySet.has(f.filename) && !archivedSet.has(f.filename));
   const wsFolded = ignoreWs ? visible.reduce((n, f) => n + wsSections(f).folded, 0) : 0; // sections folded in the rest
   const generated = files.filter((f) => f.generated);
   const noDiff = files.filter((f) => f.noDiff && !f.generated);
   const wsOnly = files.filter((f) => wsOnlySet.has(f.filename));
   const importOnly = files.filter((f) => importsOnlySet.has(f.filename));
+  const archived = files.filter((f) => archivedSet.has(f.filename) && !wsOnlySet.has(f.filename) && !importsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
   // The files on show in reading order (files.ts reviewPlan: specs, build, models, the change, tests, resources) or
   // GitHub's (Settings → Pull request view); a big PR also gets the plan itself, with how much of each step is viewed.
@@ -1196,7 +1201,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const plan = showPlan && visible.length >= PLAN_AT ? steps : null;
   const rank = readingOrder ? new Map(steps.flatMap((s) => s.paths).map((p, i) => [p, i])) : null;
   const inOrder = rank ? [...visible].sort((a, b) => rank.get(a.filename)! - rank.get(b.filename)!) : visible;
-  const shown = [...inOrder, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : [])];
+  const shown = [...inOrder, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : []), ...(showArchived ? archived : [])];
   // Centred, a changed line too wide for it: the PR fills the window instead (Settings → Diff); tabs count as 4.
   const tooWide = centered && (split || (fit && visible.some((f) => f.patch?.split('\n').some((l) => l[0] !== '@' && l.length > Number(cols) + 1 && l.replace(/\t/g, '    ').length > Number(cols) + 1))));
   // Modules as the files on show have them (not the ones waiting behind a row).
@@ -1766,6 +1771,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             (genOpen ? generated.map(section) : (
               <button class="gen-row" onClick={() => setShowGenerated(true)}>
                 {generated.length} generated file{generated.length > 1 ? 's' : ''} hidden. Show
+              </button>
+            ))}
+          {archived.length > 0 &&
+            (showArchived ? archived.map(section) : (
+              <button class="gen-row" onClick={() => setShowArchived(true)}>
+                {archived.length} archived spec{archived.length > 1 ? 's' : ''} hidden. Show
               </button>
             ))}
           {noDiff.length > 0 &&

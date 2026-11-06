@@ -161,6 +161,21 @@ export const DEMOS: Record<string, Demo> = {
       </File>
     ),
   },
+  hideArchivedSpecs: {
+    title: 'Hide archived specs',
+    off: (
+      <>
+        <File path="docs/specs/payment-retries.md" add={24} del={2} />
+        <File path="docs/specs/archive/payment-retries-v1.md" add={180} del={0} />
+      </>
+    ),
+    on: (
+      <>
+        <File path="docs/specs/payment-retries.md" add={24} del={2} />
+        <button class="gen-row">1 archived spec hidden. Show</button>
+      </>
+    ),
+  },
   hideGenerated: {
     title: 'Hide generated files',
     off: (
