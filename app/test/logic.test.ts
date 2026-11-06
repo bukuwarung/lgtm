@@ -1046,6 +1046,45 @@ test('switchedOff: tests skipped and checks silenced, in any language; moved lin
   ]);
 });
 
+test('switchedOff: CI let off in workflows and scripts', async () => {
+  const { switchedOff } = await import('../src/switchedoff.ts');
+  const p = (filename: string, ...lines: string[]) => ({ filename, patch: ['@@ -1,1 +1,9 @@', ...lines].join('\n') });
+  const got = switchedOff([
+    p('.github/workflows/ci.yml', '+        continue-on-error: true', '+    if: false', '+      - run: npm run lint || true', '+          kill $PID 2>/dev/null || true', '+          files=$(git diff --name-only || true)', '+      - run: ./gradlew build -x test', "+    if: github.event_name == 'push'"),
+    p('.gitlab-ci.yml', '+  allow_failure: true'),
+    p('scripts/release.sh', '+git commit --no-verify -m wip', '+echo done || true'),
+    p('src/app.ts', '+const x = a || true'),
+  ]).map((x) => [x.what, !!x.ci]);
+  assert.deepEqual(got, [
+    ['continue-on-error: true', true], ['if: false', true], ['|| true', true], ['-x test', true],
+    ['allow_failure: true', true], ['--no-verify', true],
+  ]);
+});
+
+test('protectionsOff: release builds readable, debuggable, cleartext, TLS unchecked; debug and tests not', async () => {
+  const { protectionsOff } = await import('../src/switchedoff.ts');
+  const p = (filename: string, ...lines: string[]) => ({ filename, patch: ['@@ -1,1 +1,9 @@', ...lines].join('\n') });
+  const got = protectionsOff([
+    p('app/build.gradle.kts', '     buildTypes {', '         release {', '-            isMinifyEnabled = true', '+            isMinifyEnabled = false', '         }', '         debug {', '-            isMinifyEnabled = true', '+            isMinifyEnabled = false'),
+    p('app/build.gradle', '         release {', '             signingConfig signingConfigs.release', '-            minifyEnabled true', '+            minifyEnabled false'),
+    p('lib/build.gradle.kts', '         release {', '+            isMinifyEnabled = false'), // a library's default
+    p('app/proguard-rules.pro', '+-dontobfuscate', '+-keep class ** { *; }', '+-keep class com.acme.Model { *; }'),
+    p('app/src/main/AndroidManifest.xml', '+        android:usesCleartextTraffic="true"', '+        android:debuggable="true"'),
+    p('app/src/debug/AndroidManifest.xml', '+        android:usesCleartextTraffic="true"'),
+    p('app/src/main/res/xml/network_security_config.xml', '+    <base-config cleartextTrafficPermitted="true">', '+            <certificates src="user" />'),
+    p('app/src/main/res/xml/nsc.xml', '+    <debug-overrides>', '+        <trust-anchors>', '+            <certificates src="user" />', '+    </debug-overrides>'),
+    p('api/client.py', '+    r = requests.get(url, verify=False)'),
+    p('net/client.go', '+\tTLSClientConfig: &tls.Config{InsecureSkipVerify: true},'),
+    p('app/src/main/java/a/Net.kt', '+        .hostnameVerifier { _, _ -> true }'),
+    p('app/src/test/java/a/NetTest.kt', '+        .hostnameVerifier { _, _ -> true }'),
+  ]).map((x) => x.what);
+  assert.deepEqual(got, [
+    'isMinifyEnabled = false', 'minifyEnabled false', '-dontobfuscate', '-keep class ** { *; }',
+    'android:usesCleartextTraffic="true"', 'android:debuggable="true"', 'cleartextTrafficPermitted="true"', '<certificates src="user"',
+    'verify=False', 'InsecureSkipVerify: true', 'hostnameVerifier { _, _ -> true',
+  ]);
+});
+
 test('expertise: who wrote the lines a PR touches', async () => {
   const { touchedLines, tally, whoKnows } = await import('../src/expertise.ts');
   const patch = ['@@ -10,4 +10,5 @@', ' a', '-b', '+B', '+C', ' d', ' e'].join('\n');

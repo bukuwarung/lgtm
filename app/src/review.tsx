@@ -5,7 +5,7 @@ import { depChanges, type DepChange } from './deps.ts';
 import { findHardcoded, type Hardcoded } from './hardcoded.ts';
 import { roomCheck, type SchemaChange } from './room.ts';
 import { focused, lockfileDrift, rawHtml, type WebHit } from './web.ts';
-import { switchedOff } from './switchedoff.ts';
+import { protectionsOff, switchedOff } from './switchedoff.ts';
 import { entityWithoutMigration, isMigration, migrationIssues, privateTransactional, type MigrationIssue } from './spring.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
@@ -844,6 +844,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [chkLock] = useStoredFlag('checkLockfile', true);
   const [chkFocus] = useStoredFlag('checkFocused', true);
   const [chkSupp] = useStoredFlag('checkSuppressions', true);
+  const [chkUnsafe] = useStoredFlag('checkProtections', true);
   const [chkHtml] = useStoredFlag('checkRawHtml', true);
   // package.json changed without its lockfile (web.ts): the base's file names in that folder, listed.
   const [drift, setDrift] = useState<Awaited<ReturnType<typeof lockfileDrift>>>([]);
@@ -973,6 +974,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const mainLang = majorityLanguage(data.files.filter((f) => !f.generated).map((f) => f.filename));
   const [flagUntested] = useStoredFlag('flagUntested', true);
   const supp = useMemo(() => (chkSupp ? switchedOff(data.files.filter((f) => !f.generated)) : []), [data.files, chkSupp]);
+  const unsafe = useMemo(() => (chkUnsafe ? protectionsOff(data.files.filter((f) => !f.generated)) : []), [data.files, chkUnsafe]);
   const goneTests = useMemo(() => deletedTests(data.files), [data.files]);
   const noTests = useMemo(() => new Set(flagUntested ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested]);
   // Modules (Settings → Reviewing), from where the repo's build files sit: with 2+ touched the index groups files by
@@ -994,6 +996,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const migText = (m: MigrationIssue) =>
     m.kind === 'edited' ? 'an applied migration changed: Flyway refuses to start where it already ran' : m.kind === 'duplicate' ? 'the same version as one already on the base branch' : `older than ${m.newest}, the newest on the base branch: Flyway refuses it where that one ran`;
   const findings: { text: string; go: () => void }[] = [
+    ...(unsafe.length ? [{ text: plural(unsafe.length, 'protection') + ' switched off', go: () => jumpToLine(unsafe[0].path, unsafe[0].line) }] : []),
     ...(secrets.list.length ? [{ text: plural(secrets.list.length, 'possible secret'), go: () => jumpToLine(secrets.list[0].path, secrets.list[0].line) }] : []),
     ...(texts.list.length ? [{ text: `${plural(texts.list.length, 'text')} not in strings.xml`, go: () => jumpToLine(texts.list[0].path, texts.list[0].line) }] : []),
     ...(room.length ? [{ text: `${room[0].entity}: a table changed with no database version raised`, go: () => jumpToLine(room[0].path, room[0].side === 'RIGHT' ? room[0].line : undefined) }] : []),
@@ -1399,7 +1402,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={!!me && pr.user.login === me} stillOpen={stillOpen} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -1407,13 +1410,38 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <DocCodeJump files={shown} />
         <HoldPlace />
         <main>
+          {pr.merged ? (
+            <p class="pr-state merged">
+              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by ? ` by @${pr.merged_by.login}` : ''} into <code>{pr.base.ref}</code>{pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}. A review now can only comment.</span>
+            </p>
+          ) : pr.state === 'closed' ? (
+            <p class="pr-state closed">
+              <Octicon name="git-pull-request-closed" size={16} /> <span><b>Closed without merging</b>{pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}. A review now can only comment.</span>
+            </p>
+          ) : pr.draft ? (
+            <p class="pr-state draft">
+              <Octicon name="git-pull-request-draft" size={16} /> <span><b>Draft.</b> {me && pr.user.login === me ? "Reviewers aren't notified until you mark it ready for review." : "The author hasn't asked for review yet: it may still change."}</span>
+            </p>
+          ) : null}
           <div class="pills pr-status">
             {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}><Tg i="again" t="updating…" /></span>}
-            {pr.draft && <span class="pill"><Tg i="draft" t="draft" /></span>}
             {status && !pr.draft && (
               <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] }>
                 <Tg i={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
               </span>
+            )}
+            {unsafe.length > 0 && (
+              <PillMenu cls="p-bad" label={<Tg i="alert" n={unsafe.length} t={`protection${unsafe.length > 1 ? 's' : ''} switched off`} />} head="Safeguards the PR turns off:">
+                {unsafe.map((x) => (
+                  <div class="pill-row">
+                    <button onClick={() => jumpToLine(x.path, x.line)} title={`${x.path}: ${x.why}`}>
+                      <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
+                      <small>{x.why}</small>
+                    </button>
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `${x.what}: ${x.why.charAt(0).toLowerCase() + x.why.slice(1)} Is that meant for this build? If it's only for debugging, could it go in a debug-only config instead?`)} />
+                  </div>
+                ))}
+              </PillMenu>
             )}
             {secrets.list.length > 0 && (
               <PillMenu cls="p-bad" label={<Tg i="key" n={secrets.list.length} t={`possible secret${secrets.list.length > 1 ? 's' : ''}`} />} head="Added lines that look like a secret (a key, a token, a password in the code):">
@@ -1509,16 +1537,16 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             )}
             {supp.length > 0 && (
               <PillMenu
-                cls={supp.some((x) => x.test) ? 'p-warn' : ''}
-                label={<Tg i="alert" n={supp.length} t={supp.every((x) => x.test) ? `test${supp.length > 1 ? 's' : ''} switched off` : supp.some((x) => x.test) ? 'tests and checks switched off' : `check${supp.length > 1 ? 's' : ''} switched off`} />}
-                head="Tests skipped, and checks (types, lint, warnings, coverage) silenced by the PR:"
+                cls={supp.some((x) => x.test || x.ci) ? 'p-warn' : ''}
+                label={<Tg i="alert" n={supp.length} t={offLabel(supp)} />}
+                head="Tests skipped, CI steps let fail or skipped, and checks (types, lint, warnings, coverage) silenced by the PR:"
               >
                 {supp.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
                       <b>{x.what}</b> <small>{base(x.path)}:{x.line}</small>
                     </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, x.test ? `${x.what} switches this test off. Should it stay off? If it's broken or flaky, could it be fixed here, or tracked in a ticket so it comes back?` : `${x.what} switches a check off here. Could the code satisfy it instead${/ts-/.test(x.what) ? ' (or @ts-expect-error with the reason, so it shows when it\u2019s no longer needed)' : ''}?`)} />
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, x.ci ? `With ${x.what} here, CI can pass without this step or its tests passing. Is that meant to stay?` : x.test ? `${x.what} switches this test off. Should it stay off? If it's broken or flaky, could it be fixed here, or tracked in a ticket so it comes back?` : `${x.what} switches a check off here. Could the code satisfy it instead${/ts-/.test(x.what) ? ' (or @ts-expect-error with the reason, so it shows when it\u2019s no longer needed)' : ''}?`)} />
                   </div>
                 ))}
               </PillMenu>
@@ -2265,6 +2293,12 @@ function BinaryInfo({ file, ctx }: { file: File; ctx: Ctx }) {
     </div>
   );
 }
+
+// "2 tests switched off", "3 checks switched off", "CI step let off", or "4 switched off" for a mix.
+const offLabel = (xs: { test: boolean; ci?: boolean }[]) => {
+  const kinds = new Set(xs.map((x) => (x.ci ? 'CI step' : x.test ? 'test' : 'check')));
+  return kinds.size > 1 ? 'switched off' : `${[...kinds][0]}${xs.length > 1 ? 's' : ''} switched off`;
+};
 
 // Possible secrets, worked out once per file list (the list is the same object until the PR reloads).
 const secretsSeen = new WeakMap<object, { list: Secret[]; byPath: Map<string, Map<number, string>> }>();

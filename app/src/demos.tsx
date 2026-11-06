@@ -1319,6 +1319,7 @@ const PKG_ROWS: Row[] = [['-', 12, '', sql('    "vue": "^3.4.0",')], ['+', '', 1
 const ONLY_ROWS = tsRows([['+', 8, "describe.only('cart', () => {"], ['+', 9, "  it('adds an item', () => {"]]);
 const HTML_ROWS: Row[] = [['+', '', 21, sql('<div class="note" v-html="order.note"></div>')]];
 const SUPP_ROWS = tsRows([['+', 30, '// @ts-ignore'], ['+', 31, 'const total = cart.items.reduce(sum)']]);
+const MINIFY_ROWS: Row[] = [[' ', 23, 23, `<span>${kt('        release {')}</span>`], ['-', 24, '', `<span>${kt('            isMinifyEnabled = true')}</span>`], ['+', '', 24, `<span>${kt('            isMinifyEnabled = false')}</span>`]];
 const IGNORE_ROWS: Row[] = [[' ', 14, 14, `<span>${kt('    @Test')}</span>`], ['+', '', 15, `<span>${kt('    @Ignore("flaky on CI")')}</span>`], [' ', 15, 16, `<span>${kt('    fun appliesPromoCode() {')}</span>`]];
 Object.assign(DEMOS, {
   checkLockfile: {
@@ -1337,13 +1338,27 @@ Object.assign(DEMOS, {
     on: <>{pills(['p-warn', <Tg i="alert" n={1} t="raw HTML" />])}<File path="OrderNote.vue" add={1} del={0}><Rows rows={HTML_ROWS} /></File></>,
   },
   checkSuppressions: {
-    title: 'Tests and checks switched off',
+    title: 'Tests, CI and checks switched off',
     off: <><File path="cart.ts" add={2} del={0}><Rows rows={SUPP_ROWS} /></File><File path="CartTest.kt" add={1} del={0}><Rows rows={IGNORE_ROWS} /></File></>,
     on: (
       <>
         {pills(['p-warn', <Tg i="alert" n={2} t="tests and checks switched off" />])}
         <File path="cart.ts" add={2} del={0}><Rows rows={SUPP_ROWS} /></File>
         <File path="CartTest.kt" add={1} del={0}><Rows rows={IGNORE_ROWS} /></File>
+      </>
+    ),
+  },
+  checkProtections: {
+    title: 'Protections switched off',
+    off: <File path="app/build.gradle.kts" add={1} del={1}><Rows rows={MINIFY_ROWS} /></File>,
+    on: (
+      <>
+        {pills(['p-bad', <Tg i="alert" n={1} t="protection switched off" />])}
+        <div class="pill-pop demo-pop">
+          <p class="pill-head">Safeguards the PR turns off:</p>
+          <div class="pill-row"><button><b>isMinifyEnabled = false</b> <small>build.gradle.kts:24</small> <small>Release builds ship unshrunk and unobfuscated: anyone can read the code back from the app.</small></button></div>
+        </div>
+        <File path="app/build.gradle.kts" add={1} del={1}><Rows rows={MINIFY_ROWS} /></File>
       </>
     ),
   },

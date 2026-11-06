@@ -18,6 +18,11 @@ export type PR = {
   head: { sha: string; ref: string; repo: { full_name: string; owner: { login: string } } | null };
   base: { ref: string; sha: string };
   draft?: boolean;
+  state?: 'open' | 'closed';
+  merged?: boolean;
+  merged_at?: string | null;
+  closed_at?: string | null;
+  merged_by?: { login: string } | null;
   additions?: number;
   deletions?: number;
   changed_files?: number;
