@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir, spentThisHour } from './github.ts';
-import { CheckMark, Octicon, Tg } from './tags.tsx';
+import { CheckMark, Octicon, Tg, Who } from './tags.tsx';
 import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
@@ -1385,7 +1385,7 @@ function SlackPeople({ team }: { team: string }) {
               return (
                 <tr key={l} id={'slack-' + l} class={l === focus ? 'focus' : ''}>
                   <td>
-                    @{l}{' '}
+                    <Who login={l} />{' '}
                     <button class="link" title="Treat as a bot: no Slack messages; comments fold like bots'" disabled={!!busy} onClick={() => toggleBot(l)}>
                       bot?
                     </button>
@@ -1422,7 +1422,7 @@ function SlackPeople({ team }: { team: string }) {
           Marked as bots (never messaged; their comments fold like bots'):{' '}
           {[...bots].map((b) => (
             <span key={b} class="bot-chip">
-              @{b}
+              <Who login={b} />
               <button class="link" title="Not a bot" onClick={() => toggleBot(b)}>×</button>
             </span>
           ))}

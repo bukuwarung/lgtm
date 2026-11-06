@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, reportError, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep } from './files.ts';
-import { CheckMark, Octicon, Tg } from './tags.tsx';
+import { CheckMark, Octicon, Tg, Who } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
@@ -327,7 +327,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
   const myConv = conversation.filter((c) => !c.bot && !!me && c.author === me).length;
   const othersConv = conversation.filter((c) => !c.bot && c.author !== me).length;
   const convEntry = (c: ConversationItem, i: number) => (
-    <Entry key={c.id} label={c.author} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
+    <Entry key={c.id} label={<Who login={c.author} src={c.avatar} />} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
   );
   const tiers = threadTiers(sortedThreads, me);
   // In the bots' and the resolved group, their author and "resolved" go without saying.
@@ -338,7 +338,11 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
       <Entry
         key={t.id}
         label={<>{waiting && <Octicon name="comment" />} {`${base(t.path)}${t.line ? ':' + t.line : ''}`}</>}
-        meta={[inGroup !== 'bot' && first?.author?.login, waiting && 'awaiting your reply', inGroup !== 'resolved' && t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ')}
+        meta={(() => {
+          const rest = [waiting && 'awaiting your reply', inGroup !== 'resolved' && t.isResolved && 'resolved', t.isOutdated && 'outdated'].filter(Boolean).join(' · ');
+          const who = inGroup !== 'bot' && first?.author;
+          return who ? <><Who login={who.login} src={who.avatarUrl} />{rest && ` · ${rest}`}</> : rest;
+        })()}
         sub={oneLine(first?.bodyText ?? '')}
         inline
         dim={t.isResolved || t.isOutdated}

@@ -1200,11 +1200,53 @@ export type MergeState = {
   deleteBranchOnMerge: boolean; // the repo deletes merged branches itself
   methods: MergeMethod[]; // allowed in this repo, the viewer's usual one first
   message: Record<MergeMethod, { title: string; body: string }>; // GitHub's default commit message per method
+  holds: string[]; // what says not to merge it yet (holdSigns)
 };
+
+// "Do not merge" signs: a label (do-not-merge, DNM, WIP, hold), the title ([WIP], DO NOT MERGE, DNM), or a WIP commit on
+// top. Each as the merge box names it.
+const HOLD_LABEL = /^(do[ -]?not[ -]?merge|don'?t[ -]?merge|dnm|wip|work[ -]in[ -]progress|(on[ -]?)?hold)$/i;
+const HOLD_TEXT = /\[\s*wip\s*\]|^\s*wip\b|\bdo not merge\b|\bdon'?t merge\b|\bDNM\b/i;
+export const holdSigns = (title: string, labels: string[], headCommit: string) => [
+  ...labels.filter((l) => HOLD_LABEL.test(l.trim())).map((l) => `the “${l}” label`),
+  ...(HOLD_TEXT.test(title) ? ['its title'] : []),
+  ...(HOLD_TEXT.test(headCommit) ? [`the last commit (“${headCommit}”)`] : []),
+];
+
+// The checks the base branch requires (branch protection, and rulesets), by name; once per repo and branch.
+const requiredSeen = new Map<string, Promise<string[]>>();
+export function requiredChecks(repo: string, branch: string): Promise<string[]> {
+  const key = `${repo}@${branch}`;
+  const b = encodeURIComponent(branch);
+  if (!requiredSeen.has(key))
+    requiredSeen.set(key, Promise.all([
+      json(`/repos/${repo}/branches/${b}`).then((x) => (x.protection?.required_status_checks?.contexts ?? []) as string[], () => []),
+      json(`/repos/${repo}/rules/branches/${b}`).then((rules: any[]) => rules.filter((r) => r.type === 'required_status_checks').flatMap((r) => (r.parameters?.required_status_checks ?? []).map((c: { context: string }) => c.context)) as string[], () => []),
+    ]).then(([a, c]) => [...new Set([...a, ...c])]));
+  return requiredSeen.get(key)!;
+}
+// Required checks with no run at all on the head commit, once nothing is still running (a path filter skipped its
+// workflow, say): GitHub waits for them for ever. Our names are "Workflow / job"; required ones are the job's.
+export const neverRan = (required: string[], checks: Pick<Check, 'name' | 'state'>[] | null) =>
+  !checks || checks.some((c) => c.state === 'pending') ? [] : required.filter((r) => !checks.some((c) => c.name === r || c.name.endsWith(` / ${r}`)));
+
+// Other PRs naming the same Jira tickets (in the title, description or branch) across the owner's repos: the backend
+// PR for this app PR's ticket, say.
+export type TicketPR = { repo: string; number: number; title: string; state: 'OPEN' | 'CLOSED' | 'MERGED'; isDraft: boolean; author: string; keys: string[] };
+export async function ticketPRs(repo: string, n: number, keys: string[]): Promise<TicketPR[]> {
+  if (!keys.length) return [];
+  const q = `${keys.map((k) => `"${k}"`).join(' OR ')} user:${repo.split('/')[0]} is:pr`;
+  const d = await graphql(`query($q:String!){search(query:$q,type:ISSUE,first:30){nodes{...on PullRequest{number title state isDraft headRefName body repository{nameWithOwner} author{login}}}}}`, { q });
+  return (d.search.nodes as any[])
+    .filter((p) => p.number && !(p.repository.nameWithOwner === repo && p.number === n))
+    .map((p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, state: p.state, isDraft: p.isDraft, author: p.author?.login ?? 'ghost', keys: keys.filter((k) => new RegExp(`\\b${k}\\b`).test(`${p.title} ${p.headRefName} ${p.body}`)) }))
+    .filter((p) => p.keys.length);
+}
 
 const MERGE_STATE = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){
   mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod deleteBranchOnMerge
   pullRequest(number:$n){id state isDraft mergeable mergeStateStatus reviewDecision headRefOid mergedBy{login}
+    title labels(first:20){nodes{name}} commits(last:1){nodes{commit{messageHeadline}}}
     isCrossRepository viewerCanDeleteHeadRef headRefName baseRefName headRef{id}
     autoMergeRequest{mergeMethod enabledBy{login}}
     viewerCanMergeAsAdmin viewerCanEnableAutoMerge viewerCanDisableAutoMerge viewerCanUpdateBranch
@@ -1214,11 +1256,12 @@ const MERGE_STATE = `query($owner:String!,$name:String!,$n:Int!){repository(owne
 export async function getMergeState(repo: string, n: number): Promise<MergeState> {
   const [owner, name] = repo.split('/');
   const r = (await graphql(MERGE_STATE, { owner, name, n })).repository;
-  const { mt, mb, st, sb, ...pr } = r.pullRequest;
+  const { mt, mb, st, sb, title, labels, commits, ...pr } = r.pullRequest;
   const allowed = (['MERGE', 'SQUASH', 'REBASE'] as const).filter((m) => r[`${m.toLowerCase()}${m === 'MERGE' ? 'Commit' : 'Merge'}Allowed`]);
   return {
     ...pr,
     deleteBranchOnMerge: r.deleteBranchOnMerge,
+    holds: holdSigns(title, labels.nodes.map((l: { name: string }) => l.name), commits.nodes[0]?.commit.messageHeadline ?? ''),
     methods: allowed.sort((a, b) => +(b === r.viewerDefaultMergeMethod) - +(a === r.viewerDefaultMergeMethod)),
     message: { MERGE: { title: mt, body: mb }, SQUASH: { title: st, body: sb }, REBASE: { title: '', body: '' } },
   };

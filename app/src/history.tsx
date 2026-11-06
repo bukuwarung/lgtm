@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getMyReviews, type MyReview } from './github.ts';
 import { copyText } from './platform.ts';
-import { Tg } from './tags.tsx';
+import { Tg, Who } from './tags.tsx';
 
 // While a page of PRs loads (this one, a person's): its shape, shimmering (style.css .sk). `face`: a picture by the title.
 const SK = [78, 62, 88, 55, 70];
@@ -71,7 +71,7 @@ export function History() {
             <a class="history-row" href={`#/${r.repo}/pull/${r.number}`}>
               <span class={`ix-meta v-${r.state}`}><Tg i={VERDICT[r.state][0]} t={VERDICT[r.state][1]} /></span>
               <b>{r.title}</b>
-              <small>{r.repo}#{r.number} · {r.author}{r.waited != null ? ` · ${hours(r.waited)} after you were asked` : ''} · {new Date(r.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small>
+              <small>{r.repo}#{r.number} · <Who login={r.author} />{r.waited != null ? ` · ${hours(r.waited)} after you were asked` : ''} · {new Date(r.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small>
             </a>
           ))}
         </section>

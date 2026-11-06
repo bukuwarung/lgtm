@@ -5,7 +5,7 @@ import { closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, d
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
-import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -226,7 +226,7 @@ function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
       <Octicon name={r.state ? STATE_ICON[r.state] : 'git-pull-request'} class={`recent-${r.state ?? 'open'}`} />
       <span class="recent-title">{r.title}</span>
       <small>
-        {r.repo.split('/')[1]}#{r.n} · {r.author} · {ago(new Date(r.at).toISOString())}
+        {r.repo.split('/')[1]}#{r.n} · <Who login={r.author} /> · {ago(new Date(r.at).toISOString())}
       </small>
     </a>
   );

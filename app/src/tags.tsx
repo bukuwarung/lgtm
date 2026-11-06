@@ -87,3 +87,11 @@ export const DECISION: Record<string, [string, string]> = {
   CHANGES_REQUESTED: ['changes', 'changes requested'],
   REVIEW_REQUIRED: ['waiting', 'awaiting review'],
 };
+
+// A GitHub login with its avatar, wherever a person is named in a line of text.
+export const Who = ({ login, src }: { login: string; src?: string }) => (
+  <span class="who">
+    <img class="who-av" src={src ?? `https://github.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}.png?size=40`} alt="" loading="lazy" />
+    {login}
+  </span>
+);

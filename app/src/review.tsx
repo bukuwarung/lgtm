@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-} from './github.ts';
+  ticketPRs, type TicketPR } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -23,7 +23,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { CheckMark, DECISION, Octicon, Tg } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -1419,7 +1419,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <main>
           {pr.merged ? (
             <p class="pr-state merged">
-              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by ? ` by @${pr.merged_by.login}` : ''} into <code>{pr.base.ref}</code>{pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}. A review now can only comment.</span>
+              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <code>{pr.base.ref}</code>{pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}. A review now can only comment.</span>
             </p>
           ) : pr.state === 'closed' ? (
             <p class="pr-state closed">
@@ -1728,6 +1728,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             </p>
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
+          <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />
           <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} />
           {inOrder.map(section)}
@@ -3961,6 +3962,28 @@ const keepJira = (issue: JiraIssue) => {
     localStorage.setItem('jiraSeen', JSON.stringify(Object.fromEntries([...Object.entries(all), [issue.key, issue]].slice(-40))));
   } catch {}
 };
+
+// Other PRs for this PR's Jira tickets (github.ts ticketPRs), each opening here: the merge order at a glance.
+const PR_ICON = { MERGED: 'git-merge', CLOSED: 'git-pull-request-closed', OPEN: 'git-pull-request' } as const;
+function TicketPRs({ repo, n, keys }: { repo: string; n: number; keys: string[] }) {
+  const [list, setList] = useState<TicketPR[]>([]);
+  useEffect(() => void ticketPRs(repo, n, keys).then(setList, () => setList([])), [repo, n, keys.join()]);
+  if (!list.length) return null;
+  return (
+    <div class="ticket-prs">
+      <span class="note">Also for {[...new Set(list.flatMap((p) => p.keys))].join(', ')}:</span>
+      {list.map((p) => {
+        const st = p.state === 'OPEN' && p.isDraft ? 'draft' : p.state.toLowerCase();
+        return (
+          <a href={`#/${p.repo}/pull/${p.number}`} title={`${p.title}\n${p.repo}#${p.number} by ${p.author}`}>
+            <Octicon name={p.isDraft && p.state === 'OPEN' ? 'git-pull-request-draft' : PR_ICON[p.state]} class={`recent-${st}`} />
+            <b>{p.repo === repo ? '' : p.repo.split('/')[1]}#{p.number}</b> <span class="ticket-pr-title">{p.title}</span> <small>{st}</small>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
 
 function Ticket({ id, lang }: { id: string; lang?: string }) {
   const [issue, setIssue] = useState<JiraIssue | null>(() => jiraSeen()[id] ?? null);

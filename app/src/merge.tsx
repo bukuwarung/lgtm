@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
-import { Octicon } from './tags.tsx';
+import { Octicon, Who } from './tags.tsx';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus } from './platform.ts';
-import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -85,6 +85,8 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
       if (x.state === 'OPEN' && x.mergeStateStatus === 'UNKNOWN' && tries < 5) setTimeout(() => load(tries + 1), 3000);
     }, (e) => setErr(e.message));
   useEffect(() => void load(), [repo, n, checks]); // checks reloaded: the merge state may have moved too
+  const [required, setRequired] = useState<string[]>([]);
+  useEffect(() => void (s?.baseRefName && requiredChecks(repo, s.baseRefName).then(setRequired)), [repo, s?.baseRefName]);
 
   if (!s) return err ? bar('Merge', '', `Couldn't load the merge status: ${err}`, <div class="panel merge m-bad"><p class="error">Couldn't load the merge status: {err}</p></div>) : null;
   if (s.state !== 'OPEN')
@@ -93,7 +95,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
       `merge-state m-${s.state.toLowerCase()}`,
       s.state === 'MERGED' ? 'Merged: the branch and the Jira ticket' : 'Closed without merging',
       <div class={`panel merge m-${s.state.toLowerCase()}`}>
-        <b>{s.state === 'MERGED' ? `Merged${s.mergedBy ? ` by ${s.mergedBy.login}` : ''}` : 'Closed'}</b>
+        <b>{s.state === 'MERGED' ? <>Merged{s.mergedBy && <> by <Who login={s.mergedBy.login} /></>}</> : 'Closed'}</b>
         {s.state === 'MERGED' && s.headRef && s.viewerCanDeleteHeadRef && !s.isCrossRepository && (
           <button disabled={!!busy} onClick={() => (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
             {busy === 'delete' ? 'Deleting…' : `Delete ${s.headRefName}`}
@@ -107,7 +109,8 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
 
   const m = method && s.methods.includes(method) ? method : s.methods[0];
   const ready = canMerge(s);
-  const why = blockers(s, checks);
+  const missing = neverRan(required, checks);
+  const why = [...blockers(s, checks).filter((w) => !missing.length || w !== 'Blocked by branch rules'), ...(missing.length ? [`required ${missing.length > 1 ? 'checks' : 'check'} never ran`] : [])];
   const conflict = s.mergeable === 'CONFLICTING' || s.mergeStateStatus === 'DIRTY';
   const tone = conflict ? 'bad' : ready ? 'ok' : 'wait';
   const headline =
@@ -141,14 +144,27 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
 
   return bar(
     s.isDraft ? 'Draft' : s.autoMergeRequest ? 'Auto-merge on' : 'Merge',
-    ready ? 'primary' : `merge-state m-${tone}`,
-    [headline, ...(ready ? [] : why)].join(' · '),
+    ready && !s.holds.length ? 'primary' : `merge-state m-${ready ? 'wait' : tone}`,
+    [headline, ...(ready ? [] : why), ...(s.holds.length ? [`marked not to merge (${s.holds.join(', ')})`] : [])].join(' · '),
     <div class={`panel merge m-${tone}`}>
       <div class="merge-head">
         <b>{headline}</b>
         {!ready && why.length > 0 && <span class="merge-why">{why.join(' · ')}</span>}
         {conflict && <a href={`${url}/conflicts`} target="_blank" rel="noopener">Resolve conflicts on GitHub</a>}
       </div>
+      {s.holds.length > 0 && (
+        <div class="merge-row merge-hold">
+          <Octicon name="alert" /> <b>Marked not to merge:</b> {s.holds.join(', ')}
+        </div>
+      )}
+      {missing.length > 0 && (
+        <div class="merge-row merge-hold">
+          <Octicon name="alert" />{' '}
+          <span>
+            <b>{missing.join(', ')}</b>: required, but {missing.length > 1 ? 'they never ran' : 'it never ran'} on this commit (its workflow skipped this PR: a path or branch filter). GitHub waits for {missing.length > 1 ? 'them' : 'it'} for ever: push a change {missing.length > 1 ? 'their workflows run' : 'its workflow runs'} on{s.viewerCanMergeAsAdmin ? ', or merge as an admin below' : ', or ask an admin to merge'}.
+          </span>
+        </div>
+      )}
       {openThreads.length > 0 && (() => {
         const waiting = openThreads.filter((t) => t.awaiting).length, bots = openThreads.filter((t) => t.bot).length;
         return (
@@ -172,7 +188,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
       )}
       {s.autoMergeRequest && (
         <div class="merge-row">
-          Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{s.autoMergeRequest.enabledBy ? `, enabled by ${s.autoMergeRequest.enabledBy.login}` : ''}: it merges once requirements are met.
+          Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{s.autoMergeRequest.enabledBy && <>, enabled by <Who login={s.autoMergeRequest.enabledBy.login} /></>}: it merges once requirements are met.
           {s.viewerCanDisableAutoMerge && <button disabled={!!busy} onClick={() => run('disable', () => disableAutoMerge(s.id))}>Disable auto-merge</button>}
         </div>
       )}
@@ -198,6 +214,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
       </div>
       {confirm && (
         <div class="merge-confirm">
+          {s.holds.length > 0 && <p class="warn">It's marked not to merge: {s.holds.join(', ')}. Merge anyway?</p>}
           {m !== 'REBASE' && (
             <>
               <input value={msg.title} onInput={(e) => setMsg({ ...msg, title: e.currentTarget.value })} aria-label="Commit title" />

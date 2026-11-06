@@ -1085,6 +1085,15 @@ test('protectionsOff: release builds readable, debuggable, cleartext, TLS unchec
   ]);
 });
 
+test('merge box: do-not-merge signs, and required checks that never ran', async () => {
+  const { holdSigns, neverRan } = await import('../src/github.ts');
+  assert.deepEqual(holdSigns('[WIP] Payment retries', ['bug', 'do-not-merge', 'On Hold'], 'wip: halfway'), ['the “do-not-merge” label', 'the “On Hold” label', 'its title', 'the last commit (“wip: halfway”)']);
+  assert.deepEqual(holdSigns('Wipe old caches', ['wipe'], 'Fix DNMS lookup'), []);
+  const done = [{ name: 'CI / build', state: 'success' as const }, { name: 'lint', state: 'failure' as const }];
+  assert.deepEqual(neverRan(['build', 'lint', 'e2e'], done), ['e2e']);
+  assert.deepEqual(neverRan(['e2e'], [...done, { name: 'CI / test', state: 'pending' as const }]), []); // still running: may yet come
+});
+
 test('expertise: who wrote the lines a PR touches', async () => {
   const { touchedLines, tally, whoKnows } = await import('../src/expertise.ts');
   const patch = ['@@ -10,4 +10,5 @@', ' a', '-b', '+B', '+C', ' d', ' e'].join('\n');

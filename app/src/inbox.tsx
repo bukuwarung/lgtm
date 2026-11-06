@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
 import { ago, markReplyDone, readBots, reportError, useStoredFlag } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
-import { Tg } from './tags.tsx';
+import { Tg, Who } from './tags.tsx';
 
 // Every review thread waiting on my reply (#/inbox): in the PRs in my list (only those the list already counts one
 // waiting in are asked for their threads), and in PRs merged lately that I opened or reviewed, where a reply after
@@ -132,7 +132,7 @@ function InboxThread({ t, item, me, current, onPick, onDone }: { t: Thread; item
         <a href={`#/${item.repo}/pull/${item.number}`} title={`${t.path}: open the PR`} data-k="o">{where}</a>
         {t.isOutdated && <Tg i="history" t="outdated" />}
         <small>
-          {last?.author?.login ?? 'someone'} · {last ? ago(last.createdAt) : ''}
+          {last?.author ? <Who login={last.author.login} src={last.author.avatarUrl} /> : 'someone'} · {last ? ago(last.createdAt) : ''}
           {t.comments.nodes.length > 1 && ` · ${t.comments.nodes.length} comments`}
         </small>
       </div>
@@ -142,7 +142,7 @@ function InboxThread({ t, item, me, current, onPick, onDone }: { t: Thread; item
           <summary>{t.comments.nodes.length - 1} earlier comment{t.comments.nodes.length > 2 ? 's' : ''}</summary>
           {t.comments.nodes.slice(0, -1).map((c) => (
             <div class="inbox-earlier-one">
-              <small>{c.author?.login ?? 'someone'} · {ago(c.createdAt)}</small>
+              <small>{c.author ? <Who login={c.author.login} src={c.author.avatarUrl} /> : 'someone'} · {ago(c.createdAt)}</small>
               <div class="md" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
             </div>
           ))}
@@ -208,7 +208,7 @@ function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: 
       <div class="inbox-where">
         <a href={c.url} target="_blank" rel="noreferrer" title="The comment on GitHub">mentioned you</a>
         <a href={`#/${item.repo}/pull/${item.number}`} data-k="o" hidden />
-        <small>{c.author?.login ?? 'someone'} · {ago(c.createdAt)}</small>
+        <small>{c.author ? <Who login={c.author.login} src={c.author.avatarUrl} /> : 'someone'} · {ago(c.createdAt)}</small>
       </div>
       <div class="md inbox-last" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
       <textarea
