@@ -1,7 +1,8 @@
 import type { ComponentChildren } from 'preact';
 
 import { OCTICONS } from './octicons.ts';
-import { ago, useStoredFlag } from './platform.ts';
+import { ago, copyText, useStoredFlag } from './platform.ts';
+import { useState } from 'preact/hooks';
 
 // An Octicon, in the text's colour; `slash` strikes it through (no person, no test change).
 export function Octicon({ name, size = 12, slash, class: cls }: { name: string; size?: number; slash?: boolean; class?: string }) {
@@ -111,3 +112,20 @@ export const Lines = ({ n = 3 }: { n?: number }) => (
     {Array.from({ length: n }, (_, i) => <span class="sk" key={i} />)}
   </div>
 );
+
+// A count as your Mac writes numbers: 14,703.
+export const num = (n: number) => n.toLocaleString();
+
+// A branch name or commit SHA that copies on click (`text`: the whole of it, when what shows is shortened).
+export function CopyCode({ children, text }: { children: string; text?: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <code
+      class={done ? 'copyable copied' : 'copyable'}
+      title={done ? 'Copied' : `Copy ${text ?? children}`}
+      onClick={(e) => (e.preventDefault(), e.stopPropagation(), copyText(text ?? children).then(() => (setDone(true), setTimeout(() => setDone(false), 1200)), () => {}))}
+    >
+      {children}
+    </code>
+  );
+}

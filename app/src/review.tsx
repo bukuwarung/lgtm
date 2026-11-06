@@ -23,7 +23,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -1462,7 +1462,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <main>
           {pr.merged ? (
             <p class="pr-state merged">
-              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <code>{pr.base.ref}</code>{pr.merged_at && <> <Time at={pr.merged_at} /></>}. A review now can only comment.</span>
+              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <CopyCode>{pr.base.ref}</CopyCode>{pr.merged_at && <> <Time at={pr.merged_at} /></>}. A review now can only comment.</span>
             </p>
           ) : pr.state === 'closed' ? (
             <p class="pr-state closed">
@@ -1665,7 +1665,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             <ModulesPill modules={view !== 'none' ? shownModules : undefined} />
             {pr.additions != null && (
               <span class="pill p-size">
-                <b class="a">+{pr.additions}</b> <b class="d">−{pr.deletions}</b> · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
+                <b class="a">+{num(pr.additions)}</b> <b class="d">−{num(pr.deletions ?? 0)}</b> · {num(pr.changed_files ?? 0)} file{pr.changed_files === 1 ? '' : 's'}
               </span>
             )}
             {/* View */}
@@ -1720,7 +1720,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 <>
                   <span class="since-state">
                     {fromSha ? `Showing only the changes after ${points?.find((p) => p.sha === fromSha)?.label ?? 'that point'} ` : 'Showing only those changes '}
-                    (<code>{sinceBase!.slice(0, 7)}</code> → <code>{pr.head.sha.slice(0, 7)}</code>)
+                    (<CopyCode text={sinceBase!}>{sinceBase!.slice(0, 7)}</CopyCode> → <CopyCode text={pr.head.sha}>{pr.head.sha.slice(0, 7)}</CopyCode>)
                     {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
                     {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
                     {sinceData && !sinceData.files.length && <b> · none of this PR's files changed (only a rebase)</b>}
@@ -2196,7 +2196,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           )}
         </a>
         <span class="counts">
-          <b class="a">+{file.additions}</b> <b class="d">−{file.deletions}</b>
+          <b class="a">+{num(file.additions)}</b> <b class="d">−{num(file.deletions)}</b>
         </span>
         <SpecChips refs={ctx.specRefs.get(path)} ix={ctx.codeIx} />
         {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}

@@ -5,7 +5,7 @@ import { closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, d
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -57,6 +57,16 @@ fetchIntegrations().then(({ jira }) => {
     }
   }).observe(document.body, { childList: true, subtree: true });
 }, () => {});
+
+// Text cut off with "…" (titles, paths, branches, excerpts) shows in full on hover: an element cut short and without a
+// tooltip of its own gets its text as one, when the pointer reaches it.
+addEventListener('mouseover', (e) => {
+  for (let el = e.target as HTMLElement | null, i = 0; el && i < 3; el = el.parentElement, i++) {
+    if (el.title || el.scrollWidth <= el.clientWidth || getComputedStyle(el).textOverflow !== 'ellipsis') continue;
+    el.title = el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    return;
+  }
+});
 
 // Menus from the keyboard: Enter or Space on a menu's button opens it (they're buttons); ↓ / ↑ (Home, End) go into it and
 // through its items; Esc closes it (each menu's own handler) and puts the focus back on its button.
@@ -140,7 +150,7 @@ function StaleBranches() {
       {step === 'confirm' ? (
         <>
           <p>Delete these branches on GitHub? Their PRs are merged.</p>
-          <ul>{list.map((b) => <li><code>{b.headRefName}</code> <small>{repoLabel(b.repo)}#{b.number}</small></li>)}</ul>
+          <ul>{list.map((b) => <li><CopyCode>{b.headRefName}</CopyCode> <small>{repoLabel(b.repo)}#{b.number}</small></li>)}</ul>
           <button class="primary" onClick={go}>Delete {list.length} branch{list.length > 1 ? 'es' : ''}</button> <button onClick={() => setStep('')}>Cancel</button>
         </>
       ) : (
@@ -1497,7 +1507,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           <Tg i="⏱" n={estimateLabel(i.estimate.minutes / pace)} />
         </span>}
         <span class="pill p-size" title={`${i.files} changed files`}>
-          <b class="a">+{i.additions}</b> <b class="d">−{i.deletions}</b> · {i.files} file{i.files === 1 ? '' : 's'}
+          <b class="a">+{num(i.additions)}</b> <b class="d">−{num(i.deletions)}</b> · {num(i.files)} file{i.files === 1 ? '' : 's'}
         </span>
       </span>
     </a>
