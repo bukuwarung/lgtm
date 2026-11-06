@@ -5,7 +5,7 @@ import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type Plan
 import { CheckMark, Octicon, Tg, Who } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { awaitsMe, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { awaitsMe, earlierVerdicts, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -325,8 +325,9 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
   const bots = conversation.filter((c) => c.bot);
   // Mine first, grouped; on someone else's PR the rest of the people fold away (on mine, they're what I'm reading).
   const minePR = !!me && pr.user.login === me;
-  const myConv = conversation.filter((c) => !c.bot && !!me && c.author === me).length;
-  const othersConv = conversation.filter((c) => !c.bot && c.author !== me).length;
+  const replaced = new Set([...earlierVerdicts(conversation).values()].flat()); // folded under the same person's later verdict
+  const myConv = conversation.filter((c) => !c.bot && !!me && c.author === me && !replaced.has(c.id)).length;
+  const othersConv = conversation.filter((c) => !c.bot && c.author !== me && !replaced.has(c.id)).length;
   const convEntry = (c: ConversationItem, i: number) => (
     <Entry key={c.id} label={<Who login={c.author} src={c.avatar} />} meta={c.state ? <Tg i={VERDICT[c.state][0]} t={VERDICT[c.state][1]} /> : undefined} sub={excerpts[i]} onClick={() => jumpTo('cv-' + c.id)} />
   );
@@ -396,13 +397,13 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
         {addMe && !reviewers.has(me) && <AddMe add={addMe} />}
       </Section>
 
-      <Section title="Conversation" count={conversation.length + 1 + threads.length + drafts.length}>
+      <Section title="Conversation" count={conversation.length - replaced.size + 1 + threads.length + drafts.length}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
         {myConv + drafts.length + tiers.mine.length > 0 && (
           <details class="ix-ckgroup" open>
             <summary><Octicon name="person" /> {myConv + drafts.length + tiers.mine.length} yours</summary>
             {tiers.mine.filter(waitsOnMe).map((t) => threadEntry(t))}
-            {conversation.map((c, i) => !c.bot && c.author === me && convEntry(c, i))}
+            {conversation.map((c, i) => !c.bot && c.author === me && !replaced.has(c.id) && convEntry(c, i))}
             {drafts.map((d) => (
               <Entry
                 key={d.id}
@@ -420,7 +421,7 @@ export function ShortcutIndex({ repo, pr, conversation, threads, settled = 0, se
           <details class="ix-ckgroup" open={minePR}>
             <summary><Octicon name="comment-discussion" /> {othersConv + tiers.human.length} from others</summary>
             {tiers.human.filter(waitsOnMe).map((t) => threadEntry(t))}
-            {conversation.map((c, i) => !c.bot && c.author !== me && convEntry(c, i))}
+            {conversation.map((c, i) => !c.bot && c.author !== me && !replaced.has(c.id) && convEntry(c, i))}
             {tiers.human.filter((t) => !waitsOnMe(t)).map((t) => threadEntry(t))}
           </details>
         )}

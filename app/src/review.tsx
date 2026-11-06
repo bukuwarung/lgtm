@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, type TicketPR } from './github.ts';
+  ticketPRs, earlierVerdicts, type TicketPR } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -4362,6 +4362,8 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
     setTimeout(() => setShots(shotPairs(desc.current)), 300); // once its images are signed
   }, [pr.body_html, ix]);
   const peek = useRefPeek(ix);
+  const earlier = useMemo(() => earlierVerdicts(items), [items]);
+  const replaced = new Set([...earlier.values()].flat());
   return (
     <details class="conversation" id="conversation" open={!folded}>
       <summary>
@@ -4393,6 +4395,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
       </div>
       {items.map((c) => {
         if (c.bot && foldBots) return null; // below, behind one line
+        if (replaced.has(c.id)) return null; // folded under the same person's later verdict
         const head = (
           <>
             <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
@@ -4410,6 +4413,21 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
           <div class="comment" key={c.id} id={'cv-' + c.id}>
             {head}
             {body}
+            {earlier.get(c.id)?.map((id) => {
+              const e = items.find((x) => x.id === id)!;
+              const n = threads.filter((t) => t.comments.nodes.some((x) => x.pullRequestReview?.databaseId === Number(id.slice(1)))).length;
+              return (
+                <details class="earlier-verdict" key={id} id={'cv-' + id}>
+                  <summary>
+                    Earlier: <span class={'rstate r-' + e.state}><Tg i={STATE_ICON[e.state!] ?? ''} t={STATE_LABEL[e.state!] ?? e.state} /></span>{' '}
+                    <time>{new Date(e.at).toLocaleString()}</time>
+                    {n > 0 && ` · ${n} comment${n === 1 ? '' : 's'} on the code`}
+                  </summary>
+                  {e.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: e.html }} />}
+                  <ReviewThreads review={e} threads={threads} reveal={reveal} />
+                </details>
+              );
+            })}
           </div>
         );
       })}

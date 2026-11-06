@@ -542,6 +542,16 @@ export async function getAskedPRs(org: string, login: string): Promise<QueueItem
   return (d.s.nodes.map(toItem) as QueueItem[]).sort((a, b) => a.waitingSince.localeCompare(b.waitingSince));
 }
 
+// A person's verdicts (approved, changes requested) that a later one of theirs replaced, by the latest one's id: the
+// conversation folds them under it, and the index lists only the latest.
+export function earlierVerdicts(items: Pick<ConversationItem, 'id' | 'author' | 'state' | 'at' | 'bot'>[]): Map<string, string[]> {
+  const verdicts = items.filter((c) => !c.bot && (c.state === 'APPROVED' || c.state === 'CHANGES_REQUESTED')).sort((a, b) => a.at.localeCompare(b.at));
+  const latest = new Map(verdicts.map((c) => [c.author, c.id]));
+  const out = new Map<string, string[]>();
+  for (const c of verdicts) if (latest.get(c.author) !== c.id) out.set(latest.get(c.author)!, [...(out.get(latest.get(c.author)!) ?? []), c.id]);
+  return out;
+}
+
 // Top-level PR comments plus submitted reviews that carry a verdict or a summary.
 export async function getConversation(repo: string, n: number): Promise<ConversationItem[]> {
   const [comments, reviews] = await Promise.all([

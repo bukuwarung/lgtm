@@ -1085,6 +1085,16 @@ test('protectionsOff: release builds readable, debuggable, cleartext, TLS unchec
   ]);
 });
 
+test('earlierVerdicts: a person\'s replaced verdicts fold under their latest', async () => {
+  const { earlierVerdicts } = await import('../src/github.ts');
+  const v = (id: string, author: string, state: string | undefined, at: string, bot = false) => ({ id, author, state: state as any, at, bot });
+  const got = earlierVerdicts([
+    v('r1', 'andika', 'CHANGES_REQUESTED', '1'), v('c2', 'andika', undefined, '2'), v('r3', 'budi', 'APPROVED', '3'),
+    v('r4', 'andika', 'APPROVED', '4'), v('r5', 'cubic', 'CHANGES_REQUESTED', '5', true), v('r6', 'cubic', 'APPROVED', '6', true),
+  ]);
+  assert.deepEqual([...got], [['r4', ['r1']]]); // comments, other people and bots untouched
+});
+
 test('merge box: do-not-merge signs, and required checks that never ran', async () => {
   const { holdSigns, neverRan } = await import('../src/github.ts');
   assert.deepEqual(holdSigns('[WIP] Payment retries', ['bug', 'do-not-merge', 'On Hold'], 'wip: halfway'), ['the “do-not-merge” label', 'the “On Hold” label', 'its title', 'the last commit (“wip: halfway”)']);
