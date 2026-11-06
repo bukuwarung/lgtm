@@ -519,6 +519,7 @@ export function Settings() {
         <h3>Appearance</h3>
         <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency."  demo />
         <TagStyle />
+        <Flag k="themeColors" initial={true} label="Theme colours for lgtm's marks" hint="With a theme on: warnings, findings, away, Given/When/Then and the like take its colours. Solid badges with white text (Merged, the failing-checks bar, counts) keep lgtm's, so they stay readable. Off: lgtm's own colours everywhere." demo />
         <Flag k="relativeTimes" initial={true} label="Relative times" hint="“2 hours ago”, “yesterday”. Off: the date and time. Either way, the other shows when you point at it." demo />
         <div class="set-row">
           <span>

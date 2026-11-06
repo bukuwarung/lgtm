@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { useStoredValue } from './platform.ts';
+import { useStoredFlag, useStoredValue } from './platform.ts';
 import { BUILTIN_THEMES, themeProps, type AppTheme } from './themes.ts';
 
 // Code colours and font, picked in Settings → Appearance. A theme is a light and a dark palette for the
@@ -138,6 +138,29 @@ export function saveTheme(look: { mine: string; setMine: (v: string) => void; se
   if (t) look.setAppTheme(key);
 }
 
+// lgtm's status colours (style.css --c-*) in a theme's: each from the theme colour it stands for, in light and in dark,
+// only where that reads at 4.5:1 or better on the theme's background (else lgtm's own, as in Ayu Light's pale amber).
+const MARKS: [mark: string, token: string, light: string, dark: string][] = [
+  ['--c-attn', '--warnfg', '#9a6700', '#d29922'], ['--c-mark', '--warnfg', '#bf8700', '#d29922'], ['--c-away', '--warnfg', '#8a5300', '#e3b341'],
+  ['--c-bad', '--delfg', '#cf222e', '#f85149'], ['--c-good', '--addfg', '#1a7f37', '#3fb950'], ['--c-info', '--accent', '#0b5cad', '#79b8ff'],
+  ['--c-quiet', '--muted', '#57606a', '#9da7b3'], ['--c-given', '--accent', '#0b5cad', '#79b8ff'], ['--c-when', '--warnfg', '#8a5300', '#e3b341'],
+  ['--c-then', '--addfg', '#1a7f37', '#56d364'],
+];
+const rgb = (c?: string) => c?.match(/^#([0-9a-f]{6})/i)?.[1].match(/../g)!.map((h) => parseInt(h, 16) / 255);
+const lum = (c: number[]) => c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+export function contrast(a?: string, b?: string): number {
+  const x = rgb(a), y = rgb(b);
+  if (!x || !y) return 0;
+  const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p);
+  return (hi + 0.05) / (lo + 0.05);
+}
+export function markProps(t: AppTheme): Record<string, string> {
+  const pick = (mode: 'light' | 'dark', token: string, own: string) => (contrast(t[mode][token], t[mode]['--bg']) >= 4.5 ? t[mode][token] : own);
+  const props = Object.fromEntries(MARKS.map(([v, tok, l, d]) => [v, `light-dark(${pick('light', tok, l)}, ${pick('dark', tok, d)})`]));
+  if (t.light['--del'] && t.dark['--del']) props['--c-bad-tint'] = `light-dark(${t.light['--del']}, ${t.dark['--del']})`; // a line's background
+  return props;
+}
+
 let applied: string[] = []; // the colour properties set on the page, to take off when the theme changes
 // Applies the saved app theme, code colours and font, and the text sizes, to the page (once, in App), and gives
 // Settings the setters. Code colours "theme": the app theme's own (lgtm's own look: Classic).
@@ -147,10 +170,11 @@ export function useCodeLook() {
   const [theme, setTheme] = useStoredValue('codeTheme', 'theme');
   const [font, setFont] = useStoredValue('codeFont', 'jetbrains');
   const tried = useTrial();
+  const [themeColors] = useStoredFlag('themeColors', true); // lgtm's marks in the theme's colours (markProps)
   useEffect(() => {
     const app = tried?.t ?? allThemes(mine)[appTheme] ?? null;
     const own = theme === 'theme' || !!tried; // a theme being tried shows its own code colours
-    const props = app ? themeProps(app) : {};
+    const props = app ? { ...themeProps(app), ...(themeColors ? markProps(app) : {}) } : {};
     if (!app || !own) for (const k of Object.keys(props)) if (k.startsWith('--hl-')) delete props[k];
     const code = own ? (app ? null : CODE_THEMES.intellij) : (CODE_THEMES[theme] ?? CODE_THEMES.intellij);
     if (code) for (const k of Object.keys(code.light) as (keyof Palette)[]) props[`--hl-${k}`] = `light-dark(${code.light[k]}, ${code.dark[k]})`;
@@ -158,7 +182,7 @@ export function useCodeLook() {
     for (const k of applied) if (!(k in props)) style.removeProperty(k);
     for (const [k, v] of Object.entries(props)) style.setProperty(k, v);
     applied = Object.keys(props);
-  }, [appTheme, theme, mine, tried]);
+  }, [appTheme, theme, mine, tried, themeColors]);
   useEffect(() => {
     const f = CODE_FONTS[font] ?? CODE_FONTS.jetbrains;
     void f.load?.();

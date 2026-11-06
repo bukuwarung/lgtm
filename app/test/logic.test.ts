@@ -1095,6 +1095,21 @@ test('earlierVerdicts: a person\'s replaced verdicts fold under their latest', a
   assert.deepEqual([...got], [['r4', ['r1']]]); // comments, other people and bots untouched
 });
 
+test('markProps: a theme\'s colours for lgtm\'s marks only where they read at 4.5:1', async () => {
+  const { markProps, contrast } = await import('../src/look.ts');
+  const { BUILTIN_THEMES } = await import('../src/themes.ts');
+  const ayu = markProps(BUILTIN_THEMES.ayu)['--c-attn'];
+  assert.match(ayu, /^light-dark\(#9a6700, /); // Ayu Light's amber is too pale: lgtm's own
+  assert.ok(!ayu.endsWith('#d29922)')); // Ayu Dark's reads well: the theme's
+  for (const t of Object.values(BUILTIN_THEMES))
+    for (const [k, v] of Object.entries(markProps(t)))
+      if (k !== '--c-bad-tint') {
+        const [, l, d] = v.match(/^light-dark\((#\w+), (#\w+)\)$/)!;
+        if (l !== '#' && t.light['--bg']) assert.ok(contrast(l, t.light['--bg']) >= 4.5 || ['#9a6700', '#bf8700', '#8a5300', '#cf222e', '#1a7f37', '#0b5cad', '#57606a'].includes(l), `${k} light`);
+        if (t.dark['--bg']) assert.ok(contrast(d, t.dark['--bg']) >= 4.5 || ['#d29922', '#e3b341', '#f85149', '#3fb950', '#79b8ff', '#9da7b3', '#56d364'].includes(d), `${k} dark`);
+      }
+});
+
 test('repoLabel: the repo name alone, unless two owners have one by that name', async () => {
   const { knowRepos, repoLabel } = await import('../src/platform.ts');
   knowRepos(['bukuwarung/bukuwarung-app', 'bukuwarung/lgtm', 'someone/lgtm']);

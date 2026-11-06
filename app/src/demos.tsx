@@ -4,6 +4,7 @@ import { md } from './markdown.ts';
 import { FileIcon, ModuleIcon } from './shortcuts.tsx';
 import { folderIcon } from './fileicons.ts';
 import { CheckMark, Octicon, Tg, Who } from './tags.tsx';
+import { markProps, themeStyle } from './look.ts';
 import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
@@ -1363,12 +1364,28 @@ Object.assign(DEMOS, {
 } satisfies Record<string, Demo>);
 
 Object.assign(DEMOS, {
+  themeColors: {
+    title: "Theme colours for lgtm's marks (here with Gruvbox)",
+    off: <ThemeMarks on={false} />,
+    on: <ThemeMarks on />,
+  },
   relativeTimes: {
     title: 'Relative times',
     off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi</b> <time>5 Nov 2026, 14:31</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
     on: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
   },
 } satisfies Record<string, Demo>);
+
+// lgtm's marks under a theme (Gruvbox): its colours (on), or lgtm's own (off).
+function ThemeMarks({ on }: { on: boolean }) {
+  return (
+    <div class="demo-theme" style={{ ...themeStyle(BUILTIN_THEMES.gruvbox), ...(on ? markProps(BUILTIN_THEMES.gruvbox) : {}) }}>
+      <p><span class="ph ph-given">Given</span> a saved card <span class="ph ph-when">When</span> it expires <span class="ph ph-then">Then</span> retry</p>
+      <p><b>okhttp</b> <small class="dep-major">4.12.0 → 5.0.0 · major</small> · <span class="ix-status away">🌴 On leave</span></p>
+      <p><span class="state-chip merged"><Octicon name="git-merge" /> Merged</span> keeps lgtm's colours</p>
+    </div>
+  );
+}
 
 // Settings → App → Mac app: the menu bar item, and its menu.
 const MACBAR = (on: boolean) => (

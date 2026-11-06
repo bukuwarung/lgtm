@@ -97,7 +97,7 @@ code, pre { font-family: var(--mono); }
 .recent-row:hover { background: var(--soft); }
 .recent-row small { grid-column: 2; color: var(--muted); font-size: calc(12px * var(--ts)); }
 .recent-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.recent-open { color: var(--addfg); } .recent-merged { color: light-dark(#8250df, #a371f7); } .recent-closed { color: var(--delfg); } .recent-draft { color: var(--muted); }
+.recent-open { color: var(--addfg); } .recent-merged { color: var(--c-merged); } .recent-closed { color: var(--delfg); } .recent-draft { color: var(--muted); }
 .recent-menu { position: relative; }
 .recent-pop { left: 0; right: auto; width: min(460px, 80vw); max-height: 70vh; overflow: auto; }
 .stale { display: grid; justify-items: center; gap: 6px; font-size: calc(13px * var(--ts)); }
@@ -121,10 +121,10 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .person-pills { display: flex; gap: 4px; flex-wrap: wrap; align-items: start; }
 /* A suggested reviewer's Slack status; one away (sick, vacation, leave) dimmed, its status in amber. */
 .ix-status { display: flex; align-items: center; gap: 4px; margin: 1px 0 0 26px; font-size: calc(11px * var(--ts)); color: var(--muted); }
-.ix-status.away { color: light-dark(#8a5300, #e3b341); }
+.ix-status.away { color: var(--c-away); }
 .ix-status-emoji { width: 14px; height: 14px; }
 .ix-person.away > .ix-label { opacity: .6; }
-.g-away { margin-left: 6px; font-size: calc(11px * var(--ts)); font-weight: 400; color: light-dark(#8a5300, #e3b341); }
+.g-away { margin-left: 6px; font-size: calc(11px * var(--ts)); font-weight: 400; color: var(--c-away); }
 .sk.sk-face { width: 56px; height: 56px; border-radius: 50%; flex: none; }
 .sk-head { display: grid; gap: 8px; }
 .sk.sk-sum { width: 60%; height: 11px; margin: 16px 0 6px; }
@@ -162,9 +162,9 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 /* A test's phases (// Given, // When, // Then, Arrange / Act / Assert): a label each, and a faint line where one starts. */
 tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transparent); }
 .ph { display: inline-block; padding: 0 7px; border-radius: 4px; font: 600 calc(11px * var(--ts)) / 1.6 var(--sans); letter-spacing: .02em; }
-.ph-given { color: light-dark(#0b5cad, #79b8ff); background: color-mix(in srgb, #2f81f7 16%, transparent); }
-.ph-when { color: light-dark(#8a5300, #e3b341); background: color-mix(in srgb, #d29922 18%, transparent); }
-.ph-then { color: light-dark(#1a7f37, #56d364); background: color-mix(in srgb, #2ea043 16%, transparent); }
+.ph-given { color: var(--c-given); background: color-mix(in srgb, var(--c-given) 16%, transparent); }
+.ph-when { color: var(--c-when); background: color-mix(in srgb, var(--c-when) 18%, transparent); }
+.ph-then { color: var(--c-then); background: color-mix(in srgb, var(--c-then) 16%, transparent); }
 .ph-and { color: var(--muted); background: var(--soft); }
 .ph-rest { color: var(--muted); font-style: italic; }
 /* Android strings, read as texts: the name in a column, then the text as the app shows it. */
@@ -175,7 +175,7 @@ tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transpa
 .sx-nl { color: var(--muted); }
 .sx-empty, .sx-tag { font: italic calc(11px * var(--ts)) var(--sans); color: var(--muted); }
 .sx-tag { margin-left: 8px; }
-.sx-warn { margin-left: 8px; padding: 0 6px; border-radius: 999px; white-space: nowrap; font: calc(11px * var(--ts)) var(--sans); color: light-dark(#8a5300, #e3b341); background: color-mix(in srgb, #d29922 16%, transparent); }
+.sx-warn { margin-left: 8px; padding: 0 6px; border-radius: 999px; white-space: nowrap; font: calc(11px * var(--ts)) var(--sans); color: var(--c-when); background: color-mix(in srgb, var(--c-when) 16%, transparent); }
 mark.sx-ch { color: inherit; border-radius: 2px; background: color-mix(in srgb, currentColor 22%, transparent); }
 /* The title bar's buttons, all one size: icons centred in a 34×29 box (Back grows when it names where it goes). */
 .top :is(button, .nav-btn) { box-sizing: border-box; height: 29px; min-width: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; }
@@ -580,7 +580,7 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .pr-status { margin-bottom: 10px; }
 .pr-state { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 10px 14px; border-radius: 6px; border: 1px solid; }
 .pr-state .octicon { flex: none; }
-.pr-state.merged { --c: light-dark(#8250df, #a371f7); color: var(--c); border-color: color-mix(in srgb, var(--c) 45%, transparent); background: color-mix(in srgb, var(--c) 10%, var(--bg)); }
+.pr-state.merged { --c: var(--c-merged); color: var(--c); border-color: color-mix(in srgb, var(--c) 45%, transparent); background: color-mix(in srgb, var(--c) 10%, var(--bg)); }
 .pr-state.closed { color: var(--delfg); border-color: color-mix(in srgb, var(--delfg) 45%, transparent); background: var(--del); }
 .pr-state.draft { color: var(--muted); border-color: var(--border); background: var(--soft); }
 .pr-state b { color: inherit; }
@@ -809,6 +809,18 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .setup-fix pre { margin: 0; padding: 4px 8px; background: var(--soft); border-radius: 4px; font-size: calc(12px * var(--ts)); white-space: pre-wrap; }
 /* Pills, legible: neutral ones in near-text colour on a soft fill; coloured ones in brighter shades than the diff's
    (the dark theme's green and red are dimmed for code) with a light tint of their own colour. */
+/* lgtm's status colours by name: lgtm's own, unless a theme is on and Settings → Appearance → "Theme colours for
+   lgtm's marks" is too, when look.ts markProps sets the theme's (each only where it reads well on the theme's
+   background). Text, borders and tints only: solid badges with white text (Merged, the failing-checks bar, the
+   switches, counts) keep lgtm's colours, for contrast. */
+:root, .lgtm-colors {
+  --c-attn: light-dark(#9a6700, #d29922); --c-mark: light-dark(#bf8700, #d29922); --c-away: light-dark(#8a5300, #e3b341);
+  --c-bad: light-dark(#cf222e, #f85149); --c-bad-tint: light-dark(#ffebe9, rgb(248 81 73 / .18)); --c-good: light-dark(#1a7f37, #3fb950);
+  --c-info: light-dark(#0b5cad, #79b8ff); --c-quiet: light-dark(#57606a, #9da7b3); --c-merged: light-dark(#8250df, #a371f7);
+  --c-given: light-dark(#0b5cad, #79b8ff); --c-when: light-dark(#8a5300, #e3b341); --c-then: light-dark(#1a7f37, #56d364);
+}
+.demo-theme { padding: 8px 12px; border-radius: 8px; background: var(--bg); color: var(--fg); }
+.demo-theme p { margin: 6px 0; }
 :root, .lgtm-colors { --pill-ok: light-dark(#1a7f37, #7fc27a); --pill-bad: light-dark(#cf222e, #f08a84); --pill-warn: light-dark(#9a6700, #e8a95c); --pill-info: light-dark(#0969da, #79b4ff); }
 .pill { color: color-mix(in srgb, var(--fg) 88%, var(--bg)); background: var(--soft); border-color: var(--border); }
 .pill.p-ok, .pill.p-claude { color: var(--pill-ok); }
@@ -1175,7 +1187,7 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 /* A lint baseline as its suppressions */
 .lint-sum { padding: 10px 16px; font-size: calc(13px * var(--ts)); }
 .lint-sum p { margin: 4px 0; }
-.lint-sum .lint-new { color: var(--attn, light-dark(#9a6700, #d29922)); }
+.lint-sum .lint-new { color: var(--c-attn); }
 .lint-sum ul { margin: 4px 0 8px; padding-left: 18px; }
 .lint-sum li { margin: 2px 0; }
 .lint-sum .lint-msg { color: var(--muted); }
@@ -1183,7 +1195,7 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 /* A binary file: what it is and its size */
 .bin-info { padding: 10px 16px; font-size: calc(13px * var(--ts)); }
 .bin-info p { margin: 2px 0; }
-.bin-info .bin-warn { color: var(--attn, light-dark(#9a6700, #d29922)); }
+.bin-info .bin-warn { color: var(--c-attn); }
 /* A big PR's review plan */
 .plan { margin: 0 0 12px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: calc(13px * var(--ts)); }
 .plan summary { cursor: pointer; color: var(--muted); }
@@ -1198,18 +1210,18 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 .plan-ok { color: var(--primary); }
 @media (max-width: 700px) { .plan li { grid-template-columns: 1fr 52px 72px; } .plan-bar { display: none; } }
 /* An added line that looks like a secret (secrets.ts) */
-.diff tr.ln.secret td.code { box-shadow: inset 3px 0 0 light-dark(#cf222e, #f85149); background: light-dark(#ffebe9, rgb(248 81 73 / .18)); }
+.diff tr.ln.secret td.code { box-shadow: inset 3px 0 0 var(--c-bad); background: var(--c-bad-tint); }
 /* An Android manifest's permissions and components, above its diff */
 .manifest-sum { padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: calc(13px * var(--ts)); }
 .manifest-sum p { margin: 3px 0; }
-.manifest-sum .risky { color: light-dark(#9a6700, #d29922); }
+.manifest-sum .risky { color: var(--c-attn); }
 /* The dependencies pill's rows: the change (a jump to its line), its page */
 .pill-pop .pill-row { display: flex; align-items: center; }
 .pill-pop .pill-row > button { flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill-pop .pill-row > button:hover, .pill-pop .pill-row > a:hover { background: var(--soft); }
 .pill-pop .pill-row > a { padding: 5px 8px; border-radius: 6px; color: var(--muted); }
-.dep-major { color: light-dark(#9a6700, #d29922); font-weight: 600; }
-.diff tr.ln.hardcoded td.code { box-shadow: inset 3px 0 0 light-dark(#bf8700, #d29922); }
+.dep-major { color: var(--c-attn); font-weight: 600; }
+.diff tr.ln.hardcoded td.code { box-shadow: inset 3px 0 0 var(--c-mark); }
 /* A finding's "comment on it" button */
 .say-it { display: inline-flex; align-items: center; padding: 2px 6px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; vertical-align: middle; }
 .say-it:hover { color: var(--fg); background: var(--soft); }
@@ -1249,13 +1261,13 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .demo-with-index .demo-index > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .demo-glass .bar button { white-space: nowrap; padding: 2px 10px; font-size: calc(12px * var(--ts)); }
 .api-budget { display: grid; gap: 4px; margin-top: 6px; max-width: 520px; font-size: calc(12px * var(--ts)); }
-.api-head { color: light-dark(#9a6700, #d29922); }
+.api-head { color: var(--c-attn); }
 .api-row { display: grid; grid-template-columns: 116px 1fr auto; align-items: center; gap: 8px; }
 .api-name { color: var(--muted); }
 .api-bar { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
-.api-bar i { display: block; height: 100%; border-radius: 3px; background: light-dark(#1a7f37, #3fb950); }
-.api-bar i.mid { background: light-dark(#bf8700, #d29922); }
-.api-bar i.low { background: light-dark(#cf222e, #f85149); }
+.api-bar i { display: block; height: 100%; border-radius: 3px; background: var(--c-good); }
+.api-bar i.mid { background: var(--c-mark); }
+.api-bar i.low { background: var(--c-bad); }
 .api-left { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .preflight { margin: 4px 0 8px; padding: 8px 10px; border: 1px solid light-dark(#d4a72c, #9e6a03); border-radius: 8px; background: color-mix(in srgb, #d29922 10%, transparent); font-size: calc(13px * var(--ts)); }
 .preflight p { margin: 0 0 4px; }
@@ -1277,8 +1289,8 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .demo-traymenu .h { color: var(--muted); }
 .demo-traymenu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
 .on-base { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: calc(11px * var(--ts)); color: var(--muted); background: var(--soft); white-space: nowrap; }
-.on-base.same { color: light-dark(#57606a, #9da7b3); }
-.on-base.diff { color: light-dark(#cf222e, #f85149); background: color-mix(in srgb, #f85149 12%, transparent); }
+.on-base.same { color: var(--c-quiet); }
+.on-base.diff { color: var(--c-bad); background: color-mix(in srgb, var(--c-bad) 12%, transparent); }
 .merge-open { flex-wrap: wrap; gap: 6px; font-size: calc(13px * var(--ts)); }
 .merge-open .link { margin-left: auto; }
 .approve-open { margin: 0; font-size: calc(12.5px * var(--ts)); }
@@ -1302,7 +1314,7 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .inbox-earlier-one small { color: var(--muted); }
 .inbox-thread.cur { border-color: var(--accent); }
 .inbox-keys { margin-left: 12px; }
-.inbox-merged { color: light-dark(#8250df, #a371f7); }
+.inbox-merged { color: var(--c-merged); }
 .nav-inbox { position: relative; display: inline-flex; align-items: center; }
 .nav-inbox.on { border-color: var(--accent); color: var(--accent); }
 .nav-count { position: absolute; top: -6px; right: -7px; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; background: var(--primary); color: var(--on-primary); font: 600 10px/15px var(--sans); text-align: center; }
