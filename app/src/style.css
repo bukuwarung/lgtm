@@ -886,7 +886,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
   border: 1px solid var(--glass-line); border-radius: 14px; box-shadow: inset 0 1px 0 var(--glass-edge), 0 14px 44px var(--shadow);
 }
 .glass .whats-new-back { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
-.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary) { border-radius: 999px; background: color-mix(in srgb, var(--bg) 45%, transparent); border-color: var(--glass-line); box-shadow: inset 0 1px 0 var(--glass-edge); }
+.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn) { border-radius: 999px; background: color-mix(in srgb, var(--bg) 45%, transparent); border-color: var(--glass-line); box-shadow: inset 0 1px 0 var(--glass-edge); }
 .glass :is(.top, .bar) button.primary { border-radius: 999px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25); }
 .glass .top .cmd input { border-radius: 999px; background: color-mix(in srgb, var(--bg) 80%, transparent); border-color: color-mix(in srgb, var(--fg) 20%, transparent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 3px var(--shadow); }
 .glass .top .cmd input:focus { border-color: var(--accent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
@@ -950,8 +950,14 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* The account (top bar): its avatar, and the accounts to switch to. */
 .account { position: relative; display: inline-flex; }
-.account-btn { padding: 2px; border-radius: 999px; line-height: 0; }
-.account-btn img { width: 24px; height: 24px; border-radius: 50%; }
+.top .account-btn, .account-btn { position: relative; width: 29px; min-width: 29px; height: 29px; padding: 0; border: 0; border-radius: 50%; background: none; box-shadow: none; line-height: 0; display: grid; place-items: center; }
+.account-btn:not(:has(img)) { border: 1px solid var(--border); color: var(--muted); } /* no picture (yet): a circle like the other buttons */
+.account-btn img { width: 29px; height: 29px; border-radius: 50%; object-fit: cover; }
+.account-btn:hover img, .account-btn[aria-expanded='true'] img { box-shadow: 0 0 0 2px var(--border); }
+/* Which site is on show, when you're signed in to both. */
+.acct-host { position: absolute; right: -3px; bottom: -3px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; box-shadow: 0 0 0 1.5px var(--bg); }
+.acct-host svg { width: 11px; height: 11px; fill: var(--fg); }
+.acct-host.gitlab svg { fill: #fc6d26; }
 .account-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; gap: 2px; min-width: 240px; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
 .account-head { padding: 4px 8px 6px; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .account-menu > button { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: none; text-align: left; }
