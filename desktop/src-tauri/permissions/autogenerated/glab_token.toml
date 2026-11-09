@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-glab-token"
+description = "Enables the glab_token command without any pre-configured scope."
+commands.allow = ["glab_token"]
+
+[[permission]]
+identifier = "deny-glab-token"
+description = "Denies the glab_token command without any pre-configured scope."
+commands.deny = ["glab_token"]

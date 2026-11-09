@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-glab-accounts"
+description = "Enables the glab_accounts command without any pre-configured scope."
+commands.allow = ["glab_accounts"]
+
+[[permission]]
+identifier = "deny-glab-accounts"
+description = "Denies the glab_accounts command without any pre-configured scope."
+commands.deny = ["glab_accounts"]

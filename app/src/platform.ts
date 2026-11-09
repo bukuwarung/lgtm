@@ -35,11 +35,12 @@ export function setAccount(login: string) {
 const owners = new Map<string, Set<string>>();
 export function knowRepos(full: string[]) {
   for (const f of full) {
-    const [o, name] = f.split('/');
-    owners.set(name, (owners.get(name) ?? new Set()).add(o));
+    const i = f.lastIndexOf('/');
+    owners.set(f.slice(i + 1), (owners.get(f.slice(i + 1)) ?? new Set()).add(f.slice(0, i)));
   }
 }
-export const repoLabel = (full: string) => ((owners.get(full.split('/')[1])?.size ?? 0) > 1 ? full : full.split('/')[1] ?? full);
+// GitLab's repos are "host/group/…/project": the name is the last part.
+export const repoLabel = (full: string) => ((owners.get(full.slice(full.lastIndexOf('/') + 1))?.size ?? 0) > 1 ? full : full.slice(full.lastIndexOf('/') + 1) || full);
 
 // PRs opened lately, newest first, kept across launches (the clock by Back, the start page, ⌘K): the last 30.
 export type RecentPR = { repo: string; n: number; title: string; author: string; state?: 'merged' | 'closed' | 'draft'; at: number };
@@ -161,6 +162,25 @@ export async function fetchToken(): Promise<string> {
     localStorage.removeItem('ghAccount');
     return fetchToken();
   }
+}
+
+// Faces of GitLab people met (their account pictures), by username: GitHub's are github.com/<login>.png, GitLab has no
+// such address. ponytail: one name on both GitHub and GitLab shows the GitLab face once it's been seen.
+const faces = new Map<string, string>();
+export const knowFace = (login: string, url: string) => void faces.set(login, url);
+export const faceOf = (login: string, size = 40) => faces.get(login) ?? `https://github.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}.png?size=${size}`;
+
+// GitLab through glab: the hosts it's signed in to (each with the account and where its API is), and a host's token,
+// asked of the local server (or, in the app, its command) like gh's.
+export type GlabAccount = { host: string; login: string; api: string };
+let glabList: Promise<GlabAccount[]> | undefined;
+export const glabAccounts = (fresh = false): Promise<GlabAccount[]> =>
+  (fresh || !glabList ? (glabList = (isDesktop ? command<GlabAccount[]>('glab_accounts') : fetch('/glab-accounts').then((r) => (r.ok ? r.json() : []))).then((a) => (Array.isArray(a) ? a : []), () => [])) : glabList);
+export async function fetchGlabToken(host: string): Promise<string> {
+  if (isDesktop) return command<string>('glab_token', { host });
+  const res = await fetch('/glab-token?host=' + encodeURIComponent(host));
+  if (!res.ok) throw new Error((await res.text()) || `Could not get a GitLab token for ${host}.`);
+  return res.text();
 }
 
 // The Slack workspace's custom emoji (name → image, or ":name:" for an alias), loaded once; {} without Slack.

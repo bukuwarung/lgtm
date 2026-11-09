@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -92,11 +92,8 @@ addEventListener(
   true,
 );
 
-// Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1" or a pasted PR URL.
-export function parseRoute(s: string) {
-  const m = s.match(/([^/\s#]+\/[^/\s]+)\/pull\/(\d+)/);
-  return m ? { repo: m[1], n: +m[2] } : null;
-}
+// Accepts "#https://github.com/o/r/pull/1", "#/o/r/pull/1", a pasted PR URL, or a GitLab MR's.
+export const parseRoute = parsePrUrl; // also a GitLab MR's address
 
 // GitHub out of reach (github.ts says so from any request): one bar for the whole app instead of a failure per part.
 // What was loaded stays on show; buttons that need GitHub rest (style.css html.offline). It tries again every 20
@@ -145,14 +142,14 @@ function TrialBar({ look }: { look: ReturnType<typeof useCodeLook> }) {
 const VERB: Record<ReviewEvent | 'skipped', [string, string]> = { APPROVE: ['approved', 'Approved'], REQUEST_CHANGES: ['changes', 'Requested changes'], COMMENT: ['reply', 'Commented'], skipped: ['skipped', 'Skipped'] };
 function ReviewLog({ log }: { log: { repo: string; n: number; title: string; how: ReviewEvent | 'skipped' }[] }) {
   const [copied, setCopied] = useState(false);
-  const url = (l: (typeof log)[number]) => `https://github.com/${l.repo}/pull/${l.n}`;
+  const url = (l: (typeof log)[number]) => prWebUrl(l.repo, l.n);
   const copy = () =>
     copyText(log.map((l) => `${VERB[l.how][1]}: ${l.title || `${l.repo}#${l.n}`} ${url(l)}`).join('\n')).then(() => setCopied(true), () => {});
   return (
     <div class="review-log">
       {log.map((l) => (
         <a href={`#/${l.repo}/pull/${l.n}`} class={`rl-${l.how.toLowerCase()}`}>
-          <Tg i={VERB[l.how][0]} t={VERB[l.how][1]} /> <b>{l.title}</b> <small>{repoLabel(l.repo)}#{l.n}</small>
+          <Tg i={VERB[l.how][0]} t={VERB[l.how][1]} /> <b>{l.title}</b> <small>{repoLabel(l.repo)}{numRef(l.repo, l.n)}</small>
         </a>
       ))}
       <button class="link" onClick={copy}>{copied ? 'Copied' : 'Copy as text'}</button>
@@ -324,7 +321,7 @@ function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
       <Octicon name={r.state ? STATE_ICON[r.state] : 'git-pull-request'} class={`recent-${r.state ?? 'open'}`} />
       <span class="recent-title">{r.title}</span>
       <small>
-        {repoLabel(r.repo)}#{r.n} · <Who login={r.author} /> · <Time at={r.at} />
+        {repoLabel(r.repo)}{numRef(r.repo, r.n)} · <Who login={r.author} /> · <Time at={r.at} />
       </small>
     </a>
   );
@@ -903,7 +900,7 @@ function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshi
 // Cycles auto → light → dark; index.html applies the saved choice before first paint.
 // The GitHub account lgtm uses, as its avatar. A click lists the accounts gh is signed in to; picking another
 // switches (the page loads again as that account). Settings → Accounts has the same choice.
-const avatarOf = (login: string) => `https://github.com/${encodeURIComponent(login)}.png?size=64`;
+const avatarOf = (login: string) => faceOf(login, 64);
 function AccountMenu() {
   const [me, setMe] = useState('');
   const [accounts, setAccounts] = useState<GhAccount[] | null>(null);
@@ -1044,7 +1041,7 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     asked: (m) => load[m] ?? 0,
   };
 };
-const avatar = (login: string) => `https://github.com/${encodeURIComponent(login)}.png?size=40`;
+const avatar = (login: string) => faceOf(login);
 type Tab = 'reviewing' | 'mine' | 'team';
 
 // On my PRs: where merging stands (BLOCKED is already told by the group: waiting for review / changes requested).
@@ -1126,7 +1123,7 @@ async function autoMerge(i: QueueItem) {
 // view's re-request does; none if that message is emptied or Slack isn't set up).
 async function askAgain(i: QueueItem): Promise<string> {
   await Promise.all(i.changesBy.map((l) => requestReview(i.repo, i.number, l)));
-  const text = fillSlack(slackTemplate('again'), prValues({ repo: i.repo, number: i.number, title: i.title, url: `https://github.com/${i.repo}/pull/${i.number}`, author: i.author }));
+  const text = fillSlack(slackTemplate('again'), prValues({ repo: i.repo, number: i.number, title: i.title, url: prWebUrl(i.repo, i.number), author: i.author }));
   if (!text || !(await slackStatus(`${i.repo}#${i.number}`).catch(() => null))?.configured) return 'Asked again on GitHub';
   try {
     const emails = await getEmails(i.repo.split('/')[0], i.changesBy);
@@ -1166,7 +1163,7 @@ function Waiting({ i, nudge, presence }: { i: QueueItem; nudge: boolean; presenc
     setStep('sending');
     try {
       const emails = await getEmails(i.repo.split('/')[0], to);
-      const url = `https://github.com/${i.repo}/pull/${i.number}`;
+      const url = prWebUrl(i.repo, i.number);
       const text = fillSlack(slackTemplate('nudge'), { ...prValues({ repo: i.repo, number: i.number, title: i.title, url, author: i.author }), days: `${days} day${days > 1 ? 's' : ''}` });
       const results = await notifySlack(to.map((login) => ({ login, emails: emails[login] ?? [] })), text, `${i.repo}#${i.number}`);
       const failed = results.filter((r) => !r.ok);
@@ -1479,7 +1476,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       <span class="meta">
         {i.face !== who && <><span class="person-link" onClick={toPerson(i.face)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span> ·{' '}</>}
         {layer && <b class="layer">{layer} </b>}
-        {repoLabel(i.repo)}#{i.number} ·{' '}
+        {repoLabel(i.repo)}{numRef(i.repo, i.number)} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>
           active <Time at={i.updatedAt} />
         </span>

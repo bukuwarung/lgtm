@@ -3,7 +3,7 @@ import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask } from './platform.ts';
-import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -103,7 +103,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
       <div class={`panel merge m-${s.state.toLowerCase()}`}>
         <b>{s.state === 'MERGED' ? <>Merged{s.mergedBy && <> by <Who login={s.mergedBy.login} /></>}</> : 'Closed'}</b>
         {s.state === 'MERGED' && s.headRef && s.viewerCanDeleteHeadRef && !s.isCrossRepository && (
-          <button disabled={!!busy} onClick={async () => (await ask(`Delete ${s.headRefName} on GitHub? Its PR is merged.`, 'Delete')) && (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
+          <button disabled={!!busy} onClick={async () => (await ask(`Delete ${s.headRefName} on ${site(repo)}? Its PR is merged.`, 'Delete')) && (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
             {busy === 'delete' ? 'Deleting…' : `Delete ${s.headRefName}`}
           </button>
         )}
@@ -157,7 +157,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
         <b>{headline}</b>
         {loading && <Updating />}
         {!ready && why.length > 0 && <span class="merge-why">{why.join(' · ')}</span>}
-        {conflict && <a href={`${url}/conflicts`} target="_blank" rel="noopener">Resolve conflicts on GitHub</a>}
+        {conflict && <a href={`${url}/conflicts`} target="_blank" rel="noopener">Resolve conflicts on {site(repo)}</a>}
       </div>
       {s.holds.length > 0 && (
         <div class="merge-row merge-hold">

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir, spentThisHour } from './github.ts';
 import { CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
-import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople } from './platform.ts';
+import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -295,7 +295,9 @@ export function Settings() {
   const [ints, setInts] = useState<Integrations | null>(null);
   const [err, setErr] = useState('');
   const [accounts, setAccounts] = useState<GhAccount[] | null>(null);
+  const [glab, setGlab] = useState<GlabAccount[] | null>(null);
   useEffect(() => {
+    glabAccounts(true).then(setGlab);
     getViewer().then(setMe, () => setMe(''));
     getGhAccounts().then(setAccounts, () => setAccounts([]));
     getTeams().then(setTeams, () => setTeams([]));
@@ -349,6 +351,12 @@ export function Settings() {
               </small>
             )
           )}
+        </Status>
+        <Status ok={glab == null ? null : glab.length > 0}>
+          <b>GitLab</b> (merge requests){' '}
+          {!glab ? 'checking…' : glab.length ? <>signed in through the GitLab CLI as {glab.map((a, k) => <>{k ? ', ' : ''}<code>@{a.login}</code> on {a.host}</>)}</> : 'not signed in'}
+          {glab && !glab.length && <pre>brew install glab{'\n'}glab auth login</pre>}
+          <small>Optional. GitLab merge requests (on gitlab.com or your own GitLab) open and list like PRs; another host is <code>glab auth login --hostname gitlab.example.com</code>.</small>
         </Status>
         <Status ok={ints ? ints.slack.ok : null}>
           <b>Slack</b> (review DMs){' '}

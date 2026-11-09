@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
-import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers } from '../src/github.ts';
+import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, uniqueNames, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -1165,4 +1165,22 @@ test('firstParagraph: the PR description for the QA request', async () => {
   // Jira-only openings, headings and quotes skipped; links as their text.
   assert.equal(firstParagraph('JIRA: [BUKU-1](https://x/browse/BUKU-1) (phases 1–3)\n\n## Summary\n\nRemoves the [blanket](https://x) keeps.'), 'Removes the blanket keeps.');
   assert.equal(firstParagraph('## JIRA\n[BUKU-2](https://x/browse/BUKU-2)\n\n> **Draft.**\n\n## Problem\nKey loading truncates the TMK.'), 'Key loading truncates the TMK.');
+});
+
+test('PR and GitLab MR addresses', () => {
+  assert.deepEqual(parsePrUrl('https://github.com/o/r/pull/12'), { repo: 'o/r', n: 12 });
+  assert.deepEqual(parsePrUrl('#/o/r.js/pull/3'), { repo: 'o/r.js', n: 3 });
+  assert.deepEqual(parsePrUrl('https://gitlab.com/gitlab-org/cli/-/merge_requests/4345#note_1'), { repo: 'gitlab.com/gitlab-org/cli', n: 4345 });
+  assert.deepEqual(parsePrUrl('https://git.example.co.id:8443/a/b/c/-/merge_requests/7'), { repo: 'git.example.co.id:8443/a/b/c', n: 7 });
+  assert.deepEqual(parsePrUrl('#/gitlab.com/group/sub/proj/pull/9'), { repo: 'gitlab.com/group/sub/proj', n: 9 });
+  assert.equal(parsePrUrl('https://gitlab.com/group/proj/-/issues/9'), null);
+  assert.ok(isLab('gitlab.com/a/b') && !isLab('bukuwarung/lgtm') && !isLab('o/r.js'));
+  assert.equal(numRef('gitlab.com/a/b', 4), '!4');
+  assert.equal(numRef('o/r', 4), '#4');
+});
+
+test("GitLab's suggestion range", () => {
+  const t = { id: 't', path: 'a.ts', line: 10, diffSide: 'RIGHT' } as any;
+  const s = suggestionOf(t, { databaseId: 1, body: '```suggestion:-2+1\nX\n```', author: null } as any)!;
+  assert.deepEqual([s.start, s.end, s.text], [8, 11, 'X\n']);
 });

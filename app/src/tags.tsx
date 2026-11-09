@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 
 import { OCTICONS } from './octicons.ts';
-import { ago, copyText, useStoredFlag } from './platform.ts';
+import { ago, copyText, useStoredFlag, faceOf } from './platform.ts';
 import { useState } from 'preact/hooks';
 
 // An Octicon, in the text's colour; `slash` strikes it through (no person, no test change).
@@ -93,7 +93,7 @@ export const DECISION: Record<string, [string, string]> = {
 // A GitHub login with its avatar, wherever a person is named in a line of text.
 export const Who = ({ login, src }: { login: string; src?: string }) => (
   <span class="who">
-    <img class="who-av" src={src ?? `https://github.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}.png?size=40`} alt="" loading="lazy" />
+    <img class="who-av" src={src ?? faceOf(login)} alt="" loading="lazy" />
     {login}
   </span>
 );

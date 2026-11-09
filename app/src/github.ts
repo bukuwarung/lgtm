@@ -1,7 +1,10 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, fetchToken, readBots, recordError, repliesDone } from './platform.ts';
+import { agentsAsBots, fetchJobLog, fetchToken, readBots, recordError, repliesDone } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
+import * as lab from './gitlab.ts';
+import { isLab, isLabId } from './gitlab.ts';
+export { isLab } from './gitlab.ts';
 
 export type PR = {
   number: number;
@@ -101,6 +104,22 @@ export type QueueItem = {
 };
 export type ConversationItem = { id: string; author: string; avatar?: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
 
+// A PR's and a file's web addresses, and the site's name: github.com, or the GitLab the repo is on.
+export const site = (repo: string) => (isLab(repo) ? 'GitLab' : 'GitHub');
+// A PR's number as its site writes it: #12 on GitHub, !12 for a GitLab MR.
+export const numRef = (repo: string, n: number) => `${isLab(repo) ? '!' : '#'}${n}`;
+export const prWebUrl = (repo: string, n: number) => (isLab(repo) ? lab.mrUrl(repo, n) : `https://github.com/${repo}/pull/${n}`);
+export const blobWebUrl = (repo: string, ref: string, path: string, line?: number) =>
+  isLab(repo) ? lab.blobUrl(repo, ref, path, line) : `https://github.com/${repo}/blob/${ref}/${path}${line ? `#L${line}` : ''}`;
+// A PR from its address: a github.com PR ("o/r/pull/1", with or without the site), or a GitLab MR
+// ("gitlab.example.com/group/sub/project/-/merge_requests/1"; lgtm's own route for it is "host/group/…/project/pull/1").
+export function parsePrUrl(s: string): { repo: string; n: number } | null {
+  const gl = s.match(/([a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:\/[\w.-]+){2,}?)\/(?:-\/merge_requests|pull)\/(\d+)/i);
+  if (gl && !/^(www\.)?github\.com\//i.test(gl[1])) return { repo: gl[1], n: +gl[2] };
+  const m = s.match(/([^/\s#]+\/[^/\s]+)\/pull\/(\d+)/);
+  return m ? { repo: m[1], n: +m[2] } : null;
+}
+
 // --- auth ---
 
 let token: string | undefined;
@@ -112,7 +131,7 @@ export async function loadToken() {
 
 // Review mode's practice run (main.tsx): nothing is written to GitHub, every change refused here, reads go through.
 let practice = false;
-export const setPractice = (on: boolean) => void (practice = on);
+export const setPractice = (on: boolean) => void ((practice = on), lab.setLabPractice(on));
 const writes = (path: string, init: RequestInit) =>
   !!init.method && init.method !== 'GET' && path !== '/markdown' && (path !== '/graphql' || /"query":"(?:\\[nt]|\s)*mutation/.test(String(init.body)));
 
@@ -267,6 +286,7 @@ async function graphql<T = any>(query: string, variables: Record<string, unknown
 // Which of these PRs ("owner/repo#n") GitHub says are merged or closed, in one query. One it can't find (gone, or no
 // access) isn't counted: only a closed one is certain.
 export async function closedPRs(prs: string[]): Promise<string[]> {
+  if (prs.some((p) => isLab(p))) return Promise.all([closedPRs(prs.filter((p) => !isLab(p))), lab.labClosed(prs.filter((p) => isLab(p)))]).then(([a, b]) => [...a, ...b]);
   const parts = prs.map((p) => p.match(/^([^/]+)\/([^#]+)#(\d+)$/));
   const ks = parts.flatMap((m, k) => (m ? [k] : []));
   if (!ks.length) return [];
@@ -294,13 +314,13 @@ fragment F on PullRequest{id number title updatedAt isDraft reviewDecision merge
   latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
-  const d = await graphql(QUEUE, {});
+  const [d, gitlab] = await Promise.all([graphql(QUEUE, {}), lab.getLabQueue()]);
   const me = d.viewer.login;
   const ids = (k: string) => new Set<string>(d[k].nodes.map((p: any) => p.id));
   const [requested, reviewed, authored, assigned, mentioned] = ['requested', 'reviewed', 'authored', 'assigned', 'mentioned'].map(ids);
   const all = new Map<string, any>(['mentioned', 'authored', 'assigned', 'reviewed', 'requested'].flatMap((k) => d[k].nodes.map((p: any) => [p.id, p])));
   return [...all.values()]
-    .map((p) => ({
+    .map((p): QueueItem => ({
       ...toItem(p),
       requested: requested.has(p.id),
       // A comment-only review (a reply, say) after an approval doesn't undo it on GitHub, so my approval or change
@@ -323,6 +343,7 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       authored: authored.has(p.id),
       mentioned: mentioned.has(p.id),
     }))
+    .concat(gitlab)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
@@ -434,6 +455,8 @@ const dayCache = async <T>(key: string, load: () => Promise<T>): Promise<T> => {
   return v;
 };
 export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
+  repos = repos.filter((r) => !isLab(r));
+  if (!repos.length) return [];
   const me = await getViewer();
   const teams = await dayCache('myTeams', async () =>
     ((await graphql(`query($me:[String!]){viewer{organizations(first:20){nodes{login teams(first:100,userLogins:$me){nodes{slug}}}}}}`, { me: [me] })).viewer.organizations.nodes as any[]).flatMap(
@@ -468,7 +491,8 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
 export type MyReview = { repo: string; number: number; title: string; url: string; author: string; state: ReviewState; at: string; waited?: number };
 export async function getMyReviews(days = 30): Promise<MyReview[]> {
   const me = await getViewer();
-  return reviewsBy(me, `reviewed-by:@me -author:@me`, days);
+  const [hub, gitlab] = await Promise.all([reviewsBy(me, `reviewed-by:@me -author:@me`, days), lab.getLabMyReviews(days).catch(() => [])]);
+  return [...hub, ...gitlab].sort((a, b) => b.at.localeCompare(a.at));
 }
 // Someone's reviews of the last `days` days, newest first: the PRs they reviewed (not their own), up to 300, a page of
 // 100 at a time; each PR's reviews collapsed (collapseReviews).
@@ -566,6 +590,7 @@ export function earlierVerdicts(items: Pick<ConversationItem, 'id' | 'author' | 
 
 // Top-level PR comments plus submitted reviews that carry a verdict or a summary.
 export async function getConversation(repo: string, n: number): Promise<ConversationItem[]> {
+  if (isLab(repo)) return lab.getLabConversation(repo, n);
   const [comments, reviews] = await Promise.all([
     paginate<any>(`/repos/${repo}/issues/${n}/comments?per_page=100`, FULL),
     paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`, FULL),
@@ -583,6 +608,7 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
 export type ReviewerPick = { login: string; load: number; why: string; knows?: number }; // knows: share of the changed code they wrote
 // Who wrote the code a PR changes (expertise.ts): git blame at the base commit for its 5 most-changed files, one query.
 export async function whoWrote(repo: string, base: string, files: { filename: string; status: string; patch?: string; additions: number; deletions: number }[]): Promise<Knows[]> {
+  if (isLab(repo)) return []; // ponytail: GitLab's blame names commit emails, not accounts
   const [owner, name] = repo.split('/');
   const pick = files
     .filter((f) => f.status === 'modified' && f.patch && !/(^|\/)(lint-baseline[^/]*\.xml|[\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml)$|(^|\/)(generated|build)\//.test(f.filename)) // tests count: their authors know the code too
@@ -610,6 +636,7 @@ export async function whoWrote(repo: string, base: string, files: { filename: st
 }
 
 export async function suggestReviewers(repo: string, skip: Set<string>, team: string, knows: Knows[] = []): Promise<ReviewerPick[]> {
+  if (isLab(repo)) return []; // ponytail: no reviewer suggestions on GitLab yet
   const [owner, name] = repo.split('/');
   const d = await graphql(
     `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(last:40,states:[OPEN,MERGED]){nodes{reviews(first:30){nodes{author{__typename login}}}}}}}`,
@@ -640,12 +667,13 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
 }
 
 export const requestReview = (repo: string, n: number, login: string) =>
-  json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'POST', body: JSON.stringify({ reviewers: [login] }) });
+  isLab(repo) ? lab.setLabReviewer(repo, n, login, true) : json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'POST', body: JSON.stringify({ reviewers: [login] }) });
 export const unrequestReview = (repo: string, n: number, login: string) =>
-  json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'DELETE', body: JSON.stringify({ reviewers: [login] }) });
+  isLab(repo) ? lab.setLabReviewer(repo, n, login, false) : json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'DELETE', body: JSON.stringify({ reviewers: [login] }) });
 
 let viewer: Promise<string> | undefined;
-export const getViewer = () => (viewer ??= json('/user').then((u) => u.login as string));
+// Me on GitHub, or (for a GitLab repo) on that GitLab.
+export const getViewer = (repo?: string) => (repo && isLab(repo) ? lab.getLabViewer(repo) : (viewer ??= json('/user').then((u) => u.login as string)));
 
 // Emails to find someone on Slack: their verified company addresses for the org, then their public email.
 export async function getEmails(org: string, logins: string[]): Promise<Record<string, string[]>> {
@@ -678,6 +706,7 @@ export async function getPeople(org: string, logins: string[]): Promise<Record<s
 
 // The PR-wide review verdict and merge state, which only GraphQL has.
 export async function getStatus(repo: string, n: number): Promise<{ reviewDecision: QueueItem['reviewDecision']; mergeStateStatus: QueueItem['mergeState'] }> {
+  if (isLab(repo)) return lab.getLabStatus(repo, n);
   const [owner, name] = repo.split('/');
   return (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviewDecision mergeStateStatus}}}`, { owner, name, n }))
     .repository.pullRequest;
@@ -687,6 +716,7 @@ export async function getStatus(repo: string, n: number): Promise<{ reviewDecisi
 // before it), newest first.
 export type PushPoint = { sha: string; label: string; at: string; force?: boolean };
 export async function getPushPoints(repo: string, n: number): Promise<PushPoint[]> {
+  if (isLab(repo)) return lab.getLabPushPoints(repo, n);
   const [owner, name] = repo.split('/');
   const d = await graphql(
     `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
@@ -715,7 +745,7 @@ export function getBuildRoots(repo: string, sha: string): Promise<BuildRoot[] | 
   if (!rootsSeen.has(key))
     rootsSeen.set(
       key,
-      json(`/repos/${repo}/git/trees/${sha}?recursive=1`).then((d: any) => {
+      (isLab(repo) ? lab.labTree(repo, sha).then((tree) => ({ truncated: !tree, tree: tree ?? [] })) : json(`/repos/${repo}/git/trees/${sha}?recursive=1`)).then((d: any) => {
         if (d.truncated) return null;
         const roots = new Map<string, boolean>();
         for (const e of d.tree as { path: string; type: string }[]) {
@@ -731,15 +761,16 @@ export function getBuildRoots(repo: string, sha: string): Promise<BuildRoot[] | 
 
 // The PR's head commit now, cheaply: to notice a push while it's open.
 export const getHead = async (repo: string, n: number): Promise<string> => {
+  if (isLab(repo)) return lab.getLabHead(repo, n);
   const [owner, name] = repo.split('/');
   return (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){headRefOid}}}`, { owner, name, n })).repository.pullRequest.headRefOid;
 };
 // My PR's title and description, rewritten.
 export const updatePR = (repo: string, n: number, f: { title: string; body: string }) =>
-  json(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify(f) });
-export const getPR = (repo: string, n: number): Promise<PR> => json(`/repos/${repo}/pulls/${n}`, undefined, FULL);
+  isLab(repo) ? lab.updateLab(repo, n, f) : json(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify(f) });
+export const getPR = (repo: string, n: number): Promise<PR> => isLab(repo) ? lab.getLabPR(repo, n) : json(`/repos/${repo}/pulls/${n}`, undefined, FULL);
 
-export const getFiles = (repo: string, n: number) => paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);
+export const getFiles = (repo: string, n: number) => isLab(repo) ? lab.getLabFiles(repo, n) : paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);
 
 // Everything a PR page shows first, as one bundle (also cached, and loaded ahead for the list's top PRs).
 export type LoadedPR = { pr: PR; files: PRFile[]; threads: Thread[]; conversation: ConversationItem[]; attrs: string | null; pending?: PendingReview | null; paused?: string }; // paused: why the threads are missing
@@ -765,6 +796,7 @@ export async function loadPR(repo: string, n: number, onPR?: (pr: PR) => void): 
 // with lgtm's drafts added; meanwhile nothing can post on its own (one review at a time, GitHub's rule).
 export type PendingReview = { id: string; count: number };
 export async function getPendingReview(repo: string, n: number): Promise<PendingReview | null> {
+  if (isLab(repo)) return lab.getLabPending(repo, n);
   const [owner, name] = repo.split('/');
   const d = await graphql(
     `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviews(states:PENDING,first:1){nodes{id comments{totalCount}}}}}}`,
@@ -775,18 +807,19 @@ export async function getPendingReview(repo: string, n: number): Promise<Pending
 }
 // A comment in my pending review, changed or taken out (GitHub allows both until the review is sent).
 export const editReviewComment = (id: string, body: string) =>
-  graphql(`mutation($id:ID!,$b:String!){updatePullRequestReviewComment(input:{pullRequestReviewCommentId:$id,body:$b}){clientMutationId}}`, { id, b: body });
+  isLabId(id) ? lab.editLabNote(id, body) : graphql(`mutation($id:ID!,$b:String!){updatePullRequestReviewComment(input:{pullRequestReviewCommentId:$id,body:$b}){clientMutationId}}`, { id, b: body });
 export const deleteReviewComment = (id: string) =>
-  graphql(`mutation($id:ID!){deletePullRequestReviewComment(input:{id:$id}){clientMutationId}}`, { id });
+  isLabId(id) ? lab.deleteLabNote(id) : graphql(`mutation($id:ID!){deletePullRequestReviewComment(input:{id:$id}){clientMutationId}}`, { id });
 export const discardReview = (id: string) =>
-  graphql(`mutation($r:ID!){deletePullRequestReview(input:{pullRequestReviewId:$r}){clientMutationId}}`, { r: id });
+  isLabId(id) ? lab.discardLabReview(id) : graphql(`mutation($r:ID!){deletePullRequestReview(input:{pullRequestReviewId:$r}){clientMutationId}}`, { r: id });
 
 // A folder's entries in a repo (its default branch, or at `ref`).
 export const listDir = (repo: string, path: string, ref?: string): Promise<{ name: string; path: string; type: string }[]> =>
-  json(`/repos/${repo}/contents/${path}${ref ? `?ref=${ref}` : ''}`);
+  isLab(repo) ? lab.listLabDir(repo, path, ref) : json(`/repos/${repo}/contents/${path}${ref ? `?ref=${ref}` : ''}`);
 
 // A file's size at a commit. A file in Git LFS is, in Git, a small pointer naming its real size: that size, lfs set.
 export async function getBlobInfo(repo: string, path: string, ref: string): Promise<{ size: number; lfs: boolean } | null> {
+  if (isLab(repo)) return lab.getLabBlobInfo(repo, path, ref);
   const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`);
   if (res.status === 404) return null;
   const j = (await (await ok(res)).json()) as { size: number; encoding?: string; content?: string };
@@ -796,6 +829,7 @@ export async function getBlobInfo(repo: string, path: string, ref: string): Prom
 }
 
 export async function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
+  if (isLab(repo)) return lab.getLabRaw(repo, path, ref);
   const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, {}, 'application/vnd.github.raw');
   if (res.status === 404) return null;
   return (await ok(res)).text();
@@ -804,9 +838,11 @@ export async function getRaw(repo: string, path: string, ref: string): Promise<s
 // A reviewer's suggested change: the ```suggestion block in a comment, to replace lines start..end of the head file.
 export type Suggestion = { id: number; thread: string; path: string; start: number; end: number; text: string; author: Comment['author'] };
 export function suggestionOf(t: Thread, c: Comment): Suggestion | null {
-  const m = (c.body ?? '').replace(/\r\n/g, '\n').match(/^```suggestion[^\n]*\n([\s\S]*?)^ *```/m);
+  const m = (c.body ?? '').replace(/\r\n/g, '\n').match(/^```suggestion(?::-(\d+)\+(\d+))?[^\n]*\n([\s\S]*?)^ *```/m);
   if (!m || !t.line || t.diffSide !== 'RIGHT') return null;
-  return { id: c.databaseId, thread: t.id, path: t.path, start: t.startLine ?? t.line, end: t.line, text: m[1], author: c.author };
+  // GitLab's ```suggestion:-a+b reaches a lines above the comment's line and b below.
+  if (m[1]) return { id: c.databaseId, thread: t.id, path: t.path, start: t.line - Number(m[1]), end: t.line + Number(m[2]), text: m[3], author: c.author };
+  return { id: c.databaseId, thread: t.id, path: t.path, start: t.startLine ?? t.line, end: t.line, text: m[3], author: c.author };
 }
 
 // A file with suggestions applied, bottom up so earlier line numbers hold; its line endings kept. An empty block
@@ -825,13 +861,15 @@ export function applySuggestions(src: string, list: Pick<Suggestion, 'path' | 's
 // Suggestions committed to the PR's branch as one commit, like GitHub's "Commit suggestions": each file read at the
 // head, its suggestions applied bottom up, the authors credited. Refused if the branch moved (expectedHeadOid).
 export async function commitSuggestions(headRepo: string, branch: string, head: string, list: Suggestion[], me: string) {
-  const additions = [];
+  const files = [];
   for (const path of new Set(list.map((x) => x.path))) {
     const src = await getRaw(headRepo, path, head);
     if (src == null) throw new Error(`${path} isn't on the branch`);
-    const bytes = new TextEncoder().encode(applySuggestions(src, list.filter((x) => x.path === path)));
-    additions.push({ path, contents: btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join('')) });
+    files.push({ path, content: applySuggestions(src, list.filter((x) => x.path === path)) });
   }
+  const headline = list.length > 1 ? 'Apply suggestions from code review' : 'Apply suggestion from code review';
+  if (isLab(headRepo)) return void (await lab.commitLabSuggestions(headRepo, branch, head, files, headline));
+  const additions = files.map(({ path, content }) => ({ path, contents: btoa(Array.from(new TextEncoder().encode(content), (b) => String.fromCharCode(b)).join('')) }));
   const credit = new Map(list.filter((x) => x.author && x.author.login !== me && x.author.databaseId).map((x) => [x.author!.login, x.author!.databaseId]));
   await graphql(
     `mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}`,
@@ -841,7 +879,7 @@ export async function commitSuggestions(headRepo: string, branch: string, head: 
         expectedHeadOid: head,
         fileChanges: { additions },
         message: {
-          headline: list.length > 1 ? 'Apply suggestions from code review' : 'Apply suggestion from code review',
+          headline,
           body: [...credit].map(([login, id]) => `Co-authored-by: ${login} <${id}+${login}@users.noreply.github.com>`).join('\n'),
         },
       },
@@ -852,6 +890,7 @@ export async function commitSuggestions(headRepo: string, branch: string, head: 
 // A short-lived, signed link to a file at a commit, for <img>: unlike the raw bytes it resolves Git LFS files to the
 // stored image rather than the LFS pointer. Null if the file isn't there.
 export async function getDownloadUrl(repo: string, path: string, ref: string): Promise<string | null> {
+  if (isLab(repo)) return lab.getLabDownloadUrl(repo, path, ref);
   // no-store: the same URL fetched raw (getRaw) may sit in the browser cache, and that cached body isn't JSON.
   const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, { cache: 'no-store' });
   if (res.status === 404) return null;
@@ -904,13 +943,14 @@ const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repos
       comments(first:100){nodes{id databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid} pullRequestReview{databaseId}}}}}}}}`;
 
 // A comment on the PR's conversation (not on a line), as my own: answers someone there.
-export const commentOnPR = (repo: string, n: number, body: string) => json(`/repos/${repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+export const commentOnPR = (repo: string, n: number, body: string) => isLab(repo) ? lab.commentOnLab(repo, n, body) : json(`/repos/${repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
 
 // Per PR (by id), the latest conversation comment that @-mentions me, from someone (not a bot), unless I've commented
 // or reviewed there since or marked it done (the inbox). GitHub's own mention link in the rendered comment decides:
 // not a team's mention, not "@me" in code. A comment that starts with a hidden <!-- marker --> is automation's (the
 // marker is how it finds its comment to update), even posted from a person's account: left out.
 export async function getMentions(ids: string[], me: string, bots: Set<string> = new Set()): Promise<Map<string, Comment>> {
+  ids = ids.filter((id) => !isLabId(id)); // ponytail: GitLab mentions not in the inbox yet
   const out = new Map<string, Comment>();
   if (!ids.length || !me) return out;
   const d = await graphql(
@@ -929,6 +969,7 @@ export async function getMentions(ids: string[], me: string, bots: Set<string> =
 }
 
 export async function getThreads(repo: string, n: number): Promise<Thread[]> {
+  if (isLab(repo)) return lab.getLabThreads(repo, n);
   const [owner, name] = repo.split('/');
   const out: Thread[] = [];
   for (let after: string | null = null; ; ) {
@@ -941,7 +982,7 @@ export async function getThreads(repo: string, n: number): Promise<Thread[]> {
 }
 
 // jobId: the GitHub Actions job, whose log the local server can fetch.
-export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string; jobId?: number; onBase?: Check['state'] | null }; // onBase: the same check on the base branch's latest commit (a failing one only)
+export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string; jobId?: number; run?: string; onBase?: Check['state'] | null }; // run: a GitLab job's pipeline // onBase: the same check on the base branch's latest commit (a failing one only)
 
 const CHECKS = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
   commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename
@@ -957,6 +998,7 @@ const CHECK_ORDER = ['failure', 'pending', 'success', 'neutral'];
 
 // CI checks (GitHub Actions runs and commit statuses) on the PR's head commit, failures first.
 export async function getChecks(repo: string, n: number): Promise<Check[]> {
+  if (isLab(repo)) return lab.getLabChecks(repo, n);
   const [owner, name] = repo.split('/');
   const d: any = await graphql(CHECKS, { owner, name, n });
   const nodes = d.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? [];
@@ -986,6 +1028,7 @@ export async function getChecks(repo: string, n: number): Promise<Check[]> {
 // branch's run only "job": both are kept by their last part too.
 const baseSeen = new Map<string, { at: number; states: Promise<Map<string, Check['state']>> }>();
 export function baseChecks(repo: string, ref: string): Promise<Map<string, Check['state']>> {
+  if (isLab(repo)) return lab.labBaseChecks(repo, ref);
   const k = `${repo}@${ref}`;
   const c = baseSeen.get(k);
   if (c && Date.now() - c.at < 5 * 60_000) return c.states;
@@ -1006,14 +1049,17 @@ export function baseChecks(repo: string, ref: string): Promise<Map<string, Check
 export const onBaseOf = (base: Map<string, Check['state']>, c: Check) => base.get(c.name) ?? base.get(c.name.split(' / ').pop()!) ?? null;
 
 // Running failed GitHub Actions jobs again: one job (and the jobs that wait on it), or every failed job of a run.
-export const rerunJob = async (repo: string, jobId: number) => void (await ok(await gh(`/repos/${repo}/actions/jobs/${jobId}/rerun`, { method: 'POST' })));
+export const rerunJob = async (repo: string, jobId: number) => isLab(repo) ? lab.retryLabJob(repo, jobId) : void (await ok(await gh(`/repos/${repo}/actions/jobs/${jobId}/rerun`, { method: 'POST' })));
 export const rerunFailedJobs = async (repo: string, runId: string) =>
-  void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, { method: 'POST' })));
+  isLab(repo) ? lab.retryLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, { method: 'POST' })));
 // A job's run, from its link (…/actions/runs/<run>/job/<job>).
-export const runOf = (c: Check) => c.url?.match(/\/actions\/runs\/(\d+)/)?.[1];
+// The end of a failed job's log: a GitHub Actions job through the local server (gh), a GitLab job from GitLab.
+export const jobLog = (repo: string, job: number) => (isLab(repo) ? lab.labJobLog(repo, job) : fetchJobLog(repo, job));
+export const runOf = (c: Check) => c.run ?? c.url?.match(/\/actions\/runs\/(\d+)/)?.[1];
 
 // Files I've marked "Viewed" on GitHub (GitHub's own per-user state, so it carries over to github.com).
 export async function getViewed(repo: string, n: number): Promise<Set<string>> {
+  if (isLab(repo)) return lab.getLabViewed(repo, n);
   const [owner, name] = repo.split('/');
   const viewed = new Set<string>();
   for (let after: string | null = null; ; ) {
@@ -1031,6 +1077,7 @@ export async function getViewed(repo: string, n: number): Promise<Set<string>> {
 
 // Files marked (or unmarked) as viewed on GitHub: one request for up to 50 (a folder or module at once, from the index).
 export async function setViewed(prId: string, paths: string[], viewed: boolean) {
+  if (isLabId(prId)) return lab.setLabViewed(prId, paths, viewed);
   const op = viewed ? 'markFileAsViewed' : 'unmarkFileAsViewed';
   for (let i = 0; i < paths.length; i += 50) {
     const chunk = paths.slice(i, i + 50);
@@ -1042,7 +1089,7 @@ export async function setViewed(prId: string, paths: string[], viewed: boolean) 
 }
 
 export const resolveThread = (threadId: string, resolve: boolean) =>
-  graphql(
+  isLabId(threadId) ? lab.resolveLab(threadId, resolve) : graphql(
     resolve
       ? `mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){clientMutationId}}`
       : `mutation($id:ID!){unresolveReviewThread(input:{threadId:$id}){clientMutationId}}`,
@@ -1062,6 +1109,7 @@ export type LayerStatus = {
   reviewers: { login: string; verdict: ReviewState | 'WAITING' }[];
 };
 export async function getStackStatus(repo: string, numbers: number[]): Promise<Map<number, LayerStatus>> {
+  if (isLab(repo)) return lab.getLabStackStatus(repo, numbers);
   const [owner, name] = repo.split('/');
   const d = await graphql(
     `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){${numbers
@@ -1102,6 +1150,7 @@ export async function getStackStatus(repo: string, numbers: number[]): Promise<M
 // The whole stack around a PR, bottom → top: follow base branches down to PRs whose head is our base, and
 // head branches up to the single PR based on our head. Stops at forks, branching stacks, or 10 layers.
 export async function getStack(repo: string, pr: PR): Promise<StackLayer[]> {
+  if (isLab(repo)) return lab.getLabStack(repo, pr);
   const owner = repo.split('/')[0];
   if (pr.head.repo?.full_name !== repo) return [];
   const open = (q: string) => json(`/repos/${repo}/pulls?state=open&per_page=10&${q}`) as Promise<PR[]>;
@@ -1125,6 +1174,7 @@ export async function getStack(repo: string, pr: PR): Promise<StackLayer[]> {
 // The commit my latest submitted review was on, if any.
 // My latest submitted review: the commit it was on, and when.
 export async function getMyLastReview(repo: string, n: number): Promise<{ sha: string; at: string } | null> {
+  if (isLab(repo)) return lab.getLabMyLastReview(repo, n);
   const [me, reviews] = await Promise.all([getViewer(), paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`)]);
   const r = reviews.filter((r) => r.user?.login === me && r.state !== 'PENDING').at(-1);
   return r ? { sha: r.commit_id, at: r.submitted_at } : null;
@@ -1133,6 +1183,7 @@ export async function getMyLastReview(repo: string, n: number): Promise<{ sha: s
 // Files changed between two commits. status 'diverged' means `base` isn't an ancestor (the PR was rebased).
 // commits: how many head has that base doesn't.
 export async function getCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[]; commits: number }> {
+  if (isLab(repo)) return lab.getLabCompare(repo, base, head);
   const d = await json(`/repos/${repo}/compare/${base}...${head}`);
   return { status: d.status, files: d.files ?? [], commits: d.ahead_by ?? 0 };
 }
@@ -1147,16 +1198,18 @@ export const getEmojis = () =>
 
 // Markdown rendered by GitHub itself (emoji, @mentions, #refs, mermaid…), exactly as the comment will look there.
 export async function renderGfm(text: string, repo: string): Promise<string> {
+  if (isLab(repo)) return lab.renderLabMarkdown(text, repo);
   const res = await ok(await gh('/markdown', { method: 'POST', body: JSON.stringify({ text, mode: 'gfm', context: repo }) }, 'text/html'));
   return res.text();
 }
 
 export const reply = (repo: string, n: number, commentId: number, body: string) =>
-  json(`/repos/${repo}/pulls/${n}/comments/${commentId}/replies`, { method: 'POST', body: JSON.stringify({ body }) });
+  isLab(repo) ? lab.replyLab(repo, n, commentId, body) : json(`/repos/${repo}/pulls/${n}/comments/${commentId}/replies`, { method: 'POST', body: JSON.stringify({ body }) });
 
 // GraphQL rather than REST: only addPullRequestReviewThread supports file-level comments inside a review.
 // `pending`: my review already open on GitHub, to add to and send (never deleted here if something fails).
 export async function submitReview(prId: string, commitOID: string, event: ReviewEvent, body: string, drafts: Draft[], pending?: string) {
+  if (isLabId(prId)) return lab.submitLabReview(prId, commitOID, event, body, drafts);
   const reviewId =
     pending ??
     (
@@ -1238,6 +1291,7 @@ export const holdSigns = (title: string, labels: string[], headCommit: string) =
 // The checks the base branch requires (branch protection, and rulesets), by name; once per repo and branch.
 const requiredSeen = new Map<string, Promise<string[]>>();
 export function requiredChecks(repo: string, branch: string): Promise<string[]> {
+  if (isLab(repo)) return Promise.resolve([]); // GitLab asks for the whole pipeline to pass, not named checks
   const key = `${repo}@${branch}`;
   const b = encodeURIComponent(branch);
   if (!requiredSeen.has(key))
@@ -1256,6 +1310,7 @@ export const neverRan = (required: string[], checks: Pick<Check, 'name' | 'state
 // PR for this app PR's ticket, say.
 export type TicketPR = { repo: string; number: number; title: string; state: 'OPEN' | 'CLOSED' | 'MERGED'; isDraft: boolean; author: string; keys: string[] };
 export async function ticketPRs(repo: string, n: number, keys: string[]): Promise<TicketPR[]> {
+  if (isLab(repo)) return lab.labTicketPRs(repo, n, keys);
   if (!keys.length) return [];
   const q = `${keys.map((k) => `"${k}"`).join(' OR ')} user:${repo.split('/')[0]} is:pr`;
   const d = await graphql(`query($q:String!){search(query:$q,type:ISSUE,first:30){nodes{...on PullRequest{number title state isDraft headRefName body repository{nameWithOwner} author{login}}}}}`, { q });
@@ -1276,6 +1331,7 @@ const MERGE_STATE = `query($owner:String!,$name:String!,$n:Int!){repository(owne
     st:viewerMergeHeadlineText(mergeType:SQUASH) sb:viewerMergeBodyText(mergeType:SQUASH)}}}`;
 
 export async function getMergeState(repo: string, n: number): Promise<MergeState> {
+  if (isLab(repo)) return lab.getLabMergeState(repo, n, holdSigns);
   const [owner, name] = repo.split('/');
   const r = (await graphql(MERGE_STATE, { owner, name, n })).repository;
   const { mt, mb, st, sb, title, labels, commits, ...pr } = r.pullRequest;
@@ -1291,7 +1347,7 @@ export async function getMergeState(repo: string, n: number): Promise<MergeState
 
 // expectedHeadOid: refuse if commits were pushed after the state I looked at.
 export const mergePR = (s: MergeState, method: MergeMethod, title: string, body: string, auto: boolean) =>
-  graphql(
+  isLabId(s.id) ? lab.mergeLab(s, method, title, body, auto) : graphql(
     auto
       ? `mutation($id:ID!,$m:PullRequestMergeMethod,$t:String,$b:String,$oid:GitObjectID){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:$m,commitHeadline:$t,commitBody:$b,expectedHeadOid:$oid}){clientMutationId}}`
       : `mutation($id:ID!,$m:PullRequestMergeMethod,$t:String,$b:String,$oid:GitObjectID){mergePullRequest(input:{pullRequestId:$id,mergeMethod:$m,commitHeadline:$t,commitBody:$b,expectedHeadOid:$oid}){clientMutationId}}`,
@@ -1300,6 +1356,7 @@ export const mergePR = (s: MergeState, method: MergeMethod, title: string, body:
 // The bottom layer of a stack merged from the stack overview: GitHub's usual method and message, then the next layer
 // pointed at what it merged into, then its branch deleted (unless the repo does that, or another PR builds on it).
 export async function mergeLayer(repo: string, n: number, next?: number) {
+  if (isLab(repo)) return lab.mergeLabLayer(repo, n, next, holdSigns);
   const s = await getMergeState(repo, n);
   const m = s.methods[0];
   await mergePR(s, m, s.message[m].title, s.message[m].body, false);
@@ -1309,6 +1366,7 @@ export async function mergeLayer(repo: string, n: number, next?: number) {
 
 // A merged PR's branch, unless another open PR builds on it (deleting it would close that one).
 export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' | 'headRefName'>) {
+  if (isLab(repo)) return s.headRef ? lab.deleteLabBranch(repo, s.headRefName) : undefined;
   if (!s.headRef) return;
   const [above] = (await json(`/repos/${repo}/pulls?state=open&per_page=1&base=${encodeURIComponent(s.headRefName)}`)) as PR[];
   if (above) throw new Error(`kept ${s.headRefName}: #${above.number} builds on it`);
@@ -1319,6 +1377,7 @@ export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' |
 export type StaleBranch = { repo: string; number: number; title: string; headRefName: string; headRef: { id: string } };
 const KEEP = /^(main|master|develop|dev|staging|production|release\/|hotfix\/)/;
 export async function getStaleBranches(): Promise<StaleBranch[]> {
+  const gitlab = lab.getLabStaleBranches().catch(() => []);
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
   const d = await graphql(
     `query($q:String!){s:search(query:$q,type:ISSUE,first:100){nodes{...on PullRequest{number title repository{nameWithOwner} isCrossRepository viewerCanDeleteHeadRef headRefName headRef{id}}}}}`,
@@ -1326,15 +1385,16 @@ export async function getStaleBranches(): Promise<StaleBranch[]> {
   );
   return (d.s.nodes as any[])
     .filter((p) => p?.headRef && p.viewerCanDeleteHeadRef && !p.isCrossRepository && !KEEP.test(p.headRefName))
-    .map((p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, headRefName: p.headRefName, headRef: p.headRef }));
+    .map((p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, headRefName: p.headRefName, headRef: p.headRef }))
+    .concat(await gitlab);
 }
 
 export const disableAutoMerge = (id: string) =>
-  graphql(`mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}`, { id });
+  isLabId(id) ? lab.cancelLabAutoMerge(id) : graphql(`mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 export const updateBranch = (s: { id: string; headRefOid?: string }) =>
-  graphql(`mutation($id:ID!,$oid:GitObjectID){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}`, { id: s.id, oid: s.headRefOid });
+  isLabId(s.id) ? lab.rebaseLab(s.id) : graphql(`mutation($id:ID!,$oid:GitObjectID){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}`, { id: s.id, oid: s.headRefOid });
 export const markReady = (id: string) =>
-  graphql(`mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}`, { id });
+  isLabId(id) ? lab.markLabReady(id) : graphql(`mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 
 // Comments by accounts marked as bots count as bot comments (folded, never awaiting a reply, bot threads).
 // A comment that opens with 🤖 (after any hidden <!-- markers -->): an agent's, by its own say, posted from a person's
@@ -1443,7 +1503,7 @@ export const forgetThreadStatus = (id: string) => void extrasSeen.set(id, { ...(
 // (getMentions)? For the inbox button's count; only the PRs that changed are asked.
 export async function getMentionStatus(items: QueueItem[]): Promise<Map<string, boolean>> {
   const me = await getViewer();
-  const all = items.filter((i) => i.mentioned || i.authored);
+  const all = items.filter((i) => (i.mentioned || i.authored) && !isLab(i.repo));
   const ask = changed(all, 'mention');
   if (ask.length) {
     const found = await getMentions(ask.map((i) => i.id), me, readBots());
@@ -1455,7 +1515,7 @@ export async function getMentionStatus(items: QueueItem[]): Promise<Map<string, 
 // Each PR's rough time to review, asked after the list shows (its description and per-file line counts would slow the
 // list down).
 export async function getEstimates(items: { id: string; updatedAt: string }[]): Promise<Map<string, Estimate>> {
-  const ask = changed(items, 'estimate');
+  const ask = changed(items.filter((i) => !isLabId(i.id)), 'estimate'); // ponytail: no estimate for GitLab MRs yet
   for (let k = 0; k < ask.length; k += 100) {
     const part = ask.slice(k, k + 100);
     const d = await graphql(`query($ids:[ID!]!){nodes(ids:$ids){... on PullRequest{id body files(first:100){nodes{path additions deletions}}}}}`, { ids: part.map((i) => i.id) });
@@ -1469,6 +1529,14 @@ export async function getThreadStatus(items: QueueItem[], bots: Set<string> = ne
   const all = items.filter((i) => i.mine || i.myState);
   const ask = changed(all, 'thread');
   const have = () => new Map(all.flatMap((i) => { const t = extrasSeen.get(i.id)?.thread; return t ? [[i.id, t] as const] : []; }));
+  // GitLab's: each MR's discussions, read for the ones that changed.
+  await Promise.all(ask.filter((i) => isLab(i.repo)).map(async (i) => {
+    const me = await getViewer(i.repo);
+    const threads = markBots(await lab.getLabThreads(i.repo, i.number), bots);
+    const mine = threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === me));
+    keep(i, { thread: { awaiting: threads.filter((t) => awaitsMe(t, me, i.authored)).length, allMineResolved: mine.length > 0 && mine.every((t) => t.isResolved) } });
+  }).map((p) => p.catch(() => {})));
+  ask.splice(0, ask.length, ...ask.filter((i) => !isLab(i.repo)));
   if (!ask.length) return have();
   const vars = Object.fromEntries(ask.map((i, k) => [`i${k}`, i.id]));
   const d = await graphql(

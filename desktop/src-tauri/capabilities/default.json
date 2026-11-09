@@ -8,6 +8,8 @@
   "permissions": [
     "core:default",
     "allow-gh-token",
+    "allow-glab-token",
+    "allow-glab-accounts",
     "allow-notify",
     "allow-gh-accounts",
     "allow-slack-emoji",

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { fetchJobLog, reportError, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
+import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { awaitsMe, earlierVerdicts, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { awaitsMe, earlierVerdicts, jobLog, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -250,7 +250,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
     );
   };
   const [logErr, setLogErr] = useState('');
-  const loadLog = () => (setLogErr(''), fetchJobLog(repo, c.jobId!).then(setLog, (e) => setLogErr(e.message)));
+  const loadLog = () => (setLogErr(''), jobLog(repo, c.jobId!).then(setLog, (e) => setLogErr(e.message)));
   const toggle = () => {
     setOpen(!open);
     if (log === null) loadLog();
@@ -404,7 +404,7 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
           <div class="ix-check">
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
               <span class="ix-label">
-                {!who.startsWith('team ') && <img src={`https://github.com/${encodeURIComponent(who)}.png?size=40`} alt="" />}
+                {!who.startsWith('team ') && <img src={faceOf(who)} alt="" />}
                 {who} <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
               </span>
               {presence[who] && <span class={isAway(presence[who]) ? 'ix-status away' : 'ix-status'}>{isAway(presence[who]) && '🌴 '}{statusText(presence[who])}</span>}

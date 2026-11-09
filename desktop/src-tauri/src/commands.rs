@@ -191,6 +191,45 @@ pub async fn gh_accounts() -> Result<Value, String> {
     Ok(json!(all.iter().filter(|a| a["state"] == "success").map(|a| json!({ "login": a["login"], "active": a["active"] == json!(true) })).collect::<Vec<_>>()))
 }
 
+/// GitLab through glab, which owns the sign-in like gh does: the hosts it's signed in to, each with its account and
+/// where its API is (`glab auth status` prints them on stderr).
+#[tauri::command]
+pub async fn glab_accounts() -> Result<Value, String> {
+    let o = run("glab", &["auth", "status"], None, SECONDS_30);
+    let text = format!("{}{}", o.stdout, o.stderr);
+    let host_ok = re(r"^[A-Za-z0-9.-]+(:\d+)?$");
+    let config = |key: &str, host: &str| {
+        let c = run("glab", &["config", "get", key, "--host", host], None, SECONDS_30);
+        Some(c.stdout.trim().to_string()).filter(|v| c.ok && !v.is_empty())
+    };
+    Ok(json!(re(r"Logged in to (\S+) as (\S+)")
+        .captures_iter(&text)
+        .filter(|c| host_ok.is_match(&c[1]))
+        .map(|c| {
+            let api = config("api_host", &c[1]).unwrap_or_else(|| c[1].to_string());
+            let protocol = config("api_protocol", &c[1]).unwrap_or_else(|| "https".into());
+            json!({ "host": &c[1], "login": &c[2], "api": format!("{protocol}://{api}") })
+        })
+        .collect::<Vec<_>>()))
+}
+
+/// glab's token for a host, read on every call so `glab auth login` applies on reload.
+#[tauri::command]
+pub async fn glab_token(host: String) -> Result<String, String> {
+    if !re(r"^[A-Za-z0-9.-]+(:\d+)?$").is_match(&host) {
+        return Err("Bad host".into());
+    }
+    let o = run("glab", &["config", "get", "token", "--host", &host], None, SECONDS_30);
+    if o.missing {
+        return Err("The GitLab CLI (glab) isn't installed.".into());
+    }
+    let token = o.stdout.trim();
+    if !o.ok || token.is_empty() {
+        return Err(format!("glab isn't signed in to {host}. Run `glab auth login --hostname {host}`, then reload."));
+    }
+    Ok(token.to_string())
+}
+
 #[tauri::command]
 pub async fn job_log(repo: String, job: u64, user: Option<String>) -> Result<String, String> {
     if !re(r"^[\w.-]+/[\w.-]+$").is_match(&repo) {

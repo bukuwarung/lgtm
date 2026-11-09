@@ -45,6 +45,31 @@ const ghAccounts = () =>
     }),
   );
 
+// GitLab through glab (https://gitlab.com/gitlab-org/cli), which owns the sign-in like gh does: the hosts it's signed in
+// to, each with its account and where its API is, and a host's token, read per request so `glab auth login` applies on reload.
+const GL_HOST = /^[a-z0-9.-]+(:\d+)?$/i;
+const glab = (args) => execFileSync('glab', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 }).trim();
+const glabToken = (host) => {
+  if (!GL_HOST.test(host)) throw new Error('Bad host');
+  return glab(['config', 'get', 'token', '--host', host]);
+};
+const glabAccounts = () =>
+  new Promise((resolve) =>
+    execFile('glab', ['auth', 'status'], { timeout: 30000 }, (_err, stdout, stderr) => {
+      const out = [];
+      for (const [, host, login] of `${stdout}${stderr}`.matchAll(/Logged in to (\S+) as (\S+)/g)) {
+        if (!GL_HOST.test(host)) continue;
+        let api = host, protocol = 'https';
+        try {
+          api = glab(['config', 'get', 'api_host', '--host', host]) || host;
+          protocol = glab(['config', 'get', 'api_protocol', '--host', host]) || 'https';
+        } catch {}
+        out.push({ host, login, api: `${protocol}://${api}` });
+      }
+      resolve(out);
+    }),
+  );
+
 async function readConfig() {
   try {
     return JSON.parse(await readFile(CONFIG, 'utf8'));
@@ -678,7 +703,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-mod', '/claude-outbox', '/claude-session', '/gh-accounts', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-mod', '/claude-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input))
@@ -755,6 +780,17 @@ const server = createServer(async (req, res) => {
     }
   }
   if (path === '/gh-accounts') return ghAccounts().then((r) => json(res, 200, r));
+  if (path === '/glab-accounts') return glabAccounts().then((r) => json(res, 200, r));
+  if (path === '/glab-token') {
+    const host = new URL(req.url ?? '/', ORIGIN).searchParams.get('host') ?? '';
+    try {
+      const token = glabToken(host);
+      if (!token) throw new Error();
+      return res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }).end(token);
+    } catch {
+      return res.writeHead(500).end(`glab isn't signed in to ${host}. Run \`glab auth login --hostname ${host}\`, then reload.`);
+    }
+  }
   if (path === '/slack-emoji') return slackEmoji().then((r) => json(res, 200, r));
 
   const file = normalize(join(DIST, path === '/' ? 'index.html' : path));

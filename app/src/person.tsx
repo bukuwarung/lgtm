@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { getPerson, type Person, type QueueItem } from './github.ts';
+import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
 import { ago, usePresence, repoLabel } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { Tg, Who, Time } from './tags.tsx';
@@ -32,7 +32,7 @@ function Row({ i, waiting }: { i: QueueItem; waiting?: boolean }) {
       </span>
       <b>{i.title}</b>
       <small>
-        {repoLabel(i.repo)}#{i.number}{waiting ? <> · <Who login={i.author} /> · waiting {ago(i.waitingSince).replace(/ ago$/, '')}</> : <> · active <Time at={i.updatedAt} /></>}
+        {repoLabel(i.repo)}{numRef(i.repo, i.number)}{waiting ? <> · <Who login={i.author} /> · waiting {ago(i.waitingSince).replace(/ ago$/, '')}</> : <> · active <Time at={i.updatedAt} /></>}
       </small>
     </a>
   );

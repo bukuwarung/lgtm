@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, type TicketPR } from './github.ts';
+  ticketPRs, earlierVerdicts, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia } from './platform.ts';
+import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -234,7 +234,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       await requestReview(repo, n, login);
     } catch (e: any) {
       mark(login);
-      return setErr(`Couldn't ask @${login} on GitHub: ${e.message}`);
+      return setErr(`Couldn't ask @${login} on ${site(repo)}: ${e.message}`);
     }
     mark(login, 'asked');
     if (!(slack && slackOk)) return onAsked(`Asked @${login} for a review.`, true);
@@ -242,9 +242,9 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       const emails = await getEmails(repo.split('/')[0], [login]);
       const message = fillSlack(text, prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
       const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], message, `${repo}#${n}`);
-      onAsked(r?.ok ? `Asked @${login} for a review, on GitHub and Slack.` : `Asked @${login} on GitHub; Slack didn't reach them (${r?.error ?? 'no reply'}).`, !!r?.ok);
+      onAsked(r?.ok ? `Asked @${login} for a review, on ${site(repo)} and Slack.` : `Asked @${login} on ${site(repo)}; Slack didn't reach them (${r?.error ?? 'no reply'}).`, !!r?.ok);
     } catch (e: any) {
-      onAsked(`Asked @${login} on GitHub; Slack failed (${e.message}).`, false);
+      onAsked(`Asked @${login} on ${site(repo)}; Slack failed (${e.message}).`, false);
     }
   };
   return (
@@ -283,7 +283,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
             onClick={() => (findings.length && !cleared ? setHeld(p.login) : ask(p.login))}
           >
             <span class="ix-label">
-              <img src={`https://github.com/${encodeURIComponent(p.login)}.png?size=40`} alt="" />@{p.login}{' '}
+              <img src={faceOf(p.login)} alt="" />@{p.login}{' '}
               <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? <><Octicon name="check" /> asked</> : away ? 'away' : p.load ? `${p.load} waiting` : 'free'}</span>
             </span>
             {(s?.text || s?.emoji) && (
@@ -303,7 +303,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
           {slack && <EmojiTextarea rows={2} value={text} onInput={setText} names={emoji.names} emoji={emoji.emoji} label="Slack message" />}
         </label>
       ) : (
-        <p class="note ix-pad">Slack isn't set up, so this only asks on GitHub.</p>
+        <p class="note ix-pad">Slack isn't set up, so this only asks on {site(repo)}.</p>
       )}
     </div>
   );
@@ -394,7 +394,7 @@ function PRSkeleton({ pr }: { pr?: PR | null }) {
       <main>
         {pr ? (
           <h1 class="skel-h1">
-            <span class="pr-num">#{pr.number}</span> {pr.title}
+            <span class="pr-num">{pr.html_url.includes("/-/merge_requests/") ? "!" : "#"}{pr.number}</span> {pr.title}
           </h1>
         ) : (
           <span class="sk sk-title" />
@@ -573,7 +573,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (listed !== undefined) return setToReview(listed);
     if (!data) return;
     // The signed-in login, known already (not `me`, which waits for the PR's refresh from GitHub).
-    getViewer().then((login) => setToReview(data.pr.user.login !== login && (data.pr.requested_reviewers ?? []).some((u) => u.login === login)), () => setToReview(false));
+    getViewer(repo).then((login) => setToReview(data.pr.user.login !== login && (data.pr.requested_reviewers ?? []).some((u) => u.login === login)), () => setToReview(false));
   }, [data, listed]);
   const [stale, setStale] = useState<number | null>(null); // showing the copy loaded at this time, while refreshing
   const [early, setEarly] = useState<PR | null>(null); // the PR, before its files (PRSkeleton shows its title)
@@ -673,13 +673,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     function extras(pr: PR) {
       if (started) return;
       started = true;
-      getViewer().then((me) => {
+      getViewer(repo).then((me) => {
         setMe(me);
         setMine([pr.user, ...pr.assignees].some((u) => u.login === me));
       }, () => {});
       getStack(repo, pr).then(setStack, () => {});
       // My "reviews" of my own PR are only replies to threads: no "since your last review" there.
-      Promise.all([getMyLastReview(repo, n), getViewer().catch(() => '')]).then(([last, me]) => {
+      Promise.all([getMyLastReview(repo, n), getViewer(repo).catch(() => '')]).then(([last, me]) => {
         if (pr.user.login === me) return;
         const sha = last?.sha;
         if (last) setLastReviewAt(last.at);
@@ -707,7 +707,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       addEventListener('focus', again);
       addEventListener('online', again);
     };
-    Promise.all([slackStatus(`${repo}#${n}`), getViewer()]).then(([slack, me]) => {
+    Promise.all([slackStatus(`${repo}#${n}`), getViewer(repo)]).then(([slack, me]) => {
       if (!live) return;
       setSlackThreads(slack.threads);
       const people = [...new Set([pr.user, ...pr.assignees].filter((u) => u.type !== 'Bot' && u.login !== me).map((u) => u.login))];
@@ -742,7 +742,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         if (d.files.length >= 300) {
           setSince(false);
           setLastReviewed(null); // no "since" toggle either: it would hit the same limit
-          setNotice({ ok: false, text: 'Showing the full diff: the branch was rebased onto so much new base-branch work since your last review that GitHub can\'t list just what changed in this PR.' });
+          setNotice({ ok: false, text: `Showing the full diff: the branch was rebased onto so much new base-branch work since your last review that ${site(repo)} can't list just what changed in this PR.` });
           return;
         }
         const inPR = new Set(data.files.map((f) => f.filename));
@@ -841,6 +841,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => {
     const on = (e: Event) => {
       const url = (e as CustomEvent<string>).detail;
+      // A GitLab note (#note_…) is a thread's comment or the conversation's; whichever this page has.
+      const note = url.startsWith(prWebUrl(repo, n)) && url.match(/#note_(\d+)$/)?.[1];
+      if (note) {
+        const id = document.getElementById(`rc-${note}`) ? `rc-${note}` : `cv-c${note}`;
+        e.preventDefault();
+        if (!document.getElementById(id) && hiddenThreads) setShowSettled();
+        return jumpTo(id);
+      }
       const here = url.startsWith(`https://github.com/${repo}/pull/${n}`) && url.match(/#(discussion_r|issuecomment-|pullrequestreview-|r)(\d+)$/); // #r…: the files tab's links
       if (here) {
         const id = ({ discussion_r: 'rc-', r: 'rc-', 'issuecomment-': 'cv-c', 'pullrequestreview-': 'cv-r' } as Record<string, string>)[here[1]] + here[2];
@@ -848,7 +856,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         if (!document.getElementById(id) && hiddenThreads) setShowSettled();
         return jumpTo(id);
       }
-      const blob = url.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/blob\/([^/]+)\/([^#?]+)[^#]*(?:#L(\d+)(?:-L\d+)?)?$/);
+      const blob = url.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/blob\/([^/]+)\/([^#?]+)[^#]*(?:#L(\d+)(?:-L\d+)?)?$/) ?? url.match(/^https:\/\/([\w.-]+(?:\/[\w.-]+)+?)\/-\/blob\/([^/]+)\/([^#?]+)[^#]*(?:#L(\d+)(?:-\d+)?)?$/);
       const path = blob && decodeURIComponent(blob[3]);
       if (!blob || !data || ![repo, data.headRepo].includes(blob[1]) || !data.files.some((f) => f.filename === path)) return;
       e.preventDefault();
@@ -946,7 +954,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (event !== 'APPROVE' && !body.trim() && !drafts.length && !pending?.count) {
       onSubmitted(event);
       if (next || focus) onReviewed(null);
-      else setNotice({ ok: true, text: 'Your comments are already on GitHub: nothing more to send.' });
+      else setNotice({ ok: true, text: `Your comments are already on ${site(repo)}: nothing more to send.` });
       return true;
     }
     const now = await getPR(repo, n);
@@ -1152,7 +1160,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     });
     setViewed(pr.node_id, change, on).catch((e) => {
       apply(!on);
-      setNotice({ ok: false, text: `Couldn't update "Viewed" on GitHub: ${e.message}` });
+      setNotice({ ok: false, text: `Couldn't update "Viewed" on ${site(repo)}: ${e.message}` });
     });
   }
   const toggleViewed = (path: string) => markViewed([path], !viewed.has(path));
@@ -1162,7 +1170,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     try {
       await requestReview(repo, n, login);
     } catch (e: any) {
-      setNotice({ ok: false, text: `Couldn't ask @${login} again on GitHub: ${e.message}` });
+      setNotice({ ok: false, text: `Couldn't ask @${login} again on ${site(repo)}: ${e.message}` });
       return false;
     }
     let note = `Asked @${login} to review again.`;
@@ -1171,9 +1179,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       try {
         const emails = await getEmails(repo.split('/')[0], [login]);
         const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], text, `${repo}#${n}`);
-        note = r?.ok ? `Asked @${login} to review again, on GitHub and Slack.` : `Asked @${login} again on GitHub; Slack didn't reach them: ${r?.error ?? 'no reply'}`;
+        note = r?.ok ? `Asked @${login} to review again, on ${site(repo)} and Slack.` : `Asked @${login} again on ${site(repo)}; Slack didn't reach them: ${r?.error ?? 'no reply'}`;
       } catch (e: any) {
-        note = `Asked @${login} again on GitHub; Slack failed (${e.message}).`;
+        note = `Asked @${login} again on ${site(repo)}; Slack failed (${e.message}).`;
       }
     }
     setNotice({ ok: !note.includes("didn't") && !note.includes('failed'), text: note });
@@ -1457,8 +1465,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             </span>
           )}
           <h1>
-            <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on GitHub`}>
-              <span class="pr-num">#{n}</span> {pr.title}
+            <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on ${site(repo)}`}>
+              <span class="pr-num">{numRef(repo, n)}</span> {pr.title}
             </a>
           </h1>
           <div class="bar-group">
@@ -1783,7 +1791,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 class="link"
                 disabled={discarding}
                 onClick={async () => {
-                  if (!(await ask(`Discard your review in progress on GitHub${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`, 'Discard'))) return;
+                  if (!(await ask(`Discard your review in progress on ${site(repo)}${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`, 'Discard'))) return;
                   setDiscarding(true);
                   await discardReview(pending.id).catch((e) => setError(e.message));
                   setPending(null);
@@ -1974,7 +1982,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
           {/* What GitHub (and Slack) will get, so nothing about submitting is a surprise. */}
           <div class="sends">
             {event !== 'APPROVE' && !body.trim() && !count && !(event === 'REQUEST_CHANGES' && mySummary) ? (
-              event === 'COMMENT' ? (myOpenThreads ? 'Nothing new to send: your comments are already on GitHub. Submitting just moves on.' : 'Nothing to send yet: write a summary, or comment on lines.') : 'A change request needs to say what to change: write it above.'
+              event === 'COMMENT' ? (myOpenThreads ? `Nothing new to send: your comments are already on ${site(repo)}. Submitting just moves on.` : 'Nothing to send yet: write a summary, or comment on lines.') : 'A change request needs to say what to change: write it above.'
             ) : (
               <>
                 Sends {authored ? 'a comment' : { COMMENT: 'a comment', APPROVE: 'an approval', REQUEST_CHANGES: 'a change request' }[event]}
@@ -2010,14 +2018,17 @@ function DiffMode({ rich, set }: { rich: boolean; set: (rich: boolean) => void }
   );
 }
 
-// A file on github.dev (VS Code in the browser, with the whole repo) at the PR's commit; the . key too.
+// A file on github.dev (VS Code in the browser, with the whole repo) at the PR's commit; the . key too. GitLab's own
+// is its Web IDE.
 const githubDev = (headRepo: string, sha: string, path: string, line?: number) =>
-  `https://github.dev/${headRepo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}${line ? `#L${line}` : ''}`;
+  isLab(headRepo)
+    ? `https://${headRepo.slice(0, headRepo.indexOf('/'))}/-/ide/project/${headRepo.slice(headRepo.indexOf('/') + 1)}/edit/${sha}/-/${path.split('/').map(encodeURIComponent).join('/')}`
+    : `https://github.dev/${headRepo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}${line ? `#L${line}` : ''}`;
 function OpenInEditor({ headRepo, sha, path, line }: { headRepo: string; sha: string; path: string; line?: number }) {
   return (
     <button
       class="icon-btn"
-      title={`Open on github.dev, at the PR's commit${line ? `, line ${line}` : ''}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').githubDev)}`}
+      title={`Open ${isLab(headRepo) ? "in GitLab's Web IDE" : 'on github.dev'}, at the PR's commit${line ? `, line ${line}` : ''}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').githubDev)}`}
       onClick={() => openExternal(githubDev(headRepo, sha, path, line))}
     >
       <Octicon name="link-external" />
@@ -2049,7 +2060,7 @@ const whitespaceOnly = (f: File) => { const s = wsSections(f); return s.total > 
 
 // A comment author's picture beside their name (GitHub's own URL for it when the data has one; bots' differ).
 const Avatar = ({ login, src }: { login: string; src?: string }) => (
-  <img class="c-avatar" src={src ?? `https://github.com/${encodeURIComponent(login)}.png?size=40`} alt="" loading="lazy" />
+  <img class="c-avatar" src={src ?? faceOf(login)} alt="" loading="lazy" />
 );
 
 // Images' sizes once loaded (by their address as the page first had it; the 400 most recent), set on them next time
@@ -2253,7 +2264,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         <button class="icon-btn" title={`Comment on this file${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fileComment)}`} aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>
           <Octicon name="comment" />
         </button>
-        <ViewedToggle viewed={viewed} onToggle={onToggleViewed} title={`${viewed ? 'Viewed: click to mark as not viewed' : 'Mark as viewed'} on GitHub${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').viewed)}`} />
+        <ViewedToggle viewed={viewed} onToggle={onToggleViewed} title={`${viewed ? 'Viewed: click to mark as not viewed' : 'Mark as viewed'} on ${site(ctx.repo)}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').viewed)}`} />
       </header>
       {collapsed ? (
         <button class="collapsed-row" onClick={onExpand}>
@@ -2275,7 +2286,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
       ) : !file.patch ? (
         <p class="note pad">
           {!file.additions && !file.deletions && ['added', 'removed'].includes(file.status) && !!languageFor(file.filename) ? `An empty file, ${file.status === 'added' ? 'added' : 'deleted'}.` : 'No diff to show (binary, too large, or renamed without changes).'}{' '}
-          <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a>
+          <a href={file.blob_url} target="_blank" rel="noopener">View on {site(ctx.repo)}</a>
         </p>
       ) : hideDeleted ? (
         <button class="collapsed-row" onClick={() => setShowDeleted(true)}>
@@ -2343,7 +2354,7 @@ function BinaryInfo({ file, ctx }: { file: File; ctx: Ctx }) {
   const ships = path.match(/(?:^|\/)src\/(\w+)\/(?:assets|res\/raw)\//)?.[1]; // Android: packed into the app as is
   const { was, now } = info ?? {};
   if (info && !was?.size && !now?.size)
-    return <p class="note pad">{file.status === 'removed' ? 'An empty file, deleted.' : file.status === 'added' ? 'An empty file, added.' : 'No diff to show.'} <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a></p>;
+    return <p class="note pad">{file.status === 'removed' ? 'An empty file, deleted.' : file.status === 'added' ? 'An empty file, added.' : 'No diff to show.'} <a href={file.blob_url} target="_blank" rel="noopener">View on {site(ctx.repo)}</a></p>;
   return (
     <div class="bin-info">
       <p>
@@ -2358,7 +2369,7 @@ function BinaryInfo({ file, ctx }: { file: File; ctx: Ctx }) {
           ' · …'
         )}
         {ships && file.status !== 'removed' && <> · packed into the app{ships === 'main' ? '' : ` (${ships} builds)`}</>}{' '}
-        <a href={file.blob_url} target="_blank" rel="noopener">View on GitHub</a>
+        <a href={file.blob_url} target="_blank" rel="noopener">View on {site(ctx.repo)}</a>
       </p>
       {now && !now.lfs && file.lfs && (
         <p class="bin-warn">
@@ -2519,7 +2530,7 @@ function LintBaselineView({ file, ctx }: { file: File; ctx: Ctx }) {
     return ctx.codeIx.patches.has(x.file) ? (
       <a href={'#'} onClick={(e) => (e.preventDefault(), jumpToLine(x.file, x.line))} title={x.file}>{where}</a>
     ) : (
-      <a href={`https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${x.file}${x.line ? `#L${x.line}` : ''}`} target="_blank" rel="noopener" title={x.file}>{where}</a>
+      <a href={blobWebUrl(ctx.headRepo, ctx.pr.head.sha, x.file, x.line)} target="_blank" rel="noopener" title={x.file}>{where}</a>
     );
   };
   const row = (x: Suppression, ask = false) => (
@@ -2743,8 +2754,8 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
     if (e.altKey) {
       const url =
         side === 'LEFT'
-          ? `https://github.com/${ctx.repo}/blob/${ctx.pr.base.sha}/${file.previous_filename ?? path}#L${line}`
-          : `https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${path}#L${line}`;
+          ? blobWebUrl(ctx.repo, ctx.pr.base.sha, file.previous_filename ?? path, line)
+          : blobWebUrl(ctx.headRepo, ctx.pr.head.sha, path, line);
       void copyText(url).then(
         () => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Link to line ${line} copied`, ms: 2500 } })),
         () => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: "Couldn't copy the link", ms: 2500 } })),
@@ -3278,7 +3289,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const look = mdStyleProps(mdStyle); // Settings → Markdown files
   const path = file.filename;
   const root = useRef<HTMLDivElement>(null);
-  const linkTo = (slug: string) => `https://github.com/${ctx.headRepo}/blob/${ctx.pr.head.sha}/${path}#${slug}`;
+  const linkTo = (slug: string) => `${blobWebUrl(ctx.headRepo, ctx.pr.head.sha, path)}#${slug}`;
   const peek = useRefPeek(ctx.codeIx);
   useEffect(() => {
     tidyDoc(root.current, linkTo);
@@ -3793,7 +3804,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       <summary>
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}
-        {first?.state === 'PENDING' && <span class="badge">Pending, started on GitHub · </span>}
+        {first?.state === 'PENDING' && <span class="badge">Pending, started on {site(ctx.repo)} · </span>}
         <span class="t-preview"><Avatar login={first?.author?.login ?? 'ghost'} src={first?.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(first?.author?.login ?? 'ghost')}>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
         {t.isResolved && <span class="badge"> · resolved</span>}
         {t.isOutdated && <span class="badge"> · outdated</span>}
@@ -3858,7 +3869,7 @@ function PendingComment({ c, ctx, path }: { c: Thread['comments']['nodes'][numbe
       <div class="md" data-lang={ctx.langFor(path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(path), languageFor(path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
       <div class="row">
         <button disabled={busy} onClick={() => setText(c.body ?? c.bodyText)}>Edit</button>
-        <button disabled={busy} onClick={async () => (await ask('Delete this comment from your review in progress on GitHub? Its text goes with it.', 'Delete')) && run(null)}>Delete</button>
+        <button disabled={busy} onClick={async () => (await ask(`Delete this comment from your review in progress on ${site(ctx.repo)}? Its text goes with it.`, 'Delete')) && run(null)}>Delete</button>
       </div>
       {err && <p class="error">{err}</p>}
     </>
@@ -4009,7 +4020,7 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
           <button
             disabled={!body.trim() || posting === 'posting' || (!now && ctx.pending)}
             onClick={() => save(!now)}
-            title={now ? 'Keep it as a draft, sent with Finish review' : ctx.pending ? 'You have a review in progress on GitHub: comments go out with it (Finish review)' : 'Post it now, on its own'}
+            title={now ? 'Keep it as a draft, sent with Finish review' : ctx.pending ? `You have a review in progress on ${site(ctx.repo)}: comments go out with it (Finish review)` : 'Post it now, on its own'}
           >
             {now ? 'Add to review' : 'Comment now'}
           </button>
@@ -4052,7 +4063,7 @@ function TicketPRs({ repo, n, keys }: { repo: string; n: number; keys: string[] 
         return (
           <a href={`#/${p.repo}/pull/${p.number}`} title={`${p.title}\n${p.repo}#${p.number} by ${p.author}`}>
             <Octicon name={p.isDraft && p.state === 'OPEN' ? 'git-pull-request-draft' : PR_ICON[p.state]} class={`recent-${st}`} />
-            <b>{p.repo === repo ? '' : repoLabel(p.repo)}#{p.number}</b> <span class="ticket-pr-title">{p.title}</span> <small>{st}</small>
+            <b>{p.repo === repo ? '' : repoLabel(p.repo)}{numRef(p.repo, p.number)}</b> <span class="ticket-pr-title">{p.title}</span> <small>{st}</small>
           </a>
         );
       })}
@@ -4126,8 +4137,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
   const [session, setSession] = useState<SessionState>(null);
   const title = session?.title ?? '';
   const [, setTick] = useState(0);
-  const [owner, name, , num] = prUrl.replace('https://github.com/', '').split('/');
-  const pr = { repo: `${owner}/${name}`, n: Number(num) };
+  const pr = parsePrUrl(prUrl) ?? { repo: '', n: 0 };
   const from = linkedClaude(pr.repo, pr.n);
   useEffect(() => {
     const t = () => setTick((x) => x + 1);

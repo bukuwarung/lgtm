@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { useDismiss } from './platform.ts';
+import { useDismiss, faceOf } from './platform.ts';
 import { getStackStatus, mergeLayer, type LayerStatus, type StackLayer } from './github.ts';
 import { canMerge } from './merge.tsx';
 import { CheckMark, Tg } from './tags.tsx';
@@ -88,7 +88,7 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
                     r.login.startsWith('team ') ? (
                       <span class="stack-team" title={`${r.login}: asked`}>{r.login.slice(5)}</span>
                     ) : (
-                      <img class={`v-${r.verdict}`} src={`https://github.com/${encodeURIComponent(r.login)}.png?size=40`} alt={r.login} title={`@${r.login}: ${VERDICT[r.verdict]}`} />
+                      <img class={`v-${r.verdict}`} src={faceOf(r.login)} alt={r.login} title={`@${r.login}: ${VERDICT[r.verdict]}`} />
                     ),
                   )}
                 </span>

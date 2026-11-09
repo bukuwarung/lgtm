@@ -134,6 +134,8 @@ pub fn run() {
             commands::jira_issue,
             commands::job_log,
             commands::gh_accounts,
+            commands::glab_accounts,
+            commands::glab_token,
             commands::slack_emoji,
             commands::jira_move,
             commands::jira_statuses,
