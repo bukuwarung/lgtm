@@ -1,6 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { labMe } from './gitlab.ts';
 import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
@@ -9,7 +10,7 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, type GlabAccount } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -897,35 +898,50 @@ function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshi
   );
 }
 
-// Cycles auto → light → dark; index.html applies the saved choice before first paint.
-// The GitHub account lgtm uses, as its avatar. A click lists the accounts gh is signed in to; picking another
-// switches (the page loads again as that account). Settings → Accounts has the same choice.
+// The account lgtm shows, as its avatar. A click lists the accounts gh is signed in to and, under them, glab's on each
+// GitLab host: picking one switches to it (the page loads again as that account; a GitLab one lists its MRs). Settings
+// → Accounts picks among GitHub's too.
 const avatarOf = (login: string) => faceOf(login, 64);
 function AccountMenu() {
-  const [me, setMe] = useState('');
+  const [me, setMe] = useState<{ login: string; avatar: string; site: string } | null>(null);
   const [accounts, setAccounts] = useState<GhAccount[] | null>(null);
+  const [labs, setLabs] = useState<GlabAccount[] | null>(null);
+  const [labFaces, setLabFaces] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(false);
-  useEffect(() => void getViewer().then(setMe, () => {}), []);
+  const host = viewAs();
+  useEffect(() => {
+    const shown = host ? labMe(host).then((u) => ({ ...u, site: host })) : getViewer().then((login) => ({ login, avatar: avatarOf(login), site: 'GitHub' }));
+    void shown.then(setMe, () => setMe(host ? { login: '?', avatar: '', site: host } : { login: '', avatar: '', site: '' }));
+  }, [host]);
   useEffect(() => {
     if (!open) return;
     getGhAccounts().then(setAccounts, () => setAccounts([]));
+    glabAccounts(true).then((l) => {
+      setLabs(l);
+      for (const a of l) void labMe(a.host).then((u) => setLabFaces((f) => ({ ...f, [a.host]: u.avatar })), () => {});
+    });
     const away = (e: Event) => !(e.target as Element).closest?.('.account') && setOpen(false);
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
     addEventListener('pointerdown', away);
     addEventListener('keydown', esc);
     return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
   }, [open]);
-  if (!me) return null;
-  const use = (a: GhAccount) => {
-    if (a.login === me) return setOpen(false);
-    if (a.active) localStorage.removeItem('ghAccount'); // gh's active one: follow gh
-    else localStorage.setItem('ghAccount', a.login);
-    location.reload(); // everything loaded so far was as the other account
+  if (me && !me.login) return null; // not signed in to GitHub
+  // Its place kept while it loads, so nothing beside it moves under the pointer.
+  if (!me) return <span class="account"><button class="account-btn" disabled aria-label="Account"><Octicon name="person" /></button></span>;
+  // Everything loaded so far was as the other account: the page loads again.
+  const switchTo = (view: string, gh?: GhAccount) => {
+    if (view === host && (view || !gh || gh.login === me.login)) return setOpen(false);
+    if (view) localStorage.setItem('viewAs', view);
+    else localStorage.removeItem('viewAs');
+    if (gh) gh.active ? localStorage.removeItem('ghAccount') : localStorage.setItem('ghAccount', gh.login); // gh's active one: follow gh
+    location.hash = '';
+    location.reload();
   };
   return (
     <span class="account">
-      <button class="account-btn" title={`GitHub: @${me}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <img src={avatarOf(me)} alt={`@${me}`} />
+      <button class="account-btn" title={`${me.site === 'GitHub' ? 'GitHub' : `GitLab (${me.site})`}: @${me.login}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {me.avatar ? <img src={me.avatar} alt={`@${me.login}`} /> : <Octicon name="person" />}
       </button>
       {open && (
         <div class="account-menu" role="menu">
@@ -933,17 +949,36 @@ function AccountMenu() {
           {accounts == null ? (
             <Lines n={2} />
           ) : (
-            accounts.map((a) => (
-              <button role="menuitemradio" aria-checked={a.login === me} class={a.login === me ? 'on' : ''} onClick={() => use(a)}>
-                <img src={avatarOf(a.login)} alt="" />
-                <span>{a.login}</span>
-                {a.active && <small>gh's active</small>}
-                {a.login === me && <span class="account-check"><Octicon name="check" /></span>}
-              </button>
-            ))
+            accounts.map((a) => {
+              const on = !host && a.login === me.login;
+              return (
+                <button role="menuitemradio" aria-checked={on} class={on ? 'on' : ''} onClick={() => switchTo('', a)}>
+                  <img src={avatarOf(a.login)} alt="" />
+                  <span>{a.login}</span>
+                  {a.active && <small>gh's active</small>}
+                  {on && <span class="account-check"><Octicon name="check" /></span>}
+                </button>
+              );
+            })
+          )}
+          <div class="account-head">GitLab accounts in glab</div>
+          {labs == null ? (
+            <Lines n={1} />
+          ) : (
+            labs.map((a) => {
+              const on = host === a.host;
+              return (
+                <button role="menuitemradio" aria-checked={on} class={on ? 'on' : ''} onClick={() => switchTo(a.host)}>
+                  {labFaces[a.host] ? <img src={labFaces[a.host]} alt="" /> : <Octicon name="person" />}
+                  <span>{a.login}</span>
+                  <small>{a.host}</small>
+                  {on && <span class="account-check"><Octicon name="check" /></span>}
+                </button>
+              );
+            })
           )}
           <p class="note">
-            Add one with <code>gh auth login</code>, then open this again.
+            Add one with <code>gh auth login</code> or <code>glab auth login</code>, then open this again.
           </p>
         </div>
       )}
@@ -951,6 +986,7 @@ function AccountMenu() {
   );
 }
 
+// Cycles auto → light → dark; index.html applies the saved choice before first paint.
 function ThemeToggle() {
   const [theme, setTheme] = useTheme();
   const i = THEMES.findIndex(([t]) => t === theme);
@@ -1227,7 +1263,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   // The last list (per account) shows at once on launch, "updating…" until GitHub's answer replaces it.
   const [loaded, setItems] = useState<QueueItem[] | null>(() => {
     try {
-      return JSON.parse(localStorage.getItem(own('queueCache')) ?? 'null');
+      return JSON.parse(localStorage.getItem(own(viewAs() ? `queueCache:${viewAs()}` : 'queueCache')) ?? 'null');
     } catch {
       return null;
     }
@@ -1320,7 +1356,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       setSettled(true);
       setFresh(true);
       try {
-        localStorage.setItem(own('queueCache'), JSON.stringify(full));
+        localStorage.setItem(own(viewAs() ? `queueCache:${viewAs()}` : 'queueCache'), JSON.stringify(full));
       } catch {}
     }, (e) => setErr(e instanceof TypeError && /fetch|load failed|network/i.test(e.message) ? "Couldn't reach GitHub" : e.message));
   };

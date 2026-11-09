@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, fetchJobLog, fetchToken, readBots, recordError, repliesDone } from './platform.ts';
+import { agentsAsBots, fetchJobLog, fetchToken, readBots, recordError, repliesDone, viewAs } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 import * as lab from './gitlab.ts';
@@ -313,8 +313,10 @@ fragment F on PullRequest{id number title updatedAt isDraft reviewDecision merge
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
   latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
 
+// Viewing a GitLab account (the avatar's menu): its MRs instead.
 export async function getReviewQueue(): Promise<QueueItem[]> {
-  const [d, gitlab] = await Promise.all([graphql(QUEUE, {}), lab.getLabQueue()]);
+  if (viewAs()) return (await lab.getLabQueue(viewAs())).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const d = await graphql(QUEUE, {});
   const me = d.viewer.login;
   const ids = (k: string) => new Set<string>(d[k].nodes.map((p: any) => p.id));
   const [requested, reviewed, authored, assigned, mentioned] = ['requested', 'reviewed', 'authored', 'assigned', 'mentioned'].map(ids);
@@ -343,7 +345,6 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       authored: authored.has(p.id),
       mentioned: mentioned.has(p.id),
     }))
-    .concat(gitlab)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
@@ -490,9 +491,9 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
 // verdict kept.
 export type MyReview = { repo: string; number: number; title: string; url: string; author: string; state: ReviewState; at: string; waited?: number };
 export async function getMyReviews(days = 30): Promise<MyReview[]> {
+  if (viewAs()) return (await lab.getLabMyReviews(days, viewAs())).sort((a, b) => b.at.localeCompare(a.at));
   const me = await getViewer();
-  const [hub, gitlab] = await Promise.all([reviewsBy(me, `reviewed-by:@me -author:@me`, days), lab.getLabMyReviews(days).catch(() => [])]);
-  return [...hub, ...gitlab].sort((a, b) => b.at.localeCompare(a.at));
+  return reviewsBy(me, `reviewed-by:@me -author:@me`, days);
 }
 // Someone's reviews of the last `days` days, newest first: the PRs they reviewed (not their own), up to 300, a page of
 // 100 at a time; each PR's reviews collapsed (collapseReviews).
@@ -1377,7 +1378,7 @@ export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' |
 export type StaleBranch = { repo: string; number: number; title: string; headRefName: string; headRef: { id: string } };
 const KEEP = /^(main|master|develop|dev|staging|production|release\/|hotfix\/)/;
 export async function getStaleBranches(): Promise<StaleBranch[]> {
-  const gitlab = lab.getLabStaleBranches().catch(() => []);
+  if (viewAs()) return lab.getLabStaleBranches(viewAs());
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
   const d = await graphql(
     `query($q:String!){s:search(query:$q,type:ISSUE,first:100){nodes{...on PullRequest{number title repository{nameWithOwner} isCrossRepository viewerCanDeleteHeadRef headRefName headRef{id}}}}}`,
@@ -1385,8 +1386,7 @@ export async function getStaleBranches(): Promise<StaleBranch[]> {
   );
   return (d.s.nodes as any[])
     .filter((p) => p?.headRef && p.viewerCanDeleteHeadRef && !p.isCrossRepository && !KEEP.test(p.headRefName))
-    .map((p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, headRefName: p.headRefName, headRef: p.headRef }))
-    .concat(await gitlab);
+    .map((p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, headRefName: p.headRefName, headRef: p.headRef }));
 }
 
 export const disableAutoMerge = (id: string) =>
@@ -1417,6 +1417,7 @@ export function markBots<T extends { comments: { nodes: (Pick<Comment, 'author'>
 export type MergedPR = { id: string; repo: string; number: number; title: string; authored: boolean; mergedAt: string; updatedAt: string; myState: ReviewState | null };
 let mergedSeen: { at: number; list: Promise<MergedPR[]> } | null = null;
 export function getMergedAwaiting(me: string): Promise<MergedPR[]> {
+  if (viewAs()) return Promise.resolve([]); // ponytail: GitHub's only, not while viewing a GitLab account
   if (mergedSeen && Date.now() - mergedSeen.at < 10 * 60_000) return mergedSeen.list;
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
   const F = `nodes{...on PullRequest{id number title mergedAt updatedAt repository{nameWithOwner} author{login} latestOpinionatedReviews(first:30){nodes{state author{login}}}

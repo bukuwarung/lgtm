@@ -5,7 +5,7 @@
 // A GitLab repo is "host/group/…/project" (gitlab.com/gitlab-org/cli): GitHub owners have no dots, so a dot in the
 // first part says GitLab. An MR is that repo and its iid. GitLab's global IDs travel as "gl:host|gid://…", an MR's as
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
-import { fetchGlabToken, glabAccounts, knowFace, readBots, recordError, agentsAsBots } from './platform.ts';
+import { fetchGlabToken, glabAccounts, knowFace, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
 import type { Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
 
 export const isLab = (repo: string) => repo.slice(0, repo.indexOf('/')).includes('.');
@@ -106,12 +106,14 @@ const mutate = async (host: string, query: string, variables: Record<string, unk
   return d;
 };
 
-const viewers = new Map<string, Promise<string>>();
-export const getLabViewer = (repo: string) => {
-  const { host } = split(repo);
-  if (!viewers.has(host)) viewers.set(host, json(host, '/user').then((u) => u.username as string).catch((e) => (viewers.delete(host), Promise.reject(e))));
+const viewers = new Map<string, Promise<{ login: string; avatar: string }>>();
+// Me on a GitLab host: my username and picture.
+export const labMe = (host: string) => {
+  if (!viewers.has(host))
+    viewers.set(host, json(host, '/user').then((u) => (knowFace(u.username, abs(host, u.avatar_url)!), { login: u.username as string, avatar: abs(host, u.avatar_url)! })).catch((e) => (viewers.delete(host), Promise.reject(e))));
   return viewers.get(host)!;
 };
+export const getLabViewer = async (repo: string) => (await labMe(split(repo).host)).login;
 
 // --- people ---
 
@@ -671,17 +673,19 @@ const itemOf = (host: string, m: any, me: string): QueueItem => {
 };
 // My open MRs on every GitLab host glab is signed in to: ones I review, opened, or am assigned. A host that fails is
 // noted (Settings → Accounts) and leaves the others, and GitHub's, on the list.
-export async function getLabQueue(): Promise<QueueItem[]> {
+export async function getLabQueue(only?: string): Promise<QueueItem[]> {
+  const accounts = (await glabAccounts()).filter((a) => !only || a.host === only);
+  if (only && !accounts.length) throw new Error(`glab isn't signed in to ${only}. Run \`glab auth login --hostname ${only}\`, or pick another account from the avatar.`);
   const lists = await Promise.all(
-    (await glabAccounts()).map(async ({ host, login }) => {
+    accounts.map(async ({ host, login }: GlabAccount) => {
       try {
-        const d = await gql(host, `{currentUser{
-          r:reviewRequestedMergeRequests(state:opened,first:100){nodes{...F}}
-          a:authoredMergeRequests(state:opened,first:100){nodes{...F}}
-          s:assignedMergeRequests(state:opened,first:100){nodes{...F}}}} ${ITEM}`);
-        const all = new Map<string, any>(['r', 'a', 's'].flatMap((k) => (d.currentUser?.[k]?.nodes ?? []).map((m: any) => [m.id, m])));
+        // One list a query: together they pass GitLab's complexity limit (250).
+        const lists = await Promise.all(['reviewRequestedMergeRequests', 'authoredMergeRequests', 'assignedMergeRequests'].map((k) =>
+          gql(host, `{currentUser{${k}(state:opened,first:100){nodes{...F}}}} ${ITEM}`).then((d) => d.currentUser?.[k]?.nodes ?? [])));
+        const all = new Map<string, any>(lists.flat().map((m: any) => [m.id, m]));
         return [...all.values()].map((m) => itemOf(host, m, login));
       } catch (e) {
+        if (only) throw e; // the list is this host's: say why it's empty
         recordError(`GitLab ${host}: ${(e as Error).message}`);
         return [];
       }
@@ -696,10 +700,10 @@ export async function labClosed(prs: string[]): Promise<string[]> {
 }
 
 // My reviews lately (the approvals and change requests GitLab noted), for History.
-export async function getLabMyReviews(days: number): Promise<MyReview[]> {
+export async function getLabMyReviews(days: number, only: string): Promise<MyReview[]> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const out: MyReview[] = [];
-  for (const { host, login } of await glabAccounts()) {
+  for (const { host, login } of (await glabAccounts()).filter((a) => a.host === only)) {
     const mrs: any[] = await json(host, `/merge_requests?scope=all&reviewer_username=${encodeURIComponent(login)}&updated_after=${since}&per_page=50`).catch(() => []);
     await Promise.all(mrs.map(async (m) => {
       const notes = await pages<any>(host, `/projects/${m.project_id}/merge_requests/${m.iid}/notes?per_page=100&sort=asc`).catch(() => []);
@@ -712,10 +716,10 @@ export async function getLabMyReviews(days: number): Promise<MyReview[]> {
   return out;
 }
 // My MRs merged in the last 90 days whose branch is still there (never main, release/…), in the same project.
-export async function getLabStaleBranches(): Promise<StaleBranch[]> {
+export async function getLabStaleBranches(only: string): Promise<StaleBranch[]> {
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
   const out: StaleBranch[] = [];
-  for (const { host } of await glabAccounts()) {
+  for (const { host } of (await glabAccounts()).filter((a) => a.host === only)) {
     const mrs: any[] = await json(host, `/merge_requests?scope=created_by_me&state=merged&updated_after=${since}&per_page=100`).catch(() => []);
     await Promise.all(mrs.filter((m) => m.source_project_id === m.project_id && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.source_branch)).map(async (m) => {
       const r = await lab(host, `/projects/${m.project_id}/repository/branches/${encodeURIComponent(m.source_branch)}`).catch(() => null);

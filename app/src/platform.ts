@@ -168,11 +168,20 @@ export async function fetchToken(): Promise<string> {
 // such address. ponytail: one name on both GitHub and GitLab shows the GitLab face once it's been seen.
 const faces = new Map<string, string>();
 export const knowFace = (login: string, url: string) => void faces.set(login, url);
-export const faceOf = (login: string, size = 40) => faces.get(login) ?? `https://github.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}.png?size=${size}`;
+// GitHub's by name from its avatars host (github.com/<login>.png redirects there, and can stall in the app's webview).
+export const faceOf = (login: string, size = 40) => faces.get(login) ?? `https://avatars.githubusercontent.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}?s=${size}`;
 
 // GitLab through glab: the hosts it's signed in to (each with the account and where its API is), and a host's token,
 // asked of the local server (or, in the app, its command) like gh's.
 export type GlabAccount = { host: string; login: string; api: string };
+// Whose PRs lgtm shows (the avatar's menu): GitHub's account (''), or a GitLab host's, by its host.
+export const viewAs = () => {
+  try {
+    return localStorage.getItem('viewAs') ?? '';
+  } catch {
+    return '';
+  }
+};
 let glabList: Promise<GlabAccount[]> | undefined;
 export const glabAccounts = (fresh = false): Promise<GlabAccount[]> =>
   (fresh || !glabList ? (glabList = (isDesktop ? command<GlabAccount[]>('glab_accounts') : fetch('/glab-accounts').then((r) => (r.ok ? r.json() : []))).then((a) => (Array.isArray(a) ? a : []), () => [])) : glabList);
