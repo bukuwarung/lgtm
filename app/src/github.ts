@@ -1234,13 +1234,19 @@ export async function getCompare(repo: string, base: string, head: string): Prom
   return { status: d.status, files: d.files ?? [], commits: d.ahead_by ?? 0 };
 }
 
-// GitHub's emoji shortcodes (name → image URL), cached for the session.
+// GitHub's emoji shortcodes (name → image URL), cached for the session; without gh's sign-in, asked anonymously (the
+// list is public). For a GitLab repo (or the GitLab account on show), only the standard (Unicode) ones: GitLab draws
+// those from the same names, but not GitHub's own images (:octocat:, :shipit:…), which would stay text there.
 let emojis: Promise<Record<string, string>> | undefined;
-export const getEmojis = () =>
-  (emojis ??= json('/emojis').then((m: Record<string, string>) => {
-    setEmojiMap(m);
-    return m;
-  }));
+const allEmojis = () =>
+  (emojis ??= json('/emojis')
+    .catch(() => fetch('https://api.github.com/emojis').then((r) => (r.ok ? r.json() : Promise.reject(new Error(`GitHub ${r.status}`)))))
+    .then((m: Record<string, string>) => {
+      setEmojiMap(m);
+      return m;
+    }));
+export const getEmojis = (repo?: string) =>
+  (repo ? isLab(repo) : !!viewAs()) ? allEmojis().then((m) => Object.fromEntries(Object.entries(m).filter(([, url]) => url.includes('/unicode/')))) : allEmojis();
 
 // Markdown rendered by GitHub itself (emoji, @mentions, #refs, mermaid…), exactly as the comment will look there.
 export async function renderGfm(text: string, repo: string): Promise<string> {

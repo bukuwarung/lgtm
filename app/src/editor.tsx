@@ -30,7 +30,7 @@ export function Editor(p: Props) {
   const [replies] = useSavedReplies();
 
   useEffect(() => {
-    getEmojis().then(setEmojis, () => {});
+    getEmojis(p.repo).then(setEmojis, () => {});
     if (p.autoFocus) area.current?.focus();
   }, []);
   useEffect(() => void renderMermaid(previewRef.current), [preview]);
