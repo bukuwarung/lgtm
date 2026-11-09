@@ -1,6 +1,6 @@
 {
   "name": "lgtm",
-  "description": "Claude Code mods for lgtm, the GitHub PR review app for your Mac",
+  "description": "Claude Code mods for lgtm, the GitHub and GitLab code review app for your Mac",
   "owner": {
     "name": "BukuWarung"
   },

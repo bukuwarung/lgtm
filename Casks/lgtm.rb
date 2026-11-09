@@ -4,7 +4,7 @@ cask "lgtm" do
 
   url "https://github.com/bukuwarung/lgtm/releases/download/v#{version}/lgtm-#{version}.zip"
   name "lgtm"
-  desc "Fast GitHub pull request review"
+  desc "Review GitHub pull requests and GitLab merge requests"
   homepage "https://github.com/bukuwarung/lgtm"
 
   depends_on formula: "gh"
