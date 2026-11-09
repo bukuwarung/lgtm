@@ -2222,7 +2222,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           </b>
           {mod && (
             <span class="file-mod" title={mod === '.' ? 'The root project' : `Module ${moduleName(mod)}, in ${mod}/`}>
-              <ModuleIcon /> {mod === '.' ? ':' : moduleName(mod)}
+              <ModuleIcon /> <span class="file-mod-name">{mod === '.' ? ':' : moduleName(mod)}</span>
             </span>
           )}
           {folder && (

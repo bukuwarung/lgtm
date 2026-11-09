@@ -1076,7 +1076,12 @@ html.tags-icons .ti:not(:has(+ .tn)) { margin-right: 0; }
 /* A narrow file header: the name area clips instead of running over the counts and buttons, the module chip giving
    way first. */
 .file-name { overflow: hidden; padding: 0 0 3px 3px; margin: 0 0 -3px -3px; } /* room for the icon's test badge, which overhangs it by 3px */
-.file-name .file-mod { flex-shrink: 1; min-width: 0; overflow: hidden; }
+/* Short of room: the folder path goes first, then the name gives up its middle folders (never the file's own name), then
+   the module chip, with … (its whole name on hover). */
+.file-name > b { flex: 0 1 auto; min-width: auto; }
+.file-name .file-mod { flex-shrink: 1; min-width: 4ch; overflow: hidden; }
+.file-name .file-dir { flex-shrink: 1000; } /* the folder path (shown on hover) gives way before the name and the module */
+.file-mod-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ticket-wait { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 12px; color: var(--muted); font-size: calc(13px * var(--ts)); }
 .ticket-wait .sk-line { width: 40%; }
 /* Changed words boxed or squiggled instead of filled (Settings → Diff). The box takes a little room of its own, so it
