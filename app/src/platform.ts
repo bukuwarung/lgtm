@@ -168,10 +168,28 @@ export async function fetchToken(): Promise<string> {
   }
 }
 
-// Faces of GitLab people met (their account pictures), by username: GitHub's are github.com/<login>.png, GitLab has no
-// such address. ponytail: one name on both GitHub and GitLab shows the GitLab face once it's been seen.
-const faces = new Map<string, string>();
-export const knowFace = (login: string, url: string) => void faces.set(login, url);
+// Faces of GitLab people met (their account pictures), by username, kept across launches (the latest 500): GitHub's
+// are found by login, GitLab has no such address. ponytail: one name on both GitHub and GitLab shows the GitLab face
+// once it's been seen.
+const faces = new Map<string, string>(((): [string, string][] => {
+  try {
+    return JSON.parse(localStorage.getItem('glFaces') ?? '[]');
+  } catch {
+    return [];
+  }
+})());
+let facesSaving = 0;
+export const knowFace = (login: string, url: string) => {
+  if (faces.get(login) === url) return;
+  faces.delete(login);
+  faces.set(login, url);
+  clearTimeout(facesSaving);
+  facesSaving = setTimeout(() => {
+    try {
+      localStorage.setItem('glFaces', JSON.stringify([...faces].slice(-500)));
+    } catch {}
+  }, 1000) as unknown as number;
+};
 // GitHub's by name from its avatars host (github.com/<login>.png redirects there, and can stall in the app's webview).
 export const faceOf = (login: string, size = 40) => faces.get(login) ?? `https://avatars.githubusercontent.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}?s=${size}`;
 
@@ -600,7 +618,8 @@ export async function initDesktop(go: (route: string) => void) {
   );
   const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
   const open = (urls: string[] | null) => {
-    const m = urls?.[0]?.match(/([^/\s:]+\/[^/\s]+)\/pull\/(\d+)/);
+    // lgtm://owner/repo/pull/n, or a GitLab MR's lgtm://host/group/…/project/pull/n (or …/-/merge_requests/n).
+    const m = urls?.[0]?.replace(/^lgtm:\/\//, '').split(/[?#]/)[0].replace('/-/merge_requests/', '/pull/').match(/^([\w.:-]+(?:\/[\w.-]+)+)\/pull\/(\d+)\/?$/);
     const from = urls?.[0]?.match(/[?&]claude=([\w-]{1,80})/)?.[1]; // the Claude Code session that sent it (its skill)
     if (m) go(`/${m[1]}/pull/${m[2]}${from ? `?claude=${from}` : ''}`);
   };

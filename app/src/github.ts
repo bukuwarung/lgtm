@@ -206,11 +206,18 @@ function noteLimit(res: Response, path: string, body?: string) {
 
 // Whether GitHub can be reached: a request that can't get through says offline, the next that does says online again
 // (main.tsx shows it once, for the whole app, and refreshes when it's back).
+// A GitLab out of reach counts too (gitlab.ts), named in the bar.
 let offline = false;
+let offlineSite = 'GitHub';
 export const isOffline = () => offline;
-const setOffline = (v: boolean) => offline !== v && ((offline = v), dispatchEvent(new Event(v ? 'lgtm:offline' : 'lgtm:online')));
-// A cheap look (it doesn't count against the limits) to see whether GitHub answers again.
-export const pingGitHub = () => gh('/rate_limit').then(() => true, () => false);
+export const offlineWhere = () => offlineSite;
+export const setOffline = (v: boolean, where = 'GitHub') => {
+  if (v) offlineSite = where;
+  else if (where !== offlineSite) return; // one site answering says nothing of the other
+  if (offline !== v) (offline = v), dispatchEvent(new Event(v ? 'lgtm:offline' : 'lgtm:online'));
+};
+// A cheap look (it doesn't count against the limits) to see whether GitHub, or the GitLab out of reach, answers again.
+export const pingGitHub = () => (offlineSite !== 'GitHub' ? lab.pingLab(offlineSite) : gh('/rate_limit').then(() => true, () => false));
 
 async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') {
   if (practice && writes(path, init)) throw new Error('Practice run: nothing is sent to GitHub');
@@ -406,8 +413,9 @@ const toItem = (p: any): QueueItem => ({
 });
 
 // Teams in my organizations, as "org/slug", for the Team tab.
+// While a GitLab account is on show, its groups.
 export async function getTeams(): Promise<string[]> {
-  if (viewAs()) throw new Error("Teams are GitHub's: switch to your GitHub account (the avatar) to see one.");
+  if (viewAs()) return lab.getLabTeams(viewAs());
   const d = await graphql(`{viewer{organizations(first:20){nodes{login teams(first:100){nodes{slug}}}}}}`, {});
   return d.viewer.organizations.nodes.flatMap((o: any) => o.teams.nodes.map((t: any) => `${o.login}/${t.slug}`));
 }
@@ -415,6 +423,7 @@ export async function getTeams(): Promise<string[]> {
 // A team's members and their open PRs in the team's organization. Search ORs repeated author: filters; members go
 // in chunks so each query stays under GitHub's search length limit.
 export async function getTeamMembers(team: string): Promise<string[]> {
+  if (isLab(team)) return lab.getLabTeamMembers(team);
   const [org, slug] = team.split('/');
   const t = (await graphql(`query($org:String!,$slug:String!){organization(login:$org){team(slug:$slug){members(first:100){nodes{login}}}}}`, { org, slug }))
     .organization?.team;
@@ -425,7 +434,7 @@ export async function getTeamMembers(team: string): Promise<string[]> {
 // Plus each member's review load: open PRs that ask them, by name, for a review.
 // A team's open PRs by its members, and how many open PRs in the org ask each member, by name, for a review.
 export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
-  if (viewAs()) throw new Error("Teams are GitHub's: switch to your GitHub account (the avatar) to see one.");
+  if (isLab(team)) return lab.getLabTeamPRs(team);
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
   const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
@@ -458,7 +467,9 @@ const dayCache = async <T>(key: string, load: () => Promise<T>): Promise<T> => {
   return v;
 };
 export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
+  const labRepos = repos.filter((r) => isLab(r));
   repos = repos.filter((r) => !isLab(r));
+  if (labRepos.length) return [...(await lab.getLabOwnedDrafts(labRepos, skip, codeOwners)), ...(repos.length ? await getOwnedDrafts(repos, skip) : [])];
   if (!repos.length) return [];
   const me = await getGitHubViewer();
   const teams = await dayCache('myTeams', async () =>
@@ -575,6 +586,7 @@ export function collapseReviews(reviews: { state: string; submittedAt: string | 
 
 // The open PRs in an org asking someone, by name, for a review (up to 50), the longest-waiting first.
 export async function getAskedPRs(org: string, login: string): Promise<QueueItem[]> {
+  if (org.includes('.')) return lab.getLabAskedPRs(org, login); // a GitLab host
   const d = await graphql(
     `query($q:String!){s:search(query:$q,type:ISSUE,first:50){nodes{...F}}} ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
     { q: `is:open is:pr archived:false org:${org} user-review-requested:${login}` },
@@ -612,7 +624,6 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
 export type ReviewerPick = { login: string; load: number; why: string; knows?: number }; // knows: share of the changed code they wrote
 // Who wrote the code a PR changes (expertise.ts): git blame at the base commit for its 5 most-changed files, one query.
 export async function whoWrote(repo: string, base: string, files: { filename: string; status: string; patch?: string; additions: number; deletions: number }[]): Promise<Knows[]> {
-  if (isLab(repo)) return []; // ponytail: GitLab's blame names commit emails, not accounts
   const [owner, name] = repo.split('/');
   const pick = files
     .filter((f) => f.status === 'modified' && f.patch && !/(^|\/)(lint-baseline[^/]*\.xml|[\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml)$|(^|\/)(generated|build)\//.test(f.filename)) // tests count: their authors know the code too
@@ -621,6 +632,10 @@ export async function whoWrote(repo: string, base: string, files: { filename: st
     .map((f) => ({ path: f.filename, lines: touchedLines(f.patch!) }))
     .filter((f) => f.lines.length);
   if (!pick.length) return [];
+  if (isLab(repo)) {
+    const ranges = await lab.labBlame(repo, base, pick);
+    return whoKnows(pick.map((f, k) => ({ path: f.path, lines: f.lines.length, by: tally(ranges[k], f.lines) })));
+  }
   const vars = Object.fromEntries([['owner', owner], ['name', name], ['exp', base], ...pick.map((f, k) => [`p${k}`, f.path])]);
   const d = await graphql(
     `query($owner:String!,$name:String!,$exp:String!,${pick.map((_, k) => `$p${k}:String!`).join(',')}){repository(owner:$owner,name:$name){object(expression:$exp){...on Commit{${pick
@@ -640,19 +655,20 @@ export async function whoWrote(repo: string, base: string, files: { filename: st
 }
 
 export async function suggestReviewers(repo: string, skip: Set<string>, team: string, knows: Knows[] = []): Promise<ReviewerPick[]> {
-  if (isLab(repo)) return []; // ponytail: no reviewer suggestions on GitLab yet
   const [owner, name] = repo.split('/');
-  const d = await graphql(
-    `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(last:40,states:[OPEN,MERGED]){nodes{reviews(first:30){nodes{author{__typename login}}}}}}}`,
-    { owner, name },
-  );
-  const count = new Map<string, number>();
-  for (const p of d.repository.pullRequests.nodes)
-    for (const login of new Set<string>(p.reviews.nodes.filter((r: any) => r.author?.__typename === 'User').map((r: any) => r.author.login)))
-      count.set(login, (count.get(login) ?? 0) + 1);
+  const count = isLab(repo) ? await lab.labRecentReviewers(repo) : new Map<string, number>();
+  if (!isLab(repo)) {
+    const d = await graphql(
+      `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(last:40,states:[OPEN,MERGED]){nodes{reviews(first:30){nodes{author{__typename login}}}}}}}`,
+      { owner, name },
+    );
+    for (const p of d.repository.pullRequests.nodes)
+      for (const login of new Set<string>(p.reviews.nodes.filter((r: any) => r.author?.__typename === 'User').map((r: any) => r.author.login)))
+        count.set(login, (count.get(login) ?? 0) + 1);
+  }
   const fit = (p: { login: string }) => !skip.has(p.login) && !p.login.endsWith('[bot]');
   let people: { login: string; why: string; knows?: number }[] = [...count].sort((a, b) => b[1] - a[1]).map(([login, k]) => ({ login, why: `reviewed ${k} of the last 40 PRs here` })).filter(fit);
-  if (!people.length && team) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${team.split('/')[1]}` })).filter(fit);
+  if (!people.length && team && isLab(team) === isLab(repo)) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${team.split('/')[1]}` })).filter(fit);
   // Whoever wrote a real share (10%+) of the code being changed: named for it, and in the list even if they don't review here.
   for (const k of knows.filter((k) => k.share >= 0.1 && fit(k))) {
     const said = `wrote ${Math.round(k.share * 100)}% of the code this PR changes, most in ${k.file.split('/').pop()}`;
@@ -662,8 +678,11 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
   }
   people = people.sort((a, b) => (b.knows ?? 0) - (a.knows ?? 0)).slice(0, 30);
   if (!people.length) return [];
+  const labLoad = isLab(repo) ? await lab.labReviewLoad(repo, people.map((p) => p.login)) : null;
   const vars = Object.fromEntries(people.map((p, k) => [`r${k}`, `is:open is:pr archived:false org:${owner} user-review-requested:${p.login}`]));
-  const l = await graphql(`query(${people.map((_, k) => `$r${k}:String!`).join(',')}){${people.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}`, vars);
+  const l = labLoad
+    ? Object.fromEntries(people.map((p, k) => [`r${k}`, { issueCount: labLoad.get(p.login) ?? 0 }]))
+    : await graphql(`query(${people.map((_, k) => `$r${k}:String!`).join(',')}){${people.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}`, vars);
   // Who knows the code first, then the least busy; someone who wrote little of it counts as not knowing it.
   return people
     .map((p, k) => ({ ...p, load: l[`r${k}`].issueCount as number }))
@@ -888,7 +907,7 @@ export async function commitSuggestions(headRepo: string, branch: string, head: 
     files.push({ path, content: applySuggestions(src, list.filter((x) => x.path === path)) });
   }
   const headline = list.length > 1 ? 'Apply suggestions from code review' : 'Apply suggestion from code review';
-  if (isLab(headRepo)) return void (await lab.commitLabSuggestions(headRepo, branch, head, files, headline));
+  if (isLab(headRepo)) return void (await lab.commitLabSuggestions(headRepo, branch, head, files, headline, [...new Set(list.map((x) => x.author?.login).filter((l): l is string => !!l && l !== me))]));
   const additions = files.map(({ path, content }) => ({ path, contents: btoa(Array.from(new TextEncoder().encode(content), (b) => String.fromCharCode(b)).join('')) }));
   const credit = new Map(list.filter((x) => x.author && x.author.login !== me && x.author.databaseId).map((x) => [x.author!.login, x.author!.databaseId]));
   await graphql(
@@ -970,8 +989,15 @@ export const commentOnPR = (repo: string, n: number, body: string) => isLab(repo
 // not a team's mention, not "@me" in code. A comment that starts with a hidden <!-- marker --> is automation's (the
 // marker is how it finds its comment to update), even posted from a person's account: left out.
 export async function getMentions(ids: string[], me: string, bots: Set<string> = new Set()): Promise<Map<string, Comment>> {
-  ids = ids.filter((id) => !isLabId(id)); // ponytail: GitLab mentions not in the inbox yet
   const out = new Map<string, Comment>();
+  const labIds = ids.filter((id) => isLabId(id));
+  ids = ids.filter((id) => !isLabId(id));
+  if (labIds.length) {
+    const hosts = [...new Set(labIds.map((id) => id.slice(3, id.indexOf('|'))))];
+    for (const m of await Promise.all(hosts.map((h) => lab.labMentions(h).catch(() => new Map<string, Comment>()))))
+      for (const [id, c] of m) if (labIds.includes(id) && repliesDone()[c.id!] !== c.databaseId) out.set(id, c);
+    if (!ids.length) return out;
+  }
   if (!ids.length || !me) return out;
   const d = await graphql(
     `query($ids:[ID!]!){nodes(ids:$ids){...on PullRequest{id comments(last:30){nodes{id databaseId url body bodyHTML bodyText createdAt author{__typename login avatarUrl(size:40)}}} reviews(last:30){nodes{author{login} submittedAt}}}}}`,
@@ -1436,7 +1462,7 @@ export function markBots<T extends { comments: { nodes: (Pick<Comment, 'author'>
 export type MergedPR = { id: string; repo: string; number: number; title: string; authored: boolean; mergedAt: string; updatedAt: string; myState: ReviewState | null };
 let mergedSeen: { at: number; list: Promise<MergedPR[]> } | null = null;
 export function getMergedAwaiting(me: string): Promise<MergedPR[]> {
-  if (viewAs()) return Promise.resolve([]); // ponytail: GitHub's only, not while viewing a GitLab account
+  if (viewAs()) return lab.getLabMergedAwaiting(viewAs(), me, (t, mine) => awaitsMe(t, me, mine));
   if (mergedSeen && Date.now() - mergedSeen.at < 10 * 60_000) return mergedSeen.list;
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
   const F = `nodes{...on PullRequest{id number title mergedAt updatedAt repository{nameWithOwner} author{login} latestOpinionatedReviews(first:30){nodes{state author{login}}}
@@ -1523,7 +1549,7 @@ export const forgetThreadStatus = (id: string) => void extrasSeen.set(id, { ...(
 // (getMentions)? For the inbox button's count; only the PRs that changed are asked.
 export async function getMentionStatus(items: QueueItem[]): Promise<Map<string, boolean>> {
   const me = await getGitHubViewer();
-  const all = items.filter((i) => (i.mentioned || i.authored) && !isLab(i.repo));
+  const all = items.filter((i) => i.mentioned || i.authored);
   const ask = changed(all, 'mention');
   if (ask.length) {
     const found = await getMentions(ask.map((i) => i.id), me, readBots());
@@ -1535,7 +1561,9 @@ export async function getMentionStatus(items: QueueItem[]): Promise<Map<string, 
 // Each PR's rough time to review, asked after the list shows (its description and per-file line counts would slow the
 // list down).
 export async function getEstimates(items: { id: string; updatedAt: string }[]): Promise<Map<string, Estimate>> {
-  const ask = changed(items.filter((i) => !isLabId(i.id)), 'estimate'); // ponytail: no estimate for GitLab MRs yet
+  const ask = changed(items.filter((i) => !isLabId(i.id)), 'estimate');
+  const labAsk = changed(items.filter((i) => isLabId(i.id)), 'estimate');
+  if (labAsk.length) for (const [id, x] of await lab.labEstimateInputs(labAsk)) keep(labAsk.find((i) => i.id === id)!, { estimate: estimate(x.files, x.body) });
   for (let k = 0; k < ask.length; k += 100) {
     const part = ask.slice(k, k + 100);
     const d = await graphql(`query($ids:[ID!]!){nodes(ids:$ids){... on PullRequest{id body files(first:100){nodes{path additions deletions}}}}}`, { ids: part.map((i) => i.id) });

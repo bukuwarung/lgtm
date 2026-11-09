@@ -2,7 +2,7 @@ import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { labMe } from './gitlab.ts';
-import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
@@ -119,7 +119,7 @@ function OfflineBar() {
   if (!off) return null;
   return (
     <div class="offline-bar" role="status">
-      <Octicon name="alert" /> <span><b>Offline:</b> GitHub can't be reached. This is what was loaded; lgtm tries again by itself.</span>
+      <Octicon name="alert" /> <span><b>Offline:</b> {offlineWhere()} can't be reached. This is what was loaded; lgtm tries again by itself.</span>
       <Retry onClick={() => void pingGitHub()} />
     </div>
   );
@@ -1477,7 +1477,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const teamItems = teamData?.items.filter((i) => showDrafts || !i.isDraft || isCurrent(i)) ?? [];
   // Slack statuses (slackmsg.ts isAway) of the reviewers my PRs wait on, and of the team's members on its tab.
   // A GitLab MR's reviewers by their Slack-people key (login@host): see who().
-  const presence = usePresence([...(items ?? []).filter((i) => i.authored).flatMap((i) => i.pendingReviewers.map((r) => personKey(i.repo, r))), ...(tab === 'team' ? teamData?.members ?? [] : [])]);
+  const presence = usePresence([...(items ?? []).filter((i) => i.authored).flatMap((i) => i.pendingReviewers.map((r) => personKey(i.repo, r))), ...(tab === 'team' ? (teamData?.members ?? []).map((m) => (isLab(teamData!.team) ? `${m}@${viewAs()}` : m)) : [])]);
   const listed = (i: QueueItem) => inReviewing(i) || (!!i.mentioned && !i.reviewing && !i.authored && isCurrent(i)); // the one you're on stays
   // The top PRs waiting on me load ahead, a few at a time, so opening one is instant; only ones that changed since
   // their cached copy, and not while lgtm is in the background.
@@ -1612,7 +1612,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             <ListGroup key={g} k={kind.people ? '' : `${kind.name}:${g}`} initial={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
                 {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
-                {kind.people && isAway(presence[g]) && <span class="g-away" title={`Away on Slack: ${statusText(presence[g])}`}>🌴 away</span>}
+                {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) && <span class="g-away" title={`Away on Slack: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}>🌴 away</span>}
                 {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review; how long their oldest PR has waited for one">{kind.note(g)}</span>}
               </summary>
               {!!kind.asked?.(g) && (

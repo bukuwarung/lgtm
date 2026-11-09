@@ -8,7 +8,7 @@
     {
       "name": "lgtm-links",
       "source": "./mods/lgtm-links",
-      "description": "Open GitHub pull requests in lgtm from Claude Code: a button under replies that link one, and /lgtm"
+      "description": "Open GitHub pull requests and GitLab merge requests in lgtm from Claude Code: a button under replies that link one, and /lgtm"
     }
   ]
 }

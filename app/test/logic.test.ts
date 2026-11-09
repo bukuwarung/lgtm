@@ -1193,3 +1193,16 @@ test('GitLab people reach Slack as login@host, never as a GitHub login', async (
   const v = prValues({ repo: 'gitlab.com/g/p', number: 3, title: 'T', url: 'https://gitlab.com/g/p/-/merge_requests/3', author: 'ana' });
   assert.equal(fillSlack('{@author} {pr}', v), '<@gh:ana@gitlab.com> <https://gitlab.com/g/p/-/merge_requests/3|gitlab.com/g/p!3 T>');
 });
+
+test("GitLab comment positions: both lines on unchanged ones, line codes for a range", async () => {
+  const { linePosition } = await import('../src/gitlab.ts');
+  const patch = '@@ -10,3 +10,4 @@\n a\n-b\n+B\n+C\n d';
+  assert.deepEqual(await linePosition({ path: 'x.ts', side: 'RIGHT', line: 10 }, patch), { old_line: 10, new_line: 10 });
+  assert.deepEqual(await linePosition({ path: 'x.ts', side: 'RIGHT', line: 12 }, patch), { new_line: 12 });
+  assert.deepEqual(await linePosition({ path: 'x.ts', side: 'LEFT', line: 11 }, patch), { old_line: 11 });
+  const r: any = await linePosition({ path: 'x.ts', side: 'RIGHT', line: 13, startLine: 11 }, patch);
+  assert.deepEqual([r.old_line, r.new_line], [12, 13]);
+  assert.match(r.line_range.start.line_code, /^[0-9a-f]{40}_12_11$/);
+  assert.equal(r.line_range.start.type, 'new');
+  assert.match(r.line_range.end.line_code, /_12_13$/);
+});

@@ -1334,7 +1334,7 @@ function SlackPeople({ team }: { team: string }) {
     Promise.all([team ? getTeamMembers(team).catch(() => []) : [], getReviewQueue().catch(() => []), getGitHubViewer()]).then(([members, queue, me]) => {
       setOrg(team.split('/')[0] || queue[0]?.repo.split('/')[0] || '');
       // Your team, the people in your PR list (authors, and reviewers asked), and everyone met on PRs you've opened.
-      const people = new Set([...members, ...queue.flatMap((i) => [i.author, ...i.pendingReviewers].map((l) => personKey(i.repo, l))), ...peopleSeen(), ...(focus ? [focus] : [])]);
+      const people = new Set([...members.map((m) => (team.split('/')[0].includes('.') ? `${m}@${team.split('/')[0]}` : m)), ...queue.flatMap((i) => [i.author, ...i.pendingReviewers].map((l) => personKey(i.repo, l))), ...peopleSeen(), ...(focus ? [focus] : [])]);
       people.delete(me);
       setLogins([...people].filter((l) => !l.endsWith('[bot]') && l !== 'ghost').sort((a, b) => a.localeCompare(b)));
     });

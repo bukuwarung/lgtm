@@ -807,12 +807,14 @@ fn home() -> std::path::PathBuf {
     std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
 }
 
-/// PR links and owner/repo#123 references in a text, as links.
+/// PR links and owner/repo#123 references in a text, as links; GitLab merge request links as they are.
 pub fn prs_in(text: &str) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for c in re(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)\b").captures_iter(text) {
-        let (repo, n) = (c.get(1).or(c.get(3)).unwrap().as_str(), c.get(2).or(c.get(4)).unwrap().as_str());
-        let url = format!("https://github.com/{repo}/pull/{n}");
+    for c in re(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)|https://([\w-]+(?:\.[\w-]+)+(?::\d+)?(?:/[\w.-]+){2,}?)/-/merge_requests/(\d+)|\b([\w.-]+/[\w.-]+)#(\d+)\b").captures_iter(text) {
+        let url = match (c.get(3), c.get(4)) {
+            (Some(path), Some(n)) => format!("https://{}/-/merge_requests/{}", path.as_str(), n.as_str()),
+            _ => format!("https://github.com/{}/pull/{}", c.get(1).or(c.get(5)).unwrap().as_str(), c.get(2).or(c.get(6)).unwrap().as_str()),
+        };
         if !out.contains(&url) {
             out.push(url);
         }
@@ -876,10 +878,10 @@ pub async fn claude_sessions() -> Vec<Value> {
 }
 
 // --- A PR link on the clipboard (offered when the app comes to the front) ---
-// Only the first GitHub PR link goes to the UI, never the rest of the clipboard.
+// Only the first PR link (GitHub's, or a GitLab merge request's) goes to the UI, never the rest of the clipboard.
 
 pub fn pr_link(text: &str) -> Option<String> {
-    re(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+").find(text).map(|m| m.as_str().to_string())
+    re(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+|https://[\w-]+(?:\.[\w-]+)+(?::\d+)?(?:/[\w.-]+){2,}?/-/merge_requests/\d+").find(text).map(|m| m.as_str().to_string())
 }
 
 #[tauri::command]
@@ -1104,6 +1106,8 @@ mod tests {
     fn prs_in_finds_links_and_refs_once() {
         let t = "Look at https://github.com/o/r/pull/7 (o/r#7) and acme/app#12, not o/r#7x";
         assert_eq!(prs_in(t), vec!["https://github.com/o/r/pull/7", "https://github.com/acme/app/pull/12"]);
+        assert_eq!(prs_in("see https://gitlab.com/g/s/p/-/merge_requests/9#note_1"), vec!["https://gitlab.com/g/s/p/-/merge_requests/9"]);
+        assert_eq!(pr_link("x https://gitlab.com/g/p/-/merge_requests/3 y").as_deref(), Some("https://gitlab.com/g/p/-/merge_requests/3"));
     }
 
     #[test]

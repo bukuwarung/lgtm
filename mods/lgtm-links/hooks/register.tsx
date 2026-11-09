@@ -1,8 +1,10 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-// GitHub pull request links in a text, as "owner/repo#n": each once, in the order written.
-const PR_LINK = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/g
-export const prsIn = (text: string): string[] => [...new Set([...text.matchAll(PR_LINK)].map(m => `${m[1]}#${m[2]}`))]
+// Pull request links in a text, as "owner/repo#n": each once, in the order written. A GitLab merge request
+// (https://host/group/…/project/-/merge_requests/n) as "host/group/…/project#n", as lgtm names it.
+const PR_LINK = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)|https:\/\/([\w-]+(?:\.[\w-]+)+(?::\d+)?(?:\/[\w.-]+){2,}?)\/-\/merge_requests\/(\d+)/g
+export const prsIn = (text: string): string[] =>
+  [...new Set([...text.matchAll(PR_LINK)].map(m => (m[1] ? `${m[1]}#${m[2]}` : `${m[3]}#${m[4]}`)))]
 
 // lgtm (the Mac app) opens a PR from its own link. ?claude= names this session (the Claude app's ID when it hosts it,
 // else the CLI's), so the PR's ✳ Claude in lgtm comes back here, as the lgtm-review skill's links do.
@@ -63,6 +65,7 @@ export const register: Register = on => {
     let pr = prsIn(e.args)[0]
     if (!pr) pr = (await $.session.messages()).flatMap(m => prsIn(m.text)).at(-1)
     if (!pr) pr = prsIn((await $.process.run(['gh', 'pr', 'view', '--json', 'url', '-q', '.url'])).stdout)[0]
+    if (!pr) pr = prsIn((await $.process.run(['glab', 'mr', 'view', '-F', 'json'])).stdout)[0]
     if (!pr) return { text: "No pull request to open: give its link, or run /lgtm on a branch that has one." }
     const opened = await openInLgtm($, pr)
     return { text: opened.exitCode === 0 ? `Opened ${pr} in lgtm.` : "Couldn't open lgtm: is the app installed?" }
@@ -82,11 +85,11 @@ export const register: Register = on => {
     )
   })
 
-  // Under the command that opened a PR (`gh pr create`), once it's done: the same button, before Claude replies.
+  // Under the command that opened a PR (`gh pr create`, `glab mr create`), once it's done: the same button, before Claude replies.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     const drawn = await next(e)
     const command = (e.props.input as { command?: unknown } | null)?.command
-    if (e.props.tool !== 'Bash' || e.props.isRunning || e.props.isErrored || typeof command !== 'string' || !/\bgh\s+pr\s+create\b/.test(command)) return drawn
+    if (e.props.tool !== 'Bash' || e.props.isRunning || e.props.isErrored || typeof command !== 'string' || !/\b(gh\s+pr|glab\s+mr)\s+create\b/.test(command)) return drawn
     const prs = prsIn(JSON.stringify(e.props.output ?? ''))
     if (!prs.length) return drawn
     const { Box } = $.ui.resolve(e)

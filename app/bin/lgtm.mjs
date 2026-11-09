@@ -558,9 +558,10 @@ async function jiraStatuses(project) {
 // "✳ Claude" puts the PR link there). Claude's internal formats: if they change, this finds nothing rather than failing.
 const CLAUDE_SESSIONS = join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
 const CLAUDE_PROJECTS = join(homedir(), '.claude', 'projects');
-// PR links, or owner/repo#123 references (both normalised to the link).
-const PR_REF_IN_TEXT = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)|\b([\w.-]+\/[\w.-]+)#(\d+)\b/g;
-const prsIn = (text) => [...new Set([...text.matchAll(PR_REF_IN_TEXT)].map((m) => `https://github.com/${m[1] ?? m[3]}/pull/${m[2] ?? m[4]}`))];
+// PR links, or owner/repo#123 references (both normalised to the link); GitLab merge request links as they are.
+const PR_REF_IN_TEXT = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)|https:\/\/([\w-]+(?:\.[\w-]+)+(?::\d+)?(?:\/[\w.-]+){2,}?)\/-\/merge_requests\/(\d+)|\b([\w.-]+\/[\w.-]+)#(\d+)\b/g;
+const prsIn = (text) =>
+  [...new Set([...text.matchAll(PR_REF_IN_TEXT)].map((m) => (m[3] ? `https://${m[3]}/-/merge_requests/${m[4]}` : `https://github.com/${m[1] ?? m[5]}/pull/${m[2] ?? m[6]}`)))];
 
 // The text of a transcript's first user message (reading at most 4 MB to get there).
 async function firstPrompt(file) {
@@ -698,7 +699,7 @@ try {
 }
 
 // lgtm-web https://github.com/o/r/pull/1[?claude=<session>]: the PR, and the Claude Code session that sent it (skill).
-const pr = process.argv[2]?.match(/github\.com\/[^/]+\/[^/]+\/pull\/\d+/)?.[0];
+const pr = process.argv[2]?.match(/github\.com\/[^/]+\/[^/]+\/pull\/\d+|[\w-]+(?:\.[\w-]+)+(?::\d+)?(?:\/[\w.-]+){2,}?\/-\/merge_requests\/\d+/)?.[0]; // or a GitLab MR's
 const from = process.argv[2]?.match(/[?&]claude=([\w-]{1,80})/)?.[1];
 const url = ORIGIN + '/' + (pr ? '#https://' + pr + (from ? '?claude=' + from : '') : '');
 

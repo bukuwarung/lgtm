@@ -4,9 +4,10 @@
 case "$1" in
   "") exec open -b com.bukuwarung.lgtm ;;
   https://github.com/*/pull/*) exec open "lgtm://${1#https://github.com/}" ;;
+  https://*/-/merge_requests/*) exec open "lgtm://$(printf '%s' "${1#https://}" | sed 's#/-/merge_requests/#/pull/#')" ;; # a GitLab merge request
   lgtm://*) exec open "$1" ;;
   -h | --help)
-    echo "usage: lgtm [https://github.com/OWNER/REPO/pull/NUMBER]"
+    echo "usage: lgtm [https://github.com/OWNER/REPO/pull/NUMBER | https://GITLAB/GROUP/PROJECT/-/merge_requests/NUMBER]"
     echo "Opens the lgtm app, at that pull request if given."
     ;;
   *)

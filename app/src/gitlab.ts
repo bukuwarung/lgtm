@@ -5,8 +5,9 @@
 // A GitLab repo is "host/group/…/project" (gitlab.com/gitlab-org/cli): GitHub owners have no dots, so a dot in the
 // first part says GitLab. An MR is that repo and its iid. GitLab's global IDs travel as "gl:host|gid://…", an MR's as
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
+import { collapseReviews, setOffline } from './github.ts';
 import { fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
-import type { Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
+import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
 
 export const isLab = (repo: string) => repo.slice(0, repo.indexOf('/')).includes('.');
 export const isLabId = (id: string) => id.startsWith('gl:');
@@ -29,6 +30,7 @@ export const blobUrl = (repo: string, ref: string, path: string, line?: number) 
 const abs = (host: string, url?: string | null) => (url ? (url.startsWith('/') ? `https://${host}${url}` : url) : undefined);
 // GitLab renders links to its own pages ("/user", "/uploads/…") without the host.
 const absHtml = (host: string, html?: string | null) => (html ?? '').replace(/(\s(?:href|src|data-src)=")\/(?!\/)/g, `$1https://${host}/`);
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const text = (html: string) => new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '';
 
 // --- requests ---
@@ -44,16 +46,47 @@ const apiOf = async (host: string) => (await glabAccounts()).find((a) => a.host 
 const writes = (path: string, init: RequestInit) =>
   !!init.method && init.method !== 'GET' && init.method !== 'HEAD' && !path.endsWith('/markdown') && (path !== '/graphql' || /^\s*mutation/.test(JSON.parse(String(init.body)).query));
 
+// GitLab's limits are tight (gitlab.com's free plan: about 100 API requests a minute each) and it doesn't let a page read
+// what's left of them: at most 4 requests at a time per host, and once it says "too many", none for a minute.
+const slow = new Map<string, number>();
+const running = new Map<string, number>();
+const queued = new Map<string, (() => void)[]>();
+const slowError = (host: string) =>
+  new Error(`${host} asked lgtm to slow down (its limit on requests a minute): lgtm asks again at ${new Date(slow.get(host)!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`);
+async function turn(host: string) {
+  if ((running.get(host) ?? 0) >= 4) await new Promise<void>((go) => queued.set(host, [...(queued.get(host) ?? []), go]));
+  running.set(host, (running.get(host) ?? 0) + 1);
+}
+function done(host: string) {
+  running.set(host, (running.get(host) ?? 1) - 1);
+  queued.get(host)?.shift()?.();
+}
 async function lab(host: string, path: string, init: RequestInit = {}): Promise<Response> {
   if (practice && writes(path, init)) throw new Error('Practice run: nothing is sent to GitLab');
+  if ((slow.get(host) ?? 0) > Date.now()) throw slowError(host);
+  await turn(host);
+  try {
+    return await ask(host, path, init);
+  } finally {
+    done(host);
+  }
+}
+async function ask(host: string, path: string, init: RequestInit): Promise<Response> {
   const url = `${await apiOf(host)}${path === '/graphql' ? '/api/graphql' : `/api/v4${path}`}`;
   const res = await fetch(url, {
     cache: 'no-cache',
     ...init,
     headers: { Authorization: `Bearer ${await tokenOf(host)}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}) },
   }).catch((e) => {
+    setOffline(true, host);
     throw new Error(`Couldn't reach ${host} (${e.message})`);
   });
+  setOffline(false, host);
+  if (res.status === 429) {
+    slow.set(host, Date.now() + 60_000);
+    recordError(`GitLab 429 ${path.split('?')[0]}: too many requests`);
+    throw slowError(host);
+  }
   if (res.status === 401) {
     tokens.delete(host);
     throw new Error(`${host} rejected glab's token. Run \`glab auth login --hostname ${host}\`, then reload.`);
@@ -105,6 +138,9 @@ const mutate = async (host: string, query: string, variables: Record<string, unk
   if (errs.length) throw new Error(String(errs[0]));
   return d;
 };
+
+// Whether a GitLab answers again (the offline bar).
+export const pingLab = (host: string) => lab(host, '/version').then(() => true, () => false);
 
 const viewers = new Map<string, Promise<{ login: string; avatar: string }>>();
 // Me on a GitLab host: my username and picture.
@@ -168,7 +204,7 @@ const prOf = (host: string, m: any): PR => ({
   deletions: m.diffStatsSummary?.deletions,
   changed_files: m.diffStatsSummary?.fileCount,
 });
-const mrQuery = (fields: string) => `query($p:ID!,$i:String!){project(fullPath:$p){mergeRequest(iid:$i){${fields}}}}`;
+const mrQuery = (fields: string) => `query($p:ID!,$i:String!){project(fullPath:$p){mergeRequest(iid:$i){${fields}}}}${fields === '...F' ? ` ${ITEM}` : ''}`;
 const getMR = async (repo: string, n: number, fields = MR) => {
   const { host, path } = split(repo);
   const m = (await gql(host, mrQuery(fields), { p: path, i: String(n) })).project?.mergeRequest;
@@ -250,8 +286,8 @@ const commentOf = (host: string, x: any): Comment => {
 };
 export async function getLabThreads(repo: string, n: number): Promise<Thread[]> {
   const { host } = split(repo);
-  const { head, nodes } = await discussions(repo, n);
-  return nodes
+  const [{ head, nodes }, drafts, me] = await Promise.all([discussions(repo, n), draftNotes(repo, n).catch(() => []), labMe(host).catch(() => null)]);
+  const threads = nodes
     .filter((d) => d.notes.nodes[0]?.position && !d.notes.nodes[0].system)
     .map((d): Thread => {
       const p = d.notes.nodes[0].position;
@@ -273,25 +309,78 @@ export async function getLabThreads(repo: string, n: number): Promise<Thread[]> 
         comments: { nodes: d.notes.nodes.filter((x: any) => !x.system).map((x: any) => commentOf(host, x)) },
       };
     });
+  // My draft notes (a review started on GitLab, not yet published): pending, in their thread or a new one of their own.
+  for (const dn of drafts) {
+    const c: Comment = {
+      id: gid(host, `draft:${split(repo).path}!${n}:${dn.id}`), databaseId: -dn.id, url: mrUrl(repo, n), body: dn.note,
+      bodyHTML: `<p>${esc(dn.note ?? '').replace(/\n/g, '<br>')}</p>`, bodyText: dn.note ?? '', createdAt: dn.created_at ?? new Date().toISOString(), state: 'PENDING',
+      author: me ? { login: me.login, __typename: 'User', avatarUrl: me.avatar } : null,
+    };
+    const into = dn.discussion_id && threads.find((t) => t.id.endsWith(`/${dn.discussion_id}`));
+    const p = dn.position;
+    if (into) into.comments.nodes.push(c);
+    else if (p?.new_path || p?.old_path) {
+      const left = p.new_line == null && p.old_line != null;
+      const line = p.position_type === 'text' ? (left ? p.old_line : p.new_line) : null;
+      threads.push({ id: c.id!, path: left ? p.old_path : p.new_path, line, originalLine: line, diffSide: left ? 'LEFT' : 'RIGHT', subjectType: line ? 'LINE' : 'FILE', isResolved: false, isOutdated: false, viewerCanResolve: false, viewerCanUnresolve: false, comments: { nodes: [c] } });
+    }
+  }
+  return threads;
 }
 const VERDICT: [RegExp, ReviewState][] = [[/^approved this merge request/, 'APPROVED'], [/^requested changes/, 'CHANGES_REQUESTED']];
-// ponytail: an overview thread's replies come as comments of their own, in time order (lgtm's conversation is flat).
+// An overview thread's replies come as comments of their own, in time order (lgtm's conversation is flat), each
+// opening with whom it answers and a link to the comment it follows.
 export async function getLabConversation(repo: string, n: number): Promise<ConversationItem[]> {
   const { host } = split(repo);
   const { nodes } = await discussions(repo, n);
   const agents = agentsAsBots();
   return nodes
     .filter((d) => !d.notes.nodes[0]?.position)
-    .flatMap((d) => d.notes.nodes)
+    .flatMap((d) => d.notes.nodes.map((x: any, k: number) => (k && !x.system ? { ...x, replyTo: d.notes.nodes[0] } : x)))
     .flatMap((x: any): ConversationItem[] => {
       const who = { author: x.author?.username ?? 'ghost', avatar: abs(host, x.author?.avatarUrl) };
       if (x.system) {
         const v = VERDICT.find(([re]) => re.test(x.body))?.[1];
         return v ? [{ id: 'r' + num(x.id), ...who, html: '', at: x.createdAt, url: x.url, state: v, bot: isBot(x.author) }] : [];
       }
-      return [{ id: 'c' + num(x.id), ...who, html: absHtml(host, x.bodyHtml), at: x.createdAt, url: x.url, bot: isBot(x.author) || (agents && agentSays(x.body)) }];
+      const to = x.replyTo ? `<p class="note">↪ In reply to <a href="${esc(x.replyTo.url)}">@${esc(x.replyTo.author?.username ?? 'ghost')}</a></p>` : '';
+      return [{ id: 'c' + num(x.id), ...who, html: to + absHtml(host, x.bodyHtml), at: x.createdAt, url: x.url, bot: isBot(x.author) || (agents && agentSays(x.body)) }];
     })
     .sort((a, b) => a.at.localeCompare(b.at));
+}
+
+// Each diff line's place as GitLab names it, old and new (an added line's old place is where it would be, a removed
+// line's new one likewise): what a comment's old_line/new_line and line codes are made of.
+type Row = { kind: '+' | '-' | ' '; old: number; new: number };
+export function diffRows(patch = ''): Row[] {
+  const rows: Row[] = [];
+  let o = 0, n = 0;
+  for (const raw of patch.split('\n')) {
+    const m = raw.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (m) [o, n] = [+m[1], +m[2]];
+    else if (o && raw && !raw.startsWith('\\')) {
+      const kind = raw[0] as Row['kind'];
+      rows.push({ kind, old: o, new: n });
+      if (kind !== '+') o++;
+      if (kind !== '-') n++;
+    }
+  }
+  return rows;
+}
+const sha1 = async (s: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+// A line comment's position: an unchanged line names both its old and new line (GitLab wants both), an added one its
+// new, a removed one its old; a range of lines adds its two ends as line codes (line_range).
+export async function linePosition(x: Pick<Draft, 'path' | 'side' | 'line' | 'startLine'>, patch?: string) {
+  const rows = diffRows(patch);
+  const find = (line: number) => rows.find((r) => (x.side === 'LEFT' ? r.kind !== '+' && r.old === line : r.kind !== '-' && r.new === line));
+  const at = (r: Row | undefined, line: number) =>
+    !r ? (x.side === 'LEFT' ? { old_line: line } : { new_line: line }) : r.kind === ' ' ? { old_line: r.old, new_line: r.new } : r.kind === '+' ? { new_line: r.new } : { old_line: r.old };
+  const end = find(x.line!);
+  const start = x.startLine && x.startLine !== x.line ? find(x.startLine) : undefined;
+  if (!start || !end) return at(end, x.line!);
+  const code = await sha1(x.path);
+  const end_ = (r: Row) => ({ line_code: `${code}_${r.old}_${r.new}`, type: r.kind === '+' ? 'new' : 'old', ...at(r, 0) });
+  return { ...at(end, x.line!), line_range: { start: end_(start), end: end_(end) } };
 }
 
 // Draft notes (GitLab's pending review): mine, not yet published.
@@ -304,8 +393,15 @@ export async function discardLabReview(id: string) {
   const { repo, n } = mrOf(id);
   for (const d of await draftNotes(repo, n)) await send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}/draft_notes/${d.id}`, 'DELETE');
 }
-export const editLabNote = (id: string, body: string) => mutate(unId(id).host, `mutation($id:NoteID!,$b:String!){updateNote(input:{id:$id,body:$b}){errors}}`, { id: unId(id).rest, b: body });
-export const deleteLabNote = (id: string) => mutate(unId(id).host, `mutation($id:NoteID!){destroyNote(input:{id:$id}){errors}}`, { id: unId(id).rest });
+// A note changed or taken out; a draft note (gl:host|draft:path!n:id) through the draft notes API.
+const draftOf = (id: string) => {
+  const m = unId(id).rest.match(/^draft:(.+)!(\d+):(\d+)$/);
+  return m && `/projects/${encodeURIComponent(m[1])}/merge_requests/${m[2]}/draft_notes/${m[3]}`;
+};
+export const editLabNote = (id: string, body: string) =>
+  draftOf(id) ? send(unId(id).host, draftOf(id)!, 'PUT', { note: body }) : mutate(unId(id).host, `mutation($id:NoteID!,$b:String!){updateNote(input:{id:$id,body:$b}){errors}}`, { id: unId(id).rest, b: body });
+export const deleteLabNote = (id: string) =>
+  draftOf(id) ? send(unId(id).host, draftOf(id)!, 'DELETE') : mutate(unId(id).host, `mutation($id:NoteID!){destroyNote(input:{id:$id}){errors}}`, { id: unId(id).rest });
 
 // A review: lgtm's drafts as GitLab draft notes, published together (with any I started on GitLab), then the summary
 // and the verdict.
@@ -315,14 +411,12 @@ export async function submitLabReview(prId: string, commitOID: string, event: Re
   const base = `/projects/${pid(repo)}/merge_requests/${n}`;
   const refs = (await getMR(repo, n, 'diffRefs{baseSha headSha startSha}')).diffRefs;
   if (refs.headSha !== commitOID) throw new Error('New commits were pushed while you reviewed: reload to see them, then send again');
+  const files = drafts.some((x) => x.line) ? await getLabFiles(repo, n) : [];
   for (const x of drafts) {
-    const position = {
-      base_sha: refs.baseSha, start_sha: refs.startSha, head_sha: refs.headSha, old_path: x.path, new_path: x.path,
-      ...(x.line ? { position_type: 'text', ...(x.side === 'LEFT' ? { old_line: x.line } : { new_line: x.line }) } : { position_type: 'file' }),
-    };
-    // ponytail: a comment on lines a–b sits on b (GitLab's line_range wants each end's line code); the range is said.
-    const note = x.startLine && x.startLine !== x.line ? `${x.body}\n\n<sub>On lines ${x.startLine}–${x.line}</sub>` : x.body;
-    await send(host, `${base}/draft_notes`, 'POST', { note, position });
+    const f = files.find((f) => f.filename === x.path);
+    const where = { base_sha: refs.baseSha, start_sha: refs.startSha, head_sha: refs.headSha, old_path: f?.previous_filename ?? x.path, new_path: x.path };
+    const position = x.line ? { ...where, position_type: 'text', ...(await linePosition(x, f?.patch)) } : { ...where, position_type: 'file' };
+    await send(host, `${base}/draft_notes`, 'POST', { note: x.body, position });
   }
   if (drafts.length || (await getLabPending(repo, n))) await send(host, `${base}/draft_notes/bulk_publish`, 'POST');
   if (body) await send(host, `${base}/notes`, 'POST', { body });
@@ -379,9 +473,14 @@ export async function getLabRaw(repo: string, path: string, ref: string): Promis
   const r = await lab(split(repo).host, `${filePath(repo, path)}/raw?ref=${encodeURIComponent(ref)}`);
   return r.status === 404 ? null : r.text();
 }
+// A file in Git LFS is, in Git, a small pointer naming its real size: that size, lfs set.
 export async function getLabBlobInfo(repo: string, path: string, ref: string): Promise<{ size: number; lfs: boolean } | null> {
   const r = await lab(split(repo).host, `${filePath(repo, path)}?ref=${encodeURIComponent(ref)}`, { method: 'HEAD' });
-  return r.status === 404 ? null : { size: Number(r.headers.get('x-gitlab-size') ?? 0), lfs: false };
+  if (r.status === 404) return null;
+  const size = Number(r.headers.get('x-gitlab-size') ?? 0);
+  const text = size < 400 ? (await getLabRaw(repo, path, ref)) ?? '' : '';
+  const lfs = text.startsWith('version https://git-lfs');
+  return { size: lfs ? Number(text.match(/\nsize (\d+)/)?.[1] ?? size) : size, lfs };
 }
 // A file for an <img>: its bytes (Git LFS resolved) at a blob: address, since GitLab wants the token on the request.
 export async function getLabDownloadUrl(repo: string, path: string, ref: string): Promise<string | null> {
@@ -392,13 +491,14 @@ export const listLabDir = async (repo: string, path: string, ref?: string) =>
   (await pages<any>(split(repo).host, `/projects/${pid(repo)}/repository/tree?per_page=100&path=${encodeURIComponent(path)}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`)).map((e) => ({
     name: e.name as string, path: e.path as string, type: e.type === 'tree' ? 'dir' : 'file',
   }));
-// Every file at a commit (for where build files sit): null past 5,000, as GitHub cuts a huge tree short.
+// Every file at a commit (for where build files sit): null past 1,000 (ten requests; GitLab's limits are tight), as
+// GitHub cuts a huge tree short.
 export async function labTree(repo: string, sha: string): Promise<{ path: string; type: string }[] | null> {
   const { host } = split(repo);
   const at = `/projects/${pid(repo)}/repository/tree?recursive=true&per_page=100&ref=${sha}`;
   const first = await lab(host, at);
   const total = Number(first.headers.get('x-total-pages'));
-  if (!total || total > 50) return null;
+  if (!total || total > 10) return null;
   const rest = await Promise.all(Array.from({ length: total - 1 }, (_, k) => lab(host, `${at}&page=${k + 2}`).then((r) => r.json())));
   return [await first.json(), ...rest].flat().map((e: any) => ({ path: e.path, type: e.type === 'blob' ? 'blob' : 'tree' }));
 }
@@ -435,8 +535,14 @@ export async function renderLabMarkdown(text: string, repo: string): Promise<str
 }
 // Suggestions committed to the MR's branch as one commit (each file read at head, its suggestions applied); refused
 // if the branch moved on.
-export async function commitLabSuggestions(repo: string, branch: string, head: string, files: { path: string; content: string }[], message: string) {
+// The suggestions' authors (other than me) credited as co-authors, by GitLab's no-reply address for them.
+export async function commitLabSuggestions(repo: string, branch: string, head: string, files: { path: string; content: string }[], message: string, authors: string[] = []) {
   const { host } = split(repo);
+  if (authors.length) {
+    const d = await gql(host, `query($u:[String!]){users(usernames:$u,first:100){nodes{id username name}}}`, { u: authors }).catch(() => null);
+    const credit = (d?.users?.nodes ?? []).map((u: any) => `Co-authored-by: ${u.name || u.username} <${num(u.id)}-${u.username}@users.noreply.${host}>`);
+    if (credit.length) message += `\n\n${credit.join('\n')}`;
+  }
   if ((await json(host, `/projects/${pid(repo)}/repository/branches/${encodeURIComponent(branch)}`)).commit.id !== head) throw new Error('The branch moved on since: reload, then commit again');
   return send(host, `/projects/${pid(repo)}/repository/commits`, 'POST', { branch, commit_message: message, actions: files.map((f) => ({ action: 'update', file_path: f.path, content: f.content })) });
 }
@@ -573,6 +679,102 @@ export async function deleteLabBranch(repo: string, branch: string) {
   await send(split(repo).host, `/projects/${pid(repo)}/repository/branches/${encodeURIComponent(branch)}`, 'DELETE');
 }
 
+// --- who to ask ---
+
+// Who wrote these lines at the base commit (GitLab's blame names the account), per file: as GitHub's blame ranges.
+export async function labBlame(repo: string, base: string, files: { path: string; lines: number[] }[]) {
+  const { host, path } = split(repo);
+  return Promise.all(files.map(async (f) => {
+    const d = await gql(host, `query($p:ID!,$r:String!,$f:String!,$a:Int!,$b:Int!){project(fullPath:$p){repository{blobs(paths:[$f],ref:$r){nodes{blame(fromLine:$a,toLine:$b){groups{lineno span commit{author{username}}}}}}}}}`,
+      { p: path, r: base, f: f.path, a: Math.min(...f.lines), b: Math.max(...f.lines) }).catch(() => null);
+    const groups: any[] = d?.project?.repository?.blobs?.nodes[0]?.blame?.groups ?? [];
+    return groups.map((g) => ({ startingLine: g.lineno, endingLine: g.lineno + g.span - 1, login: g.commit?.author?.username ?? null }));
+  }));
+}
+// Who reviewed the project's last 40 MRs (asked, or approved), and how many each: they know the code.
+export async function labRecentReviewers(repo: string): Promise<Map<string, number>> {
+  const { host, path } = split(repo);
+  const d = await gql(host, `query($p:ID!){project(fullPath:$p){mergeRequests(first:40,sort:UPDATED_DESC){nodes{author{username} reviewers{nodes{username bot}} approvedBy{nodes{username bot}}}}}}`, { p: path });
+  const count = new Map<string, number>();
+  for (const m of d.project?.mergeRequests?.nodes ?? [])
+    for (const login of new Set<string>([...m.reviewers.nodes, ...m.approvedBy.nodes].filter((u: any) => !u.bot && u.username !== m.author?.username).map((u: any) => u.username)))
+      count.set(login, (count.get(login) ?? 0) + 1);
+  return count;
+}
+// How many open MRs in the top-level group ask each of them for a review: how busy they are.
+export async function labReviewLoad(repo: string, logins: string[]): Promise<Map<string, number>> {
+  const { host, path } = split(repo);
+  const group = encodeURIComponent(path.split('/')[0]);
+  const n = await Promise.all(logins.map((l) => lab(host, `/groups/${group}/merge_requests?state=opened&per_page=1&reviewer_username=${encodeURIComponent(l)}`).then((r) => Number(r.headers.get('x-total') ?? 0), () => 0)));
+  return new Map(logins.map((l, k) => [l, n[k]]));
+}
+
+// --- teams: GitLab groups ---
+
+// A team is a group of mine, as "host/group/…/subgroup".
+export async function getLabTeams(host: string): Promise<string[]> {
+  return (await pages<any>(host, '/groups?min_access_level=10&per_page=100')).map((g) => `${host}/${g.full_path}`).sort();
+}
+export async function getLabTeamMembers(team: string): Promise<string[]> {
+  const { host, path } = split(team);
+  const all = await pages<any>(host, `/groups/${encodeURIComponent(path)}/members/all?per_page=100`);
+  return [...new Set(all.filter((m) => m.state === 'active' && !m.bot && !/^(project|group)_\d+_bot/.test(m.username)).map((m) => m.username as string))].sort((a, b) => a.localeCompare(b));
+}
+// The group's open MRs by its members, and how many open MRs in the group ask each member for a review.
+export async function getLabTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
+  const { host, path } = split(team);
+  const [members, me] = await Promise.all([getLabTeamMembers(team), labMe(host)]);
+  const lists = await Promise.all(members.slice(0, 60).map((u) =>
+    gql(host, `query($g:ID!,$u:String!){group(fullPath:$g){mergeRequests(state:opened,first:30,includeSubgroups:true,authorUsername:$u){nodes{...F}}}} ${ITEM}`, { g: path, u })
+      .then((d) => (d.group?.mergeRequests?.nodes ?? []) as any[], () => [])));
+  const load = await labReviewLoad(team + '/x', members.slice(0, 60));
+  return {
+    members,
+    items: lists.flat().map((m) => itemOf(host, m, me.login)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    load: Object.fromEntries(load),
+  };
+}
+// The open MRs on a GitLab asking someone for a review and still waiting on them, the longest-waiting first.
+export async function getLabAskedPRs(host: string, login: string): Promise<QueueItem[]> {
+  const me = (await labMe(host)).login;
+  const d = await gql(host, `query($u:String!){user(username:$u){reviewRequestedMergeRequests(state:opened,first:50){nodes{...F}}}} ${ITEM}`, { u: login });
+  return ((d.user?.reviewRequestedMergeRequests?.nodes ?? []) as any[])
+    .filter((m) => WAITING.includes(m.reviewers.nodes.find((r: any) => r.username === login)?.mergeRequestInteraction?.reviewState))
+    .map((m) => itemOf(host, m, me))
+    .sort((a, b) => a.waitingSince.localeCompare(b.waitingSince));
+}
+
+// Draft MRs in these repos changing files I own (CODEOWNERS, by name or through a group of mine): GitLab asks code
+// owners only once an MR is ready. `owners`: github.ts codeOwners (GitLab's file reads the same, its [Sections] aside).
+const owned = new Map<string, { at: number; text: Promise<string> }>(); // each repo's CODEOWNERS, kept a day
+export async function getLabOwnedDrafts(repos: string[], skip: Set<string>, owners: (text: string, path: string) => string[]): Promise<QueueItem[]> {
+  const out: QueueItem[] = [];
+  for (const [host, rs] of Map.groupBy(repos, (r) => split(r).host)) {
+    const me = (await labMe(host)).login;
+    const groups = (await getLabTeams(host).catch(() => [])).map((t) => `@${split(t).path}`.toLowerCase());
+    const mine = new Set([`@${me}`.toLowerCase(), ...groups]);
+    for (const repo of rs) {
+      if (!(owned.get(repo)?.at! > Date.now() - 86_400_000))
+        owned.set(repo, { at: Date.now(), text: (async () => {
+          for (const at of ['CODEOWNERS', '.gitlab/CODEOWNERS', 'docs/CODEOWNERS']) {
+            const t = await getLabRaw(repo, at, 'HEAD').catch(() => null);
+            if (t) return t.replace(/^\s*\^?\[.*$/gm, ''); // section headers
+          }
+          return '';
+        })() });
+      const text = await owned.get(repo)!.text;
+      if (!text.split(/\s+/).some((w) => mine.has(w.toLowerCase()))) continue;
+      const d = await gql(host, `query($p:ID!){project(fullPath:$p){mergeRequests(state:opened,draft:true,first:50){nodes{...F diffStats{path}}}}} ${ITEM}`, { p: split(repo).path }).catch(() => null);
+      for (const m of d?.project?.mergeRequests?.nodes ?? []) {
+        const item = itemOf(host, m, me);
+        if (skip.has(item.id) || item.authored || !(m.diffStats ?? []).some((f: any) => owners(text, f.path).some((o) => mine.has(o.toLowerCase())))) continue;
+        out.push({ ...item, requested: true, reviewing: true, codeOwner: true });
+      }
+    }
+  }
+  return out;
+}
+
 // --- stacks and tickets ---
 
 export async function getLabStack(repo: string, pr: PR): Promise<StackLayer[]> {
@@ -636,10 +838,68 @@ export async function labTicketPRs(repo: string, n: number, keys: string[]): Pro
 
 // --- the PR list ---
 
+// MRs merged in the last 14 days that I opened or review, where a thread may wait on my reply (`waits`, github.ts
+// awaitsMe): a reply after the merge would otherwise go unseen. 20 of each, newest first.
+export async function getLabMergedAwaiting(host: string, me: string, waits: (t: Thread, mine: boolean) => boolean): Promise<MergedPR[]> {
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const lists = await Promise.all([`scope=created_by_me`, `scope=all&reviewer_username=${encodeURIComponent(me)}`].map((q) =>
+    json(host, `/merge_requests?${q}&state=merged&updated_after=${since}&order_by=updated_at&per_page=20`).catch(() => []) as Promise<any[]>));
+  const mrs = [...new Map(lists.flat().map((m) => [m.id, m])).values()];
+  const found = await Promise.all(mrs.map(async (m): Promise<MergedPR | null> => {
+    const repo = `${host}/${m.references.full.split('!')[0]}`;
+    const authored = m.author?.username === me;
+    const threads = await getLabThreads(repo, m.iid).catch(() => []);
+    if (!threads.some((t) => waits(t, authored))) return null;
+    return { id: gid(host, `${m.references.full.split('!')[0]}!${m.iid}`), repo, number: m.iid, title: m.title, authored, mergedAt: m.merged_at, updatedAt: m.updated_at, myState: null };
+  }));
+  return found.filter((m): m is MergedPR => !!m);
+}
+
+// My pending GitLab to-dos where someone @-mentions me on an MR (not a bot's, not one marked done here), the latest
+// per MR, as the comment it came with: the inbox's mentions, and the list's "Mentioned you". Kept a minute per host.
+const todoSeen = new Map<string, { at: number; v: Promise<Map<string, Comment>> }>();
+export function labMentions(host: string): Promise<Map<string, Comment>> {
+  const c = todoSeen.get(host);
+  if (c && Date.now() - c.at < 60_000) return c.v;
+  const v = pages<any>(host, '/todos?state=pending&type=MergeRequest&per_page=100').then((todos) => {
+    const out = new Map<string, Comment>();
+    for (const t of todos.filter((t) => ['mentioned', 'directly_addressed'].includes(t.action_name)).sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+      const note = Number(String(t.target_url).match(/#note_(\d+)$/)?.[1]);
+      if (!note || !t.target?.iid || t.target.state !== 'opened' || isBot({ username: t.author?.username, bot: t.author?.bot })) continue;
+      if (t.author?.avatar_url) knowFace(t.author.username, abs(host, t.author.avatar_url)!);
+      out.set(gid(host, `${t.project.path_with_namespace}!${t.target.iid}`), {
+        id: gid(host, `gid://gitlab/Note/${note}`),
+        databaseId: note,
+        url: t.target_url,
+        body: t.body,
+        bodyHTML: `<p>${esc(t.body ?? '').replace(/\n/g, '<br>')}</p>`,
+        bodyText: t.body ?? '',
+        createdAt: t.created_at,
+        author: { login: t.author?.username ?? 'ghost', __typename: 'User', avatarUrl: abs(host, t.author?.avatar_url) },
+      });
+    }
+    return out;
+  });
+  todoSeen.set(host, { at: Date.now(), v });
+  v.catch(() => todoSeen.delete(host));
+  return v;
+}
+
+// Each MR's changed files (path and size) and description, for its rough time to review (files.ts estimate).
+export async function labEstimateInputs(items: { id: string }[]): Promise<Map<string, { files: { path: string; additions: number; deletions: number }[]; body: string }>> {
+  const out = new Map<string, { files: { path: string; additions: number; deletions: number }[]; body: string }>();
+  await Promise.all(items.map(async ({ id }) => {
+    const { repo, n } = mrOf(id);
+    const m = await getMR(repo, n, 'description diffStats{path additions deletions}').catch(() => null);
+    if (m) out.set(id, { files: m.diffStats ?? [], body: m.description ?? '' });
+  }));
+  return out;
+}
+
 const ITEM = `fragment F on MergeRequest{id iid title updatedAt createdAt draft detailedMergeStatus approved autoMergeEnabled availableAutoMergeStrategies
   project{fullPath} sourceProject{fullPath} sourceBranch targetBranch author{username bot avatarUrl} assignees{nodes{username}}
   reviewers{nodes{username bot mergeRequestInteraction{reviewState}}} headPipeline{status} diffStatsSummary{additions deletions fileCount}
-  userPermissions{canMerge} commits(first:1){nodes{committedDate}}}`;
+  userPermissions{canMerge} commits(first:1){nodes{committedDate}} mergeTrainIndex}`;
 const itemOf = (host: string, m: any, me: string): QueueItem => {
   const mine = m.reviewers.nodes.find((r: any) => r.username === me)?.mergeRequestInteraction?.reviewState;
   const authored = m.author?.username === me;
@@ -667,7 +927,8 @@ const itemOf = (host: string, m: any, me: string): QueueItem => {
     files: m.diffStatsSummary?.fileCount ?? 0,
     autoMerge: !!m.autoMergeEnabled,
     canAutoMerge: !!m.userPermissions?.canMerge && !!m.availableAutoMergeStrategies?.length,
-    queue: null,
+    // Its place in the merge train (GitLab's merge queue), when it's on one.
+    queue: m.mergeTrainIndex != null ? { position: m.mergeTrainIndex + 1, state: 'QUEUED' } : null,
     waitingSince: m.createdAt,
     pendingReviewers: m.reviewers.nodes.filter((r: any) => WAITING.includes(r.mergeRequestInteraction?.reviewState)).map((r: any) => r.username),
     changesBy: m.reviewers.nodes.filter((r: any) => r.mergeRequestInteraction?.reviewState === 'REQUESTED_CHANGES').map((r: any) => r.username),
@@ -683,6 +944,29 @@ const itemOf = (host: string, m: any, me: string): QueueItem => {
     mentioned: false,
   };
 };
+// What GitLab's list lacks, from an MR's notes and commits: since when it waits on me (the last time I was asked, or
+// it was marked ready), and on one I approved, the commits written since (not merges in of the base). Kept per MR
+// until it changes.
+const refined = new Map<string, { at: string; v: Pick<QueueItem, 'waitingSince' | 'newSinceApproval'> }>();
+async function refine(i: QueueItem, me: string): Promise<QueueItem> {
+  const c = refined.get(i.id);
+  if (c?.at === i.updatedAt) return { ...i, ...c.v };
+  const { host } = split(i.repo);
+  const base = `/projects/${pid(i.repo)}/merge_requests/${i.number}`;
+  const [notes, commits] = await Promise.all([
+    json(host, `${base}/notes?sort=desc&order_by=created_at&per_page=100`).catch(() => []) as Promise<any[]>,
+    i.myState === 'APPROVED' ? (json(host, `${base}/commits?per_page=20`).catch(() => []) as Promise<any[]>) : Promise.resolve([]),
+  ]);
+  const ready = notes.filter((x) => x.system && /^marked this merge request as \*\*ready\*\*/.test(x.body)).map((x) => x.created_at as string);
+  const approved = notes.find((x) => x.system && x.author?.username === me && VERDICT[0][0].test(x.body))?.created_at as string | undefined;
+  const v = {
+    waitingSince: [i.waitingSince, ...askedAt(notes, me), ...ready].sort().at(-1)!,
+    newSinceApproval: approved ? commits.filter((c) => c.parent_ids?.length === 1 && c.authored_date > approved).length : 0,
+  };
+  refined.set(i.id, { at: i.updatedAt, v });
+  return { ...i, ...v };
+}
+
 // My open MRs on every GitLab host glab is signed in to: ones I review, opened, or am assigned. A host that fails is
 // noted (Settings → Accounts) and leaves the others, and GitHub's, on the list.
 export async function getLabQueue(only?: string): Promise<QueueItem[]> {
@@ -695,7 +979,15 @@ export async function getLabQueue(only?: string): Promise<QueueItem[]> {
         const lists = await Promise.all(['reviewRequestedMergeRequests', 'authoredMergeRequests', 'assignedMergeRequests'].map((k) =>
           gql(host, `{currentUser{${k}(state:opened,first:100){nodes{...F}}}} ${ITEM}`).then((d) => d.currentUser?.[k]?.nodes ?? [])));
         const all = new Map<string, any>(lists.flat().map((m: any) => [m.id, m]));
-        return [...all.values()].map((m) => itemOf(host, m, login));
+        const items = [...all.values()].map((m) => itemOf(host, m, login));
+        // MRs where someone mentions me (my to-dos): marked, and the ones not already listed added.
+        const mentions = await labMentions(host).catch(() => new Map<string, Comment>());
+        const extra = await Promise.all([...mentions.keys()].filter((id) => !items.some((i) => i.id === id)).slice(0, 20).map((id) => {
+          const { repo, n } = mrOf(id);
+          return getMR(repo, n, '...F').then((m) => itemOf(host, m, login), () => null);
+        }));
+        const all2 = [...items, ...extra.filter((i): i is QueueItem => !!i)].map((i) => (mentions.has(i.id) && !i.authored ? { ...i, mentioned: true } : i));
+        return Promise.all(all2.map((i) => (i.requested || i.myState === 'APPROVED' ? refine(i, login) : i)));
       } catch (e) {
         if (only) throw e; // the list is this host's: say why it's empty
         recordError(`GitLab ${host}: ${(e as Error).message}`);
@@ -711,19 +1003,26 @@ export async function labClosed(prs: string[]): Promise<string[]> {
   return prs.filter((_, k) => states[k] !== 'opened');
 }
 
-// My reviews lately (the approvals and change requests GitLab noted), for History.
-// Someone's (`who`, else mine) on `only`.
+// When someone was asked to review it, from GitLab's notes ("requested review from @a and @b").
+const askedAt = (notes: any[], login: string) =>
+  notes.filter((x) => x.system && /^requested review from /.test(x.body) && new RegExp(`@${login.replace(/[.]/g, '\\.')}\\b`).test(x.body)).map((x) => x.created_at as string).sort();
+// Someone's reviews lately (`who`, else mine) on `only`, for History and their page: their approvals, change requests
+// and comments on MRs they review, those within 10 minutes of each other as one (collapseReviews), each with how long
+// after they were last asked.
 export async function getLabMyReviews(days: number, only: string, who?: string): Promise<MyReview[]> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const out: MyReview[] = [];
   for (const { host, login } of (await glabAccounts()).filter((a) => a.host === only).map((a) => ({ ...a, login: who ?? a.login }))) {
-    const mrs: any[] = await json(host, `/merge_requests?scope=all&reviewer_username=${encodeURIComponent(login)}&updated_after=${since}&per_page=50`).catch(() => []);
-    await Promise.all(mrs.map(async (m) => {
+    // ponytail: the 20 updated latest (each MR's notes is a request, and GitLab's limits are tight).
+    const mrs: any[] = await json(host, `/merge_requests?scope=all&reviewer_username=${encodeURIComponent(login)}&updated_after=${since}&order_by=updated_at&per_page=20`).catch(() => []);
+    await Promise.all(mrs.filter((m) => m.author?.username !== login).map(async (m) => {
       const notes = await pages<any>(host, `/projects/${m.project_id}/merge_requests/${m.iid}/notes?per_page=100&sort=asc`).catch(() => []);
-      for (const x of notes) {
-        const state = x.system && x.author?.username === login && x.created_at >= since && VERDICT.find(([re]) => re.test(x.body))?.[1];
-        if (state) out.push({ repo: `${host}/${m.references.full.split('!')[0]}`, number: m.iid, title: m.title, url: m.web_url, author: m.author?.username ?? 'ghost', state, at: x.created_at });
-      }
+      const reviews = notes
+        .filter((x) => x.author?.username === login)
+        .map((x) => ({ state: x.system ? VERDICT.find(([re]) => re.test(x.body))?.[1] : 'COMMENTED', submittedAt: x.created_at as string }))
+        .filter((r): r is { state: ReviewState; submittedAt: string } => !!r.state);
+      for (const r of collapseReviews(reviews, askedAt(notes, login), since))
+        out.push({ repo: `${host}/${m.references.full.split('!')[0]}`, number: m.iid, title: m.title, url: m.web_url, author: m.author?.username ?? 'ghost', ...r });
     }));
   }
   return out;

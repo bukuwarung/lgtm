@@ -94,3 +94,17 @@ test('what lgtm left for this session is handed to it once, then the file is gon
   await clock.advance(9000)
   expect(sent).toHaveLength(1)
 })
+
+test('a GitLab merge request link opens in lgtm by its host and project', async ($, on) => {
+  const runs: string[][] = []
+  on('process.run', (_, e) => (runs.push([...e.argv]), { value: ran }))
+  on('env.get', (_, e) => ({ value: e.name === 'CLAUDE_CODE_HOST_SESSION_ID' ? 'local_abc' : undefined }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>{e.props.text}</Text>
+  })
+  const ui = await $.ui.mount({ ...reply('See https://gitlab.com/acme/apps/shop/-/merge_requests/12#note_3 please.'), surface: 'desktop' })
+  await ui.press({ key: 'gitlab.com/acme/apps/shop#12' })
+  await ui.unmount()
+  expect(runs).toEqual([['open', 'lgtm://gitlab.com/acme/apps/shop/pull/12?claude=local_abc']])
+})
