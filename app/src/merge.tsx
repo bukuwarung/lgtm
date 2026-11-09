@@ -3,14 +3,20 @@ import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm } from './platform.ts';
-import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, site, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
-// Why a PR can't merge yet, from GitHub's merge state plus the checks the index already loaded.
+// Why a PR can't merge yet, from GitHub's merge state plus the checks the index already loaded. A GitLab MR's are
+// GitLab's own (its failed merge checks).
 export function blockers(s: MergeState, checks: Check[] | null): string[] {
   const failing = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
+  const runs = [failing > 0 && `${failing} failing check${failing > 1 ? 's' : ''}`, pending > 0 && `${pending} check${pending > 1 ? 's' : ''} running`];
+  if (s.reasons) {
+    const out = [...s.reasons.map((r) => r.text), ...runs].filter((x): x is string => !!x);
+    return s.mergeStateStatus === 'BLOCKED' && !out.length ? ['Blocked by project rules'] : out;
+  }
   const out = [
     s.isDraft && 'This is a draft',
     (s.mergeable === 'CONFLICTING' || s.mergeStateStatus === 'DIRTY') && 'Conflicts with the base branch',
@@ -183,6 +189,23 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
           </div>
         );
       })()}
+      {s.rules?.map((r) => (
+        <div class="merge-row merge-open">
+          <Octicon name="person" /> <b>{r.name}</b>: {r.approvedBy.length} of {r.required} approval{r.required === 1 ? '' : 's'}
+          {r.eligible.length > 0 && (
+            <span class="merge-why">
+              {' · can approve: '}
+              {r.eligible.slice(0, 6).map((l, k) => (
+                <>
+                  {k > 0 && ', '}
+                  <Who login={l} /> <button class="link" disabled={!!busy} title={`Ask @${l} to review`} onClick={() => run('ask', () => requestReview(repo, n, l))}>ask</button>
+                </>
+              ))}
+              {r.eligible.length > 6 && ` and ${r.eligible.length - 6} more`}
+            </span>
+          )}
+        </div>
+      ))}
       {qa && (
         <div class={`merge-row merge-qa${qa.thread?.status ? ' qa-' + qa.thread.status : ''}`}>
           <Octicon name="beaker" />{' '}
@@ -202,7 +225,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
       <div class="merge-row">
         {s.isDraft && <button disabled={!!busy} onClick={() => run('ready', () => markReady(s.id).then(() => (setShown(false), jumpTo('ix-reviewers'))))}>{busy === 'ready' ? 'Marking…' : 'Ready for review'}</button>}
         {s.mergeStateStatus === 'BEHIND' && s.viewerCanUpdateBranch && (
-          <button disabled={!!busy} onClick={() => run('update', () => updateBranch(s))}>{busy === 'update' ? 'Updating…' : 'Update branch'}</button>
+          <button disabled={!!busy} onClick={() => run('update', () => updateBranch(s))}>{busy === 'update' ? (s.reasons ? 'Rebasing…' : 'Updating…') : s.reasons ? 'Rebase' : 'Update branch'}</button>
         )}
         {s.methods.length > 1 && (
           <select value={m} onChange={(e) => setMethod(e.currentTarget.value as MergeMethod)} title="Merge method">

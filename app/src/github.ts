@@ -1028,7 +1028,7 @@ export async function getThreads(repo: string, n: number): Promise<Thread[]> {
 }
 
 // jobId: the GitHub Actions job, whose log the local server can fetch.
-export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string; jobId?: number; run?: string; onBase?: Check['state'] | null }; // run: a GitLab job's pipeline // onBase: the same check on the base branch's latest commit (a failing one only)
+export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string; jobId?: number; run?: string; manual?: boolean; onBase?: Check['state'] | null }; // run: a GitLab job's pipeline; manual: a GitLab job waiting to be started, that I may start // onBase: the same check on the base branch's latest commit (a failing one only)
 
 const CHECKS = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
   commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename
@@ -1095,6 +1095,8 @@ export function baseChecks(repo: string, ref: string): Promise<Map<string, Check
 export const onBaseOf = (base: Map<string, Check['state']>, c: Check) => base.get(c.name) ?? base.get(c.name.split(' / ').pop()!) ?? null;
 
 // Running failed GitHub Actions jobs again: one job (and the jobs that wait on it), or every failed job of a run.
+// A GitLab manual job started.
+export const playJob = (repo: string, jobId: number) => lab.playLabJob(repo, jobId);
 export const rerunJob = async (repo: string, jobId: number) => isLab(repo) ? lab.retryLabJob(repo, jobId) : void (await ok(await gh(`/repos/${repo}/actions/jobs/${jobId}/rerun`, { method: 'POST' })));
 export const rerunFailedJobs = async (repo: string, runId: string) =>
   isLab(repo) ? lab.retryLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, { method: 'POST' })));
@@ -1328,6 +1330,8 @@ export type MergeState = {
   methods: MergeMethod[]; // allowed in this repo, the viewer's usual one first
   message: Record<MergeMethod, { title: string; body: string }>; // GitHub's default commit message per method
   holds: string[]; // what says not to merge it yet (holdSigns)
+  reasons?: { id: string; text: string }[]; // GitLab's own word on what blocks it (its failed merge checks)
+  rules?: { name: string; required: number; approvedBy: string[]; eligible: string[] }[]; // GitLab's approval rules still unmet
 };
 
 // "Do not merge" signs: a label (do-not-merge, DNM, WIP, hold), the title ([WIP], DO NOT MERGE, DNM), or a WIP commit on

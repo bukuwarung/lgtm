@@ -5,7 +5,7 @@ import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type Plan
 import { CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { awaitsMe, earlierVerdicts, jobLog, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { awaitsMe, earlierVerdicts, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -249,6 +249,15 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
       (e) => setRerun(`couldn't: ${e.message}`),
     );
   };
+  // Start a GitLab manual job (deploy to staging, say); the checks reload once it's started.
+  const [played, setPlayed] = useState<'' | 'asking' | 'started' | string>('');
+  const play = () => {
+    setPlayed('asking');
+    playJob(repo, c.jobId!).then(
+      () => (setPlayed('started'), setTimeout(onRefresh, 3000)),
+      (e) => setPlayed(`couldn't: ${e.message}`),
+    );
+  };
   const [logErr, setLogErr] = useState('');
   const loadLog = () => (setLogErr(''), jobLog(repo, c.jobId!).then(setLog, (e) => setLogErr(e.message)));
   const toggle = () => {
@@ -265,6 +274,17 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
           {c.summary && <span class="ix-sub">{c.summary}</span>}
           {c.onBase && c.onBase !== 'neutral' && <span class="ix-sub"><OnBase c={c} branch={base} /></span>}
         </a>
+        {c.manual && c.jobId && (
+          <button
+            class={`ix-icon-btn${played === 'asking' ? ' busy' : played === 'started' ? ' done' : played ? ' failed' : ''}`}
+            title={played === 'started' ? 'Started' : played.startsWith('couldn') ? `${played}; click to try again` : 'Run this manual job'}
+            aria-label="Run this manual job"
+            disabled={played === 'asking' || played === 'started'}
+            onClick={play}
+          >
+            <Icon name={played === 'started' ? 'check' : 'play'} />
+          </button>
+        )}
         {c.state === 'failure' && c.jobId && (
           <>
             <button

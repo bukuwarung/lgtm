@@ -443,9 +443,16 @@ export const markLabReady = (id: string) => {
   const { repo, n } = mrOf(id);
   return mutate(split(repo).host, `mutation($p:ID!,$i:String!){mergeRequestSetDraft(input:{projectPath:$p,iid:$i,draft:false}){errors}}`, { p: split(repo).path, i: String(n) });
 };
-// A reviewer asked, or no longer: GitLab sets the whole list, so it's read first.
+// A reviewer asked, or no longer: GitLab sets the whole list, so it's read first. One already on it is asked again
+// (GitLab's re-request: their review state starts over), as adding them again would change nothing.
 export async function setLabReviewer(repo: string, n: number, login: string, on: boolean) {
+  const { host, path } = split(repo);
   const now = new Set<string>((await getMR(repo, n, 'reviewers{nodes{username}}')).reviewers.nodes.map((r: any) => r.username));
+  if (on && now.has(login)) {
+    const u = (await gql(host, `query($u:[String!]){users(usernames:$u,first:1){nodes{id}}}`, { u: [login] })).users?.nodes[0];
+    if (!u) throw new Error(`No one called @${login} on ${host}`);
+    return mutate(host, `mutation($p:ID!,$i:String!,$u:UserID!){mergeRequestReviewerRereview(input:{projectPath:$p,iid:$i,userId:$u}){errors}}`, { p: path, i: String(n), u: u.id });
+  }
   if (on) now.add(login);
   else now.delete(login);
   return mutate(split(repo).host, `mutation($p:ID!,$i:String!,$u:[String!]!){mergeRequestSetReviewers(input:{projectPath:$p,iid:$i,reviewerUsernames:$u,operationMode:REPLACE}){errors}}`, { p: split(repo).path, i: String(n), u: [...now] });
@@ -552,12 +559,12 @@ export async function commitLabSuggestions(repo: string, branch: string, head: s
 
 // --- pipelines as checks ---
 
-const JOB_STATE: Record<string, Check['state']> = { SUCCESS: 'success', FAILED: 'failure', CANCELED: 'neutral', CANCELING: 'neutral', SKIPPED: 'neutral', MANUAL: 'neutral' };
+const JOB_STATE: Record<string, Check['state']> = { SUCCESS: 'success', FAILED: 'failure', CANCELED: 'neutral', CANCELING: 'neutral', SKIPPED: 'neutral', MANUAL: 'neutral', SCHEDULED: 'neutral' };
 const ORDER = ['failure', 'pending', 'success', 'neutral'];
 // The head pipeline's jobs (latest try of each), failures first; "stage / job" as GitHub's are "workflow / job".
 export async function getLabChecks(repo: string, n: number): Promise<Check[]> {
   const { host } = split(repo);
-  const p = (await getMR(repo, n, 'headPipeline{id jobs(first:100){nodes{id name status allowFailure webPath retried stage{name} detailedStatus{label}}}}')).headPipeline;
+  const p = (await getMR(repo, n, 'headPipeline{id jobs(first:100){nodes{id name status allowFailure webPath retried canPlayJob stage{name} detailedStatus{label}}}}')).headPipeline;
   if (!p) return [];
   return (p.jobs.nodes as any[])
     .filter((j) => !j.retried)
@@ -568,9 +575,11 @@ export async function getLabChecks(repo: string, n: number): Promise<Check[]> {
         name: `${j.stage?.name ? `${j.stage.name} / ` : ''}${j.name}`,
         state: allowed ? 'neutral' : raw,
         url: abs(host, j.webPath) ?? null,
-        summary: allowed ? 'failed (allowed to fail)' : String(j.detailedStatus?.label ?? j.status).toLowerCase(),
+        summary: allowed ? 'failed (allowed to fail)' : j.status === 'MANUAL' ? 'manual: waits to be started' : String(j.detailedStatus?.label ?? j.status).toLowerCase(),
         jobId: num(j.id),
         run: String(num(p.id)),
+        // A job waiting for someone to start it (deploy to staging, say), that I may start.
+        manual: j.status === 'MANUAL' && !!j.canPlayJob,
       };
     })
     .sort((a, b) => ORDER.indexOf(a.state) - ORDER.indexOf(b.state) || a.name.localeCompare(b.name));
@@ -591,6 +600,7 @@ export function labBaseChecks(repo: string, ref: string): Promise<Map<string, Ch
   v.catch(() => baseSeen.delete(k));
   return v;
 }
+export const playLabJob = async (repo: string, job: number) => void (await send(split(repo).host, `/projects/${pid(repo)}/jobs/${job}/play`, 'POST'));
 export const retryLabJob = async (repo: string, job: number) => void (await send(split(repo).host, `/projects/${pid(repo)}/jobs/${job}/retry`, 'POST'));
 export const retryLabPipeline = async (repo: string, pipeline: string) => void (await send(split(repo).host, `/projects/${pid(repo)}/pipelines/${pipeline}/retry`, 'POST'));
 // The end of a job's log as GitLab writes it, colours and its collapsible-section markers taken out.
@@ -621,7 +631,17 @@ export async function getLabStatus(repo: string, n: number) {
 }
 
 type Holds = (title: string, labels: string[], headCommit: string) => string[];
-const MERGE_FIELDS = `${MR} autoMergeEnabled availableAutoMergeStrategies shouldRemoveSourceBranch forceRemoveSourceBranch sourceBranchExists
+// What GitLab says blocks the merge, each in lgtm's words (its merge checks that failed).
+const CHECK_TEXT: Record<string, string> = {
+  NOT_OPEN: "It isn't open", DRAFT_STATUS: 'This is a draft', CONFLICT: 'Conflicts with the base branch', NEED_REBASE: 'Needs a rebase onto the base branch',
+  CI_MUST_PASS: 'Its pipeline must pass', DISCUSSIONS_NOT_RESOLVED: 'Every thread must be resolved', NOT_APPROVED: 'Not approved yet',
+  REQUESTED_CHANGES: 'Changes requested', TITLE_REGEX: "Its title doesn't match the project's rule", JIRA_ASSOCIATION_MISSING: 'Needs a Jira issue key in its title or description',
+  STATUS_CHECKS_MUST_PASS: 'External status checks must pass', MERGE_TIME: 'Not before its scheduled merge time', MERGE_REQUEST_BLOCKED: 'Blocked by an MR it depends on',
+  LOCKED_PATHS: 'Changes paths someone has locked', LOCKED_LFS_FILES: 'Changes LFS files someone has locked', COMMITS_STATUS: 'Its source branch is missing or has no commits',
+  SECURITY_POLICY_VIOLATIONS: 'Security policies are violated', SECURITY_POLICY_PIPELINE_CHECK: 'A security policy pipeline must pass',
+};
+// mergeabilityChecks before the rest: like detailedMergeStatus, it reads wrong after diffStatsSummary.
+const MERGE_FIELDS = `mergeabilityChecks{identifier status} approvalState{rules{name approved approvalsRequired approvedBy{nodes{username}} eligibleApprovers{username}}} ${MR} autoMergeEnabled availableAutoMergeStrategies shouldRemoveSourceBranch forceRemoveSourceBranch sourceBranchExists
   defaultMergeCommitMessage defaultSquashCommitMessage commits(first:1){nodes{title}} userPermissions{canMerge pushToSourceBranch removeSourceBranch}`;
 export async function getLabMergeState(repo: string, n: number, holdSigns: Holds): Promise<MergeState> {
   const { host } = split(repo);
@@ -657,6 +677,10 @@ export async function getLabMergeState(repo: string, n: number, holdSigns: Holds
     methods,
     message: { MERGE: msg(m.defaultMergeCommitMessage), SQUASH: msg(m.defaultSquashCommitMessage ?? m.title), REBASE: { title: '', body: '' } },
     holds: holdSigns(m.title, m.labels.nodes.map((l: any) => l.title), m.commits?.nodes[0]?.title ?? ''),
+    reasons: state === 'OPEN' ? (m.mergeabilityChecks ?? []).filter((c: any) => c.status === 'FAILED').map((c: any) => ({ id: c.identifier, text: CHECK_TEXT[c.identifier] ?? c.identifier.toLowerCase().replace(/_/g, ' ') })) : [],
+    rules: (m.approvalState?.rules ?? [])
+      .filter((r: any) => !r.approved && r.approvalsRequired > 0)
+      .map((r: any) => ({ name: r.name, required: r.approvalsRequired, approvedBy: r.approvedBy.nodes.map((u: any) => u.username), eligible: (r.eligibleApprovers ?? []).map((u: any) => u.username) })),
   };
 }
 // Merged now, or once the pipeline passes (auto); refused if commits were pushed since (sha).
