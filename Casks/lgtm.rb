@@ -1,6 +1,6 @@
 cask "lgtm" do
-  version "0.8.0"
-  sha256 "edb72e0877cbf98aefb8d339dc2163e6226678ac27a48905e66319ff36ceb581"
+  version "0.9.0"
+  sha256 "9c513c54a737833938f6bb5158f78d87eae062739c4a8b46e36a4bbbd75ed22c"
 
   url "https://github.com/bukuwarung/lgtm/releases/download/v#{version}/lgtm-#{version}.zip"
   name "lgtm"
@@ -11,6 +11,7 @@ cask "lgtm" do
   depends_on macos: :ventura
 
   app "lgtm.app"
+  binary "#{appdir}/lgtm.app/Contents/Resources/bin/lgtm" # `lgtm [PR link]` opens the app
 
   # Not notarized (no Apple Developer account): without this, macOS blocks the app until "Open Anyway" in
   # System Settings → Privacy & Security.
