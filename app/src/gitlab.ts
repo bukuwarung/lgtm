@@ -175,10 +175,11 @@ export async function labPeople(keys: string[]): Promise<Record<string, { name: 
 
 // --- one MR ---
 
-const MR = `id iid title description descriptionHtml webUrl updatedAt createdAt draft state mergedAt closedAt mergeUser{username}
+// detailedMergeStatus first: asked after diffStatsSummary, GitLab answers CONFLICT for a mergeable MR (as of 2026-11).
+const MR = `detailedMergeStatus id iid title description descriptionHtml webUrl updatedAt createdAt draft state mergedAt closedAt mergeUser{username}
   author{username avatarUrl bot} assignees{nodes{username bot}} reviewers{nodes{username avatarUrl bot mergeRequestInteraction{reviewState}}}
   sourceBranch targetBranch sourceProject{fullPath} targetProject{fullPath} diffHeadSha diffRefs{baseSha headSha startSha}
-  diffStatsSummary{additions deletions fileCount} labels{nodes{title}} approved detailedMergeStatus`;
+  diffStatsSummary{additions deletions fileCount} labels{nodes{title}} approved`;
 const WAITING = ['UNREVIEWED', 'REVIEW_STARTED', 'UNAPPROVED'];
 const prOf = (host: string, m: any): PR => ({
   number: Number(m.iid),
@@ -596,6 +597,7 @@ export const retryLabPipeline = async (repo: string, pipeline: string) => void (
 export async function labJobLog(repo: string, job: number): Promise<string> {
   const r = await lab(split(repo).host, `/projects/${pid(repo)}/jobs/${job}/trace`);
   return (await r.text())
+    .replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z [0-9a-f]{2}[OE]\+? ?/gim, '') // a timestamped log's line prefix (time, stream)
     .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
     .replace(/section_(start|end):\d+:[\w.-]+(\[[^\]]*\])?\r?/g, '')
     .split('\n')
@@ -658,16 +660,24 @@ export async function getLabMergeState(repo: string, n: number, holdSigns: Holds
   };
 }
 // Merged now, or once the pipeline passes (auto); refused if commits were pushed since (sha).
-export function mergeLab(s: MergeState, method: MergeMethod, title: string, body: string, auto: boolean) {
+// GitLab's refusals as what they mean: 405, it can't merge now (or set auto-merge: its pipeline failed, say); 406, the
+// branch can't merge (conflicts, a rule); 409, commits arrived since.
+export async function mergeLab(s: MergeState, method: MergeMethod, title: string, body: string, auto: boolean) {
   const { repo, n } = mrOf(s.id);
   const message = [title, body].filter(Boolean).join('\n\n');
-  return send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}/merge`, 'PUT', {
+  const why: Record<string, string> = {
+    '405': auto ? "GitLab won't set auto-merge now: its pipeline has likely failed or finished; reload to see where it stands" : "GitLab won't merge it now: reload to see what's in the way",
+    '406': "GitLab can't merge this branch: it may have conflicts, or a project rule blocks it",
+    '409': 'New commits were pushed since: reload, then merge again',
+  };
+  return mergeRequest().catch((e: Error) => Promise.reject(new Error(why[e.message.match(/^GitLab (\d+)/)?.[1] ?? ''] ?? e.message)));
+  function mergeRequest() { return send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}/merge`, 'PUT', {
     sha: s.headRefOid,
     squash: method === 'SQUASH',
     ...(message && method !== 'REBASE' ? (method === 'SQUASH' ? { squash_commit_message: message } : { merge_commit_message: message }) : {}),
     should_remove_source_branch: s.deleteBranchOnMerge,
     ...(auto ? { auto_merge: true, merge_when_pipeline_succeeds: true } : {}),
-  });
+  }); }
 }
 export const cancelLabAutoMerge = (id: string) => {
   const { repo, n } = mrOf(id);
@@ -851,8 +861,10 @@ export async function labTicketPRs(repo: string, n: number, keys: string[]): Pro
   if (!keys.length) return [];
   const { host, path } = split(repo);
   const found = new Map<number, any>();
+  // The top-level group's MRs; a project under a person (no group) searches its own.
+  const where = (await lab(host, `/groups/${encodeURIComponent(path.split('/')[0])}`).catch(() => null))?.ok ? `/groups/${encodeURIComponent(path.split('/')[0])}` : `/projects/${pid(repo)}`;
   for (const k of keys)
-    for (const m of await json(host, `/groups/${encodeURIComponent(path.split('/')[0])}/merge_requests?state=all&per_page=30&search=${encodeURIComponent(k)}`).catch(() => []))
+    for (const m of await json(host, `${where}/merge_requests?state=all&per_page=30&search=${encodeURIComponent(k)}`).catch(() => []))
       found.set(m.id, m);
   return [...found.values()]
     .map((m): TicketPR => ({
