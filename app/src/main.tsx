@@ -253,10 +253,10 @@ function BellMenu() {
 function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
   const [showDrafts] = useStoredFlag('showDrafts', false);
   if (!items) return <p class="note page empty">Pick a PR from the list, or paste a PR link in the box at the top (⌘K).</p>;
-  const needs = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts));
+  const needs = toReview(items, showDrafts);
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
-  const replies = items.reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0);
+  const replies = repliesWaiting(items);
   const cards: [string, number | string, string, string][] = [
     ['reviewing', needs.length, 'need your review', needs.length ? 'Open the Reviewing tab' : ''],
     ['reviewing', oldest ? ago(oldest).replace(/ ago$/, '') : '–', 'oldest wait', oldest ? `Since ${new Date(oldest).toLocaleString()}` : ''],
@@ -388,7 +388,7 @@ function App() {
   // after the ready ones.
   const [showDrafts] = useStoredFlag('showDrafts', false);
   const needs = (items: QueueItem[], skip: string[], practice = rm?.practice) => {
-    const l = items.filter((i) => (practice ? i.mine : i.reviewing && groupOf(i) === 'needs') && (!i.isDraft || (showDrafts && !practice)) && !skip.includes(`${i.repo}#${i.number}`));
+    const l = (practice ? items.filter((i) => i.mine && !i.isDraft) : toReview(items, showDrafts)).filter((i) => !skip.includes(`${i.repo}#${i.number}`));
     return rm || practice ? l.sort((a, b) => +a.isDraft - +b.isDraft || a.waitingSince.localeCompare(b.waitingSince)) : l; // review mode: longest-waiting first
   };
   const goNext = async (from: { repo: string; n: number } | null, notice: { text: string; ok: boolean } | null, skip = rm?.seen ?? [], practice = rm?.practice) => {
@@ -455,7 +455,7 @@ function App() {
   const [backTo, setBackTo] = useState('');
   const [failure, setFailure] = useState(''); // platform.ts reportError
   const [queueItems, setQueueItems] = useState<QueueItem[] | null>(null); // the list's, for the start page
-  const replies = (queueItems ?? []).reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0); // threads and mentions waiting on my reply, for the inbox button
+  const replies = repliesWaiting(queueItems ?? []); // threads and mentions waiting on my reply, for the inbox button
   const [, setPrTab] = useStoredValue('prTab', 'reviewing');
   useEffect(() => {
     const show = (e: Event) => setFailure((e as CustomEvent<string>).detail);
@@ -939,6 +939,11 @@ const backToMe = (i: QueueItem) => !i.requested && !!i.myState && i.myState !== 
 const reReview = (i: QueueItem) => (i.requested && (!!i.myState || i.reviewedBefore)) || backToMe(i);
 // Waiting for my review: the list's "Needs your review" (the badge counts these).
 const needsMyReview = (i: QueueItem) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft;
+// What every count of "waiting for you" reads, so the list, the start page, Review Mode, the Dock badge, the window title
+// and the menu bar agree: the PRs in "Needs your review" (drafts too while the list shows them), and the threads and
+// mentions waiting on your reply (the inbox).
+const toReview = (items: QueueItem[], showDrafts: boolean) => items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts));
+const repliesWaiting = (items: QueueItem[]) => items.reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0);
 const groupOf = (i: QueueItem): Group =>
   !i.reviewing && i.mentioned ? 'mentioned'
   : i.requested || backToMe(i) ? 'needs'
@@ -1349,10 +1354,10 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   }, [items]);
   useEffect(() => {
     if (!items || !settled) return;
-    const waiting = items.filter(needsMyReview);
+    const waiting = toReview(items, showDrafts);
     // The badge also counts PRs whose Claude Code session is waiting for you, and (Settings) the inbox: threads and
     // mentions waiting on your reply, as the inbox button counts them.
-    const inbox = badgeInbox ? items.reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0) : 0;
+    const inbox = badgeInbox ? repliesWaiting(items) : 0;
     const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length + inbox;
     document.title = count ? `(${count}) lgtm` : 'lgtm';
     void setBadge(count); // the app's Dock icon
@@ -1389,7 +1394,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     seen.current = new Set(waiting.map((i) => i.id));
     rulesWas.current = rules;
     before.current = new Map(items.map((i) => [i.id, i]));
-  }, [items, settled, claude, menuBar, badgeInbox]);
+  }, [items, settled, claude, menuBar, badgeInbox, showDrafts]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
@@ -1587,7 +1592,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         <button class="primary review-all" onClick={() => onReview()} title="The PRs that need your review, longest-waiting first, with nothing else on screen (⇧⌘R in the app)">
           <Octicon name="play" /> Review {c} PR{c > 1 ? 's' : ''}
         </button>
-      ))(shown.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts)).length)}
+      ))(toReview(shown, showDrafts).length)}
       {(tab === 'reviewing' || tab === 'team') && ((c) => c > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
           {showDrafts ? `Hide ${c} draft PR${c > 1 ? 's' : ''}` : `${c} draft PR${c > 1 ? 's' : ''} hidden · show`}

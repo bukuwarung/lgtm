@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
-import { Octicon, Who, Retry } from './tags.tsx';
+import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
@@ -80,12 +80,16 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
     </div>
   );
 
-  const load = (tries = 0) =>
+  const [loading, setLoading] = useState(false); // fetching again, the last answer still shown
+  const load = (tries = 0) => (
+    setLoading(true),
     getMergeState(repo, n).then((x) => {
       setS(x);
+      setLoading(false);
       // GitHub computes mergeability in the background after a push; ask again shortly.
       if (x.state === 'OPEN' && x.mergeStateStatus === 'UNKNOWN' && tries < 5) setTimeout(() => load(tries + 1), 3000);
-    }, (e) => setErr(e.message));
+    }, (e) => (setErr(e.message), setLoading(false)))
+  );
   useEffect(() => void load(), [repo, n, checks]); // checks reloaded: the merge state may have moved too
   const [required, setRequired] = useState<string[]>([]);
   useEffect(() => void (s?.baseRefName && requiredChecks(repo, s.baseRefName).then(setRequired)), [repo, s?.baseRefName]);
@@ -151,6 +155,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
     <div class={`panel merge m-${tone}`}>
       <div class="merge-head">
         <b>{headline}</b>
+        {loading && <Updating />}
         {!ready && why.length > 0 && <span class="merge-why">{why.join(' · ')}</span>}
         {conflict && <a href={`${url}/conflicts`} target="_blank" rel="noopener">Resolve conflicts on GitHub</a>}
       </div>

@@ -81,6 +81,7 @@ code, pre { font-family: var(--mono); }
 .side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
 .prs .side-scroll { padding: 8px; }
 .review-all { width: 100%; margin-bottom: 6px; }
+.updating { display: inline-flex; align-items: center; gap: 6px; font-size: calc(11px * var(--ts)); font-weight: 400; color: var(--muted); }
 .list-updating { display: flex; align-items: center; gap: 6px; margin: 0 4px 6px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .sk-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: sk-pulse 1s ease-in-out infinite alternate; }
 @keyframes sk-pulse { from { opacity: .3; } to { opacity: 1; } }

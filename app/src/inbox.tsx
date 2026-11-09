@@ -3,7 +3,7 @@ import { uniqueNames } from './files.ts';
 import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
 import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
-import { Tg, Who, Time, Retry } from './tags.tsx';
+import { Tg, Who, Time, Retry, Updating } from './tags.tsx';
 
 // Every review thread waiting on my reply (#/inbox): in the PRs in my list (only those the list already counts one
 // waiting in are asked for their threads), and in PRs merged lately that I opened or reviewed, where a reply after
@@ -81,6 +81,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   let k = 0;
   return (
     <div class="page history inbox">
+      {pending && <p class="list-updating"><Updating /></p>}
       {loadErr && <p class="error">Couldn't load your threads: {loadErr} <Retry onClick={() => (setLoadErr(''), setList(null), setTries((t) => t + 1))} /></p>}
       <h2>Waiting on your reply</h2>
       <p class="note">

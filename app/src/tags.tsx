@@ -145,3 +145,8 @@ export function Fold({ k, initial = true, class: cls, id, children }: { k: strin
     </details>
   );
 }
+
+// Shown from an earlier copy while a fresh one loads, as the list and the PR page say it.
+export const Updating = () => (
+  <span class="updating" role="status"><span class="sk-dot" /> updating…</span>
+);
