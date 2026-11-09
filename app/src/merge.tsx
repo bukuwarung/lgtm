@@ -42,7 +42,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
   const [bypass, setBypass] = useState(false);
   const [dropBranch, toggleDropBranch] = useStoredFlag('deleteBranch', true);
   // Its Jira tickets that aren't done, moved as it merges when ticked (Settings → Reviewing ticks it to start with).
-  const [moveOnMerge] = useStoredFlag('jiraOnMerge', false);
+  const [moveOnMerge] = useStoredFlag('jiraOnMerge', true);
   const [jiraTo] = useStoredValue('jiraAfterMerge', 'Done');
   const [to, setTo] = useState(jiraTo); // this merge's, from the usual one
   const [moveTickets, setMoveTickets] = useState(moveOnMerge);

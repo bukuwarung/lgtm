@@ -506,14 +506,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
   const [foldNoDiff] = useStoredFlag('hideNoDiff', true);
   const [foldArchived] = useStoredFlag('hideArchivedSpecs', true);
-  const [startSince] = useStoredFlag('sinceFirst', true);
+  const [startSince] = useStoredFlag('sinceFirst', false);
   const [resumeOn] = useStoredFlag('resumePosition', false);
   const [dimMoved] = useStoredFlag('dimMoved', true);
   const index = useStoredFlag('showIndex', true);
   const focusIndex = useStoredFlag('reviewModeIndex', false);
   // Settings → "Hide the index on PRs waiting for your review": such a PR opens without it; i (or the button) shows it,
   // on this PR only. Decided once the PR and I are known (until then, without), so a review sent doesn't bring it back.
-  const [hideToReview] = useStoredFlag('hideIndexToReview', false);
+  const [hideToReview] = useStoredFlag('hideIndexToReview', true);
   const [toReview, setToReview] = useState<boolean | null>(null);
   const [peek, setPeek] = useState(false);
   const quiet = !focus && hideToReview && toReview !== false && index[0];
@@ -523,9 +523,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [ixOver, setIxOver] = useState(false);
   useDismiss(narrowIx && ixOver, () => setIxOver(false), '.side.tree, .bar-index');
   const [showIndex, toggleIndex] = narrowIx ? ([ixOver, () => setIxOver((o) => !o)] as const) : focus ? focusIndex : quiet ? ([peek, () => setPeek((p) => !p)] as const) : index;
-  const [centered, toggleCentered] = useStoredFlag('centerDiff', false);
+  const [centered, toggleCentered] = useStoredFlag('centerDiff', true);
   const [split, toggleSplit] = useStoredFlag('splitDiff', false);
-  const [fit] = useStoredFlag('centerFit', true);
+  const [fit] = useStoredFlag('centerFit', false);
   const [cols] = useStoredValue('centerCols', '120');
   useEffect(() => {
     const show = () => !showIndex && toggleIndex();
@@ -555,7 +555,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     return () => removeEventListener('lgtm:help', open);
   }, []);
   const [status, setStatus] = useState<Awaited<ReturnType<typeof getStatus>> | null>(null);
-  const [ignoreWs, toggleWs] = useStoredFlag('ignoreWs', false);
+  const [ignoreWs, toggleWs] = useStoredFlag('ignoreWs', true);
   const [changedSinceVisit, setChangedSinceVisit] = useState<Set<string>>(new Set());
   const resumeAt = useRef<Visit['at']>(null);
   const visitKey = `visit:${repo}#${n}`;
@@ -869,7 +869,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   });
 
   const [readingOrder] = useStoredFlag('readingOrder', true); // files in the plan's order, else GitHub's
-  const [qaRequest] = useStoredFlag('qaRequest', false); // Settings → Slack: the Ask QA button on my PRs
+  const [qaRequest] = useStoredFlag('qaRequest', true); // Settings → Slack: the Ask QA button on my PRs
   const [stepsSaved] = useStoredValue('readingSteps', ''); // its steps' order, if dragged into another
   const [paused, setPaused] = useState(''); // GraphQL's limit used up: the threads couldn't load
   // Settings → Checks and → Android: what lgtm points out.
@@ -910,7 +910,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     ]).then(([mig, ent]) => !stop && setBackend({ mig, ent }), () => {});
     return () => void (stop = true);
   }, [data?.files, chkMigrations, chkJpa]);
-  const [showPlan] = useStoredFlag('reviewPlan', true);
+  const [showPlan] = useStoredFlag('reviewPlan', false);
   // Room tables changed with no database version raised (room.ts): it reads the files it needs, so after the PR.
   const [room, setRoom] = useState<SchemaChange[]>([]);
   useEffect(() => {
@@ -2682,7 +2682,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   // One line number, the new one (a removed line shows its old one, faint), unless Settings asks for both.
   const [oldNums] = useStoredFlag('oldLineNumbers', false);
   const path = file.filename;
-  const [rainbowOn] = useStoredFlag('rainbowBrackets', false); // highlightCode reads it (main.tsx sets it)
+  const [rainbowOn] = useStoredFlag('rainbowBrackets', true); // highlightCode reads it (main.tsx sets it)
   const hl = useMemo(() => highlightHunks(hunks, path), [hunks, rainbowOn]);
   // "Show more lines": unchanged stretches come from the head version of the file, fetched on first use.
   const gapList = useMemo(() => (file.status === 'added' || file.status === 'removed' ? [] : gaps(hunks)), [hunks]);
@@ -2853,7 +2853,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   const [renderDocs] = useStoredFlag('renderDocs', true);
   const [renderEdited] = useStoredFlag('renderEditedDocs', true); // edited ones too, changed parts marked
   const [renderLine] = useStoredFlag('renderLineComments', true); // runs of // comments too
-  const [renderSingle] = useStoredFlag('renderSingleComments', false); // and lone comment lines
+  const [renderSingle] = useStoredFlag('renderSingleComments', true); // and lone comment lines
   // Side by side (Settings → Diff, or the bar's button): old and new as two halves of each row, removed lines paired
   // with the added ones after them. Doc comments stay as source there.
   const [split] = useStoredFlag('splitDiff', false);
@@ -4063,7 +4063,7 @@ function TicketPRs({ repo, n, keys }: { repo: string; n: number; keys: string[] 
 function Ticket({ id, lang }: { id: string; lang?: string }) {
   const [issue, setIssue] = useState<JiraIssue | null>(() => jiraSeen()[id] ?? null);
   const [err, setErr] = useState('');
-  const [open, toggle] = useStoredFlag('ticketOpen', true);
+  const [open, toggle] = useStoredFlag('ticketOpen', false);
   const [tries, setTries] = useState(0);
   useEffect(() => void fetchJira(id).then((i) => (setIssue(i), keepJira(i), setErr('')), (e) => setErr(e.message)), [id, tries]);
   if (err && !issue) return <p class="note ticket-err">Jira {id}: {err} <Retry onClick={() => (setErr(''), setTries((t) => t + 1))} /></p>;

@@ -85,8 +85,10 @@ export const CODE_FONTS: Record<string, { name: string; family: string; load?: (
 const FALLBACK = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 // The text sizes, in px: the app's text and the diff's code (style.css scales every size by --ts / --cs).
-export const TEXT_SIZE = 14;
+export const TEXT_SIZE = 14; // the sizes the styles are written at (--ts and --cs scale them)
 export const CODE_SIZE = 12;
+export const TEXT_DEFAULT = 13; // the sizes lgtm starts at
+export const CODE_DEFAULT = 11;
 
 // Every app theme: lgtm's own (the stylesheet's colours, so nothing to set), the built-in ones, and ones added in
 // Settings (saved as JSON under myThemes).
@@ -165,9 +167,9 @@ let applied: string[] = []; // the colour properties set on the page, to take of
 // Applies the saved app theme, code colours and font, and the text sizes, to the page (once, in App), and gives
 // Settings the setters. Code colours "theme": the app theme's own (lgtm's own look: Classic).
 export function useCodeLook() {
-  const [appTheme, setAppTheme] = useStoredValue('appTheme', 'lgtm');
+  const [appTheme, setAppTheme] = useStoredValue('appTheme', 'one');
   const [mine, setMine] = useStoredValue('myThemes', '{}');
-  const [theme, setTheme] = useStoredValue('codeTheme', 'theme');
+  const [theme, setTheme] = useStoredValue('codeTheme', 'intellij');
   const [font, setFont] = useStoredValue('codeFont', 'jetbrains');
   const tried = useTrial();
   const [themeColors] = useStoredFlag('themeColors', true); // lgtm's marks in the theme's colours (markProps)
@@ -188,8 +190,8 @@ export function useCodeLook() {
     void f.load?.();
     document.documentElement.style.setProperty('--mono', `${f.family}, ${FALLBACK}`);
   }, [font]);
-  const [textSize, setTextSize] = useStoredValue('textSize', String(TEXT_SIZE));
-  const [codeSize, setCodeSize] = useStoredValue('codeSize', String(CODE_SIZE));
+  const [textSize, setTextSize] = useStoredValue('textSize', String(TEXT_DEFAULT));
+  const [codeSize, setCodeSize] = useStoredValue('codeSize', String(CODE_DEFAULT));
   useEffect(() => document.documentElement.style.setProperty('--ts', String(Number(textSize) / TEXT_SIZE)), [textSize]);
   useEffect(() => document.documentElement.style.setProperty('--cs', String(Number(codeSize) / CODE_SIZE)), [codeSize]);
   return { appTheme, setAppTheme, mine, setMine, theme, setTheme, font, setFont, textSize: Number(textSize), setTextSize, codeSize: Number(codeSize), setCodeSize };

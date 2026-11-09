@@ -18,7 +18,7 @@ import { History } from './history.tsx';
 import { PersonPage, toPerson } from './person.tsx';
 import { Inbox } from './inbox.tsx';
 import { DemoPage } from './demos.tsx';
-import { CODE_SIZE, TEXT_SIZE, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
+import { CODE_DEFAULT, TEXT_DEFAULT, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 import { hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
@@ -200,7 +200,7 @@ const standing = (i: QueueItem) =>
 function BellMenu() {
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState('');
-  const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
+  const [notify, toggleNotify] = useStoredFlag('notifyRequests', true);
   const [list, setList] = useState(notices);
   useEffect(() => {
     const h = () => setList(notices());
@@ -388,9 +388,9 @@ function App() {
   // Glass (Settings → Appearance), unless macOS asks for less transparency.
   const [glass] = useStoredFlag('glass', true);
   useEffect(() => void document.documentElement.classList.toggle('glass', glass && !matchMedia('(prefers-reduced-transparency: reduce)').matches), [glass]);
-  const [rainbowOn] = useStoredFlag('rainbowBrackets', false); // Settings → Diff
+  const [rainbowOn] = useStoredFlag('rainbowBrackets', true); // Settings → Diff
   setRainbow(rainbowOn); // before the page below highlights anything
-  const [tagStyle] = useStoredValue('tagStyle', 'both'); // Settings → Appearance: tags as text, icons or both
+  const [tagStyle] = useStoredValue('tagStyle', 'icons'); // Settings → Appearance: tags as text, icons or both
   useEffect(() => {
     document.documentElement.classList.toggle('tags-text', tagStyle === 'text');
     document.documentElement.classList.toggle('tags-icons', tagStyle === 'icons');
@@ -401,16 +401,16 @@ function App() {
   useEffect(() => void document.documentElement.classList.toggle('no-file-footer', !footer), [footer]);
   const [signs] = useStoredFlag('diffSigns', false); // Settings → Diff: + and − before changed lines
   useEffect(() => void document.documentElement.classList.toggle('no-signs', !signs), [signs]);
-  const [centered] = useStoredFlag('centerDiff', false); // Settings → Diff, or the PR header: the page at a reading width
+  const [centered] = useStoredFlag('centerDiff', true); // Settings → Diff, or the PR header: the page at a reading width
   useEffect(() => void document.documentElement.classList.toggle('center-diff', centered), [centered]);
   const [cols] = useStoredValue('centerCols', '120'); // its width, in columns of code
   useEffect(() => document.documentElement.style.setProperty('--cols', cols), [cols]);
-  const [lineStyle] = useStoredValue('lineStyle', 'fill'); // Settings → Diff: changed lines filled, tinted or barred
+  const [lineStyle] = useStoredValue('lineStyle', 'subtle'); // Settings → Diff: changed lines filled, tinted or barred
   useEffect(() => {
     document.documentElement.classList.toggle('ln-subtle', lineStyle === 'subtle');
     document.documentElement.classList.toggle('ln-bar', lineStyle === 'bar');
   }, [lineStyle]);
-  const [wordStyle] = useStoredValue('wordStyle', 'fill'); // Settings → Diff: changed words filled, boxed or squiggled
+  const [wordStyle] = useStoredValue('wordStyle', 'squiggle'); // Settings → Diff: changed words filled, boxed or squiggled
   useEffect(() => {
     document.documentElement.classList.toggle('wd-box', wordStyle === 'box');
     document.documentElement.classList.toggle('wd-squiggle', wordStyle === 'squiggle');
@@ -526,8 +526,8 @@ function App() {
   // ⌘+ / ⌘− / ⌘0, as in a browser: the text sizes (Settings → Appearance) a step up, down, or back; code keeps pace.
   // The app's View menu has them (its keys never reach the page); in a browser, the keys here.
   const textStep = (step: number) => {
-    const text = step ? Math.min(20, Math.max(11, look.textSize + step)) : TEXT_SIZE;
-    const code = step ? Math.min(18, Math.max(10, look.codeSize + step)) : CODE_SIZE;
+    const text = step ? Math.min(20, Math.max(11, look.textSize + step)) : TEXT_DEFAULT;
+    const code = step ? Math.min(18, Math.max(10, look.codeSize + step)) : CODE_DEFAULT;
     look.setTextSize(String(text));
     look.setCodeSize(String(code));
     say({ text: `Text ${text}px · code ${code}px` }, 1500);
@@ -1238,9 +1238,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const [fresh, setFresh] = useState(false);
   // Settings → "Mute replies and mentions on PRs you've approved": their threads wait on no one here (no pill, count,
   // bell entry or inbox thread), until my latest verdict is something else.
-  const [muteApproved] = useStoredFlag('muteApproved', false);
+  const [muteApproved] = useStoredFlag('muteApproved', true);
   const [badgeInbox] = useStoredFlag('badgeInbox', false); // Settings → App: the inbox counts on the Dock badge too
-  const [agents] = useStoredFlag('agentsAsBots', false); // 🤖 comments as a bot's: thread counts asked again
+  const [agents] = useStoredFlag('agentsAsBots', true); // 🤖 comments as a bot's: thread counts asked again
   const rules = `${muteApproved}${agents}`;
   const rulesWas = useRef(rules); // as the last notifications saw them
   const agentsWas = useRef(agents);
@@ -1258,7 +1258,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const [showDrafts, toggleDrafts] = useStoredFlag('showDrafts', false);
   const showDraftsRef = useRef(showDrafts); // the refresh timer closes over the first render
   showDraftsRef.current = showDrafts;
-  const [paceRaw] = useStoredValue('reviewPace', '100'); // Settings → Time to review: estimates ÷ your pace
+  const [paceRaw] = useStoredValue('reviewPace', '150'); // Settings → Time to review: estimates ÷ your pace
   const pace = (Number(paceRaw) || 100) / 100;
   const [tabValue, setTab] = useStoredValue('prTab', 'reviewing'); // which tab, remembered
   const tab = tabValue as Tab;
@@ -1357,7 +1357,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     const t = setInterval(() => (!document.hidden || Date.now() - lastLoad.current > 9.5 * 60_000) && load(), 3 * 60 * 1000);
     return () => clearInterval(t);
   }, []);
-  const [notify] = useStoredFlag('notifyRequests', false);
+  const [notify] = useStoredFlag('notifyRequests', true);
   const [menuBar] = useStoredFlag('menuBar', true);
   const [notifyReplies] = useStoredFlag('notifyReplies', true);
   const [notifyVerdicts] = useStoredFlag('notifyVerdicts', true);

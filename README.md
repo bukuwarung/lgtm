@@ -77,7 +77,7 @@ gh auth login   # once, if you haven't
 - Files in reading order: specs and docs, build and config, models, the implementation (each test right below its class), other tests, then resources. Drag the steps into your own order; the index groups files by step, or as folders.
 - Files grouped by module, with code changed but no test.
 - Re-reviews show only what changed since your last one, and your threads say whether their lines moved.
-- An index: reviewers; the conversation (comments, reviews and review threads together, what waits on your reply first); checks (failed-job logs, and whether `main` fails them too, or a required one that never ran); and files, following your scroll, with what's hidden behind a row. Big PRs get a review plan. It can start hidden on PRs waiting for your review, and sections stay folded as you leave them.
+- An index: reviewers; the conversation (comments, reviews and review threads together, what waits on your reply first); checks (failed-job logs, and whether `main` fails them too, or a required one that never ran); and files, following your scroll, with what's hidden behind a row. Big PRs can get a review plan (a switch). It can start hidden on PRs waiting for your review, and sections stay folded as you leave them.
 - A merged, closed or draft PR says so at the top; a review of a merged or closed one is a comment.
 - In the conversation, bot comments wait behind one line, each review lists its comments on the code, and a reviewer's earlier verdict folds under their latest.
 - Other PRs for the same Jira ticket, in any of your repos, under the ticket.
@@ -108,9 +108,9 @@ lgtm reads the diff for what's easy to miss, and says so in a pill with a commen
 
 ## Less to read
 
-On by default, each with a switch and a preview in Settings:
+Each with a switch and a preview in Settings, on unless it says otherwise:
 
-- **Since your last review:** re-reviews show only what's new.
+- **Since your last review:** re-reviews show only what's new (off to start with).
 - **Fold imports**, naming only new libraries.
 - **Generated, moved and deleted files** wait behind one row each.
 - **Moved code** dimmed, with where it came from.

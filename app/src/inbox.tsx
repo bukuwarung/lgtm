@@ -24,7 +24,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   };
   const [cur, setCur] = useState(0); // the thread the keys act on, in page order
   const asked = (items ?? []).filter((i) => (i.thread?.awaiting ?? 0) > 0);
-  const [muteApproved] = useStoredFlag('muteApproved', false); // Settings: nothing from PRs I've approved
+  const [muteApproved] = useStoredFlag('muteApproved', true); // Settings: nothing from PRs I've approved
   // Asked for comments mentioning me: the list's mentioning PRs and mine, unless the list already knows none waits.
   const named = (items ?? []).filter((i) => (i.mentioned || i.authored) && i.mentionWaiting !== false && !(muteApproved && i.myState === 'APPROVED'));
   // A refresh asks again about the PRs that changed: until it knows, what's shown stays (and a reply being typed with it).

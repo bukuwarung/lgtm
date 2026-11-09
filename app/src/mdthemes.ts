@@ -147,7 +147,7 @@ export function useAppDark() {
 // Returns the style, its setter (null: dark goes back to following light), and whether dark follows light.
 export function useMdStyle(mode?: 'light' | 'dark') {
   const dark = useAppDark();
-  const [light, setLight] = useStoredValue('mdStyle', '{"theme":"lgtm"}');
+  const [light, setLight] = useStoredValue('mdStyle', '{"theme":"linen","measure":0}');
   const [darkRaw, setDark] = useStoredValue('mdStyleDark', '');
   const m = mode ?? (dark ? 'dark' : 'light');
   const same = m === 'dark' && !darkRaw;

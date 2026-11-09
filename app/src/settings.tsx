@@ -8,7 +8,7 @@ import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './
 import { DemoPair } from './demos.tsx';
 import { SlackPreview } from './emojibox.tsx';
 import { highlightCode } from './highlight.ts';
-import { CODE_FONTS, CODE_SIZE, CODE_THEMES, TEXT_SIZE, useCodeLook, allThemes, saveTheme, setTrial } from './look.ts';
+import { CODE_FONTS, CODE_DEFAULT, CODE_THEMES, TEXT_DEFAULT, useCodeLook, allThemes, saveTheme, setTrial } from './look.ts';
 import { fromVSCode, fromVSCodeSet, fromZedFile, parseThemeFile, pickVariant, vsAppearance, withIncludes, type AppTheme } from './themes.ts';
 import { ThemeThumb } from './themecard.tsx';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
@@ -40,7 +40,7 @@ export function useTheme() {
 // sub-switches: indented under it, and greyed out while it's off.
 // How added and removed lines are marked: filled (GitHub's way), a lighter tint, or just a bar at their left edge.
 function LineStyle() {
-  const [style, setStyle] = useStoredValue('lineStyle', 'fill');
+  const [style, setStyle] = useStoredValue('lineStyle', 'subtle');
   return (
     <div class="set-row">
       <span>Changed lines</span>
@@ -57,7 +57,7 @@ function LineStyle() {
 
 // How changed words are marked: filled (GitHub's way), boxed, or a wavy underline like a typo's.
 function WordStyle() {
-  const [style, setStyle] = useStoredValue('wordStyle', 'fill');
+  const [style, setStyle] = useStoredValue('wordStyle', 'squiggle');
   return (
     <div class="set-row">
       <span>Style</span>
@@ -75,7 +75,7 @@ function WordStyle() {
 // Tags and pills (a file's added / modified, a PR's "CI failing"…) as words, icons or both. Icons alone say their words
 // on hover; numbers always show.
 function TagStyle() {
-  const [style, setStyle] = useStoredValue('tagStyle', 'both');
+  const [style, setStyle] = useStoredValue('tagStyle', 'icons');
   return (
     <div class="set-row">
       <span>
@@ -289,7 +289,7 @@ export function Settings() {
   const [keys] = useBindings();
   const also = (k: string) => (k ? `Also ${keyLabel(k)} on a PR.` : undefined);
   const [team, setTeam] = useStoredValue('team', '');
-  const [notify, toggleNotify] = useStoredFlag('notifyRequests', false);
+  const [notify, toggleNotify] = useStoredFlag('notifyRequests', true);
   const [teams, setTeams] = useState<string[] | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [ints, setInts] = useState<Integrations | null>(null);
@@ -368,7 +368,7 @@ export function Settings() {
         <div class="set-group">
           <h4>Slack</h4>
           {ints?.slack.ok && <SlackPeople team={team} />}
-          <Flag k="qaRequest" initial={false} label="A button to ask QA, on your PRs" hint="Ask QA posts your QA request to the channel below, filled in from the PR: you read and can change it before it goes. Its wording is under Messages." demo>
+          <Flag k="qaRequest" initial={true} label="A button to ask QA, on your PRs" hint="Ask QA posts your QA request to the channel below, filled in from the PR: you read and can change it before it goes. Its wording is under Messages." demo>
             <QaChannel />
           </Flag>
           <SlackMessages />
@@ -380,7 +380,7 @@ export function Settings() {
       <section>
         <h3>PR list</h3>
         <Flag k="showDrafts" initial={false} label="Show other people's draft PRs" hint="Your own drafts always show."  demo />
-        <Flag k="muteApproved" initial={false} label="Mute replies and mentions on PRs you've approved" hint="No “awaiting your reply”, no inbox entry, no notification, while your latest review is an approval. New commits that dismiss it, or another verdict, bring them back. The PR itself still shows its threads." demo />
+        <Flag k="muteApproved" initial={true} label="Mute replies and mentions on PRs you've approved" hint="No “awaiting your reply”, no inbox entry, no notification, while your latest review is an approval. New commits that dismiss it, or another verdict, bring them back. The PR itself still shows its threads." demo />
         <label class="set-row">
           <input
             type="checkbox"
@@ -424,10 +424,10 @@ export function Settings() {
       <section>
         <h3>Reviewing</h3>
         <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)}  demo />
-        <Flag k="hideIndexToReview" initial={false} label="Hide the index on PRs waiting for your review" hint={`They open with just the diff; ${keys.index ? keyLabel(keys.index) + ' or the index button' : 'the index button'} shows it, on that PR only. Your own PRs and the rest keep it.`} demo />
-        <Flag k="ignoreWs" initial={false} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
-        <Flag k="ticketOpen" initial={true} label="Expand the Jira ticket above the conversation"  demo />
-        <Flag k="jiraOnMerge" initial={false} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge."  demo />
+        <Flag k="hideIndexToReview" initial={true} label="Hide the index on PRs waiting for your review" hint={`They open with just the diff; ${keys.index ? keyLabel(keys.index) + ' or the index button' : 'the index button'} shows it, on that PR only. Your own PRs and the rest keep it.`} demo />
+        <Flag k="ignoreWs" initial={true} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
+        <Flag k="ticketOpen" initial={false} label="Expand the Jira ticket above the conversation"  demo />
+        <Flag k="jiraOnMerge" initial={true} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge."  demo />
         <JiraAfterMerge />
         <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Specs and docs, then build and config, models and contracts, the implementation (each file with its tests right below it), other tests, and last resources and assets. Off: GitHub's order, by path. Drag the steps into the order you read in." demo>
           <ReadingSteps />
@@ -441,7 +441,7 @@ export function Settings() {
 
       <section>
         <h3>Diff</h3>
-        <Flag k="sinceFirst" initial={true} label="On a re-review, show only what changed since your last review" demo />
+        <Flag k="sinceFirst" initial={false} label="On a re-review, show only what changed since your last review" demo />
         <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New outside packages are still named. Files whose only changes are imports wait behind one row." demo />
         <Flag k="hideArchivedSpecs" initial={true} label="Hide archived specs" hint="Specs, docs and their metadata (OpenSpec's .openspec.yaml, say) in an archive folder (archive/, archives/, archived/), behind one row: what was, not what this change does. Code there still shows." demo />
         <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated or linguist-binary in .gitattributes." demo />
@@ -451,13 +451,13 @@ export function Settings() {
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)."  demo />
         <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text."  demo />
         <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint="Old on the left, new on the right; rendered doc comments show as source. The button beside the PR's title switches it too."  demo />
-        <Flag k="centerDiff" initial={false} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too." demo>
+        <Flag k="centerDiff" initial={true} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too." demo>
           <CenterCols />
-          <Flag k="centerFit" initial={true} label="Fill the window when a line in the diff is wider than that"  demo />
+          <Flag k="centerFit" initial={false} label="Fill the window when a line in the diff is wider than that"  demo />
         </Flag>
         <Flag k="diffSigns" initial={false} label="Show + and − before changed lines" hint="Off: their colour alone marks added and removed lines, and the code gets that column back."  demo />
         <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Its name, Comment and Viewed, as in its header."  demo />
-        <Flag k="rainbowBrackets" initial={false} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)."  demo />
+        <Flag k="rainbowBrackets" initial={true} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)."  demo />
         <LineStyle />
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
           <WordStyle />
@@ -465,7 +465,7 @@ export function Settings() {
         <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode." demo>
           <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source."  demo />
           <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines (or # lines, in Python, shell, YAML, ProGuard and the like) read as prose. Commented-out code stays source." demo>
-            <Flag k="renderSingleComments" initial={false} label="Single comment lines too" hint="A lone comment line, lighter. Comments after code on the same line stay as they are."  demo />
+            <Flag k="renderSingleComments" initial={true} label="Single comment lines too" hint="A lone comment line, lighter. Comments after code on the same line stay as they are."  demo />
           </Flag>
         </Flag>
         <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Per file, <> beside it shows the source, as on GitHub. Their look: Markdown files, below." demo>
@@ -475,7 +475,7 @@ export function Settings() {
         <Flag k="foldBots" initial={true} label="Bot comments behind one line, bot-only threads folded" hint="In the conversation, all the bots' comments (CI reports, AI reviewers) sit behind one “N comments from bots” line; open it for one line each." demo>
           <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." demo />
         </Flag>
-        <Flag k="agentsAsBots" initial={false} label="Comments that open with 🤖 are a bot's" hint="Agents posting from people's accounts often say so that way (“🤖 Posted by an agent”). They then fold like bots', and don't wait on your reply or count as mentions." demo />
+        <Flag k="agentsAsBots" initial={true} label="Comments that open with 🤖 are a bot's" hint="Agents posting from people's accounts often say so that way (“🤖 Posted by an agent”). They then fold like bots', and don't wait on your reply or count as mentions." demo />
         <Flag k="hideSettled" initial={true} label="Hide resolved and outdated threads" hint="Unless you commented in them. The index offers to show them per PR."  demo />
         <Flag k="resumePosition" initial={false} label="Reopen a PR where you left off" hint="Off: every PR opens at its top." />
       </section>
@@ -490,7 +490,7 @@ export function Settings() {
         <Flag k="checkSuppressions" initial={true} label="Tests, CI and checks switched off" hint="Tests skipped or ignored (@Ignore, @Disabled, .skip, xit, pytest.mark.skip, t.Skip…); CI let off (continue-on-error, allow_failure, if: false, || true, -x test, -DskipTests, --no-verify); and checks silenced: @Suppress, @SuppressLint, @ts-ignore, eslint-disable, noqa, type: ignore, nolint, NOSONAR, coverage ignores and the like. Lines moved as they were don't count; new files count too." demo />
         <Flag k="checkProtections" initial={true} label="Protections switched off" hint="Release builds not minified or obfuscated (minifyEnabled false, -dontobfuscate, keep-everything rules), android:debuggable, plain HTTP allowed, user-installed certificates trusted, TLS not checked (verify=False, InsecureSkipVerify, rejectUnauthorized: false, a HostnameVerifier that says yes). Debug-only sources don't count, nor TLS ones in tests." demo />
         <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)."  demo />
-        <Flag k="reviewPlan" initial={true} label="A review plan for big PRs" hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed."  demo />
+        <Flag k="reviewPlan" initial={false} label="A review plan for big PRs" hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed."  demo />
         <div class="set-group">
           <h4>Android</h4>
         <Flag k="checkHardcoded" initial={true} label="UI text not in strings.xml" hint="A layout's android:text, Compose's Text(“…”), toasts, dialogs: text written in code is never translated. Tests, debug code and previews don't count."  demo />
@@ -563,7 +563,7 @@ export function Settings() {
           <span class="set-size">
             <input type="range" min={11} max={20} step={0.5} value={look.textSize} onInput={(e) => look.setTextSize(e.currentTarget.value)} />
             <span>{look.textSize}px</span>
-            {look.textSize !== TEXT_SIZE && <button class="md-reset" title="Back to 14px" onClick={() => look.setTextSize(String(TEXT_SIZE))}>↺</button>}
+            {look.textSize !== TEXT_DEFAULT && <button class="md-reset" title={`Back to ${TEXT_DEFAULT}px`} onClick={() => look.setTextSize(String(TEXT_DEFAULT))}>↺</button>}
           </span>
         </label>
         <label class="set-row">
@@ -574,7 +574,7 @@ export function Settings() {
           <span class="set-size">
             <input type="range" min={10} max={18} step={0.5} value={look.codeSize} onInput={(e) => look.setCodeSize(e.currentTarget.value)} />
             <span>{look.codeSize}px</span>
-            {look.codeSize !== CODE_SIZE && <button class="md-reset" title="Back to 12px" onClick={() => look.setCodeSize(String(CODE_SIZE))}>↺</button>}
+            {look.codeSize !== CODE_DEFAULT && <button class="md-reset" title={`Back to ${CODE_DEFAULT}px`} onClick={() => look.setCodeSize(String(CODE_DEFAULT))}>↺</button>}
           </span>
         </label>
         <label class="set-row">
@@ -1161,7 +1161,7 @@ function About() {
 
 // The stopwatch estimate in the PR list: where its paces come from, and your own pace on top (50%–200%).
 function TimeToReview() {
-  const [raw, setPace] = useStoredValue('reviewPace', '100');
+  const [raw, setPace] = useStoredValue('reviewPace', '150');
   const pace = Number(raw) || 100;
   const example = (minutes: number) => estimateLabel(minutes / (pace / 100));
   return (
