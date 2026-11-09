@@ -1206,3 +1206,12 @@ test("GitLab comment positions: both lines on unchanged ones, line codes for a r
   assert.equal(r.line_range.start.type, 'new');
   assert.match(r.line_range.end.line_code, /_12_13$/);
 });
+
+test("GitLab CODEOWNERS sections: a section's default owners for patterns that name none", async () => {
+  const { sectionOwners } = await import('../src/gitlab.ts');
+  const t = sectionOwners('* @all\n[Payments] @g/payments\napp/pay/\nlib/ @ana\n^[Docs][2] @docs\n*.md');
+  assert.deepEqual(codeOwners(t, 'app/pay/x.kt'), ['@g/payments']);
+  assert.deepEqual(codeOwners(t, 'lib/a.kt'), ['@ana']);
+  assert.deepEqual(codeOwners(t, 'README.md'), ['@docs']);
+  assert.deepEqual(codeOwners(t, 'src/x.kt'), ['@all']);
+});

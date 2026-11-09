@@ -241,7 +241,7 @@ export async function getLabFiles(repo: string, n: number): Promise<PRFile[]> {
 // The MR's discussions, once per load: threads on the code, and the conversation (comments, and verdicts from
 // GitLab's own notes: "approved this merge request", "requested changes").
 const DISCUSSIONS = `query($p:ID!,$i:String!,$after:String){project(fullPath:$p){mergeRequest(iid:$i){diffHeadSha discussions(first:100,after:$after){pageInfo{hasNextPage endCursor}
-  nodes{id resolved resolvable userPermissions{resolveNote} notes{nodes{id body bodyHtml system url createdAt author{username avatarUrl bot}
+  nodes{id resolved resolvable userPermissions{resolveNote} truncatedDiffLines{text} notes{nodes{id body bodyHtml system url createdAt author{username avatarUrl bot}
     position{filePath oldPath newPath oldLine newLine positionType diffRefs{headSha}}}}}}}}}`;
 const noteDiscussion = new Map<number, string>(); // note id → its discussion's id, for replies
 const seen = new Map<string, { at: number; p: Promise<{ head: string; nodes: any[] }> }>();
@@ -307,6 +307,8 @@ export async function getLabThreads(repo: string, n: number): Promise<Thread[]> 
         viewerCanResolve: can && !d.resolved,
         viewerCanUnresolve: can && !!d.resolved,
         comments: { nodes: d.notes.nodes.filter((x: any) => !x.system).map((x: any) => commentOf(host, x)) },
+        // The code it was written on, up to its line (the inbox shows it).
+        hunk: d.truncatedDiffLines?.length ? { nodes: [{ diffHunk: ['@@', ...d.truncatedDiffLines.map((l: any) => l.text)].join('\n') }] } : undefined,
       };
     });
   // My draft notes (a review started on GitLab, not yet published): pending, in their thread or a new one of their own.
@@ -623,7 +625,10 @@ export async function getLabMergeState(repo: string, n: number, holdSigns: Holds
   const { host } = split(repo);
   const [m, proj] = await Promise.all([getMR(repo, n, MERGE_FIELDS), json(host, `/projects/${pid(repo)}`)]);
   const squash = proj.squash_option as string;
-  const methods: MergeMethod[] = squash === 'always' ? ['SQUASH'] : squash === 'never' ? ['MERGE'] : squash === 'default_on' ? ['SQUASH', 'MERGE'] : ['MERGE', 'SQUASH'];
+  // The project's merge method decides how it lands: a fast-forward one ("ff") makes no merge commit, so it's offered as
+  // rebase (lgtm's name for that), next to squashing as the project allows.
+  const plain: MergeMethod = proj.merge_method === 'ff' ? 'REBASE' : 'MERGE';
+  const methods: MergeMethod[] = squash === 'always' ? ['SQUASH'] : squash === 'never' ? [plain] : squash === 'default_on' ? ['SQUASH', plain] : [plain, 'SQUASH'];
   const msg = (s?: string | null) => ({ title: (s ?? '').split('\n')[0], body: (s ?? '').split('\n').slice(1).join('\n').trim() });
   const state = m.state === 'opened' ? 'OPEN' : m.state === 'merged' ? 'MERGED' : 'CLOSED';
   const canMerge = !!m.userPermissions?.canMerge;
@@ -659,7 +664,7 @@ export function mergeLab(s: MergeState, method: MergeMethod, title: string, body
   return send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}/merge`, 'PUT', {
     sha: s.headRefOid,
     squash: method === 'SQUASH',
-    ...(message ? (method === 'SQUASH' ? { squash_commit_message: message } : { merge_commit_message: message }) : {}),
+    ...(message && method !== 'REBASE' ? (method === 'SQUASH' ? { squash_commit_message: message } : { merge_commit_message: message }) : {}),
     should_remove_source_branch: s.deleteBranchOnMerge,
     ...(auto ? { auto_merge: true, merge_when_pipeline_succeeds: true } : {}),
   });
@@ -724,14 +729,21 @@ export async function getLabTeamMembers(team: string): Promise<string[]> {
 export async function getLabTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
   const { host, path } = split(team);
   const [members, me] = await Promise.all([getLabTeamMembers(team), labMe(host)]);
-  const lists = await Promise.all(members.slice(0, 60).map((u) =>
-    gql(host, `query($g:ID!,$u:String!){group(fullPath:$g){mergeRequests(state:opened,first:30,includeSubgroups:true,authorUsername:$u){nodes{...F}}}} ${ITEM}`, { g: path, u })
-      .then((d) => (d.group?.mergeRequests?.nodes ?? []) as any[], () => [])));
-  const load = await labReviewLoad(team + '/x', members.slice(0, 60));
+  // The group's open MRs (up to 500, a page of 100 a query): the members' are the team's, and each member's load is how
+  // many of them wait on their review.
+  const all: any[] = [];
+  for (let after: string | null = null, k = 0; k < 5; k++) {
+    const d: any = await gql(host, `query($g:ID!,$a:String){group(fullPath:$g){mergeRequests(state:opened,first:100,after:$a,includeSubgroups:true){pageInfo{hasNextPage endCursor} nodes{...F}}}} ${ITEM}`, { g: path, a: after });
+    all.push(...(d.group?.mergeRequests?.nodes ?? []));
+    if (!d.group?.mergeRequests?.pageInfo.hasNextPage) break;
+    after = d.group.mergeRequests.pageInfo.endCursor;
+  }
+  const team_ = new Set(members);
+  const load = Object.fromEntries(members.map((u) => [u, all.filter((m) => m.reviewers.nodes.some((r: any) => r.username === u && WAITING.includes(r.mergeRequestInteraction?.reviewState))).length]));
   return {
     members,
-    items: lists.flat().map((m) => itemOf(host, m, me.login)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    load: Object.fromEntries(load),
+    items: all.filter((m) => team_.has(m.author?.username)).map((m) => itemOf(host, m, me.login)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    load,
   };
 }
 // The open MRs on a GitLab asking someone for a review and still waiting on them, the longest-waiting first.
@@ -747,6 +759,20 @@ export async function getLabAskedPRs(host: string, login: string): Promise<Queue
 // Draft MRs in these repos changing files I own (CODEOWNERS, by name or through a group of mine): GitLab asks code
 // owners only once an MR is ready. `owners`: github.ts codeOwners (GitLab's file reads the same, its [Sections] aside).
 const owned = new Map<string, { at: number; text: Promise<string> }>(); // each repo's CODEOWNERS, kept a day
+// GitLab's CODEOWNERS as GitHub's reads: a [Section] line's default owners given to its patterns that name none, the
+// section lines themselves taken out.
+export function sectionOwners(text: string): string {
+  let defaults = '';
+  return text
+    .split('\n')
+    .map((line) => {
+      const head = line.match(/^\s*\^?\[[^\]]*\](?:\[\d+\])?\s*(.*)$/);
+      if (head) return (defaults = head[1].replace(/#.*/, '').trim()), '';
+      const bare = line.replace(/#.*/, '').trim();
+      return bare && !/\s/.test(bare) && defaults ? `${bare} ${defaults}` : line;
+    })
+    .join('\n');
+}
 export async function getLabOwnedDrafts(repos: string[], skip: Set<string>, owners: (text: string, path: string) => string[]): Promise<QueueItem[]> {
   const out: QueueItem[] = [];
   for (const [host, rs] of Map.groupBy(repos, (r) => split(r).host)) {
@@ -758,7 +784,7 @@ export async function getLabOwnedDrafts(repos: string[], skip: Set<string>, owne
         owned.set(repo, { at: Date.now(), text: (async () => {
           for (const at of ['CODEOWNERS', '.gitlab/CODEOWNERS', 'docs/CODEOWNERS']) {
             const t = await getLabRaw(repo, at, 'HEAD').catch(() => null);
-            if (t) return t.replace(/^\s*\^?\[.*$/gm, ''); // section headers
+            if (t) return sectionOwners(t);
           }
           return '';
         })() });
@@ -861,7 +887,7 @@ const todoSeen = new Map<string, { at: number; v: Promise<Map<string, Comment>> 
 export function labMentions(host: string): Promise<Map<string, Comment>> {
   const c = todoSeen.get(host);
   if (c && Date.now() - c.at < 60_000) return c.v;
-  const v = pages<any>(host, '/todos?state=pending&type=MergeRequest&per_page=100').then((todos) => {
+  const v = pages<any>(host, '/todos?state=pending&type=MergeRequest&per_page=100').then(async (todos) => {
     const out = new Map<string, Comment>();
     for (const t of todos.filter((t) => ['mentioned', 'directly_addressed'].includes(t.action_name)).sort((a, b) => a.created_at.localeCompare(b.created_at))) {
       const note = Number(String(t.target_url).match(/#note_(\d+)$/)?.[1]);
@@ -876,6 +902,17 @@ export function labMentions(host: string): Promise<Map<string, Comment>> {
         bodyText: t.body ?? '',
         createdAt: t.created_at,
         author: { login: t.author?.username ?? 'ghost', __typename: 'User', avatarUrl: abs(host, t.author?.avatar_url) },
+      });
+    }
+    // Each as GitLab renders it; one on a line of code is its thread's (the inbox lists that), not a mention.
+    const list = [...out];
+    for (let k = 0; k < list.length; k += 20) {
+      const part = list.slice(k, k + 20);
+      const d = await gql(host, `{${part.map(([, c], j) => `n${j}:note(id:"gid://gitlab/Note/${c.databaseId}"){bodyHtml position{filePath}}`).join(' ')}}`).catch(() => null);
+      part.forEach(([id, c], j) => {
+        const x = d?.[`n${j}`];
+        if (x?.position) out.delete(id);
+        else if (x?.bodyHtml) out.set(id, { ...c, bodyHTML: absHtml(host, x.bodyHtml), bodyText: text(absHtml(host, x.bodyHtml)) });
       });
     }
     return out;
@@ -1013,10 +1050,16 @@ export async function getLabMyReviews(days: number, only: string, who?: string):
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const out: MyReview[] = [];
   for (const { host, login } of (await glabAccounts()).filter((a) => a.host === only).map((a) => ({ ...a, login: who ?? a.login }))) {
-    // ponytail: the 20 updated latest (each MR's notes is a request, and GitLab's limits are tight).
-    const mrs: any[] = await json(host, `/merge_requests?scope=all&reviewer_username=${encodeURIComponent(login)}&updated_after=${since}&order_by=updated_at&per_page=20`).catch(() => []);
-    await Promise.all(mrs.filter((m) => m.author?.username !== login).map(async (m) => {
-      const notes = await pages<any>(host, `/projects/${m.project_id}/merge_requests/${m.iid}/notes?per_page=100&sort=asc`).catch(() => []);
+    // Up to 100 MRs, their notes asked 5 MRs a query (GitLab's limits are tight).
+    const mrs: any[] = (await json(host, `/merge_requests?scope=all&reviewer_username=${encodeURIComponent(login)}&updated_after=${since}&order_by=updated_at&per_page=100`).catch(() => [])).filter((m: any) => m.author?.username !== login);
+    const notesOf = new Map<number, any[]>();
+    await Promise.all(Array.from({ length: Math.ceil(mrs.length / 5) }, async (_, c) => {
+      const part = mrs.slice(c * 5, c * 5 + 5);
+      const d = await gql(host, `{${part.map((m, j) => `m${j}:project(fullPath:${JSON.stringify(m.references.full.split('!')[0])}){mergeRequest(iid:"${m.iid}"){notes(first:100){nodes{system body createdAt author{username}}}}}`).join(' ')}}`).catch(() => null);
+      part.forEach((m, j) => notesOf.set(m.id, (d?.[`m${j}`]?.mergeRequest?.notes?.nodes ?? []).map((x: any) => ({ system: x.system, body: x.body, created_at: x.createdAt, author: x.author }))));
+    }));
+    await Promise.all(mrs.map(async (m) => {
+      const notes = (notesOf.get(m.id) ?? []).sort((a, b) => a.created_at.localeCompare(b.created_at));
       const reviews = notes
         .filter((x) => x.author?.username === login)
         .map((x) => ({ state: x.system ? VERDICT.find(([re]) => re.test(x.body))?.[1] : 'COMMENTED', submittedAt: x.created_at as string }))
