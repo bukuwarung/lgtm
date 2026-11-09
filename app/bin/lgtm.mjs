@@ -313,8 +313,11 @@ async function channelId(channel) {
   if (!channel.startsWith('#')) return { id: channel };
   const r = await slackcli(['search', 'channels', channel.slice(1), '--json', '--limit', '20']);
   if (!r.ok) return { error: r.error };
-  const c = parseJson(r.stdout)?.channels?.find((x) => x.name === channel.slice(1));
-  return c ? { id: c.id, name: '#' + c.name } : { error: `no channel named ${channel}` };
+  const all = parseJson(r.stdout)?.channels ?? [];
+  const c = all.find((x) => x.name === channel.slice(1));
+  // Not that name: the one it most likely meant (one starting with it, else one containing it), to offer.
+  const near = all.find((x) => x.name.startsWith(channel.slice(1))) ?? all.find((x) => x.name.includes(channel.slice(1)));
+  return c ? { id: c.id, name: '#' + c.name } : { error: `no channel named ${channel}${near ? ` (did you mean #${near.name}?)` : ''}` };
 }
 
 // A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.

@@ -401,11 +401,17 @@ fn channel_id(channel: &str) -> Result<(String, Option<String>), String> {
     if !r.ok {
         return Err(r.error);
     }
-    let found = parse_json(&r.stdout).and_then(|v| v["channels"].as_array().and_then(|cs| cs.iter().find(|c| c["name"].as_str() == Some(name)).cloned()));
-    match found.and_then(|c| c["id"].as_str().map(String::from)) {
-        Some(id) => Ok((id, Some(channel.to_string()))),
-        None => Err(format!("no channel named {channel}")),
+    let all = parse_json(&r.stdout).and_then(|v| v["channels"].as_array().cloned()).unwrap_or_default();
+    let named = |c: &Value| c["name"].as_str().unwrap_or("").to_string();
+    if let Some(id) = all.iter().find(|c| named(c) == name).and_then(|c| c["id"].as_str().map(String::from)) {
+        return Ok((id, Some(channel.to_string())));
     }
+    // Not that name: the one it most likely meant (one starting with it, else one containing it), to offer.
+    let near = all.iter().map(named).find(|n| n.starts_with(name)).or_else(|| all.iter().map(named).find(|n| n.contains(name)));
+    Err(match near {
+        Some(n) => format!("no channel named {channel} (did you mean #{n}?)"),
+        None => format!("no channel named {channel}"),
+    })
 }
 
 /// A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.

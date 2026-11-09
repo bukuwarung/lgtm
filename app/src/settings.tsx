@@ -883,21 +883,28 @@ function QaChannel() {
     const t = setTimeout(() => checkSlackChannel(channel).then((r) => !stop && setCheck(r), (e) => !stop && setCheck({ ok: false, error: e.message })), 600);
     return () => ((stop = true), clearTimeout(t));
   }, [channel]);
+  // What Slack says, under the field (the label's column is narrow).
+  const status = !SLACK_CHANNEL.test(channel) ? <span class="set-warn">Not a channel ID, #name or link.</span>
+    : check === 'checking' ? 'Checking on Slack…'
+    : check?.ok ? <span class="ok"><CheckMark state="success" /> {check.name ?? check.id} exists</span>
+    : check && ((near) => (
+        <span class="set-warn">
+          Not found on Slack: {(check.error ?? '').replace(/ \(did you mean #[\w.-]+\?\)$/, '')}.
+          {near && <> <button type="button" class="link" onClick={() => setChannel(near)}>Use {near}</button></>}
+        </span>
+      ))((check.error ?? '').match(/did you mean (#[\w.-]+)\?/)?.[1]);
   return (
-    <label class="set-row">
-      <span>
-        QA channel
-        <small>
-          Its ID, #name or link.{' '}
-          {!SLACK_CHANNEL.test(channel) ? <b class="warn">Not a channel ID, #name or link.</b>
-            : check === 'checking' ? 'Checking on Slack…'
-            : check?.ok ? <span class="ok"><CheckMark state="success" /> {check.name ?? check.id} exists</span>
-            : check && <b class="warn">Not found on Slack: {check.error}</b>}
-        </small>
-      </span>
-      <input type="text" value={channel} spellcheck={false} onInput={(e) => setChannel(e.currentTarget.value.trim())} />
-      {channel !== QA_CHANNEL && <button class="md-reset" title="Back to #qa-task-requests" onClick={() => setChannel(QA_CHANNEL)}>↺</button>}
-    </label>
+    <>
+      <label class="set-row">
+        <span>
+          QA channel
+          <small>Its ID, #name or link.</small>
+        </span>
+        <input type="text" value={channel} spellcheck={false} onInput={(e) => setChannel(e.currentTarget.value.trim())} />
+        {channel !== QA_CHANNEL && <button class="md-reset" title="Back to #qa-task-requests" onClick={() => setChannel(QA_CHANNEL)}>↺</button>}
+      </label>
+      {status && <p class="note set-status">{status}</p>}
+    </>
   );
 }
 

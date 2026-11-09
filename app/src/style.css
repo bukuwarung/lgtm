@@ -57,6 +57,8 @@ code, pre { font-family: var(--mono); }
 .note { color: var(--muted); }
 .error { color: var(--delfg); }
 .warn { background: var(--warn); padding: 8px 12px; border-radius: 6px; }
+.set-warn { color: var(--c-attn); font-weight: 600; }
+.set-status { margin: -4px 0 8px; } /* a warning inside a line of text, not a box */
 .notice { background: var(--add); padding: 8px 12px; border-radius: 6px; }
 .page, .pad { padding: 0 16px; }
 .badge { font-size: calc(12px * var(--ts)); color: var(--muted); }
