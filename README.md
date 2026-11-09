@@ -21,7 +21,7 @@ gh auth login   # once, if you haven't
 
 `brew upgrade` updates it. Slack and Jira are optional; lgtm shows how to set them up on first launch.
 
-GitLab works too, through the GitLab CLI: `brew install glab`, then `glab auth login` (add `--hostname gitlab.example.com` for your own GitLab). Merge requests open from their link and join the PR list. Not there yet for GitLab: reviewer suggestions, review-time estimates and mentions in the inbox.
+GitLab works too, through the GitLab CLI: `brew install glab`, then `glab auth login` (add `--hostname gitlab.example.com` for your own GitLab, in the app or the browser). Merge requests open from their link and join the PR list. Not there yet for GitLab: reviewer suggestions, review-time estimates and mentions in the inbox.
 
 ## Highlights
 
