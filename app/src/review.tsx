@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel } from './platform.ts';
+import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -491,6 +491,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [sinceData, setSinceData] = useState<{ status: string; files: File[] } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [pending, setPending] = useState<PendingReview | null>(null); // my review in progress on GitHub
+  const [discarding, setDiscarding] = useState(false);
   const [conversation, setConversation] = useState<ConversationItem[]>([]);
   const [saved, setSaved] = useState<Saved>({ sha: '', drafts: [] });
   const [target, setTarget] = useState<Target | null>(null);
@@ -1060,7 +1061,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     },
     addDraft: (d) => saveDrafts([...drafts, { ...d, id: crypto.randomUUID() }]),
     updateDraft: (id, d) => saveDrafts(drafts.map((x) => (x.id === id ? { ...d, id } : x))),
-    removeDraft: (id) => saveDrafts(drafts.filter((d) => d.id !== id)),
+    removeDraft: (id) => {
+      const gone = drafts.find((d) => d.id === id);
+      saveDrafts(drafts.filter((d) => d.id !== id));
+      if (gone) offerUndo('Comment deleted', () => setSaved((s) => (s.drafts.some((d) => d.id === id) ? s : (void storage.set(key, { ...s, drafts: [...s.drafts, gone] }), { ...s, drafts: [...s.drafts, gone] }))));
+    },
     reply: async (t, body) => {
       await reply(repo, n, t.comments.nodes[0].databaseId, body);
       setThreads(await getThreads(repo, n));
@@ -1068,6 +1073,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     resolve: async (t, resolve) => {
       await resolveThread(t.id, resolve);
       setThreads(await getThreads(repo, n));
+      if (resolve) offerUndo('Conversation resolved', () => resolveThread(t.id, false).then(async () => setThreads(await getThreads(repo, n)), (e) => setError(`Couldn't unresolve it: ${e.message}`)));
     },
     // As GitHub's "Add single comment": a one-comment review on the commit on show; then its thread appears.
     postNow: async (d) => {
@@ -1767,14 +1773,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               You have a review in progress on GitHub ({pending.count} comment{pending.count === 1 ? '' : 's'}): Finish review sends it, with your comments here.{' '}
               <button
                 class="link"
+                disabled={discarding}
                 onClick={async () => {
                   if (!(await ask(`Discard your review in progress on GitHub${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`, 'Discard'))) return;
+                  setDiscarding(true);
                   await discardReview(pending.id).catch((e) => setError(e.message));
                   setPending(null);
                   setThreads(await getThreads(repo, n));
+                  setDiscarding(false);
                 }}
               >
-                Discard it
+                {discarding ? 'Discarding…' : 'Discard it'}
               </button>
             </p>
           )}
@@ -3841,7 +3850,7 @@ function PendingComment({ c, ctx, path }: { c: Thread['comments']['nodes'][numbe
       <div class="md" data-lang={ctx.langFor(path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(path), languageFor(path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
       <div class="row">
         <button disabled={busy} onClick={() => setText(c.body ?? c.bodyText)}>Edit</button>
-        <button disabled={busy} onClick={() => run(null)}>Delete</button>
+        <button disabled={busy} onClick={async () => (await ask('Delete this comment from your review in progress on GitHub? Its text goes with it.', 'Delete')) && run(null)}>Delete</button>
       </div>
       {err && <p class="error">{err}</p>}
     </>

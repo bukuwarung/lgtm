@@ -871,6 +871,16 @@ export const repliesDone = (): Record<string, number> => {
     return {};
   }
 };
+export function unmarkReplyDone(thread: string) {
+  const d = repliesDone();
+  delete d[thread];
+  localStorage.setItem(own('repliesDone'), JSON.stringify(d));
+}
+
+// Something just left the screen and can come back: a toast with Undo for a few seconds (main.tsx shows "lgtm:toast").
+export const offerUndo = (text: string, undo: () => unknown) =>
+  dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, action: ['Undo', undo], ms: 6000 } }));
+
 export function markReplyDone(thread: string, lastComment: number) {
   const d = repliesDone();
   d[thread] = lastComment;
@@ -892,7 +902,10 @@ export const notices = (): Notice[] => {
 const saveNotices = (list: Notice[]) => (localStorage.setItem(own('notices'), JSON.stringify(list.slice(0, 50))), dispatchEvent(new Event('lgtm:notices')));
 export const addNotice = (what: string, title: string, pr: string) =>
   saveNotices([{ id: `${pr}:${what}:${Date.now()}`, what, title, pr, at: Date.now() }, ...notices().filter((n) => !(n.pr === pr && n.what === what))]);
-export const dropNotices = (pick: (n: Notice) => boolean) => {
+export const dropNotices = (pick: (n: Notice) => boolean): Notice[] => {
   const all = notices();
   if (all.some(pick)) saveNotices(all.filter((n) => !pick(n)));
+  return all.filter(pick);
 };
+// Dismissed ones back (Undo), newest first.
+export const putBackNotices = (back: Notice[]) => saveNotices([...back, ...notices().filter((n) => !back.some((b) => b.id === n.id))].sort((a, b) => b.at - a.at));

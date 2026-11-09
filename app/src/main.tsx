@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode } fro
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -231,12 +231,12 @@ function BellMenu() {
                     </span>
                     <small>{repoLabel(n.pr.split('#')[0])}#{n.pr.split('#')[1]} · <Time at={n.at} /></small>
                   </button>
-                  <button class="bell-x" title="Dismiss" aria-label="Dismiss" onClick={() => dropNotices((x) => x.id === n.id)}>
+                  <button class="bell-x" title="Dismiss" aria-label="Dismiss" onClick={() => { const gone = dropNotices((x) => x.id === n.id); offerUndo('Dismissed', () => putBackNotices(gone)); }}>
                     <Octicon name="x" />
                   </button>
                 </div>
               ))}
-              <button role="menuitem" class="bell-act bell-clear" onClick={() => dropNotices(() => true)}>
+              <button role="menuitem" class="bell-act bell-clear" onClick={() => { const gone = dropNotices(() => true); offerUndo(`Cleared ${gone.length}`, () => putBackNotices(gone)); }}>
                 Clear all
               </button>
             </>

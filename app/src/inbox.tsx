@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { uniqueNames } from './files.ts';
 import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
-import { ago, markReplyDone, readBots, reportError, useStoredFlag, repoLabel } from './platform.ts';
+import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
 import { Tg, Who, Time } from './tags.tsx';
 
@@ -18,6 +18,10 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   const [me, setMe] = useState('');
   const [list, setList] = useState<Waiting[] | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set()); // replied to or resolved here
+  const hide = (id: string, what?: string, undo?: () => unknown) => {
+    setDone((s) => new Set(s).add(id));
+    if (what && undo) offerUndo(what, () => (undo(), setDone((s) => new Set([...s].filter((x) => x !== id)))));
+  };
   const [cur, setCur] = useState(0); // the thread the keys act on, in page order
   const asked = (items ?? []).filter((i) => (i.thread?.awaiting ?? 0) > 0);
   const [muteApproved] = useStoredFlag('muteApproved', false); // Settings: nothing from PRs I've approved
@@ -94,11 +98,11 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
           </h4>
           {mention && (() => {
             const n = k++;
-            return <InboxMention key={mention.id} c={mention} item={item} current={n === at} onPick={() => setCur(n)} onDone={() => setDone((s) => new Set(s).add(mention.id!))} />;
+            return <InboxMention key={mention.id} c={mention} item={item} current={n === at} onPick={() => setCur(n)} onDone={(what, undo) => hide(mention.id!, what, undo)} />;
           })()}
           {threads.map((t, _, all) => {
             const n = k++;
-            return <InboxThread key={t.id} t={t} names={uniqueNames(all.map((x) => x.path))} item={item} me={me} current={n === at} onPick={() => setCur(n)} onDone={() => setDone((s) => new Set(s).add(t.id))} />;
+            return <InboxThread key={t.id} t={t} names={uniqueNames(all.map((x) => x.path))} item={item} me={me} current={n === at} onPick={() => setCur(n)} onDone={(what, undo) => hide(t.id, what, undo)} />;
           })}
         </section>
       ))}
@@ -106,9 +110,11 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   );
 }
 
+// Off the list: with what happened and how to take it back when it can be (an Undo toast), else just gone (a reply sent).
+type Done = (what?: string, undo?: () => unknown) => void;
 const FAILED: Record<string, string> = { reply: 'send the reply', resolve: 'resolve it', commit: 'commit the suggestion' };
 
-function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Thread; names: Map<string, string>; item: Item; me: string; current: boolean; onPick: () => void; onDone: () => void }) {
+function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Thread; names: Map<string, string>; item: Item; me: string; current: boolean; onPick: () => void; onDone: Done }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState('');
   const last = t.comments.nodes[t.comments.nodes.length - 1];
@@ -122,9 +128,9 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
     await resolveThread(t.id, true).catch(() => {});
     dispatchEvent(new Event('lgtm:list-refresh'));
   };
-  const act = (what: string, run: () => Promise<unknown>) => {
+  const act = (what: string, run: () => Promise<unknown>, undo?: () => unknown) => {
     setBusy(what);
-    run().then(onDone, (e) => (setBusy(''), reportError(`Couldn't ${FAILED[what]}: ${e.message}`)));
+    run().then(() => onDone(undo && 'Thread resolved', undo), (e) => (setBusy(''), reportError(`Couldn't ${FAILED[what]}: ${e.message}`)));
   };
   const send = () => text.trim() && !busy && act('reply', () => reply(item.repo, item.number, t.comments.nodes[0].databaseId, text.trim()));
   return (
@@ -161,11 +167,11 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
           disabled={!!busy || !last}
           data-k="e"
           title="Take it off your list without replying; it comes back if someone writes again. Nothing changes on GitHub."
-          onClick={() => (markReplyDone(t.id, last!.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone())}
+          onClick={() => (markReplyDone(t.id, last!.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(t.id), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}
         >
           Done
         </button>
-        {t.viewerCanResolve && <button disabled={!!busy} data-k="x" onClick={() => act('resolve', () => resolveThread(t.id, true))}>{busy === 'resolve' ? 'Resolving…' : 'Resolve'}</button>}
+        {t.viewerCanResolve && <button disabled={!!busy} data-k="x" onClick={() => act('resolve', () => resolveThread(t.id, true), () => resolveThread(t.id, false).catch((e) => reportError(`Couldn't unresolve it: ${e.message}`)))}>{busy === 'resolve' ? 'Resolving…' : 'Resolve'}</button>}
         {sug && (
           <button disabled={!!busy} data-k="c" title={`Commit @${last!.author?.login}'s suggestion to the branch and resolve the thread (c)`} onClick={() => act('commit', commit)}>
             {busy === 'commit' ? 'Committing…' : 'Commit suggestion'}
@@ -196,7 +202,7 @@ function Code({ t }: { t: Thread }) {
 }
 
 // A PR conversation comment mentioning me: a reply goes on the conversation; Done as a thread's.
-function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: Item; current: boolean; onPick: () => void; onDone: () => void }) {
+function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: Item; current: boolean; onPick: () => void; onDone: Done }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const send = () => {
@@ -221,7 +227,7 @@ function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: 
         disabled={busy}
       />
       <div class="row">
-        <button disabled={busy} data-k="e" title="Take it off your list without replying. Nothing changes on GitHub." onClick={() => (markReplyDone(c.id!, c.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone())}>
+        <button disabled={busy} data-k="e" title="Take it off your list without replying. Nothing changes on GitHub." onClick={() => (markReplyDone(c.id!, c.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(c.id!), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}>
           Done
         </button>
         <button class="primary" disabled={busy || !text.trim()} title="Send (⌘↵)" onClick={send}>
