@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'preact/hooks';
 
-// Each GitHub account's own data lives under its login, so switching accounts (the avatar) never mixes them: unsent
-// drafts, what you'd seen of a PR, Claude session links, the PR list's team, and the saved PR copies. Settings are
+// Each account's own data lives under its name (a GitHub login, or a GitLab one as login@host), so switching accounts
+// (the avatar) never mixes them: unsent drafts, what you'd seen of a PR, Claude session links, the PR list's team and
+// its cached copy, the bell, PRs opened lately, files marked viewed on GitLab, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:)/;
 let account = '';
+// The account of last time, per site (GitHub's, or a GitLab host's): the next launch starts as it.
+const lastKey = () => (viewAs() ? `lastLogin:${viewAs()}` : 'lastLogin');
 export const lastLogin = () => {
   try {
-    return localStorage.getItem('lastLogin') ?? '';
+    return localStorage.getItem(lastKey()) ?? '';
   } catch {
     return '';
   }
@@ -18,7 +21,8 @@ export function setAccount(login: string) {
   account = login;
   if (!login) return;
   try {
-    localStorage.setItem('lastLogin', login); // the next launch starts as it, before GitHub confirms (main.tsx)
+    localStorage.setItem(lastKey(), login); // the next launch starts as it, before GitHub (or GitLab) confirms (main.tsx)
+    for (const k of Object.keys(localStorage)) if (k.startsWith('queueCache:')) localStorage.removeItem(k); // per site, before accounts kept it
     for (const k of Object.keys(localStorage)) {
       if (!OWN.test(k)) continue;
       localStorage.setItem(own(k), localStorage.getItem(k)!);

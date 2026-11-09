@@ -5,7 +5,7 @@
 // A GitLab repo is "host/group/…/project" (gitlab.com/gitlab-org/cli): GitHub owners have no dots, so a dot in the
 // first part says GitLab. An MR is that repo and its iid. GitLab's global IDs travel as "gl:host|gid://…", an MR's as
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
-import { fetchGlabToken, glabAccounts, knowFace, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
+import { fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
 import type { Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
 
 export const isLab = (repo: string) => repo.slice(0, repo.indexOf('/')).includes('.');
@@ -343,7 +343,7 @@ export async function setLabReviewer(repo: string, n: number, login: string, on:
 }
 
 // Files I've marked viewed: GitLab keeps that in its own page's browser storage only, so lgtm keeps its own, per MR.
-const viewedKey = (repo: string, n: number) => `glViewed:${repo}!${n}`;
+const viewedKey = (repo: string, n: number) => own(`glViewed:${repo}!${n}`);
 export function getLabViewed(repo: string, n: number): Set<string> {
   try {
     return new Set(JSON.parse(localStorage.getItem(viewedKey(repo, n)) ?? '[]'));

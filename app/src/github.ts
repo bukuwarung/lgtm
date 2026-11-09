@@ -407,6 +407,7 @@ const toItem = (p: any): QueueItem => ({
 
 // Teams in my organizations, as "org/slug", for the Team tab.
 export async function getTeams(): Promise<string[]> {
+  if (viewAs()) throw new Error("Teams are GitHub's: switch to your GitHub account (the avatar) to see one.");
   const d = await graphql(`{viewer{organizations(first:20){nodes{login teams(first:100){nodes{slug}}}}}}`, {});
   return d.viewer.organizations.nodes.flatMap((o: any) => o.teams.nodes.map((t: any) => `${o.login}/${t.slug}`));
 }
@@ -424,6 +425,7 @@ export async function getTeamMembers(team: string): Promise<string[]> {
 // Plus each member's review load: open PRs that ask them, by name, for a review.
 // A team's open PRs by its members, and how many open PRs in the org ask each member, by name, for a review.
 export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
+  if (viewAs()) throw new Error("Teams are GitHub's: switch to your GitHub account (the avatar) to see one.");
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
   const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
@@ -458,7 +460,7 @@ const dayCache = async <T>(key: string, load: () => Promise<T>): Promise<T> => {
 export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
   repos = repos.filter((r) => !isLab(r));
   if (!repos.length) return [];
-  const me = await getViewer();
+  const me = await getGitHubViewer();
   const teams = await dayCache('myTeams', async () =>
     ((await graphql(`query($me:[String!]){viewer{organizations(first:20){nodes{login teams(first:100,userLogins:$me){nodes{slug}}}}}}`, { me: [me] })).viewer.organizations.nodes as any[]).flatMap(
       (o) => o.teams.nodes.map((t: any) => `@${o.login}/${t.slug}`.toLowerCase()),
@@ -492,7 +494,7 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
 export type MyReview = { repo: string; number: number; title: string; url: string; author: string; state: ReviewState; at: string; waited?: number };
 export async function getMyReviews(days = 30): Promise<MyReview[]> {
   if (viewAs()) return (await lab.getLabMyReviews(days, viewAs())).sort((a, b) => b.at.localeCompare(a.at));
-  const me = await getViewer();
+  const me = await getGitHubViewer();
   return reviewsBy(me, `reviewed-by:@me -author:@me`, days);
 }
 // Someone's reviews of the last `days` days, newest first: the PRs they reviewed (not their own), up to 300, a page of
@@ -673,8 +675,10 @@ export const unrequestReview = (repo: string, n: number, login: string) =>
   isLab(repo) ? lab.setLabReviewer(repo, n, login, false) : json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'DELETE', body: JSON.stringify({ reviewers: [login] }) });
 
 let viewer: Promise<string> | undefined;
-// Me on GitHub, or (for a GitLab repo) on that GitLab.
-export const getViewer = (repo?: string) => (repo && isLab(repo) ? lab.getLabViewer(repo) : (viewer ??= json('/user').then((u) => u.login as string)));
+// Me: on a repo's site (GitHub, or the GitLab it's on); without one, as the account on show (the avatar's menu).
+export const getGitHubViewer = () => (viewer ??= json('/user').then((u) => u.login as string));
+export const getViewer = (repo?: string): Promise<string> =>
+  repo ? (isLab(repo) ? lab.getLabViewer(repo) : getGitHubViewer()) : viewAs() ? lab.labMe(viewAs()).then((u) => u.login) : getGitHubViewer();
 
 // Emails to find someone on Slack: their verified company addresses for the org, then their public email.
 export async function getEmails(org: string, logins: string[]): Promise<Record<string, string[]>> {
@@ -1176,7 +1180,7 @@ export async function getStack(repo: string, pr: PR): Promise<StackLayer[]> {
 // My latest submitted review: the commit it was on, and when.
 export async function getMyLastReview(repo: string, n: number): Promise<{ sha: string; at: string } | null> {
   if (isLab(repo)) return lab.getLabMyLastReview(repo, n);
-  const [me, reviews] = await Promise.all([getViewer(), paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`)]);
+  const [me, reviews] = await Promise.all([getGitHubViewer(), paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`)]);
   const r = reviews.filter((r) => r.user?.login === me && r.state !== 'PENDING').at(-1);
   return r ? { sha: r.commit_id, at: r.submitted_at } : null;
 }
@@ -1503,7 +1507,7 @@ export const forgetThreadStatus = (id: string) => void extrasSeen.set(id, { ...(
 // Per PR (mine, or one the list has as mentioning me): does a conversation comment mentioning me wait on me
 // (getMentions)? For the inbox button's count; only the PRs that changed are asked.
 export async function getMentionStatus(items: QueueItem[]): Promise<Map<string, boolean>> {
-  const me = await getViewer();
+  const me = await getGitHubViewer();
   const all = items.filter((i) => (i.mentioned || i.authored) && !isLab(i.repo));
   const ask = changed(all, 'mention');
   if (ask.length) {
@@ -1526,7 +1530,8 @@ export async function getEstimates(items: { id: string; updatedAt: string }[]): 
 }
 
 export async function getThreadStatus(items: QueueItem[], bots: Set<string> = new Set()): Promise<Map<string, ThreadStatus>> {
-  const me = await getViewer();
+  const hub = items.some((i) => !isLab(i.repo));
+  const me = hub ? await getGitHubViewer() : '';
   const all = items.filter((i) => i.mine || i.myState);
   const ask = changed(all, 'thread');
   const have = () => new Map(all.flatMap((i) => { const t = extrasSeen.get(i.id)?.thread; return t ? [[i.id, t] as const] : []; }));

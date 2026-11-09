@@ -2,7 +2,7 @@ import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { labMe } from './gitlab.ts';
-import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
+import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
@@ -470,7 +470,9 @@ function App() {
     loadToken()
       .then(async () => {
         const last = lastLogin();
-        const check = getViewer().then((me) => {
+        // A GitLab account (the avatar's menu) keeps its data as login@host, apart from GitHub's.
+        const check = getViewer().then((login) => {
+          const me = viewAs() ? `${login}@${viewAs()}` : login;
           if (me === last) return;
           setAccount(me); // this account's drafts and the like (platform.ts own)
           setAccountKey((k) => k + 1);
@@ -910,7 +912,7 @@ function AccountMenu() {
   const [open, setOpen] = useState(false);
   const host = viewAs();
   useEffect(() => {
-    const shown = host ? labMe(host).then((u) => ({ ...u, site: host })) : getViewer().then((login) => ({ login, avatar: avatarOf(login), site: 'GitHub' }));
+    const shown = host ? labMe(host).then((u) => ({ ...u, site: host })) : getGitHubViewer().then((login) => ({ login, avatar: avatarOf(login), site: 'GitHub' }));
     void shown.then(setMe, () => setMe(host ? { login: '?', avatar: '', site: host } : { login: '', avatar: '', site: '' }));
   }, [host]);
   useEffect(() => {
@@ -1263,7 +1265,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   // The last list (per account) shows at once on launch, "updating…" until GitHub's answer replaces it.
   const [loaded, setItems] = useState<QueueItem[] | null>(() => {
     try {
-      return JSON.parse(localStorage.getItem(own(viewAs() ? `queueCache:${viewAs()}` : 'queueCache')) ?? 'null');
+      return JSON.parse(localStorage.getItem(own('queueCache')) ?? 'null');
     } catch {
       return null;
     }
@@ -1356,7 +1358,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       setSettled(true);
       setFresh(true);
       try {
-        localStorage.setItem(own(viewAs() ? `queueCache:${viewAs()}` : 'queueCache'), JSON.stringify(full));
+        localStorage.setItem(own('queueCache'), JSON.stringify(full));
       } catch {}
     }, (e) => setErr(e instanceof TypeError && /fetch|load failed|network/i.test(e.message) ? "Couldn't reach GitHub" : e.message));
   };

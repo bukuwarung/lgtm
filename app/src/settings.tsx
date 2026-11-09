@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getViewer, listDir, spentThisHour } from './github.ts';
+import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
 import { CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
 import { ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
@@ -298,7 +298,7 @@ export function Settings() {
   const [glab, setGlab] = useState<GlabAccount[] | null>(null);
   useEffect(() => {
     glabAccounts(true).then(setGlab);
-    getViewer().then(setMe, () => setMe(''));
+    getGitHubViewer().then(setMe, () => setMe(''));
     getGhAccounts().then(setAccounts, () => setAccounts([]));
     getTeams().then(setTeams, () => setTeams([]));
     fetchIntegrations().then(setInts, (e) => setErr(e.message));
@@ -1331,7 +1331,7 @@ function SlackPeople({ team }: { team: string }) {
   const [err, setErr] = useState('');
   useEffect(() => {
     getSlackPeople().then(setMap, (e) => setErr(e.message));
-    Promise.all([team ? getTeamMembers(team).catch(() => []) : [], getReviewQueue().catch(() => []), getViewer()]).then(([members, queue, me]) => {
+    Promise.all([team ? getTeamMembers(team).catch(() => []) : [], getReviewQueue().catch(() => []), getGitHubViewer()]).then(([members, queue, me]) => {
       setOrg(team.split('/')[0] || queue[0]?.repo.split('/')[0] || '');
       // Your team, the people in your PR list (authors, and reviewers asked), and everyone met on PRs you've opened.
       const people = new Set([...members, ...queue.flatMap((i) => [i.author, ...i.pendingReviewers]), ...peopleSeen(), ...(focus ? [focus] : [])]);
