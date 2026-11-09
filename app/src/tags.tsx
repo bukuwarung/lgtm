@@ -129,3 +129,8 @@ export function CopyCode({ children, text }: { children: string; text?: string }
     </code>
   );
 }
+
+// After "Couldn't load …": fetch just that part again.
+export const Retry = ({ onClick }: { onClick: () => void }) => (
+  <button type="button" class="link retry" onClick={onClick}>Retry</button>
+);

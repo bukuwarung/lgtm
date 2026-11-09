@@ -548,6 +548,11 @@ code.copyable.copied { color: var(--addfg); }
 .fn-tail { flex-shrink: 0; }
 .tree-row.cur > .tree-file { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
 .ix-hidden-row { font-style: italic; }
+/* Links that leave lgtm (GitHub pages, Jira, Slack, CI logs…): a small ↗ after their words. Links to a PR in text open
+   here (main.tsx), so not those; nor @mentions, nor links that are a picture, an icon or a time. */
+:is(.md a[href^="http"]:not([href*="/pull/"]):not(.user-mention), a[target="_blank"][href^="http"]:not(.md a)):not(:has(img, svg, time, .who))::after {
+  content: "↗"; display: inline-block; margin-left: 1px; font-size: .8em; opacity: .6; text-decoration: none;
+}
 .bots-hidden { border-top: 1px solid var(--border); }
 .bots-hidden > summary { padding: 8px 0; color: var(--muted); font-size: calc(13px * var(--ts)); cursor: pointer; }
 .bots-hidden > summary:hover { color: var(--fg); }

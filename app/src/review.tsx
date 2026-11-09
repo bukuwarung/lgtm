@@ -23,7 +23,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -579,8 +579,10 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const key = `drafts:${repo}#${n}`;
 
   // Checks are secondary: a failure here shouldn't block the review.
+  const [checksErr, setChecksErr] = useState('');
   const loadChecks = () => {
     setChecks(null);
+    setChecksErr('');
     getChecks(repo, n).then((cs) => {
       setChecks(cs);
       // A failing check: is it failing on the base branch too (not this PR's doing)?
@@ -588,7 +590,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       getPR(repo, n)
         .then((pr) => baseChecks(repo, pr.base.ref))
         .then((base) => setChecks(cs.map((c) => (c.state === 'failure' ? { ...c, onBase: onBaseOf(base, c) } : c))), () => {});
-    }, () => setChecks([]));
+    }, (e) => (setChecks([]), setChecksErr(e.message)));
   };
 
   useEffect(() => {
@@ -915,7 +917,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     roomCheck(data.files, read).then((r) => !stop && setRoom(r), () => {});
     return () => void (stop = true);
   }, [data?.files, chkRoom]);
-  if (error) return <p class="error page">{error}</p>;
+  if (error) return <p class="error page">{error} <Retry onClick={() => (setError(''), dispatchEvent(new Event('lgtm:refresh')))} /></p>;
   if (!data) return <PRSkeleton pr={early} />;
   const { pr, headRepo } = data;
   const files = since && sinceData ? sinceData.files : data.files;
@@ -1387,6 +1389,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <aside class={showIndex ? 'side tree' : 'side tree collapsed'} aria-hidden={!showIndex}>
           <div class="side-scroll">
             <ShortcutIndex
+              checksErr={checksErr}
               hidden={hiddenRows}
               repo={repo}
               pr={pr}
@@ -3283,7 +3286,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const [src, setSrc] = useState<string | null | undefined>(() => rawSeen.get(rawKey));
   useEffect(() => {
     if (src === undefined) getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((t) => (t != null && rawSeen.set(rawKey, t), setSrc(t)), () => setSrc(null));
-  }, []);
+  }, [src === undefined]);
   // Only diff lines take line comments, so sections outside the diff fold away (expandable, read-only).
   const inDiff = useMemo(() => new Set(hunks.flatMap((h) => h.lines.flatMap((l) => l.new ?? []))), [hunks]);
   const chunks = useMemo(() => (src ? renderChunks(src, file.status === 'added' ? new Set() : addedLines(hunks), inDiff, ctx.mainLang) : []), [src, hunks]);
@@ -3291,7 +3294,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
   if (src === undefined) return <div class="pad" style={{ minHeight: stand }}><Lines n={6} /></div>;
-  if (src === null) return <p class="note pad">Couldn't load this file. The {'<>'} button in its header shows the source diff.</p>;
+  if (src === null) return <p class="note pad">Couldn't load this file. <Retry onClick={() => setSrc(undefined)} /> · The {'<>'} button in its header shows the source diff.</p>;
 
   const t = ctx.target?.path === path ? ctx.target : null;
   // Threads, drafts and removals attach to the first top-level block ending at or after their line.
@@ -4056,8 +4059,9 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
   const [issue, setIssue] = useState<JiraIssue | null>(() => jiraSeen()[id] ?? null);
   const [err, setErr] = useState('');
   const [open, toggle] = useStoredFlag('ticketOpen', true);
-  useEffect(() => void fetchJira(id).then((i) => (setIssue(i), keepJira(i)), (e) => setErr(e.message)), [id]);
-  if (err && !issue) return <p class="note ticket-err">Jira {id}: {err}</p>;
+  const [tries, setTries] = useState(0);
+  useEffect(() => void fetchJira(id).then((i) => (setIssue(i), keepJira(i), setErr('')), (e) => setErr(e.message)), [id, tries]);
+  if (err && !issue) return <p class="note ticket-err">Jira {id}: {err} <Retry onClick={() => (setErr(''), setTries((t) => t + 1))} /></p>;
   // The first time: a placeholder its summary's height while Jira answers.
   if (!issue) return <div class="ticket ticket-wait"><span class="sk sk-line" /> {id}</div>;
   const html = md.render(adfToMarkdown(issue.description));

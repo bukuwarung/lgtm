@@ -3,7 +3,7 @@ import { uniqueNames } from './files.ts';
 import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
 import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
-import { Tg, Who, Time } from './tags.tsx';
+import { Tg, Who, Time, Retry } from './tags.tsx';
 
 // Every review thread waiting on my reply (#/inbox): in the PRs in my list (only those the list already counts one
 // waiting in are asked for their threads), and in PRs merged lately that I opened or reviewed, where a reply after
@@ -30,6 +30,8 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   // A refresh asks again about the PRs that changed: until it knows, what's shown stays (and a reply being typed with it).
   const pending = !!items?.some((i) => (i.mine || i.myState) && !i.thread);
   const key = items ? [...asked, ...named].map((i) => `${i.id}@${i.updatedAt}`).join() + '|' + (pending ? 'pending' : '') : ''; // the list's arrival counts, even with nothing waiting in it
+  const [loadErr, setLoadErr] = useState('');
+  const [tries, setTries] = useState(0);
   useEffect(() => {
     if (!items || (pending && list)) return;
     let stop = false;
@@ -45,11 +47,11 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
           setMe(login);
           setList([...l, ...only].map((w) => ({ ...w, mention: mentions.get(w.item.id) })).filter((w) => w.threads.length || w.mention));
         },
-        (e) => !stop && (reportError(`Couldn't load your threads: ${e.message}`), setList([])),
+        (e) => !stop && (setLoadErr(e.message), setList([])),
       );
     });
     return () => void (stop = true);
-  }, [key]);
+  }, [key, tries]);
   const open = (list ?? [])
     .map((w) => ({ ...w, threads: w.threads.filter((t) => !done.has(t.id)), mention: w.mention && !done.has(w.mention.id!) ? w.mention : undefined }))
     .filter((w) => w.threads.length || w.mention);
@@ -79,6 +81,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   let k = 0;
   return (
     <div class="page history inbox">
+      {loadErr && <p class="error">Couldn't load your threads: {loadErr} <Retry onClick={() => (setLoadErr(''), setList(null), setTries((t) => t + 1))} /></p>}
       <h2>Waiting on your reply</h2>
       <p class="note">
         {count

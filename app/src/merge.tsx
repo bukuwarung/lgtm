@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
-import { Octicon, Who } from './tags.tsx';
+import { Octicon, Who, Retry } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, type Check, type MergeMethod, type MergeState } from './github.ts';
@@ -90,7 +90,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
   const [required, setRequired] = useState<string[]>([]);
   useEffect(() => void (s?.baseRefName && requiredChecks(repo, s.baseRefName).then(setRequired)), [repo, s?.baseRefName]);
 
-  if (!s) return err ? bar('Merge', '', `Couldn't load the merge status: ${err}`, <div class="panel merge m-bad"><p class="error">Couldn't load the merge status: {err}</p></div>) : null;
+  if (!s) return err ? bar('Merge', '', `Couldn't load the merge status: ${err}`, <div class="panel merge m-bad"><p class="error">Couldn't load the merge status: {err} <Retry onClick={() => (setErr(''), load())} /></p></div>) : null;
   if (s.state !== 'OPEN')
     return bar(
       s.state === 'MERGED' ? <><Octicon name="git-merge" /> Merged</> : <><Octicon name="git-pull-request-closed" /> Closed</>,

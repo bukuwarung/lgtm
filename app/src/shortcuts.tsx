@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, reportError, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
-import { CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
+import { CheckMark, Octicon, Tg, Who, Lines, Retry } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, earlierVerdicts, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
@@ -249,9 +249,11 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
       (e) => setRerun(`couldn't: ${e.message}`),
     );
   };
+  const [logErr, setLogErr] = useState('');
+  const loadLog = () => (setLogErr(''), fetchJobLog(repo, c.jobId!).then(setLog, (e) => setLogErr(e.message)));
   const toggle = () => {
     setOpen(!open);
-    if (log === null) fetchJobLog(repo, c.jobId!).then(setLog, (e) => setLog(`Couldn't load the log: ${e.message}`));
+    if (log === null) loadLog();
   };
   return (
     <>
@@ -280,7 +282,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
           </>
         )}
       </div>
-      {open && (log == null ? <Lines n={4} /> : <pre class="ix-log">{log}</pre>)}
+      {open && (logErr ? <p class="note ix-pad">Couldn't load the log: {logErr} <Retry onClick={loadLog} /></p> : log == null ? <Lines n={4} /> : <pre class="ix-log">{log}</pre>)}
     </>
   );
 }
@@ -288,6 +290,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
 type IndexProps = {
   repo: string;
   hidden?: { label: string; show: () => void }[]; // files waiting behind a row in the diff (generated, archived…)
+  checksErr?: string; // the checks didn't load
   pr: PR;
   conversation: ConversationItem[];
   threads: Thread[];
@@ -315,7 +318,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -500,6 +503,8 @@ export function ShortcutIndex({ hidden = [], repo, pr, conversation, threads, se
       >
         {!checks ? (
           <div class="ix-pad"><Lines /></div>
+        ) : checksErr ? (
+          <p class="note ix-pad">Couldn't load the checks: {checksErr} <Retry onClick={onRefreshChecks} /></p>
         ) : !checks.length ? (
           <p class="note ix-pad">No checks.</p>
         ) : (
