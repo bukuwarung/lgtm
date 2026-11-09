@@ -238,9 +238,10 @@ export const viewAs = () => {
 let glabList: Promise<GlabAccount[]> | undefined;
 export const glabAccounts = (fresh = false): Promise<GlabAccount[]> =>
   (fresh || !glabList ? (glabList = (isDesktop ? command<GlabAccount[]>('glab_accounts') : fetch('/glab-accounts').then((r) => (r.ok ? r.json() : []))).then((a) => (Array.isArray(a) ? a : []), () => [])) : glabList);
-export async function fetchGlabToken(host: string): Promise<string> {
-  if (isDesktop) return command<string>('glab_token', { host });
-  const res = await fetch('/glab-token?host=' + encodeURIComponent(host));
+// `refresh`: have glab renew an expired (OAuth) token first.
+export async function fetchGlabToken(host: string, refresh = false): Promise<string> {
+  if (isDesktop) return command<string>('glab_token', { host, refresh });
+  const res = await fetch('/glab-token?host=' + encodeURIComponent(host) + (refresh ? '&refresh=1' : ''));
   if (!res.ok) throw new Error((await res.text()) || `Could not get a GitLab token for ${host}.`);
   return res.text();
 }

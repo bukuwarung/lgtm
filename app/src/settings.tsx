@@ -393,6 +393,7 @@ export function Settings() {
       <section>
         <h3>{T.PR} list</h3>
         <Flag k="showDrafts" initial={false} label={`Show other people's draft ${T.PRs}`} hint="Your own drafts always show."  demo />
+        <Flag k="gitlabTodoSync" initial={true} label="Mark GitLab to-dos done from the inbox" hint="Done on a GitLab mention in lgtm's inbox also marks its to-do done on GitLab, so you don't clear it twice; Undo brings it back. (Replying there clears it anyway: GitLab does.)" />
         <Flag k="muteApproved" initial={true} label={`Mute replies and mentions on ${T.PRs} you've approved`} hint={`No “awaiting your reply”, no inbox entry, no notification, while your latest review is an approval. New commits that dismiss it, or another verdict, bring them back. The ${T.PR} itself still shows its threads.`} demo />
         <label class="set-row">
           <input

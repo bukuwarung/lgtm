@@ -197,33 +197,69 @@ pub async fn gh_accounts() -> Result<Value, String> {
     Ok(json!(all.iter().filter(|a| a["state"] == "success").map(|a| json!({ "login": a["login"], "active": a["active"] == json!(true) })).collect::<Vec<_>>()))
 }
 
-/// GitLab through glab, which owns the sign-in like gh does: the hosts it's signed in to, each with its account and
-/// where its API is (`glab auth status` prints them on stderr).
-#[tauri::command]
-pub async fn glab_accounts() -> Result<Value, String> {
-    let o = run("glab", &["auth", "status"], None, SECONDS_30);
-    let text = format!("{}{}", o.stdout, o.stderr);
+/// The hosts glab is signed in to, from its config file (glab-cli/config.yml): each with its user and where its API is.
+/// Read directly, as `glab auth status` checks every token online (seconds); a bad token shows on the first request.
+pub fn glab_hosts(text: &str) -> Vec<Value> {
     let host_ok = re(r"^[A-Za-z0-9.-]+(:\d+)?$");
-    let config = |key: &str, host: &str| {
-        let c = run("glab", &["config", "get", key, "--host", host], None, SECONDS_30);
-        Some(c.stdout.trim().to_string()).filter(|v| c.ok && !v.is_empty())
-    };
-    Ok(json!(re(r"Logged in to (\S+) as (\S+)")
-        .captures_iter(&text)
-        .filter(|c| host_ok.is_match(&c[1]))
-        .map(|c| {
-            let api = config("api_host", &c[1]).unwrap_or_else(|| c[1].to_string());
-            let protocol = config("api_protocol", &c[1]).unwrap_or_else(|| "https".into());
-            json!({ "host": &c[1], "login": &c[2], "api": format!("{protocol}://{api}") })
+    let (mut in_hosts, mut host_indent, mut out): (bool, Option<usize>, Vec<[String; 4]>) = (false, None, vec![]);
+    for line in text.lines() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        let indent = line.len() - line.trim_start().len();
+        if indent == 0 {
+            in_hosts = t == "hosts:";
+            continue;
+        }
+        if !in_hosts {
+            continue;
+        }
+        let Some((k, v)) = t.split_once(':') else { continue };
+        let unq = |x: &str| x.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
+        let (k, v) = (unq(k), unq(v));
+        if *host_indent.get_or_insert(indent) == indent {
+            out.push([k, String::new(), String::new(), String::new()]); // host, user, api_host, api_protocol
+        } else if let Some(cur) = out.last_mut() {
+            match k.as_str() { "user" => cur[1] = v, "api_host" => cur[2] = v, "api_protocol" => cur[3] = v, _ => {} }
+        }
+    }
+    out.into_iter()
+        .filter(|[h, u, _, _]| !u.is_empty() && host_ok.is_match(h))
+        .map(|[h, u, api, proto]| {
+            let api = if api.is_empty() { h.clone() } else { api };
+            let proto = if proto.is_empty() { "https".to_string() } else { proto };
+            json!({ "host": h, "login": u, "api": format!("{proto}://{api}") })
         })
-        .collect::<Vec<_>>()))
+        .collect()
 }
 
-/// glab's token for a host, read on every call so `glab auth login` applies on reload.
 #[tauri::command]
-pub async fn glab_token(host: String) -> Result<String, String> {
+pub async fn glab_accounts() -> Result<Value, String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dirs = [
+        std::env::var("GLAB_CONFIG_DIR").ok(),
+        std::env::var("XDG_CONFIG_HOME").ok().map(|x| format!("{x}/glab-cli")),
+        Some(format!("{home}/Library/Application Support/glab-cli")),
+        Some(format!("{home}/.config/glab-cli")),
+    ];
+    for d in dirs.into_iter().flatten() {
+        if let Ok(text) = std::fs::read_to_string(format!("{d}/config.yml")) {
+            return Ok(json!(glab_hosts(&text)));
+        }
+    }
+    Ok(json!([]))
+}
+
+/// glab's token for a host, read on every call so `glab auth login` applies on reload. `refresh`: first a request
+/// through glab, which renews an expired OAuth token (glab renews only when it makes a request itself).
+#[tauri::command]
+pub async fn glab_token(host: String, refresh: Option<bool>) -> Result<String, String> {
     if !re(r"^[A-Za-z0-9.-]+(:\d+)?$").is_match(&host) {
         return Err("Bad host".into());
+    }
+    if refresh.unwrap_or(false) {
+        let _ = run("glab", &["api", "user", "--hostname", &host], None, SECONDS_30);
     }
     let o = run("glab", &["config", "get", "token", "--host", &host], None, SECONDS_30);
     if o.missing {
@@ -1085,6 +1121,8 @@ mod tests {
         assert!(re(LOGIN).is_match("isfa-buku") && !re(LOGIN).is_match("../etc"));
         assert!(re(PR_REF).is_match("gitlab.com/group/sub/proj#12") && re(LOGIN).is_match("jo.e@gitlab.com") && !re(LOGIN).is_match("a@b/c"));
         assert_eq!(pr_page("gitlab.com/g/p", "7"), "gitlab.com/g/p/-/merge_requests/7");
+        let hosts = glab_hosts("git_protocol: ssh\nhosts:\n    gitlab.com:\n        user: ana\n        api_host: gitlab.com\n    git.acme.io:\n        token: x\n");
+        assert_eq!(hosts, vec![json!({ "host": "gitlab.com", "login": "ana", "api": "https://gitlab.com" })]);
         assert!(re(SLACK_ID).is_match("U0ABCDEF12") && !re(SLACK_ID).is_match("C123456"));
     }
 

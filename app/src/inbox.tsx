@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'preact/hooks';
 import { uniqueNames } from './files.ts';
-import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
+import { isLab, awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
 import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel, term } from './platform.ts';
+import { syncLabTodo } from './gitlab.ts';
 import { PageSkeleton } from './history.tsx';
 import { Tg, Who, Time, Retry, Updating } from './tags.tsx';
 
@@ -211,6 +212,10 @@ function Code({ t }: { t: Thread }) {
 // A PR conversation comment mentioning me: a reply goes on the conversation; Done as a thread's.
 function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: Item; current: boolean; onPick: () => void; onDone: Done }) {
   const [text, setText] = useState('');
+  // A GitLab mention's to-do follows Done (Settings → Inbox), and its Undo.
+  const [todoSync] = useStoredFlag('gitlabTodoSync', true);
+  const todo = todoSync && isLab(item.repo);
+  const sync = (done: boolean) => todo && void syncLabTodo(c, done).catch((e) => reportError(`Couldn't ${done ? 'mark' : 'restore'} the GitLab to-do: ${e.message}`));
   const [busy, setBusy] = useState(false);
   const send = () => {
     if (!text.trim() || busy) return;
@@ -234,7 +239,7 @@ function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: 
         disabled={busy}
       />
       <div class="row">
-        <button disabled={busy} data-k="e" title={`Take it off your list without replying. Nothing changes on ${T.site}.`} onClick={() => (markReplyDone(c.id!, c.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(c.id!), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}>
+        <button disabled={busy} data-k="e" title={todo ? 'Take it off your list without replying; its GitLab to-do is marked done too.' : `Take it off your list without replying. Nothing changes on ${T.site}.`} onClick={() => (markReplyDone(c.id!, c.databaseId), sync(true), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(c.id!), sync(false), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}>
           Done
         </button>
         <button class="primary" disabled={busy || !text.trim()} title="Send (⌘↵)" onClick={send}>

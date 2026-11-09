@@ -469,8 +469,14 @@ function App() {
   // Signed in as the account of last time at once (its saved list and drafts show without waiting for GitHub); GitHub's
   // answer confirms it, or (gh switched accounts) everything draws again as the right one.
   const [accountKey, setAccountKey] = useState(0);
+  // GitLab alone works too: without gh's sign-in but with glab's, lgtm starts on the GitLab account.
   const signIn = () =>
     loadToken()
+      .catch(async (e) => {
+        const labs = await glabAccounts(true);
+        if (!labs.length) throw e;
+        if (!labs.some((a) => a.host === viewAs())) localStorage.setItem('viewAs', labs[0].host);
+      })
       .then(async () => {
         const last = lastLogin();
         // A GitLab account (the avatar's menu) keeps its data as login@host, apart from GitHub's.
@@ -779,8 +785,12 @@ function SetupCheck() {
   });
   const [ints, setInts] = useState<Integrations | null>(null);
   const [skill, setSkill] = useState<SkillStatus | null>(null);
+  const [hub, setHub] = useState<boolean | null>(null);
+  const [labs, setLabs] = useState<GlabAccount[] | null>(null);
   const check = () => {
     setInts(null);
+    getGitHubViewer().then(() => setHub(true), () => setHub(false));
+    glabAccounts(true).then(setLabs);
     fetchIntegrations().then(setInts, () => setInts({ slack: { ok: false, error: "couldn't check" }, jira: { ok: false, error: "couldn't check" } }));
     claudeSkill().then(setSkill, () => setSkill(null));
   };
@@ -811,8 +821,9 @@ function SetupCheck() {
           <button onClick={check}>Check again</button>
           <button class="primary" onClick={done}>Done</button>
         </div>
-        <p class="note">lgtm borrows the sign-ins of these tools and stores no tokens. Only GitHub is required; the rest you can set up now or later in Settings.</p>
-        {row(true, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', null)}
+        <p class="note">lgtm borrows the sign-ins of these tools and stores no tokens. It needs GitHub or GitLab (or both); the rest you can set up now or later in Settings.</p>
+        {row(hub, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', <pre>brew install gh && gh auth login</pre>)}
+        {row(labs == null ? null : labs.length > 0, 'GitLab', labs?.length ? `MRs, reviews and comments, through the GitLab CLI (${labs.map((a) => a.host).join(', ')}).` : 'MRs, reviews and comments, through the GitLab CLI, on gitlab.com or your own GitLab.', <pre>brew install glab && glab auth login</pre>)}
         {row(ints ? ints.slack.ok : null, 'Slack', '(optional) DM the author when you finish a review.', <pre>brew install shaharia-lab/tap/slackcli && slackcli auth login-auto</pre>)}
         {row(ints ? ints.jira.ok : null, 'Jira', `(optional) The ${T.PRs_} ticket above its files.`, <pre>brew install atlassian/homebrew-acli/acli && acli jira auth login --web</pre>)}
         {row(skill ? skill.current : null, 'Claude Code skill', `(optional) Claude opens ${T.PRs} ready for review here, linked to its session.`, (
@@ -872,10 +883,11 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
       </h1>
       {isDesktop || /signed in|gh token|gh auth/i.test(error) ? (
         <>
-          <p>lgtm signs in with the GitHub CLI, so it never asks for a password or token. {error}</p>
-          <p>In Terminal, run:</p>
+          <p>lgtm signs in with the GitHub CLI (gh) or the GitLab CLI (glab), so it never asks for a password or token. {error}</p>
+          <p>In Terminal, run one, or both:</p>
           <pre>{missing ? 'brew install gh\ngh auth login' : 'gh auth login'}</pre>
-          <p class="note">If your organization enforces SSO, authorize the token for it when GitHub asks.</p>
+          <pre>{'brew install glab\nglab auth login'}</pre>
+          <p class="note">For GitHub: if your organization enforces SSO, authorize the token for it when GitHub asks. For your own GitLab: <code>glab auth login --hostname gitlab.example.com</code>.</p>
         </>
       ) : (
         <>

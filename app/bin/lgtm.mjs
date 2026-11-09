@@ -49,26 +49,49 @@ const ghAccounts = () =>
 // to, each with its account and where its API is, and a host's token, read per request so `glab auth login` applies on reload.
 const GL_HOST = /^[a-z0-9.-]+(:\d+)?$/i;
 const glab = (args) => execFileSync('glab', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 }).trim();
-const glabToken = (host) => {
+// glab's token for a host. `refresh`: first a request through glab, which renews an OAuth token that has expired (glab
+// renews only when it makes a request itself; lgtm reads the stored one).
+const glabToken = (host, refresh = false) => {
   if (!GL_HOST.test(host)) throw new Error('Bad host');
+  if (refresh) {
+    try {
+      glab(['api', 'user', '--hostname', host]);
+    } catch {}
+  }
   return glab(['config', 'get', 'token', '--host', host]);
 };
-const glabAccounts = () =>
-  new Promise((resolve) =>
-    execFile('glab', ['auth', 'status'], { timeout: 30000 }, (_err, stdout, stderr) => {
-      const out = [];
-      for (const [, host, login] of `${stdout}${stderr}`.matchAll(/Logged in to (\S+) as (\S+)/g)) {
-        if (!GL_HOST.test(host)) continue;
-        let api = host, protocol = 'https';
-        try {
-          api = glab(['config', 'get', 'api_host', '--host', host]) || host;
-          protocol = glab(['config', 'get', 'api_protocol', '--host', host]) || 'https';
-        } catch {}
-        out.push({ host, login, api: `${protocol}://${api}` });
-      }
-      resolve(out);
-    }),
-  );
+// The hosts glab is signed in to, from its config file: each with its user and where its API is. Read directly, as
+// `glab auth status` checks every token online (seconds); a bad token shows on the first request instead.
+const GLAB_CONFIGS = [process.env.GLAB_CONFIG_DIR, process.env.XDG_CONFIG_HOME && join(process.env.XDG_CONFIG_HOME, 'glab-cli'), join(homedir(), 'Library', 'Application Support', 'glab-cli'), join(homedir(), '.config', 'glab-cli')]
+  .filter(Boolean)
+  .map((d) => join(d, 'config.yml'));
+export function glabHosts(text) {
+  const out = [];
+  let inHosts = false, hostIndent = -1, cur = null;
+  for (const line of text.split('\n')) {
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    const indent = line.length - line.trimStart().length;
+    if (!indent) {
+      inHosts = /^hosts:\s*$/.test(line);
+      continue;
+    }
+    if (!inHosts) continue;
+    if (hostIndent < 0) hostIndent = indent;
+    const kv = line.trim().match(/^("[^"]+"|'[^']+'|[^:]+):\s*(.*)$/);
+    if (!kv) continue;
+    const [k, v] = [kv[1].replace(/^["']|["']$/g, ''), kv[2].replace(/^["']|["']$/g, '').trim()];
+    if (indent === hostIndent) out.push((cur = { host: k, user: '', api_host: '', api_protocol: '' }));
+    else if (cur && k in cur && k !== 'host') cur[k] = v;
+  }
+  return out.filter((a) => a.user && GL_HOST.test(a.host)).map((a) => ({ host: a.host, login: a.user, api: `${a.api_protocol || 'https'}://${a.api_host || a.host}` }));
+}
+const glabAccounts = async () => {
+  for (const f of GLAB_CONFIGS) {
+    const text = await readFile(f, 'utf8').catch(() => null);
+    if (text != null) return glabHosts(text);
+  }
+  return [];
+};
 
 async function readConfig() {
   try {
@@ -790,9 +813,9 @@ const server = createServer(async (req, res) => {
   if (path === '/gh-accounts') return ghAccounts().then((r) => json(res, 200, r));
   if (path === '/glab-accounts') return glabAccounts().then((r) => json(res, 200, r));
   if (path === '/glab-token') {
-    const host = new URL(req.url ?? '/', ORIGIN).searchParams.get('host') ?? '';
+    const q = new URL(req.url ?? '/', ORIGIN).searchParams, host = q.get('host') ?? '';
     try {
-      const token = glabToken(host);
+      const token = glabToken(host, q.has('refresh'));
       if (!token) throw new Error();
       return res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }).end(token);
     } catch {

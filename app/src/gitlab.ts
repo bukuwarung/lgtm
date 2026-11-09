@@ -38,8 +38,8 @@ const text = (html: string) => new DOMParser().parseFromString(html, 'text/html'
 let practice = false;
 export const setLabPractice = (on: boolean) => void (practice = on);
 const tokens = new Map<string, Promise<string>>();
-const tokenOf = (host: string) => {
-  if (!tokens.has(host)) tokens.set(host, fetchGlabToken(host).catch((e) => (tokens.delete(host), Promise.reject(e))));
+const tokenOf = (host: string, refresh = false) => {
+  if (refresh || !tokens.has(host)) tokens.set(host, fetchGlabToken(host, refresh).catch((e) => (tokens.delete(host), Promise.reject(e))));
   return tokens.get(host)!;
 };
 const apiOf = async (host: string) => (await glabAccounts()).find((a) => a.host === host)?.api ?? `https://${host}`;
@@ -71,7 +71,7 @@ async function lab(host: string, path: string, init: RequestInit = {}): Promise<
     done(host);
   }
 }
-async function ask(host: string, path: string, init: RequestInit): Promise<Response> {
+async function ask(host: string, path: string, init: RequestInit, renewed = false): Promise<Response> {
   const url = `${await apiOf(host)}${path === '/graphql' ? '/api/graphql' : `/api/v4${path}`}`;
   const res = await fetch(url, {
     cache: 'no-cache',
@@ -86,6 +86,11 @@ async function ask(host: string, path: string, init: RequestInit): Promise<Respo
     slow.set(host, Date.now() + 60_000);
     recordError(`GitLab 429 ${path.split('?')[0]}: too many requests`);
     throw slowError(host);
+  }
+  if (res.status === 401 && !renewed) {
+    // An OAuth token glab signed in with lasts 2 hours, and glab renews it only on its own requests: once, have it renew.
+    await tokenOf(host, true).catch(() => {});
+    return ask(host, path, init, true);
   }
   if (res.status === 401) {
     tokens.delete(host);
@@ -900,6 +905,15 @@ export async function labTicketPRs(repo: string, n: number, keys: string[]): Pro
 
 // --- the PR list ---
 
+// A mention's GitLab to-do marked done (from the inbox's Done), or back to pending (its Undo).
+export async function syncLabTodo(c: Comment, done: boolean) {
+  const host = unId(c.id!).host, todo = todoOfNote.get(c.databaseId);
+  if (!todo) return;
+  todoSeen.delete(host);
+  if (done) await send(host, `/todos/${todo}/mark_as_done`, 'POST');
+  else await mutate(host, `mutation($id:TodoID!){todoRestore(input:{id:$id}){errors}}`, { id: `gid://gitlab/Todo/${todo}` });
+}
+
 // MRs merged in the last 14 days that I opened or review, where a thread may wait on my reply (`waits`, github.ts
 // awaitsMe): a reply after the merge would otherwise go unseen. 20 of each, newest first.
 export async function getLabMergedAwaiting(host: string, me: string, waits: (t: Thread, mine: boolean) => boolean): Promise<MergedPR[]> {
@@ -920,6 +934,7 @@ export async function getLabMergedAwaiting(host: string, me: string, waits: (t: 
 // My pending GitLab to-dos where someone @-mentions me on an MR (not a bot's, not one marked done here), the latest
 // per MR, as the comment it came with: the inbox's mentions, and the list's "Mentioned you". Kept a minute per host.
 const todoSeen = new Map<string, { at: number; v: Promise<Map<string, Comment>> }>();
+const todoOfNote = new Map<number, number>(); // a mention's note → its to-do, for marking it done
 export function labMentions(host: string): Promise<Map<string, Comment>> {
   const c = todoSeen.get(host);
   if (c && Date.now() - c.at < 60_000) return c.v;
@@ -929,6 +944,7 @@ export function labMentions(host: string): Promise<Map<string, Comment>> {
       const note = Number(String(t.target_url).match(/#note_(\d+)$/)?.[1]);
       if (!note || !t.target?.iid || t.target.state !== 'opened' || isBot({ username: t.author?.username, bot: t.author?.bot })) continue;
       if (t.author?.avatar_url) knowFace(t.author.username, abs(host, t.author.avatar_url)!);
+      todoOfNote.set(note, t.id);
       out.set(gid(host, `${t.project.path_with_namespace}!${t.target.iid}`), {
         id: gid(host, `gid://gitlab/Note/${note}`),
         databaseId: note,

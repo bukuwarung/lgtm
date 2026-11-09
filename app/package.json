@@ -8,7 +8,8 @@
     "test": "node --test test/*.test.ts",
     "start": "vite build && node bin/lgtm.mjs",
     "demos": "node scripts/demos.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "test:gitlab": "node scripts/gitlab-live.ts"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",

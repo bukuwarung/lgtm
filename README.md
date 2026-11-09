@@ -16,7 +16,7 @@ macOS 13 or later, with Homebrew:
 ```bash
 brew tap bukuwarung/lgtm https://github.com/bukuwarung/lgtm
 brew install --cask bukuwarung/lgtm/lgtm
-gh auth login   # once, if you haven't
+gh auth login   # once, if you haven't (or glab auth login, for GitLab)
 ```
 
 `brew upgrade` updates it. Slack and Jira are optional; lgtm shows how to set them up on first launch.
