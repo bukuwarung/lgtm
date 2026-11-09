@@ -16,15 +16,20 @@ macOS 13 or later, with Homebrew:
 ```bash
 brew tap bukuwarung/lgtm https://github.com/bukuwarung/lgtm
 brew install --cask bukuwarung/lgtm/lgtm
-gh auth login   # once, if you haven't (or glab auth login, for GitLab)
 ```
 
-`brew upgrade` updates it. Slack and Jira are optional; lgtm shows how to set them up on first launch.
+Then sign in to GitHub, GitLab or both, once:
 
-GitLab works too, through the GitLab CLI: `brew install glab`, then `glab auth login` (add `--hostname gitlab.example.com` for your own GitLab, in the app or the browser). Merge requests open from their link (or `lgtm <link>`); the avatar's menu switches between your GitHub and GitLab accounts, each with its own list, inbox, team (your GitLab groups) and saved data. GitLab's API limits aren't shown: GitLab doesn't let lgtm read them.
+```bash
+brew install gh && gh auth login       # GitHub
+brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com for your own)
+```
+
+`brew upgrade` keeps it current. Slack and Jira are optional: lgtm shows how to set them up on first launch.
 
 ## Highlights
 
+- **GitHub and GitLab.** Pull requests and merge requests alike, on gitlab.com or your own GitLab; the avatar switches between your accounts, each with its own list and inbox.
 - **One page per PR.** Every changed file in reading order, with imports, generated files, whitespace and bot chatter folded away.
 - **It points things out.** Possible secrets, edited database migrations, text that won't be translated, a lockfile left behind, and more, each with a comment drafted for you.
 - **Review mode.** Your PRs to review, one after another, with nothing else on screen.
