@@ -24,6 +24,8 @@ Change the single-key ones in ⚙ Settings → Keyboard shortcuts.
 | `⌘+` / `⌘−` / `⌘0` | Bigger / smaller / default text |
 | `?` | All shortcuts |
 
+In any menu (the bell, the clock, your account, a pill's, ✳ Claude): `↓` / `↑`, `Home` / `End` move through it, `Esc` closes it and goes back to its button. Tooltips name each button's key, as you've set it.
+
 In the inbox (fixed keys):
 
 | Key | Action |

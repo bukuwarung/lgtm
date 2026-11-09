@@ -42,6 +42,8 @@ gh auth login   # once, if you haven't
 - Drafts you're a code owner of, before GitHub asks you.
 - The bell keeps what needs you (review requested, replies, verdicts, mentions, CI, ready to merge, QA) until you open the PR; desktop notifications are a switch.
 - Optional mutes: replies and mentions on PRs you've approved, and comments that open with 🤖 (agents posting from people's accounts).
+- The clock by Back lists the PRs you opened lately, kept across launches; the start page and ⌘K offer them too.
+- Every count agrees: the list, the start page, Review mode, the Dock badge, the menu bar and the window title.
 
 ## Inbox
 
@@ -51,7 +53,7 @@ gh auth login   # once, if you haven't
 </picture>
 
 - Review threads and PR comments that mention you, wherever they wait on your reply: open PRs, and ones merged lately.
-- Each shows the code it's on and the earlier comments; reply, resolve, or mark it Done until someone writes again.
+- Each shows the code it's on and the earlier comments; reply, resolve, or mark it Done until someone writes again (Undo for a few seconds after).
 - On your own PR, commit a reviewer's suggested change from there.
 - `j`/`k` move, `r` reply, `e` done, `x` resolve, `c` commit the suggestion, `o` open the PR.
 
@@ -75,7 +77,12 @@ gh auth login   # once, if you haven't
 - Files in reading order: specs and docs, build and config, models, the implementation (each test right below its class), other tests, then resources. Drag the steps into your own order; the index groups files by step, or as folders.
 - Files grouped by module, with code changed but no test.
 - Re-reviews show only what changed since your last one, and your threads say whether their lines moved.
-- An index of comments, reviewers, checks (failed-job logs, and whether `main` fails them too) and files; big PRs get a review plan. It can start hidden on PRs waiting for your review.
+- An index: reviewers; the conversation (comments, reviews and review threads together, what waits on your reply first); checks (failed-job logs, and whether `main` fails them too, or a required one that never ran); and files, following your scroll, with what's hidden behind a row. Big PRs get a review plan. It can start hidden on PRs waiting for your review, and sections stay folded as you leave them.
+- A merged, closed or draft PR says so at the top; a review of a merged or closed one is a comment.
+- In the conversation, bot comments wait behind one line, each review lists its comments on the code, and a reviewer's earlier verdict folds under their latest.
+- Other PRs for the same Jira ticket, in any of your repos, under the ticket.
+- A link to a PR, a comment or a file of this PR, in anything people wrote, opens here; Jira keys link to the ticket; links that leave lgtm end in ↗.
+- Files and repos by their short names, with as many parent folders (or the owner) as it takes to tell them apart.
 - Side-by-side or unified, centred or full width, in your pick of themes and fonts.
 - Android `strings.xml` as texts, with the other languages checked.
 
@@ -111,7 +118,8 @@ On by default, each with a switch and a preview in Settings:
 - **Whitespace** ignored (`w`).
 - **Markdown and doc comments** rendered (KDoc, Javadoc, JSDoc), still commentable line by line.
 - **Images** as pictures, Android vector drawables too.
-- **Bot comments** from CI and AI reviewers folded.
+- **Bot comments** from CI and AI reviewers behind one line.
+- **Archived specs** (an `archive/` folder of specs and their metadata) behind one row.
 
 <details><summary>See each one, off and on</summary>
 
@@ -199,7 +207,7 @@ On by default, each with a switch and a preview in Settings:
 </picture>
 
 - Reviewers suggested by who wrote the code and who's free (and who's away on Slack); one click asks on GitHub and Slack.
-- Commit suggested changes, rerun failed jobs, and merge from a box that says what's blocking.
+- Commit suggested changes, rerun failed jobs, and merge from a box that says what's blocking, a required check that never ran (GitHub would wait for ever), and a "do not merge" label, title or commit.
 - Merging moves the Jira ticket on; a PR waiting a day can nudge its reviewers on Slack.
 - **Ask QA** posts your QA request to the QA channel on Slack, filled in from the PR and yours to edit first. When QA replies, the PR, the list and the merge box say whether they signed off or raised an issue.
 
@@ -226,12 +234,17 @@ On by default, each with a switch and a preview in Settings:
 </picture>
 
 - Whole-app colour themes, light and dark: lgtm's own, One, Ayu, Gruvbox, and hundreds from Zed and VS Code.
+- lgtm's own marks (warnings, findings, away) take the theme's colours where they read well on it; a switch keeps lgtm's.
+- Text size reaches everything, Mermaid diagrams included; times read as "2 hours ago" or the date, your pick.
 
 ## On your Mac
 
 - A menu bar item and Dock badge with what needs your review.
 - `lgtm <PR link>` in Terminal opens it in the app; so do `lgtm://` links, and lgtm offers to open a PR link you copy.
 - Several GitHub accounts, Launch at login, and updates through Homebrew.
+- A narrow window keeps the diff readable: the index, then the PR list, open over it from their buttons.
+- Reduce motion and Increase contrast in macOS's Accessibility settings are followed.
+- Offline, one bar says so; what was loaded stays, and lgtm loads again once GitHub answers. A part that fails to load has its own Retry.
 
 ## More
 

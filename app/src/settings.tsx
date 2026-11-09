@@ -435,7 +435,7 @@ export function Settings() {
         <Flag k="gradleModules" initial={true} label="Group files by module" hint="Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a PR touches two or more, the index groups its files by them and each file says its own; with one, a pill names it."  demo />
         <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it."  demo />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review."  demo />
-        <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" />
+        <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" hint="Finish review starts with “Then open the next PR that needs my review” ticked." demo />
         <SavedReplies />
       </section>
 
@@ -473,7 +473,7 @@ export function Settings() {
         </Flag>
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
         <Flag k="foldBots" initial={true} label="Bot comments behind one line, bot-only threads folded" hint="In the conversation, all the bots' comments (CI reports, AI reviewers) sit behind one “N comments from bots” line; open it for one line each." demo>
-          <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." />
+          <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." demo />
         </Flag>
         <Flag k="agentsAsBots" initial={false} label="Comments that open with 🤖 are a bot's" hint="Agents posting from people's accounts often say so that way (“🤖 Posted by an agent”). They then fold like bots', and don't wait on your reply or count as mentions." demo />
         <Flag k="hideSettled" initial={true} label="Hide resolved and outdated threads" hint="Unless you commented in them. The index offers to show them per PR."  demo />

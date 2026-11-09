@@ -1,11 +1,11 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
+import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -96,6 +96,35 @@ addEventListener(
 export function parseRoute(s: string) {
   const m = s.match(/([^/\s#]+\/[^/\s]+)\/pull\/(\d+)/);
   return m ? { repo: m[1], n: +m[2] } : null;
+}
+
+// GitHub out of reach (github.ts says so from any request): one bar for the whole app instead of a failure per part.
+// What was loaded stays on show; buttons that need GitHub rest (style.css html.offline). It tries again every 20
+// seconds (and when macOS says the network is back), and once GitHub answers, everything on show loads again.
+function OfflineBar() {
+  const [off, setOff] = useState(isOffline);
+  useEffect(() => {
+    const down = () => setOff(true);
+    const up = () => (setOff(false), dispatchEvent(new Event('lgtm:refresh')), dispatchEvent(new Event('lgtm:list-refresh')));
+    const back = () => void pingGitHub();
+    addEventListener('lgtm:offline', down);
+    addEventListener('lgtm:online', up);
+    addEventListener('online', back);
+    return () => (removeEventListener('lgtm:offline', down), removeEventListener('lgtm:online', up), removeEventListener('online', back));
+  }, []);
+  useEffect(() => {
+    document.documentElement.classList.toggle('offline', off);
+    if (!off) return;
+    const t = setInterval(() => void pingGitHub(), 20_000);
+    return () => clearInterval(t);
+  }, [off]);
+  if (!off) return null;
+  return (
+    <div class="offline-bar" role="status">
+      <Octicon name="alert" /> <span><b>Offline:</b> GitHub can't be reached. This is what was loaded; lgtm tries again by itself.</span>
+      <Retry onClick={() => void pingGitHub()} />
+    </div>
+  );
 }
 
 // A theme being tried on the whole app (from Settings' theme gallery): keep it, or go back to yours. On every page, so
@@ -657,6 +686,7 @@ function App() {
           <button class="icon-btn" title="Dismiss" aria-label="Dismiss" onClick={() => setFailure('')}><Octicon name="x" /></button>
         </div>
       )}
+      <OfflineBar />
       {isDesktop && <FindBar />}
       {!rm && (
         <>

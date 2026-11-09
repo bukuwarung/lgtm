@@ -147,6 +147,10 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .fail-bar { position: sticky; top: var(--nav); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 12px; color: #fff; background: light-dark(#cf222e, #b62324); font-size: calc(13px * var(--ts)); }
 .fail-bar span { flex: 1; }
 .fail-bar .icon-btn { color: #fff; }
+.offline-bar { position: sticky; top: var(--nav); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: calc(13px * var(--ts)); color: var(--fg); background: var(--warn); border-bottom: 1px solid var(--border); }
+.offline-bar .retry { margin-left: auto; }
+/* Offline: what needs GitHub rests (the bar says why); reading, scrolling, drafts and settings go on. */
+html.offline :is(.bar-actions, .merge-bar, .review-submit, .inbox-thread .row, .thread .row) button:not(.retry) { opacity: .5; pointer-events: none; }
 .sends { margin: 6px 0; padding: 6px 8px; border-radius: 6px; font-size: calc(12px * var(--ts)); color: var(--muted); background: var(--soft); }
 .sends-list { display: block; margin-top: 2px; font-family: var(--mono); font-size: calc(11px * var(--ts)); }
 /* Specs naming the PR's code: their code spans link to it, their tasks count it, and files link back. */

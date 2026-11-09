@@ -185,6 +185,14 @@ function noteLimit(res: Response, path: string, body?: string) {
   recordError(`GitHub ${res.status} ${path}: the ${bucket} limit (${res.headers.get('x-ratelimit-used') ?? '?'}/${res.headers.get('x-ratelimit-limit') ?? '?'} used${retry ? `, retry after ${retry}s` : ''})`);
 }
 
+// Whether GitHub can be reached: a request that can't get through says offline, the next that does says online again
+// (main.tsx shows it once, for the whole app, and refreshes when it's back).
+let offline = false;
+export const isOffline = () => offline;
+const setOffline = (v: boolean) => offline !== v && ((offline = v), dispatchEvent(new Event(v ? 'lgtm:offline' : 'lgtm:online')));
+// A cheap look (it doesn't count against the limits) to see whether GitHub answers again.
+export const pingGitHub = () => gh('/rate_limit').then(() => true, () => false);
+
 async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') {
   if (practice && writes(path, init)) throw new Error('Practice run: nothing is sent to GitHub');
   const bucket = bucketOf(path.replace(/^https:\/\/api\.github\.com/, ''));
@@ -200,7 +208,11 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
       'X-GitHub-Api-Version': '2022-11-28',
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
     },
+  }).catch((e) => {
+    setOffline(true);
+    throw new Error(`Couldn't reach GitHub (${e.message})`);
   });
+  setOffline(false);
   if (res.status === 401) throw new Error('GitHub rejected the gh token. Run `gh auth login`, then reload.');
   noteLimit(res, path.replace(/^https:\/\/api\.github\.com/, '').split('?')[0], typeof init.body === 'string' ? init.body : undefined);
   return res;
