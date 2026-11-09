@@ -1,4 +1,4 @@
-import { slackEscape } from './platform.ts';
+import { slackEscape, words } from './platform.ts';
 
 // The messages lgtm sends on Slack, as templates you can change (Settings → Slack → Messages). {name} fills in a value;
 // {@recipient} (who gets it; {@them}, its first name, too), {@author} and {@any-github-login} tag that person on Slack (the sender turns <@gh:…> into a Slack mention,
@@ -11,22 +11,22 @@ export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string;
     fields: '{verdict} Approved, Requested changes on, Reviewed · {comments} " · 3 comments on PaymentService.kt, RetryPolicy.kt" · {note} your review summary, quoted',
   },
   nudge: {
-    label: 'Nudging the reviewers of your PR that has waited a day or more',
+    label: words('Nudging the reviewers of your PR that has waited a day or more'),
     initial: "👋 Could you take a look at {pr}? It's been waiting for review for {days}.",
     fields: '{days} "2 days"',
   },
   ask: {
-    label: 'Asking someone to review your PR (editable when you ask)',
+    label: words('Asking someone to review your PR (editable when you ask)'),
     initial: 'Hi! Could you review my PR when you have a moment? Thank you 🙏\n{pr}',
     fields: '',
   },
   again: {
-    label: 'Asking a reviewer to look again (re-request on your PR); empty: no Slack message',
+    label: words('Asking a reviewer to look again (re-request on your PR); empty: no Slack message'),
     initial: 'Addressed your comments 🙏 Could you take another look at {pr}?',
     fields: '',
   },
   qa: {
-    label: 'Asking QA to test your PR, in the QA channel (editable when you ask)',
+    label: words('Asking QA to test your PR, in the QA channel (editable when you ask)'),
     initial: 'Need bandwidth to test: *{title}*{jira}\n*What changed:* {description}\nPR: {pr}',
     fields: '{jira} " (Jira: BUKU-123)", linked, from the title or branch · {description} the PR description\'s first paragraph · <!subteam^ID> tags a Slack group (its ID: on Slack, the group → ⋯ → Copy group ID)',
   },
@@ -87,7 +87,8 @@ export const prValues = (p: { repo: string; number: number; title: string; url: 
 });
 
 export function fillSlack(template: string, values: Record<string, string>): string {
-  return template
+  // "my PR" says "my MR" for a GitLab one (only that: the rest of your wording stays as written)
+  return (values.repo && gitlabHost(values.repo) ? template.replace(/\bPR(s?)\b/g, 'MR$1').replace(/\bpull request/g, 'merge request') : template)
     .replace(/\{@([A-Za-z0-9-]{1,39})\}/g, (_, who: string) => `<@gh:${who === 'recipient' || who === 'them' ? '*' : who === 'author' ? values.authorKey ?? values.author : who}>`)
     .replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? values[k] : m))
     .replace(/[ \t]+\n/g, '\n')

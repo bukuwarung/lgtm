@@ -62,7 +62,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 "File",
                 true,
                 &[
-                    &item("open-url", "Open PR Link…", Some("CmdOrCtrl+L"))?,
+                    &item("open-url", "Open PR or MR Link…", Some("CmdOrCtrl+L"))?,
                     &item("palette", "Go to…", Some("CmdOrCtrl+K"))?,
                     &item("review-mode", "Start Review Mode", Some("CmdOrCtrl+Shift+R"))?,
                     &sep()?,
@@ -94,7 +94,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                     &item("back", "Back", Some("CmdOrCtrl+["))?,
                     &item("forward", "Forward", Some("CmdOrCtrl+]"))?,
                     &sep()?,
-                    &item("toggle-prs", "Show or Hide the PR List", Some("CmdOrCtrl+Shift+L"))?,
+                    &item("toggle-prs", "Show or Hide the List", Some("CmdOrCtrl+Shift+L"))?,
                     &sep()?,
                     &item("text-bigger", "Bigger Text", Some("CmdOrCtrl+="))?,
                     &item("text-smaller", "Smaller Text", Some("CmdOrCtrl+-"))?,

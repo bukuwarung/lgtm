@@ -1,4 +1,4 @@
-import { useStoredValue } from './platform.ts';
+import { useStoredValue, words } from './platform.ts';
 
 // The review page's single-key shortcuts, rebindable in Settings. A binding is the key's `KeyboardEvent.key`
 // ("j", "J" for Shift+J, " " for Space). ⌘ shortcuts stay fixed: in the app they're the menu bar's.
@@ -13,14 +13,14 @@ export const ACTIONS = [
   ['whitespace', 'Ignore whitespace on/off', 'w'],
   ['comment', 'Comment on the line under the mouse (or at the top of the view)', ' '],
   ['fileComment', 'Comment on the current file', 'c'],
-  ['stackPrev', 'Previous PR in the stack', '['],
-  ['stackNext', 'Next PR in the stack', ']'],
+  ['stackPrev', words('Previous PR in the stack'), '['],
+  ['stackNext', words('Next PR in the stack'), ']'],
   ['index', 'Show / hide the index', 'i'],
-  ['merge', 'Open / close the merge box (your PRs)', 'm'],
+  ['merge', words('Open / close the merge box (your PRs)'), 'm'],
   ['stack', "Open / close the stack's overview", 's'],
   ['githubDev', 'Open the file in view on github.dev', '.'],
   ['docCode', 'Jump between the specs (Markdown) and the code', 'g'],
-  ['skip', 'Skip to the next PR (review mode)', 'N'],
+  ['skip', words('Skip to the next PR (review mode)'), 'N'],
   ['help', 'Keyboard shortcuts', '?'],
 ] as const;
 export type Action = (typeof ACTIONS)[number][0];
@@ -28,7 +28,7 @@ export type Bindings = Record<Action, string>;
 
 export const FIXED: [string, string][] = [
   ['⌘↵', 'Finish review (submit inside the panel)'],
-  ['⌘K', 'Go to a PR, file, thread or check'],
+  ['⌘K', words('Go to a PR, file, thread or check')],
   ['⌘F', 'Find, in every file'],
   ['Esc', 'Close this help'],
 ];

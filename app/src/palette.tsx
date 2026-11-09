@@ -1,7 +1,11 @@
+import { numRef } from './github.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
-import { recentPRs, repoLabel } from './platform.ts';
+import { recentPRs, repoLabel, term } from './platform.ts';
+
+// The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
+const T = term();
 
 // Go to: a PR in your queue, or within the open PR a file or anything in its index (comments, checks, threads).
 // Index entries are read from the page and clicked, so they jump exactly like the index does.
@@ -17,7 +21,7 @@ function entries(queue: QueueItem[]): Entry[] {
   }));
   const seen = new Set(recentPRs().map((r) => `${r.repo}#${r.n}`));
   const prs = queue.filter((i) => !seen.has(`${i.repo}#${i.number}`)).map((i) => ({
-    kind: 'PR',
+    kind: `${T.PR}`,
     label: i.title,
     sub: `${repoLabel(i.repo)}#${i.number} · ${i.author}`,
     run: () => (location.hash = `/${i.repo}/pull/${i.number}`),
@@ -71,7 +75,7 @@ export function CommandBar({ queue, parse }: { queue: () => QueueItem[]; parse: 
   const shown = !list
     ? []
     : [
-        ...(pr ? [{ kind: 'Open', label: `${repoLabel(pr.repo)}#${pr.n}`, sub: 'PR from the link', run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
+        ...(pr ? [{ kind: 'Open', label: `${repoLabel(pr.repo)}${numRef(pr.repo, pr.n)}`, sub: `${term(pr.repo).PR} from the link`, run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
         ...(pr ? [] : list.filter((e) => matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50)),
       ];
   const go = (e?: Entry) => {
@@ -89,8 +93,8 @@ export function CommandBar({ queue, parse }: { queue: () => QueueItem[]; parse: 
       <input
         ref={input}
         value={q}
-        placeholder="Go to a PR, file or thread, or paste a PR link"
-        aria-label="Go to, or open a PR link"
+        placeholder={`Go to a ${T.PR}, file or thread, or paste a ${T.PR} link`}
+        aria-label={`Go to, or open a ${T.PR} link`}
         onFocus={open}
         onBlur={() => setTimeout(() => setList(null), 150)}
         onInput={(e) => (setQ(e.currentTarget.value), setSel(0), list || open())}

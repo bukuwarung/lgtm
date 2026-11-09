@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { useDismiss, faceOf } from './platform.ts';
+import { useDismiss, faceOf, pageTerm } from './platform.ts';
 import { getStackStatus, mergeLayer, type LayerStatus, type StackLayer } from './github.ts';
 import { canMerge } from './merge.tsx';
 import { CheckMark, Tg } from './tags.tsx';
@@ -57,7 +57,7 @@ export function StackNav({ repo, n, stack }: { repo: string; n: number; stack: S
   const step = (d: number) =>
     at(d) ? <a href={`#/${repo}/pull/${at(d)!.number}`} title={`#${at(d)!.number} ${at(d)!.title}`}>{d < 0 ? '‹' : '›'}</a> : <span class="off">{d < 0 ? '‹' : '›'}</span>;
   return (
-    <span class="stack-nav submit" title="This PR's stack ([ and ] to move)">
+    <span class="stack-nav submit" title={`This ${pageTerm().PRs_} stack ([ and ] to move)`}>
       {step(-1)}
       <button class="stack-k" onClick={() => setOpen(!open)} aria-expanded={open} title="Every layer of the stack">
         {k + 1}/{stack.length} <span class="caret" aria-hidden="true" />

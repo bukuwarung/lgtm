@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'preact/hooks';
 import { uniqueNames } from './files.ts';
 import { awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
-import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel } from './platform.ts';
+import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel, term } from './platform.ts';
 import { PageSkeleton } from './history.tsx';
 import { Tg, Who, Time, Retry, Updating } from './tags.tsx';
+
+// The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
+const T = term();
 
 // Every review thread waiting on my reply (#/inbox): in the PRs in my list (only those the list already counts one
 // waiting in are asked for their threads), and in PRs merged lately that I opened or reviewed, where a reply after
@@ -86,7 +89,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
       <h2>Waiting on your reply</h2>
       <p class="note">
         {count
-          ? `${[threadCount && `${threadCount} thread${threadCount === 1 ? '' : 's'}`, mentionCount && `${mentionCount} mention${mentionCount === 1 ? '' : 's'}`].filter(Boolean).join(' and ')} in ${open.length} PR${open.length === 1 ? '' : 's'}.`
+          ? `${[threadCount && `${threadCount} thread${threadCount === 1 ? '' : 's'}`, mentionCount && `${mentionCount} mention${mentionCount === 1 ? '' : 's'}`].filter(Boolean).join(' and ')} in ${open.length} ${T.PR}${open.length === 1 ? '' : 's'}.`
           : 'Nothing waits on your reply.'}
         {count > 0 && (
           <span class="inbox-keys">
@@ -140,7 +143,7 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
   return (
     <div class={current ? 'inbox-thread cur' : 'inbox-thread'} onPointerDown={onPick} onFocusIn={onPick}>
       <div class="inbox-where">
-        <a href={`#/${item.repo}/pull/${item.number}`} title={`${t.path}: open the PR`} data-k="o">{where}</a>
+        <a href={`#/${item.repo}/pull/${item.number}`} title={`${t.path}: open the ${T.PR}`} data-k="o">{where}</a>
         {t.isOutdated && <Tg i="history" t="outdated" />}
         <small>
           {last?.author ? <Who login={last.author.login} src={last.author.avatarUrl} /> : 'someone'} · {last ? ago(last.createdAt) : ''}
@@ -170,7 +173,7 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
         <button
           disabled={!!busy || !last}
           data-k="e"
-          title="Take it off your list without replying; it comes back if someone writes again. Nothing changes on GitHub."
+          title={`Take it off your list without replying; it comes back if someone writes again. Nothing changes on ${T.site}.`}
           onClick={() => (markReplyDone(t.id, last!.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(t.id), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}
         >
           Done
@@ -217,21 +220,21 @@ function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: 
   return (
     <div class={current ? 'inbox-thread cur' : 'inbox-thread'} onPointerDown={onPick} onFocusIn={onPick}>
       <div class="inbox-where">
-        <a href={c.url} target="_blank" rel="noreferrer" title="The comment on GitHub">mentioned you</a>
+        <a href={c.url} target="_blank" rel="noreferrer" title={`The comment on ${T.site}`}>mentioned you</a>
         <a href={`#/${item.repo}/pull/${item.number}`} data-k="o" hidden />
         <small>{c.author ? <Who login={c.author.login} src={c.author.avatarUrl} /> : 'someone'} · <Time at={c.createdAt} /></small>
       </div>
       <div class="md inbox-last" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
       <textarea
         rows={2}
-        placeholder={`Reply to @${c.author?.login ?? 'them'} on the PR`}
+        placeholder={`Reply to @${c.author?.login ?? 'them'} on the ${T.PR}`}
         value={text}
         onInput={(e) => setText(e.currentTarget.value)}
         onKeyDown={(e) => (e.key === 'Escape' ? e.currentTarget.blur() : e.key === 'Enter' && (e.metaKey || e.ctrlKey) && (e.preventDefault(), send()))}
         disabled={busy}
       />
       <div class="row">
-        <button disabled={busy} data-k="e" title="Take it off your list without replying. Nothing changes on GitHub." onClick={() => (markReplyDone(c.id!, c.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(c.id!), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}>
+        <button disabled={busy} data-k="e" title={`Take it off your list without replying. Nothing changes on ${T.site}.`} onClick={() => (markReplyDone(c.id!, c.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(c.id!), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}>
           Done
         </button>
         <button class="primary" disabled={busy || !text.trim()} title="Send (⌘↵)" onClick={send}>

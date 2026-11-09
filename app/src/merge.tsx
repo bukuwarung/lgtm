@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
-import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask } from './platform.ts';
+import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -103,7 +103,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
       <div class={`panel merge m-${s.state.toLowerCase()}`}>
         <b>{s.state === 'MERGED' ? <>Merged{s.mergedBy && <> by <Who login={s.mergedBy.login} /></>}</> : 'Closed'}</b>
         {s.state === 'MERGED' && s.headRef && s.viewerCanDeleteHeadRef && !s.isCrossRepository && (
-          <button disabled={!!busy} onClick={async () => (await ask(`Delete ${s.headRefName} on ${site(repo)}? Its PR is merged.`, 'Delete')) && (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
+          <button disabled={!!busy} onClick={async () => (await ask(`Delete ${s.headRefName} on ${site(repo)}? Its ${pageTerm().PR} is merged.`, 'Delete')) && (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
             {busy === 'delete' ? 'Deleting…' : `Delete ${s.headRefName}`}
           </button>
         )}
@@ -168,7 +168,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
         <div class="merge-row merge-hold">
           <Octicon name="alert" />{' '}
           <span>
-            <b>{missing.join(', ')}</b>: required, but {missing.length > 1 ? 'they never ran' : 'it never ran'} on this commit (its workflow skipped this PR: a path or branch filter). GitHub waits for {missing.length > 1 ? 'them' : 'it'} for ever: push a change {missing.length > 1 ? 'their workflows run' : 'its workflow runs'} on{s.viewerCanMergeAsAdmin ? ', or merge as an admin below' : ', or ask an admin to merge'}.
+            <b>{missing.join(', ')}</b>: required, but {missing.length > 1 ? 'they never ran' : 'it never ran'} on this commit (its workflow skipped this {pageTerm().PR}: a path or branch filter). GitHub waits for {missing.length > 1 ? 'them' : 'it'} for ever: push a change {missing.length > 1 ? 'their workflows run' : 'its workflow runs'} on{s.viewerCanMergeAsAdmin ? ', or merge as an admin below' : ', or ask an admin to merge'}.
           </span>
         </div>
       )}
@@ -248,7 +248,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
           </div>
           {openTickets.length > 0 && (
             <div class="merge-opt">
-              <label title={confirm === 'auto' ? 'Auto-merge merges later: the ticket moves the next time you open this PR here after it merged' : 'Settings → Reviewing: whether this starts ticked, and the status'}>
+              <label title={confirm === 'auto' ? `Auto-merge merges later: the ticket moves the next time you open this ${pageTerm().PR} here after it merged` : 'Settings → Reviewing: whether this starts ticked, and the status'}>
                 <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> {confirm === 'auto' ? 'Once merged, move' : 'Move'} {openTickets.join(', ')} to
               </label>
               <StatusSelect value={to} onChange={setTo} statuses={statuses} />

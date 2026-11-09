@@ -9,8 +9,11 @@ import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
 import { reviewPlan, stepIcon, stepOrder } from './files.ts';
-import { useStoredValue } from './platform.ts';
+import { useStoredValue, term } from './platform.ts';
 import { changedRange, parseString, stringHtml } from './strings.ts';
+
+// The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
+const T = term();
 
 // Small, made-up examples of each diff helper, drawn with the app's own styles: shown beside the switches in
 // Settings, and captured as the README's pictures (`npm run demos`). No real code from any PR.
@@ -481,7 +484,7 @@ const Bar = ({ linked, menu }: { linked?: boolean; menu?: boolean }) => (
           <div class="account-menu claude-pop" role="menu">
             <button role="menuitem">✳ Open its Claude Code session <small>Retry payments</small></button>
             <button role="menuitem">✳ New Claude Code session <small>⌥-click</small></button>
-            <button role="menuitem"><Octicon name="comment-discussion" /> Ask a question about this PR <small>no session</small></button>
+            <button role="menuitem"><Octicon name="comment-discussion" /> Ask a question about this {T.PR} <small>no session</small></button>
           </div>
         )}
       </span>
@@ -607,8 +610,8 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
         <div class="side-scroll">
           <div class="pr-tabs" role="tablist">
             <button role="tab" aria-selected="true">Reviewing <span class="count">5</span></button>
-            <button role="tab" aria-selected="false">Your PRs <span class="count">2</span></button>
-            <button role="tab" aria-selected="false">Team <span class="count">9</span></button>
+            <button role="tab" aria-selected="false">Your {T.PRs} <span class="count">2</span></button>
+            <button role="tab" aria-selected="false">{T.Team} <span class="count">9</span></button>
           </div>
           {QUEUE.map(([g, label, items]) => (
             <details open class={`pr-group g-${g}`}>
@@ -672,7 +675,7 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
     ),
   },
   merge: {
-    title: 'Your PRs',
+    title: `Your ${T.PRs}`,
     width: 860,
     body: (
       <div class="merge m-wait">
@@ -704,8 +707,8 @@ SCENES.inbox = {
     <div class="page history inbox">
       <h2>Waiting on your reply</h2>
       <p class="note">
-        1 thread and 1 mention in 2 PRs.
-        <span class="inbox-keys"><kbd>j</kbd> <kbd>k</kbd> move · <kbd>r</kbd> reply · <kbd>e</kbd> done · <kbd>x</kbd> resolve · <kbd>o</kbd> open the PR</span>
+        1 thread and 1 mention in 2 {T.PRs}.
+        <span class="inbox-keys"><kbd>j</kbd> <kbd>k</kbd> move · <kbd>r</kbd> reply · <kbd>e</kbd> done · <kbd>x</kbd> resolve · <kbd>o</kbd> open the {T.PR}</span>
       </p>
       <section>
         <h4><a>Retry failed payments with backoff</a> <small>shop#412</small></h4>
@@ -740,7 +743,7 @@ SCENES.inbox = {
             <small>dewi · 1 hour ago</small>
           </div>
           <div class="md inbox-last"><p><a>@you</a> can refunds over the daily limit go through, or should the screen stop them?</p></div>
-          <textarea rows={2} placeholder="Reply to @dewi on the PR" />
+          <textarea rows={2} placeholder={`Reply to @dewi on the ${T.PR}`} />
           <div class="row">
             <button>Done</button>
             <button class="primary" disabled>Reply</button>
@@ -815,11 +818,11 @@ SCENES.specs = {
             <ul>
               <li>
                 [x] 2.1 Add <code class="spec-ref">RetryPolicy</code> with the attempts and the errors to retry
-                <span class="spec-touch">1 file in this PR</span>
+                <span class="spec-touch">1 file in this {T.PR}</span>
               </li>
               <li>
                 [ ] 2.2 Call it from <code class="spec-ref">PaymentService.charge()</code>; a declined card is never retried
-                <span class="spec-touch">1 file in this PR</span>
+                <span class="spec-touch">1 file in this {T.PR}</span>
               </li>
             </ul>
           </div>
@@ -964,7 +967,7 @@ Object.assign(DEMOS, {
     on: <ReadingOrderOn />,
   },
   reviewPlan: {
-    title: 'A review plan for big PRs',
+    title: `A review plan for big ${T.PRs}`,
     off: <>{FILES_BIG.slice(0, 3).map((p) => <File path={p} add={12} del={2} />)}</>,
     on: (
       <details class="plan" open>
@@ -1237,7 +1240,7 @@ const GLASS = (on: boolean) => (
 
 Object.assign(DEMOS, {
   qaRequest: {
-    title: 'Ask QA, on your PR',
+    title: `Ask QA, on your ${T.PR}`,
     off: <div class="demo-bar"><button>Merge</button><button class="primary">Comment</button></div>,
     on: <div class="demo-bar"><button>Ask QA</button><button>Merge</button><button class="primary">Comment</button></div>,
   },
@@ -1247,17 +1250,17 @@ Object.assign(DEMOS, {
     on: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [])}</div>,
   },
   muteApproved: {
-    title: "Replies on a PR you've approved",
+    title: `Replies on a ${T.PR} you've approved`,
     off: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />], ['p-reply', <Tg i="reply" n={2} t="awaiting your reply" />]])}</div>,
     on: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />]])}</div>,
   },
   showDrafts: {
-    title: "Other people's draft PRs",
+    title: `Other people's draft ${T.PRs}`,
     off: <div class="demo-list">{LIST_ONE}</div>,
     on: <div class="demo-list">{LIST_ONE}{listItem('Try the new checkout layout', 'budi', 'acme/shop#415', [['', <Tg i="draft" t="draft" />]])}</div>,
   },
   centerDiff: {
-    title: 'Centre the PR',
+    title: `Centre the ${T.PR}`,
     off: page(TINY_FILE, false),
     on: page(TINY_FILE, true),
   },
@@ -1267,7 +1270,7 @@ Object.assign(DEMOS, {
     on: page(<File path="OrderNotifier.kt" add={1} del={0}><Rows rows={LONG_ROW} /></File>, false),
   },
   showIndex: {
-    title: 'The PR index beside the diff',
+    title: `The ${T.PR} index beside the diff`,
     off: SHORT_FILE,
     on: (
       <div class="demo-with-index">
@@ -1369,7 +1372,7 @@ Object.assign(DEMOS, {
       <>
         {pills(['p-bad', <Tg i="alert" n={1} t="protection switched off" />])}
         <div class="pill-pop demo-pop">
-          <p class="pill-head">Safeguards the PR turns off:</p>
+          <p class="pill-head">Safeguards the {T.PR} turns off:</p>
           <div class="pill-row"><button><b>isMinifyEnabled = false</b> <small>build.gradle.kts:24</small> <small>Release builds ship unshrunk and unobfuscated: anyone can read the code back from the app.</small></button></div>
         </div>
         <File path="app/build.gradle.kts" add={1} del={1}><Rows rows={MINIFY_ROWS} /></File>
@@ -1415,7 +1418,7 @@ const MACBAR = (on: boolean) => (
         <div>Retry failed payments · shop#412</div>
         <div>Cart: keep the promo code · shop#409</div>
         <hr />
-        <div class="h">Your PRs (1)</div>
+        <div class="h">Your {T.PRs} (1)</div>
         <div>Refund screen · app#85 — ready to merge</div>
         <hr />
         <div>Start Review Mode</div>
@@ -1438,14 +1441,14 @@ DEMOS.badgeInbox = { title: 'The Dock badge', off: DOCK(2, false), on: DOCK(5, t
 const NEXT_PANEL = (next: boolean) => (
   <div class="submit review-submit">
     <div class="panel" style={{ position: 'static' }}>
-      <label><input type="checkbox" checked={next} disabled /> Then open the next PR that needs my review</label>
+      <label><input type="checkbox" checked={next} disabled /> Then open the next {T.PR} that needs my review</label>
       <div class="row"><button class="primary">Submit review</button></div>
     </div>
   </div>
 );
-DEMOS.nextAfterReview = { title: 'After a review, the next PR', off: NEXT_PANEL(false), on: NEXT_PANEL(true) };
-DEMOS.unfoldBotsOnMine = { title: 'Bot comments on your own PR', off: DEMOS.foldBots.on, on: DEMOS.foldBots.off };
-DEMOS.hideIndexToReview = { title: 'A PR waiting for your review, opened', off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
+DEMOS.nextAfterReview = { title: `After a review, the next ${T.PR}`, off: NEXT_PANEL(false), on: NEXT_PANEL(true) };
+DEMOS.unfoldBotsOnMine = { title: `Bot comments on your own ${T.PR}`, off: DEMOS.foldBots.on, on: DEMOS.foldBots.off };
+DEMOS.hideIndexToReview = { title: `A ${T.PR} waiting for your review, opened`, off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
 
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which
 // it's made of.
@@ -1471,7 +1474,7 @@ SCENES.app = {
                 <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
               </svg>
               <kbd class="cmd-kbd">⌘K</kbd>
-              <input placeholder="Go to a PR, file or thread, or paste a PR link" />
+              <input placeholder={`Go to a ${T.PR}, file or thread, or paste a ${T.PR} link`} />
             </div>
           </span>
           <span class="spacer" />

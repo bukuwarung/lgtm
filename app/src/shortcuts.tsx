@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf } from './platform.ts';
+import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
@@ -118,7 +118,7 @@ export const FileIcon = ({ path, status, big, untested }: { path: string; status
       </i>
     )}
     {untested && (
-      <i class="ftest no" role="img" title="No test change: the PR changes this code but no test with its name" aria-label="No test change">
+      <i class="ftest no" role="img" title={`No test change: the ${pageTerm().PR} changes this code but no test with its name`} aria-label="No test change">
         <Icon name="beaker" slash />
       </i>
     )}
@@ -156,7 +156,7 @@ function AddMe({ add }: { add: () => Promise<unknown> }) {
     <button
       class="ix-item ix-add-me"
       disabled={state === 'adding'}
-      title={state && state !== 'adding' ? state : 'Request your own review on this PR'}
+      title={state && state !== 'adding' ? state : `Request your own review on this ${pageTerm().PR}`}
       onClick={() => (setState('adding'), add().then(() => setState(''), (e) => setState(`Couldn't add you: ${e.message}`)))}
     >
       <span class="ix-label">
@@ -229,9 +229,9 @@ function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[
 export const OnBase = ({ c, branch: full }: { c: Check; branch: string }) => {
   const branch = full.length > 20 ? 'the base branch' : full; // a feature branch's long name: said on hover
   return c.onBase === 'failure' ? (
-    <span class="on-base same" title={`The same check fails on ${full}'s latest commit: likely not this PR's doing (matched by name, not by which test failed)`}>also failing on {branch}</span>
+    <span class="on-base same" title={`The same check fails on ${full}'s latest commit: likely not this ${pageTerm().PRs_} doing (matched by name, not by which test failed)`}>also failing on {branch}</span>
   ) : c.onBase === 'success' ? (
-    <span class="on-base diff" title={`It passes on ${full}'s latest commit: likely this PR's`}>passes on {branch}</span>
+    <span class="on-base diff" title={`It passes on ${full}'s latest commit: likely this ${pageTerm().PRs_}`}>passes on {branch}</span>
   ) : c.onBase === 'pending' ? (
     <span class="on-base">{branch}: still running</span>
   ) : null;

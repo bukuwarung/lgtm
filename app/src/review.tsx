@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey } from './platform.ts';
+import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -155,7 +155,7 @@ function AskQA({ pr, repo, n, onPosted }: { pr: PR; repo: string; n: number; onP
   };
   return (
     <>
-      <button title={`Post a QA request for this PR to ${channel} on Slack (you see it first)`} onClick={open}>
+      <button title={`Post a QA request for this ${pageTerm().PR} to ${channel} on Slack (you see it first)`} onClick={open}>
         Ask QA
       </button>
       {text != null && (
@@ -278,7 +278,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
           <button
             class={`ix-item ix-person ${state[p.login] ?? ''}${away ? ' away' : ''}`}
             disabled={!!state[p.login]}
-            title={`Ask @${p.login} to review: ${p.why}; ${p.load} open PR${p.load === 1 ? '' : 's'} already waiting on their review${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}`}
+            title={`Ask @${p.login} to review: ${p.why}; ${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}`}
             onClick={() => (findings.length && !cleared ? setHeld(p.login) : ask(p.login))}
           >
             <span class="ix-label">
@@ -326,7 +326,7 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
   const label = moduleLabel;
   const list = [...by].sort(([a], [b]) => label(a).localeCompare(label(b)));
   return (
-    <PillMenu label={by.size === 1 ? <Tg i={<ModuleIcon />} n={label(list[0][0])} /> : <Tg i={<ModuleIcon />} n={by.size} t="modules" />} head="Modules this PR changes:">
+    <PillMenu label={by.size === 1 ? <Tg i={<ModuleIcon />} n={label(list[0][0])} /> : <Tg i={<ModuleIcon />} n={by.size} t="modules" />} head={`Modules this ${pageTerm().PR} changes:`}>
       {list.map(([m, paths]) => (
         <button onClick={() => jumpTo('f-' + paths[0])} title={m === '.' ? 'The root project' : `In ${m}/`}>
           <b>{label(m)}</b> <small>{paths.length} file{paths.length > 1 ? 's' : ''}</small>
@@ -384,7 +384,7 @@ function PRSkeleton({ pr }: { pr?: PR | null }) {
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle);
   return (
-    <div class={showIndex ? 'review skel' : 'review no-index skel'} aria-busy="true" aria-label="Loading the PR">
+    <div class={showIndex ? 'review skel' : 'review no-index skel'} aria-busy="true" aria-label={`Loading the ${pageTerm().PR}`}>
       <aside class="side">
         {[70, 50, 85, 40, 65, 55, 75].map((w) => (
           <span class="sk" style={{ width: `${w}%` }} />
@@ -658,7 +658,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       } catch (e: any) {
         if (first && !shownHead) throw e;
         setStale(null);
-        return setNotice({ ok: false, text: `Couldn't refresh this PR (${e.message}); showing the copy loaded earlier.` });
+        return setNotice({ ok: false, text: `Couldn't refresh this ${pageTerm().PR} (${e.message}); showing the copy loaded earlier.` });
       }
       await loadLanguages(repo, loaded.files.map((f) => f.filename)); // any language beyond the built-in ones, before drawing
       fresh = true;
@@ -741,7 +741,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         if (d.files.length >= 300) {
           setSince(false);
           setLastReviewed(null); // no "since" toggle either: it would hit the same limit
-          setNotice({ ok: false, text: `Showing the full diff: the branch was rebased onto so much new base-branch work since your last review that ${site(repo)} can't list just what changed in this PR.` });
+          setNotice({ ok: false, text: `Showing the full diff: the branch was rebased onto so much new base-branch work since your last review that ${site(repo)} can't list just what changed in this ${pageTerm().PR}.` });
           return;
         }
         const inPR = new Set(data.files.map((f) => f.filename));
@@ -978,7 +978,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
       dispatchEvent(
         new CustomEvent('lgtm:toast', {
-          detail: { text: 'This PR has a Claude Code session.', action: ['Send it your review', () => void backToClaude(from.id, text).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
+          detail: { text: `This ${pageTerm().PR} has a Claude Code session.`, action: ['Send it your review', () => void backToClaude(from.id, text).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
         }),
       );
     }
@@ -1046,7 +1046,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     ...(texts.list.length ? [{ text: `${plural(texts.list.length, 'text')} not in strings.xml`, go: () => jumpToLine(texts.list[0].path, texts.list[0].line) }] : []),
     ...(room.length ? [{ text: `${room[0].entity}: a table changed with no database version raised`, go: () => jumpToLine(room[0].path, room[0].side === 'RIGHT' ? room[0].line : undefined) }] : []),
     ...backend.mig.map((m) => ({ text: `${base(m.path)}: ${migText(m)}`, go: () => jumpTo('f-' + m.path) })),
-    ...(backend.ent.length ? [{ text: `${backend.ent[0].entity}: columns changed with no migration in this PR`, go: () => jumpToLine(backend.ent[0].path, backend.ent[0].side === 'RIGHT' ? backend.ent[0].line : undefined) }] : []),
+    ...(backend.ent.length ? [{ text: `${backend.ent[0].entity}: columns changed with no migration in this ${pageTerm().PR}`, go: () => jumpToLine(backend.ent[0].path, backend.ent[0].side === 'RIGHT' ? backend.ent[0].line : undefined) }] : []),
     ...drift.map((d) => ({ text: `${d.path}: dependencies changed, ${d.lock} not`, go: () => jumpToLine(d.path, d.line) })),
     ...(focusHits.length ? [{ text: `${plural(focusHits.length, 'focused test or debugger', 'focused tests or debuggers')} left in (${[...new Set(focusHits.map((f) => f.what))].join(', ')})`, go: () => jumpToLine(focusHits[0].path, focusHits[0].line) }] : []),
     ...(html.length ? [{ text: `${plural(html.length, 'place')} rendering raw HTML (${[...new Set(html.map((f) => f.what))].join(', ')})`, go: () => jumpToLine(html[0].path, html[0].line) }] : []),
@@ -1438,13 +1438,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               counts={(path) => (byPath.get(path)?.length ?? 0) + drafts.filter((d) => d.path === path).length}
             />
           </div>
-          <Resizer name="index" label="PR index" />
+          <Resizer name="index" label={`${pageTerm().PR} index`} />
         </aside>
       )}
       <div>
         {/* Where you are (index, stack), what it is, who it's with, then what you can do. */}
         <div class="bar">
-          <button class="bar-index" title={`${showIndex ? 'Hide the PR index' : 'Show the PR index'}${hint(bindings.index)}`} aria-label={showIndex ? 'Hide the PR index' : 'Show the PR index'} onClick={toggleIndex}>
+          <button class="bar-index" title={`${showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`}${hint(bindings.index)}`} aria-label={showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`} onClick={toggleIndex}>
             <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
           </button>
           <button class="bar-index" title={split ? 'One column: removed lines above added ones' : 'Side by side: old and new next to each other'} aria-label="Side by side" aria-pressed={split} onClick={toggleSplit}>
@@ -1480,7 +1480,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   {!!qa && qa.replies.filter((ts) => ts > qaSeenAt).length > 0 && <span class="qa-new">{qa.replies.filter((ts) => ts > qaSeenAt).length}</span>}
                 </a>
               ) : (
-                <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this PR`}>
+                <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this ${pageTerm().PR}`}>
                   {t.image ? <img src={t.image} alt={t.name ?? t.login} /> : <Octicon name="comment" />}
                 </a>
               ),
@@ -1547,7 +1547,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {unsafe.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="alert" n={unsafe.length} t={`protection${unsafe.length > 1 ? 's' : ''} switched off`} />} head="Safeguards the PR turns off:">
+              <PillMenu cls="p-bad" label={<Tg i="alert" n={unsafe.length} t={`protection${unsafe.length > 1 ? 's' : ''} switched off`} />} head={`Safeguards the ${pageTerm().PR} turns off:`}>
                 {unsafe.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(x.path, x.line)} title={`${x.path}: ${x.why}`}>
@@ -1604,13 +1604,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {room.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="alert" t="table changed, database version not raised" />} head="These change a Room table's columns, but no @Database version is raised in this PR: installed apps keep the old table and crash when they update, until the version goes up (with a migration).">
+              <PillMenu cls="p-bad" label={<Tg i="alert" t="table changed, database version not raised" />} head={`These change a Room table's columns, but no @Database version is raised in this ${pageTerm().PR}: installed apps keep the old table and crash when they update, until the version goes up (with a migration).`}>
                 {room.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
                       <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
                     </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table, but the database version isn't raised in this PR. Installed apps would keep the old table, and Room would crash on update: could the @Database version go up, with a migration?`, x.side)} />
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table, but the database version isn't raised in this ${pageTerm().PR}. Installed apps would keep the old table, and Room would crash on update: could the @Database version go up, with a migration?`, x.side)} />
                   </div>
                 ))}
               </PillMenu>
@@ -1620,7 +1620,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <PillMenu
                 cls={supp.some((x) => x.test || x.ci) ? 'p-warn' : ''}
                 label={<Tg i="alert" n={supp.length} t={offLabel(supp)} />}
-                head="Tests skipped, CI steps let fail or skipped, and checks (types, lint, warnings, coverage) silenced by the PR:"
+                head={`Tests skipped, CI steps let fail or skipped, and checks (types, lint, warnings, coverage) silenced by the ${pageTerm().PR}:`}
               >
                 {supp.map((x) => (
                   <div class="pill-row">
@@ -1633,7 +1633,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {goneTests.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="removed" n={goneTests.length} t={`test file${goneTests.length > 1 ? 's' : ''} deleted`} />} head="Tests this PR deletes (not moved or renamed):">
+              <PillMenu cls="p-warn" label={<Tg i="removed" n={goneTests.length} t={`test file${goneTests.length > 1 ? 's' : ''} deleted`} />} head={`Tests this ${pageTerm().PR} deletes (not moved or renamed):`}>
                 {goneTests.map((p) => (
                   <button onClick={() => jumpTo('f-' + p)} title={p}>
                     <b>{base(p)}</b> <small>{rest(dir(p), p)}</small>
@@ -1642,7 +1642,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {noTests.size > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="notest" n={noTests.size} t={`file${noTests.size > 1 ? 's' : ''} without test changes`} />} head="Code changed, but no test for it changed in this PR:">
+              <PillMenu cls="p-warn" label={<Tg i="notest" n={noTests.size} t={`file${noTests.size > 1 ? 's' : ''} without test changes`} />} head={`Code changed, but no test for it changed in this ${pageTerm().PR}:`}>
                 {[...noTests].map((p) => (
                   <button onClick={() => jumpTo('f-' + p)} title={p}>
                     <b>{base(p)}</b> <small>{rest(dir(p), p)}</small>
@@ -1651,13 +1651,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {backend.ent.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="alert" t="entity changed, no migration" />} head="These change a JPA entity's columns, and this PR adds no migration: the database won't have them (unless something else creates them).">
+              <PillMenu cls="p-warn" label={<Tg i="alert" t="entity changed, no migration" />} head={`These change a JPA entity's columns, and this ${pageTerm().PR} adds no migration: the database won't have them (unless something else creates them).`}>
                 {backend.ent.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
                       <b>{x.entity}</b> <small>{x.side === 'LEFT' ? 'removed: ' : ''}{x.text}</small>
                     </button>
-                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table's columns, but the PR adds no migration. Where does the database get the change?`, x.side)} />
+                    <SayIt onClick={() => ctx.suggest(x.path, x.line, `This changes the ${x.entity} table's columns, but the ${pageTerm().PR} adds no migration. Where does the database get the change?`, x.side)} />
                   </div>
                 ))}
               </PillMenu>
@@ -1762,7 +1762,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                     (<CopyCode text={sinceBase!}>{sinceBase!.slice(0, 7)}</CopyCode> → <CopyCode text={pr.head.sha}>{pr.head.sha.slice(0, 7)}</CopyCode>)
                     {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
                     {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
-                    {sinceData && !sinceData.files.length && <b> · none of this PR's files changed (only a rebase)</b>}
+                    {sinceData && !sinceData.files.length && <b> · none of this {pageTerm().PRs_} files changed (only a rebase)</b>}
                   </span>
                   <button onClick={() => (setSince(false), setFromSha(null), setSinceData(null))}>Show all changes</button>
                 </>
@@ -2024,7 +2024,7 @@ function OpenInEditor({ headRepo, sha, path, line }: { headRepo: string; sha: st
   return (
     <button
       class="icon-btn"
-      title={`Open ${isLab(headRepo) ? "in GitLab's Web IDE" : 'on github.dev'}, at the PR's commit${line ? `, line ${line}` : ''}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').githubDev)}`}
+      title={`Open ${isLab(headRepo) ? "in GitLab's Web IDE" : 'on github.dev'}, at the ${pageTerm().PRs_} commit${line ? `, line ${line}` : ''}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').githubDev)}`}
       onClick={() => openExternal(githubDev(headRepo, sha, path, line))}
     >
       <Octicon name="link-external" />
@@ -2251,7 +2251,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         </span>
         <SpecChips refs={ctx.specRefs.get(path)} ix={ctx.codeIx} />
         {threads.length > 0 && <span class="badge" title="Review threads"><Octicon name="comment" /> {threads.length}</span>}
-        {changed && <span class="new-b" title="This file changed since you last opened this PR">new since your last visit</span>}
+        {changed && <span class="new-b" title={`This file changed since you last opened this ${pageTerm().PR}`}>new since your last visit</span>}
         {canRich && <DiffMode rich={rich} set={setRich} />}
         {canStrings && <DiffMode rich={strings} set={setStrings} />}
         {canLint && <DiffMode rich={lint} set={setLint} />}
@@ -3124,7 +3124,7 @@ function linkSpecRefs(root: HTMLElement | null, ix: CodeIndex) {
       tag.className = 'spec-touch';
       li.insertBefore(tag, li.querySelector(':scope > ul, :scope > ol'));
     }
-    tag.textContent = files.size ? `${files.size} file${files.size > 1 ? 's' : ''} in this PR` : '';
+    tag.textContent = files.size ? `${files.size} file${files.size > 1 ? 's' : ''} in this ${pageTerm().PR}` : '';
   }
 }
 
@@ -4167,13 +4167,13 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
     if (offerSkill && !(await claudeSkill().catch(() => null))?.installed) return setOffer(true);
     if (suggestMod && (await claudeMod().catch(() => null))?.installed === false) setOfferMod(true);
   };
-  const install = () => claudeSkill(true).then(() => (setOffer(false), flash('Skill installed: Claude can now send PRs here')), (e) => flash(`Couldn't install it: ${e.message}`));
-  const what = label ? 'this PR' : 'this comment';
+  const install = () => claudeSkill(true).then(() => (setOffer(false), flash(`Skill installed: Claude can now send ${pageTerm().PRs} here`)), (e) => flash(`Couldn't install it: ${e.message}`));
+  const what = label ? `this ${pageTerm().PR}` : 'this comment';
   return (
     <span class="claude-menu">
       <button
         class={`${label ? 'claude-btn' : 'copy-link'}${from ? ' linked' : ''}`}
-        title={label ? 'Claude: its Claude Code session, or a question about this PR' : from ? `Open its Claude Code session${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
+        title={label ? `Claude: its Claude Code session, or a question about this ${pageTerm().PR}` : from ? `Open its Claude Code session${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
         aria-haspopup={label ? 'menu' : undefined}
         aria-expanded={label ? menu : undefined}
         onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e))}
@@ -4195,7 +4195,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
             </button>
           )}
           <button role="menuitem" onClick={() => (setMenu(false), dispatchEvent(new Event('lgtm:ask-pr')))}>
-            <Octicon name="comment-discussion" /> Ask a question about this PR <small>no session</small>
+            <Octicon name="comment-discussion" /> Ask a question about this {pageTerm().PR} <small>no session</small>
           </button>
         </div>
       )}
@@ -4278,7 +4278,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
       {panel && (
         <div class="ask-panel" role="dialog" aria-label="Ask Claude">
           <div class="row">
-            <b>Ask Claude about {panel.path ? fileLabel(panel.path) : 'this PR'}</b>
+            <b>Ask Claude about {panel.path ? fileLabel(panel.path) : `this ${pageTerm().PR}`}</b>
             <span class="spacer" />
             <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
           </div>

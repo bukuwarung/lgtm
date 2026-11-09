@@ -10,7 +10,7 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -24,6 +24,9 @@ import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 import { hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { movePending } from './merge.tsx';
+
+// The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
+const T = term();
 
 // A link to a GitHub PR in what people wrote (descriptions, comments, threads, Jira tickets, Slack previews) opens it
 // here; one into the open PR (a comment, a thread, a file of it) goes there in place (review.tsx, "lgtm:link"). ⌘- or
@@ -176,13 +179,13 @@ function StaleBranches() {
     <div class="stale">
       {step === 'confirm' ? (
         <>
-          <p>Delete these branches on {viewAs() ? 'GitLab' : 'GitHub'}? Their PRs are merged.</p>
+          <p>Delete these branches on {viewAs() ? 'GitLab' : 'GitHub'}? Their {T.PRs} are merged.</p>
           <ul>{list.map((b) => <li><CopyCode>{b.headRefName}</CopyCode> <small>{repoLabel(b.repo)}#{b.number}</small></li>)}</ul>
           <button class="primary" onClick={go}>Delete {list.length} branch{list.length > 1 ? 'es' : ''}</button> <button onClick={() => setStep('')}>Cancel</button>
         </>
       ) : (
         <button class="link" disabled={step === 'deleting'} onClick={() => setStep('confirm')}>
-          {step === 'deleting' ? 'Deleting…' : `${list.length} branch${list.length > 1 ? 'es' : ''} of your merged PRs still exist${list.length > 1 ? '' : 's'} · clean up`}
+          {step === 'deleting' ? 'Deleting…' : `${list.length} branch${list.length > 1 ? 'es' : ''} of your merged ${T.PRs} still exist${list.length > 1 ? '' : 's'} · clean up`}
         </button>
       )}
     </div>
@@ -268,7 +271,7 @@ function BellMenu() {
               </button>
             </>
           ) : (
-            <p class="note bell-empty">Nothing new. What lgtm would notify you about stays here until you open its PR.</p>
+            <p class="note bell-empty">Nothing new. What lgtm would notify you about stays here until you open its {T.PR}.</p>
           )}
         </div>
       )}
@@ -279,7 +282,7 @@ function BellMenu() {
 // No PR open: the queue at a glance; each number opens its tab of the list.
 function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
   const [showDrafts] = useStoredFlag('showDrafts', false);
-  if (!items) return <p class="note page empty">Pick a PR from the list, or paste a PR link in the box at the top (⌘K).</p>;
+  if (!items) return <p class="note page empty">Pick a {T.PR} from the list, or paste a {T.PR} link in the box at the top (⌘K).</p>;
   const needs = toReview(items, showDrafts);
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
@@ -288,9 +291,9 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
     ['reviewing', needs.length, 'need your review', needs.length ? 'Open the Reviewing tab' : ''],
     ['reviewing', oldest ? ago(oldest).replace(/ ago$/, '') : '–', 'oldest wait', oldest ? `Since ${new Date(oldest).toLocaleString()}` : ''],
     ['inbox', replies, `thread${replies === 1 ? '' : 's'} waiting on your reply`, 'Open them, to reply or resolve'],
-    ['mine', mine.filter((i) => i.reviewDecision !== 'APPROVED' && i.reviewDecision !== 'CHANGES_REQUESTED').length, 'of yours waiting for review', 'Open Your PRs'],
-    ['mine', mine.filter(readyToMerge).length, 'of yours ready to merge', 'Open Your PRs'],
-    ['mine', mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, 'of yours with changes requested', 'Open Your PRs'],
+    ['mine', mine.filter((i) => i.reviewDecision !== 'APPROVED' && i.reviewDecision !== 'CHANGES_REQUESTED').length, 'of yours waiting for review', `Open Your ${T.PRs}`],
+    ['mine', mine.filter(readyToMerge).length, 'of yours ready to merge', `Open Your ${T.PRs}`],
+    ['mine', mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, 'of yours with changes requested', `Open Your ${T.PRs}`],
   ];
   return (
     <div class="page start">
@@ -316,7 +319,7 @@ const STATE_ICON = { merged: 'git-merge', closed: 'git-pull-request-closed', dra
 function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
   const here = location.hash.slice(1);
   const list = useRecentPRs().filter((r) => `/${r.repo}/pull/${r.n}` !== here).slice(0, max);
-  if (!list.length) return onGo ? <p class="note bell-empty">PRs you open show here, and stay after a relaunch.</p> : null;
+  if (!list.length) return onGo ? <p class="note bell-empty">{T.PRs} you open show here, and stay after a relaunch.</p> : null;
   const row = (r: RecentPR) => (
     <a class="recent-row" href={`#/${r.repo}/pull/${r.n}`} onClick={onGo}>
       <Octicon name={r.state ? STATE_ICON[r.state] : 'git-pull-request'} class={`recent-${r.state ?? 'open'}`} />
@@ -345,7 +348,7 @@ function RecentMenu() {
   }, [open]);
   return (
     <span class="recent-menu">
-      <button class={'nav-hist' + (open ? ' on' : '')} title="Recently viewed PRs" aria-label="Recently viewed PRs" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button class={'nav-hist' + (open ? ' on' : '')} title={`Recently viewed ${T.PRs}`} aria-label={`Recently viewed ${T.PRs}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         <Octicon name="history" />
       </button>
       {open && (
@@ -561,7 +564,7 @@ function App() {
     else if (id === 'back') history.back();
     else if (id === 'forward') history.forward();
     else if (id === 'toggle-prs') togglePRs();
-    else if (id === 'review-mode') needs(queue.current, [], false).length ? startReview() : say({ text: 'No PRs need your review right now.', action: ['Practice run', () => startReview(true)] });
+    else if (id === 'review-mode') needs(queue.current, [], false).length ? startReview() : say({ text: `No ${T.PRs} need your review right now.`, action: ['Practice run', () => startReview(true)] });
     else if (id === 'text-bigger') textStep(1);
     else if (id === 'text-smaller') textStep(-1);
     else if (id === 'text-reset') textStep(0);
@@ -614,22 +617,22 @@ function App() {
         {rm ? (
           <>
             <b class="rm-title">Review mode</b>
-            {rm.practice && <span class="pill p-warn" title="Your own PRs; finishing a review only moves on, and nothing is sent to GitHub">practice</span>}
+            {rm.practice && <span class="pill p-warn" title={`Your own ${T.PRs}; finishing a review only moves on, and nothing is sent to ${T.site}`}>practice</span>}
             {r && (() => {
               const left = needs(queue.current, rm.seen).length || 1; // this one, and what's after it
               return <span class="rm-count">{rm.seen.length + 1} of {rm.seen.length + left}</span>;
             })()}
             <span class="spacer" />
-            {r && <button onClick={() => moveOn(r, 'skipped')} title={`On to the next PR without reviewing this one (${keyFor('skip')})`}>Skip <kbd>{keyFor('skip')}</kbd></button>}
+            {r && <button onClick={() => moveOn(r, 'skipped')} title={`On to the next ${T.PR} without reviewing this one (${keyFor('skip')})`}>Skip <kbd>{keyFor('skip')}</kbd></button>}
             <button onClick={() => setRm(null)} title="Back to everything (Esc)">Exit <kbd>Esc</kbd></button>
           </>
         ) : (<>
-        <button class="prs-btn" title="Show / hide the PR list" onClick={togglePRs}><Octicon name="three-bars" /></button>
+        <button class="prs-btn" title={`Show / hide the ${T.PR} list`} onClick={togglePRs}><Octicon name="three-bars" /></button>
         {/* The inbox: threads and mentions waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
         <a
           href="#/inbox"
           class={`nav-btn nav-inbox${route === '#/inbox' ? ' on' : ''}`}
-          title="Threads and mentions waiting on your reply (in open PRs, and ones merged lately)"
+          title={`Threads and mentions waiting on your reply (in open ${T.PRs}, and ones merged lately)`}
           aria-label={`Inbox${replies ? `: ${replies} waiting on your reply` : ''}`}
         >
           <Octicon name="inbox" />
@@ -743,10 +746,10 @@ function App() {
             <img src="/favicon.png" alt="" width="96" height="96" />
             <h2>{rm?.practice ? 'Practice run done' : rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
             <p>
-              {rm?.practice ? "Nothing was sent to GitHub. When PRs need your review, it's the button at the top of the Reviewing tab."
+              {rm?.practice ? `Nothing was sent to ${T.site}. When ${T.PRs} need your review, it's the button at the top of the Reviewing tab.`
                 : rm?.skipped ? `Reviewed ${rm.done}, skipped ${rm.skipped}: those still need your review.`
-                : rm ? `Reviewed ${rm.done}. No PRs need your review right now.`
-                : 'No PRs need your review right now.'}
+                : rm ? `Reviewed ${rm.done}. No ${T.PRs} need your review right now.`
+                : `No ${T.PRs} need your review right now.`}
             </p>
             {rm && rm.log.length > 0 && <ReviewLog log={rm.log} />}
             {rm && <button class="primary" onClick={() => setRm(null)}>Back to the list</button>}
@@ -811,8 +814,8 @@ function SetupCheck() {
         <p class="note">lgtm borrows the sign-ins of these tools and stores no tokens. Only GitHub is required; the rest you can set up now or later in Settings.</p>
         {row(true, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', null)}
         {row(ints ? ints.slack.ok : null, 'Slack', '(optional) DM the author when you finish a review.', <pre>brew install shaharia-lab/tap/slackcli && slackcli auth login-auto</pre>)}
-        {row(ints ? ints.jira.ok : null, 'Jira', "(optional) The PR's ticket above its files.", <pre>brew install atlassian/homebrew-acli/acli && acli jira auth login --web</pre>)}
-        {row(skill ? skill.current : null, 'Claude Code skill', '(optional) Claude opens PRs ready for review here, linked to its session.', (
+        {row(ints ? ints.jira.ok : null, 'Jira', `(optional) The ${T.PRs_} ticket above its files.`, <pre>brew install atlassian/homebrew-acli/acli && acli jira auth login --web</pre>)}
+        {row(skill ? skill.current : null, 'Claude Code skill', `(optional) Claude opens ${T.PRs} ready for review here, linked to its session.`, (
           <button onClick={() => claudeSkill(true).then(setSkill, () => {})}>{skill?.installed ? 'Update the skill' : 'Install the skill'}</button>
         ))}
       </div>
@@ -892,7 +895,7 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
 function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
   return (
     <div class="top-actions">
-      <button type="button" class={refreshing ? 'refreshing' : ''} title="Refresh the PR list and the open PR (the list also every 3 minutes)" onClick={onRefresh}>
+      <button type="button" class={refreshing ? 'refreshing' : ''} title={`Refresh the ${T.PR} list and the open ${T.PR} (the list also every 3 minutes)`} onClick={onRefresh}>
         <span><Octicon name="sync" /></span>
       </button>
       <BellMenu />
@@ -1046,7 +1049,7 @@ type Kind = { name: string; groups: [string, string][]; groupOf: (i: QueueItem) 
 const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 // My own PRs (and ones assigned to me), by where they stand.
 const MINE: Kind = {
-  name: 'Your PRs',
+  name: `Your ${T.PRs}`,
   groups: [
     ['m-changes', 'Changes requested'],
     ['m-approved', 'Approved'],
@@ -1069,12 +1072,12 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     : (a, b) => a.localeCompare(b),
   );
   return {
-    name: 'Team',
+    name: `${T.Team}`,
     groups: order.map((m) => [m, m]),
     groupOf: (i) => i.author,
     colorOf: MINE.groupOf,
     note: (m) =>
-      [load[m] && `${load[m]} review${load[m] > 1 ? 's' : ''} requested`, waiting[m] && `a PR waiting ${since(waiting[m])}`].filter(Boolean).join(' · '),
+      [load[m] && `${load[m]} review${load[m] > 1 ? 's' : ''} requested`, waiting[m] && `a ${T.PR} waiting ${since(waiting[m])}`].filter(Boolean).join(' · '),
     people: true,
     asked: (m) => load[m] ?? 0,
   };
@@ -1235,7 +1238,7 @@ const answered: Answered = new Map(); // reviews sent from here, until the list 
 const SK_TITLES = [86, 64, 92, 72, 58, 80];
 function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolean }) {
   return (
-    <div class="list-skel" aria-busy="true" aria-label="Loading the PRs">
+    <div class="list-skel" aria-busy="true" aria-label={`Loading the ${T.PRs}`}>
       {tabs && (
         <div class="list-skel-tabs">
           {[0, 1, 2].map(() => <span class="sk" />)}
@@ -1558,8 +1561,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             <Tg i="pushed" n={i.newSinceApproval} t={`commit${i.newSinceApproval > 1 ? 's' : ''} since your approval`} />
           </span>
         )}
-        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t="PR approved" /></span>}
-        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t="PR changes requested" /></span>}
+        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t={`${T.PR} approved`} /></span>}
+        {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t={`${T.PR} changes requested`} /></span>}
         {kind === MINE && !i.isDraft && i.mergeState === 'BEHIND' && <UpdateBase i={i} />}
         {kind === MINE && !i.isDraft && i.reviewDecision === 'CHANGES_REQUESTED' && i.changesBy.length > 0 && (
           <QuickPill icon="changes" tone="p-bad" idle="changes requested" action={`Ask ${i.changesBy.map((l) => '@' + l).join(', ')} again`} busy="asking…" done="asked again" title="Once you've made the changes: ask whoever requested them to review again" run={() => askAgain(i)} />
@@ -1613,7 +1616,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
               <summary>
                 {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
                 {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) && <span class="g-away" title={`Away on Slack: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}>🌴 away</span>}
-                {kind.note?.(g) && <span class="g-note" title="Open PRs asking this person, by name, for a review; how long their oldest PR has waited for one">{kind.note(g)}</span>}
+                {kind.note?.(g) && <span class="g-note" title={`Open ${T.PRs} asking this person, by name, for a review; how long their oldest ${T.PR} has waited for one`}>{kind.note(g)}</span>}
               </summary>
               {!!kind.asked?.(g) && (
                 <div class="member-tabs" role="tablist">
@@ -1656,7 +1659,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       {shown && !fresh && !err && <p class="list-updating"><span class="sk-dot" /> Updating…</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', shown.filter(listed).length], ['mine', 'Your PRs', shown.filter((i) => i.mine).length], ['team', 'Team', teamData && teamItems.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', shown.filter(listed).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', `${T.Team}`, teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
               {name} {n != null && <span class="count">{n}</span>}
             </button>
@@ -1664,13 +1667,13 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         </div>
       )}
       {tab === 'reviewing' && shown && ((c) => c > 0 && (
-        <button class="primary review-all" onClick={() => onReview()} title="The PRs that need your review, longest-waiting first, with nothing else on screen (⇧⌘R in the app)">
-          <Octicon name="play" /> Review {c} PR{c > 1 ? 's' : ''}
+        <button class="primary review-all" onClick={() => onReview()} title={`The ${T.PRs} that need your review, longest-waiting first, with nothing else on screen (⇧⌘R in the app)`}>
+          <Octicon name="play" /> Review {c} {T.PR}{c > 1 ? 's' : ''}
         </button>
       ))(toReview(shown, showDrafts).length)}
       {(tab === 'reviewing' || tab === 'team') && ((c) => c > 0 && (
         <button class="drafts-toggle" onClick={toggleDrafts}>
-          {showDrafts ? `Hide ${c} draft PR${c > 1 ? 's' : ''}` : `${c} draft PR${c > 1 ? 's' : ''} hidden · show`}
+          {showDrafts ? `Hide ${c} draft ${T.PR}${c > 1 ? 's' : ''}` : `${c} draft ${T.PR}${c > 1 ? 's' : ''} hidden · show`}
         </button>
       ))(tab === 'team' ? teamDrafts : draftCount)}
       {!shown ? (
@@ -1683,7 +1686,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             <>
               <div class="team-head">
                 <select class="team-pick" value={team} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="GitHub team">
-                  <option value="">Pick a GitHub team…</option>
+                  <option value="">Pick a {T.site} {T.team}…</option>
                   {[...new Set([...(team ? [team] : []), ...(teams ?? [])])].map((t) => <option value={t}>{t}</option>)}
                 </select>
                 <select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
@@ -1700,7 +1703,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         </>
       )}
       </div>
-      <Resizer name="prs" label="PR list" />
+      <Resizer name="prs" label={`${T.PR} list`} />
     </aside>
   );
 }

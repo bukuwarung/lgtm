@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
-import { ago, personKey, usePresence, repoLabel, viewAs } from './platform.ts';
+import { ago, personKey, usePresence, repoLabel, viewAs, term } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
+
+// The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
+
 
 // Someone's page (#/person/<login>), from their picture or name anywhere: their open PRs, the PRs waiting on their
 // review, and their reviews of the last 30 days.
@@ -68,7 +71,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
       </header>
       <p class="history-sum">
         {[
-          `${p.mine.length} open PR${p.mine.length === 1 ? '' : 's'}`,
+          `${p.mine.length} open ${term(login.includes('@')).PR}${p.mine.length === 1 ? '' : 's'}`,
           `${p.asked.length} waiting on their review`,
           `${p.reviews.length} review${p.reviews.length === 1 ? '' : 's'} this month`,
           count('APPROVED') && `${count('APPROVED')} approved`,
@@ -81,7 +84,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
         {p.asked.length ? p.asked.map((i) => <Row i={i} waiting />) : <p class="note">None.</p>}
       </section>
       <section>
-        <h4>Their open PRs</h4>
+        <h4>Their open {term(login.includes('@')).PRs}</h4>
         {p.mine.length ? p.mine.map((i) => <Row i={i} />) : <p class="note">None.</p>}
       </section>
       <section>

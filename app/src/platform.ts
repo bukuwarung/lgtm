@@ -193,6 +193,31 @@ export const knowFace = (login: string, url: string) => {
 // GitHub's by name from its avatars host (github.com/<login>.png redirects there, and can stall in the app's webview).
 export const faceOf = (login: string, size = 40) => faces.get(login) ?? `https://avatars.githubusercontent.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}?s=${size}`;
 
+// The words of a site, for what lgtm says: GitHub's pull requests (PRs) and teams, GitLab's merge requests (MRs) and
+// groups. For a repo, its site's; without one, the account on show's (the avatar's menu); or true for GitLab's.
+export const term = (where?: string | boolean) => {
+  const lab = typeof where === 'boolean' ? where : where ? where.slice(0, where.indexOf('/')).includes('.') : !!viewAs();
+  return lab
+    ? { PR: 'MR', PRs: 'MRs', PRs_: "MR's", pr: 'merge request', prs: 'merge requests', Pr: 'Merge request', Prs: 'Merge requests', Team: 'Group', Teams: 'Groups', team: 'group', teams: 'groups', site: 'GitLab' }
+    : { PR: 'PR', PRs: 'PRs', PRs_: "PR's", pr: 'pull request', prs: 'pull requests', Pr: 'Pull request', Prs: 'Pull requests', Team: 'Team', Teams: 'Teams', team: 'team', teams: 'teams', site: 'GitHub' };
+};
+
+// A fixed text in the site's words (PR → MR, pull request → merge request, team → group), for labels written once.
+export const words = (text: string, where?: string | boolean) => {
+  const t = term(where);
+  return text
+    .replace(/\bpull request(s?)\b/g, (_, s) => (s ? t.prs : t.pr))
+    .replace(/\bPR('s|s)?\b/g, (_, s) => (s === 's' ? t.PRs : s ? t.PRs_ : t.PR))
+    .replace(/\bTeam(s?)\b/g, (_, s) => (s ? t.Teams : t.Team))
+    .replace(/\bteam(s?)\b/g, (_, s) => (s ? t.teams : t.team));
+};
+
+// The words of the PR on show (the page's address names it: a GitLab MR's starts with its host), else the account's.
+export const pageTerm = () => {
+  const m = decodeURIComponent(location.hash).match(/^#\/?(?:https?:\/\/)?([^/]+)\/.*\/(?:pull|-\/merge_requests)\/\d+/);
+  return m ? term(m[1].includes('.') && !/^(www\.)?github\.com$/.test(m[1])) : term();
+};
+
 // GitLab through glab: the hosts it's signed in to (each with the account and where its API is), and a host's token,
 // asked of the local server (or, in the app, its command) like gh's.
 export type GlabAccount = { host: string; login: string; api: string };

@@ -2,7 +2,7 @@ import { labMe } from './gitlab.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
 import { CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
-import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount } from './platform.ts';
+import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -16,6 +16,9 @@ import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProp
 import { md } from './markdown.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
 import { COMMON_FIELDS, fillSlack, prValues, QA_CHANNEL, slackParts, SLACK_MESSAGES, type SlackKind } from './slackmsg.ts';
+
+// The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
+const T = term();
 
 // Shows every token the themes colour: keywords, annotations, types, strings, numbers, properties, named arguments,
 // `it`, constants, comments, and ligatures (->, !=, ===).
@@ -81,7 +84,7 @@ function TagStyle() {
     <div class="set-row">
       <span>
         Tags and pills
-        <small>Like a file's <span class="st s-added"><Tg i="added" t="added" /></span> or a PR's <span class="pill p-bad"><Tg i="ci" t="CI failing" /></span></small>
+        <small>Like a file's <span class="st s-added"><Tg i="added" t="added" /></span> or a {T.PRs_} <span class="pill p-bad"><Tg i="ci" t="CI failing" /></span></small>
       </span>
       <span class="set-seg" role="radiogroup" aria-label="Tags and pills">
         {([['both', 'Icons and text'], ['icons', 'Icons'], ['text', 'Text']] as const).map(([v, name]) => (
@@ -132,7 +135,7 @@ function ReadingSteps() {
               <span class="set-grip" aria-hidden="true">⠿</span>
               <Octicon name={stepIcon(k)} size={14} />
               <span>
-                <b>{title}</b> <small>{why}{k === 'tests' && ": the ones whose code the PR doesn't change (the rest sit below their code)"}</small>
+                <b>{title}</b> <small>{why}{k === 'tests' && `: the ones whose code the ${T.PR} doesn't change (the rest sit below their code)`}</small>
               </span>
               <button class="link" disabled={!i} aria-label={`Move ${title} up`} onClick={() => move(k, i - 1)}>↑</button>
               <button class="link" disabled={i === order.length - 1} aria-label={`Move ${title} down`} onClick={() => move(k, i + 1)}>↓</button>
@@ -219,6 +222,7 @@ const SECTION_ICON: Record<string, string> = {
   Accounts: 'person',
   Slack: 'comment-discussion',
   'PR list': 'git-pull-request',
+  'MR list': 'git-pull-request',
   'Time to review': 'stopwatch',
   Reviewing: 'eye',
   Diff: 'diff',
@@ -288,7 +292,7 @@ export function Settings() {
     return () => removeEventListener('scroll', spy);
   }, []);
   const [keys] = useBindings();
-  const also = (k: string) => (k ? `Also ${keyLabel(k)} on a PR.` : undefined);
+  const also = (k: string) => (k ? `Also ${keyLabel(k)} on a ${T.PR}.` : undefined);
   const [team, setTeam] = useStoredValue('team', '');
   const [notify, toggleNotify] = useStoredFlag('notifyRequests', true);
   const [teams, setTeams] = useState<string[] | null>(null);
@@ -377,7 +381,7 @@ export function Settings() {
         <div class="set-group">
           <h4>Slack</h4>
           {ints?.slack.ok && <SlackPeople team={team} />}
-          <Flag k="qaRequest" initial={true} label="A button to ask QA, on your PRs" hint="Ask QA posts your QA request to the channel below, filled in from the PR: you read and can change it before it goes. Its wording is under Messages." demo>
+          <Flag k="qaRequest" initial={true} label={`A button to ask QA, on your ${T.PRs}`} hint={`Ask QA posts your QA request to the channel below, filled in from the ${T.PR}: you read and can change it before it goes. Its wording is under Messages.`} demo>
             <QaChannel />
           </Flag>
           <SlackMessages />
@@ -387,9 +391,9 @@ export function Settings() {
 
 
       <section>
-        <h3>PR list</h3>
-        <Flag k="showDrafts" initial={false} label="Show other people's draft PRs" hint="Your own drafts always show."  demo />
-        <Flag k="muteApproved" initial={true} label="Mute replies and mentions on PRs you've approved" hint="No “awaiting your reply”, no inbox entry, no notification, while your latest review is an approval. New commits that dismiss it, or another verdict, bring them back. The PR itself still shows its threads." demo />
+        <h3>{T.PR} list</h3>
+        <Flag k="showDrafts" initial={false} label={`Show other people's draft ${T.PRs}`} hint="Your own drafts always show."  demo />
+        <Flag k="muteApproved" initial={true} label={`Mute replies and mentions on ${T.PRs} you've approved`} hint={`No “awaiting your reply”, no inbox entry, no notification, while your latest review is an approval. New commits that dismiss it, or another verdict, bring them back. The ${T.PR} itself still shows its threads.`} demo />
         <label class="set-row">
           <input
             type="checkbox"
@@ -401,7 +405,7 @@ export function Settings() {
           />
           <span>
             Desktop notifications
-            <small>For new review requests, PRs coming back to you for re-review, and what you pick below.</small>
+            <small>For new review requests, {T.PRs} coming back to you for re-review, and what you pick below.</small>
           </span>
         </label>
         <fieldset class="set-sub" disabled={!notify}>
@@ -410,16 +414,16 @@ export function Settings() {
             Send a test notification
           </button>
           <Flag k="notifyReplies" initial={true} label="New replies waiting for you" />
-          <Flag k="notifyVerdicts" initial={true} label="Your PR approved, or changes requested" />
-          <Flag k="notifyCI" initial={true} label="Your PR's checks passed or failed" />
-          <Flag k="notifyReady" initial={true} label="Your PR is ready to merge" hint="Approved, checks passed, nothing in the way and no auto-merge on: the notification opens its merge box." />
-          <Flag k="notifyMentions" initial={true} label="Someone mentions you in a PR" />
-          <Flag k="notifyQueue" initial={true} label="Your PR left the merge queue, or its auto-merge turned off" />
+          <Flag k="notifyVerdicts" initial={true} label={`Your ${T.PR} approved, or changes requested`} />
+          <Flag k="notifyCI" initial={true} label={`Your ${T.PRs_} checks passed or failed`} />
+          <Flag k="notifyReady" initial={true} label={`Your ${T.PR} is ready to merge`} hint="Approved, checks passed, nothing in the way and no auto-merge on: the notification opens its merge box." />
+          <Flag k="notifyMentions" initial={true} label={`Someone mentions you in a ${T.PR}`} />
+          <Flag k="notifyQueue" initial={true} label={`Your ${T.PR} left the merge queue, or its auto-merge turned off`} />
         </fieldset>
         <label class="set-row">
           <span>
-            Team to watch
-            <small>The Team tab lists its members' open PRs.</small>
+            {T.Team} to watch
+            <small>The {T.Team} tab lists its members' open {T.PRs}.</small>
           </span>
           <select value={team} onChange={(e) => setTeam(e.currentTarget.value)}>
             <option value="">None</option>
@@ -432,8 +436,8 @@ export function Settings() {
 
       <section>
         <h3>Reviewing</h3>
-        <Flag k="showIndex" initial={true} label="Show the PR index beside the diff" hint={also(keys.index)}  demo />
-        <Flag k="hideIndexToReview" initial={true} label="Hide the index on PRs waiting for your review" hint={`They open with just the diff; ${keys.index ? keyLabel(keys.index) + ' or the index button' : 'the index button'} shows it, on that PR only. Your own PRs and the rest keep it.`} demo />
+        <Flag k="showIndex" initial={true} label={`Show the ${T.PR} index beside the diff`} hint={also(keys.index)}  demo />
+        <Flag k="hideIndexToReview" initial={true} label={`Hide the index on ${T.PRs} waiting for your review`} hint={`They open with just the diff; ${keys.index ? keyLabel(keys.index) + ' or the index button' : 'the index button'} shows it, on that ${T.PR} only. Your own ${T.PRs} and the rest keep it.`} demo />
         <Flag k="ignoreWs" initial={true} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
         <Flag k="ticketOpen" initial={false} label="Expand the Jira ticket above the conversation"  demo />
         <Flag k="jiraOnMerge" initial={true} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge."  demo />
@@ -441,10 +445,10 @@ export function Settings() {
         <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Specs and docs, then build and config, models and contracts, the implementation (each file with its tests right below it), other tests, and last resources and assets. Off: GitHub's order, by path. Drag the steps into the order you read in." demo>
           <ReadingSteps />
         </Flag>
-        <Flag k="gradleModules" initial={true} label="Group files by module" hint="Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a PR touches two or more, the index groups its files by them and each file says its own; with one, a pill names it."  demo />
+        <Flag k="gradleModules" initial={true} label="Group files by module" hint={`Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a ${T.PR} touches two or more, the index groups its files by them and each file says its own; with one, a pill names it.`}  demo />
         <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it."  demo />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review."  demo />
-        <Flag k="nextAfterReview" initial={true} label="After a review, open the next PR that needs it" hint="Finish review starts with “Then open the next PR that needs my review” ticked." demo />
+        <Flag k="nextAfterReview" initial={true} label={`After a review, open the next ${T.PR} that needs it`} hint={`Finish review starts with “Then open the next ${T.PR} that needs my review” ticked.`} demo />
         <SavedReplies />
       </section>
 
@@ -459,8 +463,8 @@ export function Settings() {
         <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)."  demo />
         <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text."  demo />
-        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint="Old on the left, new on the right; rendered doc comments show as source. The button beside the PR's title switches it too."  demo />
-        <Flag k="centerDiff" initial={true} label="Centre the PR at a comfortable width" hint="Off: it fills the window. The button beside the PR's title switches it too." demo>
+        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Old on the left, new on the right; rendered doc comments show as source. The button beside the ${T.PRs_} title switches it too.`}  demo />
+        <Flag k="centerDiff" initial={true} label={`Centre the ${T.PR} at a comfortable width`} hint={`Off: it fills the window. The button beside the ${T.PRs_} title switches it too.`} demo>
           <CenterCols />
           <Flag k="centerFit" initial={false} label="Fill the window when a line in the diff is wider than that"  demo />
         </Flag>
@@ -482,24 +486,24 @@ export function Settings() {
         </Flag>
         <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
         <Flag k="foldBots" initial={true} label="Bot comments behind one line, bot-only threads folded" hint="In the conversation, all the bots' comments (CI reports, AI reviewers) sit behind one “N comments from bots” line; open it for one line each." demo>
-          <Flag k="unfoldBotsOnMine" initial={true} label="Except on your own PRs" hint="There, CI and AI-reviewer comments are usually yours to act on." demo />
+          <Flag k="unfoldBotsOnMine" initial={true} label={`Except on your own ${T.PRs}`} hint="There, CI and AI-reviewer comments are usually yours to act on." demo />
         </Flag>
         <Flag k="agentsAsBots" initial={true} label="Comments that open with 🤖 are a bot's" hint="Agents posting from people's accounts often say so that way (“🤖 Posted by an agent”). They then fold like bots', and don't wait on your reply or count as mentions." demo />
-        <Flag k="hideSettled" initial={true} label="Hide resolved and outdated threads" hint="Unless you commented in them. The index offers to show them per PR."  demo />
-        <Flag k="resumePosition" initial={false} label="Reopen a PR where you left off" hint="Off: every PR opens at its top." />
+        <Flag k="hideSettled" initial={true} label="Hide resolved and outdated threads" hint={`Unless you commented in them. The index offers to show them per ${T.PR}.`}  demo />
+        <Flag k="resumePosition" initial={false} label={`Reopen a ${T.PR} where you left off`} hint={`Off: every ${T.PR} opens at its top.`} />
       </section>
 
       {/* What lgtm looks for in a PR. Ones for one platform or framework get a section of their own, below. */}
       <section>
         <h3>Checks</h3>
-        <p class="note">What lgtm points out in a PR, each with a button to turn it into a comment. Switch off any that's noise in your repos. Ones for a platform or framework are grouped under it, below.</p>
+        <p class="note">What lgtm points out in a {T.PR}, each with a button to turn it into a comment. Switch off any that's noise in your repos. Ones for a platform or framework are grouped under it, below.</p>
         <Flag k="checkSecrets" initial={true} label="Possible secrets" hint="Added lines that look like a private key, a token (AWS, GitHub, Slack, Google, Stripe, JWT) or a password or key given a literal. Placeholders, environment lookups and tests' made-up passwords don't count."  demo />
         <Flag k="checkDeps" initial={true} label="Dependency changes" hint="Libraries added, removed or moved to another version (Gradle, version catalogs, package.json). Marked: major jumps, and versions not pinned (-SNAPSHOT, 1.+, ranges, latest, a git branch)."  demo />
         <Flag k="checkBinaries" initial={true} label="Binary files: what they are" hint="Kind, size before and after, in Git LFS or not; a warning for one over 1 MB straight in Git, or one .gitattributes puts in LFS that isn't."  demo />
         <Flag k="checkSuppressions" initial={true} label="Tests, CI and checks switched off" hint="Tests skipped or ignored (@Ignore, @Disabled, .skip, xit, pytest.mark.skip, t.Skip…); CI let off (continue-on-error, allow_failure, if: false, || true, -x test, -DskipTests, --no-verify); and checks silenced: @Suppress, @SuppressLint, @ts-ignore, eslint-disable, noqa, type: ignore, nolint, NOSONAR, coverage ignores and the like. Lines moved as they were don't count; new files count too." demo />
         <Flag k="checkProtections" initial={true} label="Protections switched off" hint="Release builds not minified or obfuscated (minifyEnabled false, -dontobfuscate, keep-everything rules), android:debuggable, plain HTTP allowed, user-installed certificates trusted, TLS not checked (verify=False, InsecureSkipVerify, rejectUnauthorized: false, a HostnameVerifier that says yes). Debug-only sources don't count, nor TLS ones in tests." demo />
-        <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint="A guess by file name: Foo.kt counts as tested when the PR also changes FooTest.kt (or foo.test.ts, test_foo.py…)."  demo />
-        <Flag k="reviewPlan" initial={false} label="A review plan for big PRs" hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed."  demo />
+        <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint={`A guess by file name: Foo.kt counts as tested when the ${T.PR} also changes FooTest.kt (or foo.test.ts, test_foo.py…).`}  demo />
+        <Flag k="reviewPlan" initial={false} label={`A review plan for big ${T.PRs}`} hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed."  demo />
         <div class="set-group">
           <h4>Android</h4>
         <Flag k="checkHardcoded" initial={true} label="UI text not in strings.xml" hint="A layout's android:text, Compose's Text(“…”), toasts, dialogs: text written in code is never translated. Tests, debug code and previews don't count."  demo />
@@ -513,7 +517,7 @@ export function Settings() {
         <div class="set-group">
           <h4>Java backend</h4>
         <Flag k="checkMigrations" initial={true} label="Flyway migrations edited or out of order" hint="One already there changed, renamed or deleted (Flyway won't start where it ran), or a new one with a version older than, or the same as, the newest on the base branch." demo />
-        <Flag k="checkJpa" initial={true} label="JPA entities changed with no migration" hint="An @Entity's columns change and the PR adds no migration: the database won't have them." demo />
+        <Flag k="checkJpa" initial={true} label="JPA entities changed with no migration" hint={`An @Entity's columns change and the ${T.PR} adds no migration: the database won't have them.`} demo />
         <Flag k="checkTransactional" initial={true} label="@Transactional on a private method" hint="Spring's proxy never sees the call, so it runs without a transaction." demo />
         </div>
         <div class="set-group">
@@ -873,7 +877,7 @@ function JiraAfterMerge() {
     <label class="set-row">
       <span>
         After merging, move the Jira ticket to
-        <small>As you merge (above), or offered under the merge box once your PR is merged. {projects.length ? 'The statuses of your recent tickets\' projects.' : 'Open a PR with a Jira ticket to list its project\'s statuses.'}</small>
+        <small>As you merge (above), or offered under the merge box once your {T.PR} is merged. {projects.length ? 'The statuses of your recent tickets\' projects.' : `Open a ${T.PR} with a Jira ticket to list its project's statuses.`}</small>
       </span>
       <StatusSelect value={status} onChange={setStatus} statuses={statuses} />
     </label>
@@ -1049,7 +1053,7 @@ function MarkdownStyle() {
   return (
     <div class="set-group">
       <h4>Markdown files</h4>
-      <p class="note">How markdown files and PR descriptions read: pick a theme, then change anything in it. In dark mode they follow your light-mode theme (its night version), or pick another.</p>
+      <p class="note">How markdown files and {T.PR} descriptions read: pick a theme, then change anything in it. In dark mode they follow your light-mode theme (its night version), or pick another.</p>
       <div class="md-mode">
         <span class="set-seg" role="radiogroup" aria-label="Style for">
           {(['light', 'dark'] as const).map((m) => (
@@ -1156,7 +1160,7 @@ function About() {
         >
           Copy diagnostics
         </button>{' '}
-        {copied || 'Version, macOS, which sign-ins work and recent errors, for a bug report. No tokens or PR text.'}
+        {copied || `Version, macOS, which sign-ins work and recent errors, for a bug report. No tokens or ${T.PR} text.`}
       </p>
       <p>
         lgtm is <a href="https://github.com/bukuwarung/lgtm/blob/main/LICENSE" target="_blank" rel="noopener">MIT licensed</a>. Its colour themes, icons,
@@ -1255,7 +1259,7 @@ function Shortcuts() {
   return (
     <div class="set-group">
       <h4>Keyboard shortcuts</h4>
-      <p class="note">On a PR. Click a key to change it.</p>
+      <p class="note">On a {T.PR}. Click a key to change it.</p>
       <table class="set-keys">
         <tbody>
           {ACTIONS.map(([a, d]) => (
@@ -1485,7 +1489,7 @@ function LaunchAtLogin() {
         </label>
         <DemoPair k="menuBar" active={menuBar} />
       </div>
-      <Flag k="badgeInbox" initial={false} label="Count your inbox on the Dock badge" hint="Replies and mentions waiting on you join the PRs waiting for your review (and Claude sessions waiting on you) in the badge's number." demo />
+      <Flag k="badgeInbox" initial={false} label="Count your inbox on the Dock badge" hint={`Replies and mentions waiting on you join the ${T.PRs} waiting for your review (and Claude sessions waiting on you) in the badge's number.`} demo />
     </div>
   );
 }
