@@ -269,6 +269,20 @@ export function useDismiss(open: boolean, close: () => void, inside: string) {
   }, [open]);
 }
 
+// Whether a media query holds (the window's width, say), kept current as it changes.
+export function useMedia(query: string) {
+  const [on, setOn] = useState(() => matchMedia(query).matches);
+  useEffect(() => {
+    const q = matchMedia(query);
+    const change = () => setOn(q.matches);
+    q.addEventListener('change', change);
+    addEventListener('resize', change); // some web views don't report the query's change on a resize
+    change();
+    return () => (q.removeEventListener('change', change), removeEventListener('resize', change));
+  }, [query]);
+  return on;
+}
+
 export function useStoredFlag(key: string, initial: boolean) {
   const [v, set] = useStoredValue(key, initial ? '1' : '0');
   return [v === '1', () => set(v === '1' ? '0' : '1')] as const;

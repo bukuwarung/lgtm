@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo } from './platform.ts';
+import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -517,7 +517,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [toReview, setToReview] = useState<boolean | null>(null);
   const [peek, setPeek] = useState(false);
   const quiet = !focus && hideToReview && toReview !== false && index[0];
-  const [showIndex, toggleIndex] = focus ? focusIndex : quiet ? ([peek, () => setPeek((p) => !p)] as const) : index;
+  // A narrow window keeps the diff readable: the index tucks away, and its button (or i) lays it over the diff until you
+  // pick something in it, click elsewhere or press Esc.
+  const narrowIx = useMedia('(max-width: 1280px)');
+  const [ixOver, setIxOver] = useState(false);
+  useDismiss(narrowIx && ixOver, () => setIxOver(false), '.side.tree, .bar-index');
+  const [showIndex, toggleIndex] = narrowIx ? ([ixOver, () => setIxOver((o) => !o)] as const) : focus ? focusIndex : quiet ? ([peek, () => setPeek((p) => !p)] as const) : index;
   const [centered, toggleCentered] = useStoredFlag('centerDiff', false);
   const [split, toggleSplit] = useStoredFlag('splitDiff', false);
   const [fit] = useStoredFlag('centerFit', true);
@@ -1383,10 +1388,10 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     </PillMenu>
   );
   return (
-    <div class={`review${showIndex ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}`}>
+    <div class={`review${showIndex && !narrowIx ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}`}>
       {/* Always there, so showing and hiding can slide (style.css); hidden, it's out of reach of the keyboard. */}
       {(
-        <aside class={showIndex ? 'side tree' : 'side tree collapsed'} aria-hidden={!showIndex}>
+        <aside class={`side tree${showIndex ? '' : ' collapsed'}${narrowIx && showIndex ? ' over' : ''}`} aria-hidden={!showIndex} onClick={(e) => narrowIx && (e.target as Element).closest('.ix-item, .tree-file, .ix-hidden-row') && setIxOver(false)}>
           <div class="side-scroll">
             <ShortcutIndex
               checksErr={checksErr}

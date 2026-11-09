@@ -9,7 +9,7 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -343,7 +343,18 @@ function App() {
   const [queueVersion, setQueueVersion] = useState(0);
   const [answeredTick, setAnsweredTick] = useState(0); // a review sent: lay it over the list
   const [refreshing, setRefreshing] = useState(false); // ↻: until the list's next load lands
-  const [showPRs, togglePRs] = useStoredFlag('showPRs', true);
+  const [showPRs, toggleStoredPRs] = useStoredFlag('showPRs', true);
+  // A narrow window keeps the diff readable: the PR list tucks away, and its button lays it over the page until you
+  // pick a PR, click elsewhere or press Esc (your choice for wide windows stays as it is).
+  const narrowPRs = useMedia('(max-width: 1000px)');
+  const [prsOver, setPrsOver] = useState(false);
+  const togglePRs = () => (narrowPRs ? setPrsOver((o) => !o) : toggleStoredPRs());
+  useEffect(() => {
+    const close = () => setPrsOver(false);
+    addEventListener('hashchange', close);
+    return () => removeEventListener('hashchange', close);
+  }, []);
+  useDismiss(narrowPRs && prsOver, () => setPrsOver(false), '.side.prs, .prs-btn');
   const look = useCodeLook(); // code colours and font, and text sizes, from Settings
   // Glass (Settings → Appearance), unless macOS asks for less transparency.
   const [glass] = useStoredFlag('glass', true);
@@ -584,7 +595,7 @@ function App() {
             <button onClick={() => setRm(null)} title="Back to everything (Esc)">Exit <kbd>Esc</kbd></button>
           </>
         ) : (<>
-        <button title="Show / hide the PR list" onClick={togglePRs}><Octicon name="three-bars" /></button>
+        <button class="prs-btn" title="Show / hide the PR list" onClick={togglePRs}><Octicon name="three-bars" /></button>
         {/* The inbox: threads and mentions waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
         <a
           href="#/inbox"
@@ -665,9 +676,9 @@ function App() {
           <button title="Dismiss" onClick={() => setToast(null)}><Octicon name="x" /></button>
         </div>
       )}
-      <div class={showPRs && !rm ? 'shell' : 'shell no-prs'} key={accountKey}>{/* another account: everything again, as it */}
+      <div class={showPRs && !rm && !narrowPRs ? 'shell' : 'shell no-prs'} key={accountKey}>{/* another account: everything again, as it */}
         {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
-        <PRList hidden={!showPRs || !!rm} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setQueueItems(items), setRefreshing(false), void moveMerged(items))} />
+        <PRList hidden={(narrowPRs ? !prsOver : !showPRs) || !!rm} over={narrowPRs && prsOver} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setQueueItems(items), setRefreshing(false), void moveMerged(items))} />
         {r ? (
           <Review
             key={route}
@@ -716,7 +727,7 @@ function App() {
             )}
           </div>
         ) : (
-          <StartPage items={queueItems} onTab={(t) => (setPrTab(t), !showPRs && togglePRs())} />
+          <StartPage items={queueItems} onTab={(t) => (setPrTab(t), narrowPRs ? setPrsOver(true) : !showPRs && toggleStoredPRs())} />
         )}
       </div>
     </>
@@ -1185,7 +1196,7 @@ function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolea
 
 const closedAsked = new Map<string, number>(); // the bell's PRs asked about, when ("owner/repo#n")
 
-function PRList({ hidden, onReview, current, version, answeredTick, onItems }: { hidden: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
+function PRList({ hidden, over, onReview, current, version, answeredTick, onItems }: { hidden: boolean; over?: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
   // The last list (per account) shows at once on launch, "updating…" until GitHub's answer replaces it.
   const [loaded, setItems] = useState<QueueItem[] | null>(() => {
     try {
@@ -1570,7 +1581,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
   };
 
   return (
-    <aside class={hidden ? 'side prs collapsed' : 'side prs'} aria-hidden={hidden}>
+    <aside class={`side prs${hidden ? ' collapsed' : ''}${over ? ' over' : ''}`} aria-hidden={hidden}>
       <div class="side-scroll">
       {err && (
         <p class="error">

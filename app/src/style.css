@@ -314,7 +314,22 @@ kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: va
 .fdot.s-removed { background: var(--delfg); }
 .fdot.s-renamed, .fdot.s-copied { background: var(--accent); }
 @media (max-width: 1100px) { .shell { grid-template-columns: var(--prs-w, 240px) minmax(0, 1fr); } .review { grid-template-columns: var(--index-w, 220px) minmax(0, 1fr); } }
-@media (max-width: 800px) { .shell, .review { grid-template-columns: minmax(0, 1fr); } .side { display: none; } }
+@media (max-width: 800px) { .shell, .review { grid-template-columns: minmax(0, 1fr); } .side:not(.over) { display: none; } }
+/* A narrow window: the PR list or the index laid over the page from its button (main.tsx, review.tsx), in a column of no
+   width, so the diff keeps its own. */
+.side.over { width: min(320px, 85vw); z-index: 25; background: var(--bg); box-shadow: 0 8px 32px var(--shadow); }
+@media (max-width: 800px) { .side.over { position: fixed; top: var(--nav); bottom: 0; left: 0; height: auto; } }
+
+/* macOS → Accessibility → Display → Reduce motion: no flashes, sweeps, slides or fades. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+}
+/* … → Increase contrast: borders, faint text and tints stronger, in whichever theme (over its own colours). */
+@media (prefers-contrast: more) {
+  :root { --border: color-mix(in srgb, var(--fg) 55%, var(--bg)) !important; --muted: color-mix(in srgb, var(--fg) 82%, var(--bg)) !important; --soft: color-mix(in srgb, var(--fg) 10%, var(--bg)) !important; }
+  .dim, .tree-row.dim, .bots-hidden > summary, details.comment.bot > summary { opacity: 1 !important; }
+  :focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 1px; }
+}
 .bar { position: sticky; top: var(--nav); z-index: 3; height: var(--bar); display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
 .bar h1 { flex: 1; margin: 0; font-size: calc(15px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .submit { position: relative; }
