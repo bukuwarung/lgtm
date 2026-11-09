@@ -2,7 +2,7 @@ import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { labMe } from './gitlab.ts';
-import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, getEmails, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
+import { isOffline, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
@@ -10,7 +10,7 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, type GlabAccount } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount } from './platform.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -176,7 +176,7 @@ function StaleBranches() {
     <div class="stale">
       {step === 'confirm' ? (
         <>
-          <p>Delete these branches on GitHub? Their PRs are merged.</p>
+          <p>Delete these branches on {viewAs() ? 'GitLab' : 'GitHub'}? Their PRs are merged.</p>
           <ul>{list.map((b) => <li><CopyCode>{b.headRefName}</CopyCode> <small>{repoLabel(b.repo)}#{b.number}</small></li>)}</ul>
           <button class="primary" onClick={go}>Delete {list.length} branch{list.length > 1 ? 'es' : ''}</button> <button onClick={() => setStep('')}>Cancel</button>
         </>
@@ -1162,13 +1162,12 @@ async function autoMerge(i: QueueItem) {
 async function askAgain(i: QueueItem): Promise<string> {
   await Promise.all(i.changesBy.map((l) => requestReview(i.repo, i.number, l)));
   const text = fillSlack(slackTemplate('again'), prValues({ repo: i.repo, number: i.number, title: i.title, url: prWebUrl(i.repo, i.number), author: i.author }));
-  if (!text || !(await slackStatus(`${i.repo}#${i.number}`).catch(() => null))?.configured) return 'Asked again on GitHub';
+  if (!text || !(await slackStatus(`${i.repo}#${i.number}`).catch(() => null))?.configured) return `Asked again on ${site(i.repo)}`;
   try {
-    const emails = await getEmails(i.repo.split('/')[0], i.changesBy);
-    const missed = (await notifySlack(i.changesBy.map((login) => ({ login, emails: emails[login] ?? [] })), text, `${i.repo}#${i.number}`)).filter((r) => !r.ok);
-    return missed.length ? `Asked again on GitHub; Slack didn't reach ${missed.map((r) => '@' + r.login).join(', ')}` : 'Asked again on GitHub and Slack';
+    const missed = (await notifySlack(await slackRecipients(i.repo, i.changesBy), text, `${i.repo}#${i.number}`)).filter((r) => !r.ok);
+    return missed.length ? `Asked again on ${site(i.repo)}; Slack didn't reach ${missed.map((r) => '@' + r.login).join(', ')}` : `Asked again on ${site(i.repo)} and Slack`;
   } catch (e: any) {
-    return `Asked again on GitHub; Slack failed (${e.message})`;
+    return `Asked again on ${site(i.repo)}; Slack failed (${e.message})`;
   }
 }
 async function rerunFailed(i: QueueItem) {
@@ -1194,16 +1193,15 @@ function Waiting({ i, nudge, presence }: { i: QueueItem; nudge: boolean; presenc
   if (!(days >= 1) || i.isDraft || i.reviewDecision === 'APPROVED') return null;
   const bots = readBots();
   // Reviewers away (Slack: sick, vacation, leave) aren't nudged.
-  const away = i.pendingReviewers.filter((r) => isAway(presence[r]));
+  const away = i.pendingReviewers.filter((r) => isAway(presence[personKey(i.repo, r)]));
   const to = i.pendingReviewers.filter((r) => !bots.has(r) && !away.includes(r));
   const stop = (e: Event) => (e.preventDefault(), e.stopPropagation());
   const send = async () => {
     setStep('sending');
     try {
-      const emails = await getEmails(i.repo.split('/')[0], to);
       const url = prWebUrl(i.repo, i.number);
       const text = fillSlack(slackTemplate('nudge'), { ...prValues({ repo: i.repo, number: i.number, title: i.title, url, author: i.author }), days: `${days} day${days > 1 ? 's' : ''}` });
-      const results = await notifySlack(to.map((login) => ({ login, emails: emails[login] ?? [] })), text, `${i.repo}#${i.number}`);
+      const results = await notifySlack(await slackRecipients(i.repo, to), text, `${i.repo}#${i.number}`);
       const failed = results.filter((r) => !r.ok);
       setStep(failed.length ? `Couldn't nudge ${failed.map((r) => '@' + r.login).join(', ')}` : `Nudged ${results.map((r) => '@' + r.login).join(', ')}`);
     } catch (e: any) {
@@ -1478,7 +1476,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const teamDrafts = teamData?.items.filter((i) => i.isDraft && !isCurrent(i)).length ?? 0;
   const teamItems = teamData?.items.filter((i) => showDrafts || !i.isDraft || isCurrent(i)) ?? [];
   // Slack statuses (slackmsg.ts isAway) of the reviewers my PRs wait on, and of the team's members on its tab.
-  const presence = usePresence([...(items ?? []).filter((i) => i.authored).flatMap((i) => i.pendingReviewers), ...(tab === 'team' ? teamData?.members ?? [] : [])]);
+  // A GitLab MR's reviewers by their Slack-people key (login@host): see who().
+  const presence = usePresence([...(items ?? []).filter((i) => i.authored).flatMap((i) => i.pendingReviewers.map((r) => personKey(i.repo, r))), ...(tab === 'team' ? teamData?.members ?? [] : [])]);
   const listed = (i: QueueItem) => inReviewing(i) || (!!i.mentioned && !i.reviewing && !i.authored && isCurrent(i)); // the one you're on stays
   // The top PRs waiting on me load ahead, a few at a time, so opening one is instant; only ones that changed since
   // their cached copy, and not while lgtm is in the background.
@@ -1512,7 +1511,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
-        {i.face !== who && <><span class="person-link" onClick={toPerson(i.face)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span> ·{' '}</>}
+        {i.face !== who && <><span class="person-link" onClick={toPerson(i.face, i.repo)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span> ·{' '}</>}
         {layer && <b class="layer">{layer} </b>}
         {repoLabel(i.repo)}{numRef(i.repo, i.number)} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>
@@ -1526,8 +1525,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
         )}
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
-        {kind === MINE && i.pendingReviewers.filter((r) => isAway(presence[r])).map((r) => (
-          <span class="pill p-warn" title={`Waiting on @${r}, away on Slack: ${statusText(presence[r])}`}>🌴 @{r} away</span>
+        {kind === MINE && i.pendingReviewers.filter((r) => isAway(presence[personKey(i.repo, r)])).map((r) => (
+          <span class="pill p-warn" title={`Waiting on @${r}, away on Slack: ${statusText(presence[personKey(i.repo, r)])}`}>🌴 @{r} away</span>
         ))}
         {i.codeOwner && <span class="pill" title="It changes files you own (CODEOWNERS). GitHub asks code owners once it's marked ready for review"><Tg i="assigned" t="code owner" /></span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&

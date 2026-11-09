@@ -125,7 +125,7 @@ async function saveThreads(threads) {
 // Links to this PR's Slack threads (one per person messaged), as message permalinks on the workspace's own URL.
 let slackUrl; // https://<workspace>.slack.com/
 async function prThreads(pr) {
-  if (!/^[\w.-]+\/[\w.-]+#\d+$/.test(pr)) return [];
+  if (!PR_REF.test(pr)) return [];
   const found = await dmThreads(pr);
   const mine = Object.entries({ ...found, ...(await readThreads()) }).filter(([k]) => k.startsWith(pr + ':'));
   if (!mine.length) return [];
@@ -154,8 +154,9 @@ function dmThreads(pr) {
       pr,
       (async () => {
         const [repo, n] = pr.split('#');
-        const link = new RegExp(`github\\.com/${repo.replace(/\./g, '\\.')}/pull/${n}(?!\\d)`);
-        const r = await slackcli(['search', 'messages', `github.com/${repo}/pull/${n}`, '--json', '--limit', '40']);
+        const page = prPage(repo, n);
+        const link = new RegExp(`${page.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`);
+        const r = await slackcli(['search', 'messages', page, '--json', '--limit', '40']);
         const users = (await readConfig()).slackUsers ?? {};
         const loginOf = Object.fromEntries(Object.entries(users).filter(([, v]) => /^U[A-Z0-9]+$/.test(v)).map(([l, v]) => [v, l]));
         const threads = await readThreads();
@@ -220,7 +221,12 @@ async function slackPresence(logins) {
 
 // --- GitHub ↔ Slack people (Settings) ---
 
-const LOGIN = /^[\w-]{1,39}$/;
+// A GitHub login, or a GitLab person as login@host (so a GitLab name never reaches a GitHub person's Slack).
+const LOGIN = /^(?:[\w-]{1,39}|[\w.-]{1,255}@[\w.:-]{1,253})$/;
+// A PR: owner/repo#12, or a GitLab MR as host/group/…/project#12.
+const PR_REF = /^[\w.:-]+(?:\/[\w.-]+)+#\d+$/;
+// Where a PR's own page is, for finding it in Slack messages.
+const prPage = (repo, n) => (repo.split('/')[0].includes('.') ? `${repo}/-/merge_requests/${n}` : `github.com/${repo}/pull/${n}`);
 const SLACK_ID = /^U[A-Z0-9]{6,}$/;
 // slackcli may print a spinner line first, and prints nothing at all for an empty search.
 // The JSON object in a CLI's output: some print a spinner line before it, and some (slackcli) an update notice after.
@@ -278,7 +284,7 @@ async function findSlack(people) {
       if (u?.id && !u.deleted) candidates.push(one(u, 'search'));
       p = { ...p, query: undefined };
     }
-    for (const [query, via] of [[p.query, 'search'], [p.name, 'name'], [p.login.split(/[-_]/)[0], 'username']]) {
+    for (const [query, via] of [[p.query, 'search'], [p.name, 'name'], [p.login.split('@')[0].split(/[-_.]/)[0], 'username']]) {
       if (found || typeof query !== 'string' || query.trim().length < 2 || query.startsWith('-')) continue;
       const r = await slackcli(['search', 'people', query.slice(0, 100), '--json', '--limit', '5']);
       const live = r.ok ? (parseJson(r.stdout)?.people ?? []).filter((u) => !u.deleted && !u.is_bot) : [];
@@ -305,22 +311,23 @@ async function saveSlackPeople(map) {
 
 // The message's GitHub mentions as Slack ones: <@gh:login> (and <@gh:*>, the one it's for) becomes <@U…> for whoever
 // that is on Slack (the Slack people mapping, or for the recipient their email), else stays @login.
+const MENTION = /<@gh:([\w.-]{1,255}@[\w.:-]{1,253}|[A-Za-z0-9-]{1,39}|\*)>/g;
 async function mentions(text, recipient, users) {
   if (!text.includes('<@gh:')) return text;
   const found = new Map();
-  for (const [, who] of text.matchAll(/<@gh:([A-Za-z0-9-]{1,39}|\*)>/g)) {
+  for (const [, who] of text.matchAll(MENTION)) {
     if (found.has(who)) continue;
     const login = who === '*' ? recipient.login : who;
     const target = users[login] ?? (login === recipient.login ? recipient.emails[0] : undefined);
     const id = /^U[A-Z0-9]+$/.test(target ?? '') ? target : (await slackProfile(target))?.id;
     found.set(who, id ? `<@${id}>` : `@${login}`);
   }
-  return text.replace(/<@gh:([A-Za-z0-9-]{1,39}|\*)>/g, (_, who) => found.get(who));
+  return text.replace(MENTION, (_, who) => found.get(who));
 }
 
 // The PRs' Slack threads (slack-threads.json), for Settings → Backup: all of them, or a backup's merged in (its
 // entries replace ones with the same key).
-const THREAD_KEY = /^[\w.-]+\/[\w.-]+#\d+:(#qa|[\w-]{1,39})$/;
+const THREAD_KEY = /^[\w.:-]+(?:\/[\w.-]+)+#\d+:(#qa|[\w-]{1,39}|[\w.-]{1,255}@[\w.:-]{1,253})$/;
 async function backupThreads(incoming) {
   const threads = await readThreads();
   if (incoming === undefined) return threads;
@@ -348,7 +355,7 @@ async function channelId(channel) {
 // A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
 const SLACK_CHANNEL = /^([CG][A-Z0-9]+|#[\w.-]+|https:\/\/[\w-]+\.slack\.com\/archives\/[CG][A-Z0-9]+\/?)$/;
 async function postToChannel({ channel, text, pr }) {
-  if (typeof channel !== 'string' || !SLACK_CHANNEL.test(channel) || typeof text !== 'string' || !text.trim() || text.length > 4000 || typeof pr !== 'string' || !/^[\w.-]+\/[\w.-]+#\d+$/.test(pr)) throw new Error('Bad Slack request');
+  if (typeof channel !== 'string' || !SLACK_CHANNEL.test(channel) || typeof text !== 'string' || !text.trim() || text.length > 4000 || typeof pr !== 'string' || !PR_REF.test(pr)) throw new Error('Bad Slack request');
   const to = await channelId(channel);
   if (to.error) throw new Error(to.error);
   const body = await mentions(text, { login: '', emails: [] }, (await readConfig()).slackUsers ?? {});
@@ -378,7 +385,7 @@ async function qaThreads(prs) {
   const me = await slackMe;
   const out = {};
   await Promise.all(
-    prs.filter((pr) => /^[\w.-]+\/[\w.-]+#\d+$/.test(pr) && threads[`${pr}:#qa`]).map(async (pr) => {
+    prs.filter((pr) => PR_REF.test(pr) && threads[`${pr}:#qa`]).map(async (pr) => {
       const t = threads[`${pr}:#qa`];
       if (!/^[CG][A-Z0-9]+$/.test(t.channel) || !/^\d+\.\d+$/.test(t.ts)) return;
       const r = await slackcli(['conversations', 'read', t.channel, '--thread-ts', t.ts, '--json', '--limit', '200']);
@@ -409,7 +416,7 @@ async function checkChannel(channel) {
 
 async function notify({ recipients, text, thread }) {
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
-    typeof thread === 'string' && /^[\w.-]+\/[\w.-]+#\d+$/.test(thread) &&
+    typeof thread === 'string' && PR_REF.test(thread) &&
     recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string'));
   if (!valid) throw new Error('Bad Slack request');
   const users = (await readConfig()).slackUsers ?? {};

@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, fetchJobLog, fetchToken, readBots, recordError, repliesDone, viewAs } from './platform.ts';
+import { agentsAsBots, fetchJobLog, fetchToken, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 import * as lab from './gitlab.ts';
@@ -527,6 +527,7 @@ async function reviewsBy(login: string, query: string, days: number): Promise<My
 // first), and their reviews of the last 30 days. In the given orgs (the ones in my list).
 export type Person = { login: string; name: string | null; avatar: string; bio: string | null; mine: QueueItem[]; asked: QueueItem[]; reviews: (MyReview & {})[] };
 export async function getPerson(login: string, orgs: string[], days = 30): Promise<Person> {
+  if (login.includes('@')) return lab.getLabPerson(login, days); // a GitLab person (personKey)
   const where = orgs.map((o) => 'org:' + o).join(' ');
   const [d, reviews] = await Promise.all([
     graphql(
@@ -686,8 +687,22 @@ export async function getEmails(org: string, logins: string[]): Promise<Record<s
   return Object.fromEntries(logins.map((l) => [l, people[l].emails]));
 }
 
-// GitHub name and emails per login (verified company emails first), to find people on Slack.
+// Someone's emails to reach on Slack, by Slack-people key (personKey): a GitHub login's from GitHub, a GitLab
+// person's (login@host) from that GitLab, never one looked up on the other site.
+export async function slackRecipients(repo: string, logins: string[]): Promise<{ login: string; emails: string[] }[]> {
+  const keys = logins.map((l) => personKey(repo, l));
+  const people = await getPeople(repo.split('/')[0], keys);
+  return keys.map((login) => ({ login, emails: people[login]?.emails ?? [] }));
+}
+
+// GitHub name and emails per login (verified company emails first), to find people on Slack. A GitLab person's key
+// (login@host) is asked of that GitLab: their name and public email.
 export async function getPeople(org: string, logins: string[]): Promise<Record<string, { name: string | null; emails: string[] }>> {
+  const labKeys = logins.filter((l) => l.includes('@'));
+  if (labKeys.length) {
+    const [hub, labs] = await Promise.all([getPeople(org, logins.filter((l) => !l.includes('@'))), lab.labPeople(labKeys)]);
+    return { ...hub, ...labs };
+  }
   if (!logins.length) return {};
   const query = (ls: string[], withOrg: boolean) => {
     const vars = Object.fromEntries(ls.map((l, i) => [`l${i}`, l]));

@@ -395,7 +395,7 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
     if (r.type !== 'Bot') reviewers.set(r.login, { meta: reviewers.has(r.login) ? 'asked again' : 'waiting', icon: 'waiting', tone: 'WAITING', id: reviewers.get(r.login)?.id });
   for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting', icon: 'waiting', tone: 'WAITING' });
   // Their Slack statuses: one waited on who's away (sick, vacation, leave) says so, and on my PR can be swapped.
-  const presence = usePresence([...reviewers.keys()].filter((w) => !w.startsWith('team ')));
+  const presence = usePresence([...reviewers.keys()].filter((w) => !w.startsWith('team ')), repo);
 
   return (
     <div class="index">

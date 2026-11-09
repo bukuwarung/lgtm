@@ -1184,3 +1184,12 @@ test("GitLab's suggestion range", () => {
   const s = suggestionOf(t, { databaseId: 1, body: '```suggestion:-2+1\nX\n```', author: null } as any)!;
   assert.deepEqual([s.start, s.end, s.text], [8, 11, 'X\n']);
 });
+
+test('GitLab people reach Slack as login@host, never as a GitHub login', async () => {
+  const { personKey } = await import('../src/platform.ts');
+  const { fillSlack, prValues } = await import('../src/slackmsg.ts');
+  assert.equal(personKey('gitlab.com/g/p', 'ana'), 'ana@gitlab.com');
+  assert.equal(personKey('o/r', 'ana'), 'ana');
+  const v = prValues({ repo: 'gitlab.com/g/p', number: 3, title: 'T', url: 'https://gitlab.com/g/p/-/merge_requests/3', author: 'ana' });
+  assert.equal(fillSlack('{@author} {pr}', v), '<@gh:ana@gitlab.com> <https://gitlab.com/g/p/-/merge_requests/3|gitlab.com/g/p!3 T>');
+});

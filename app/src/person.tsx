@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
-import { ago, usePresence, repoLabel } from './platform.ts';
+import { ago, personKey, usePresence, repoLabel, viewAs } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
@@ -9,11 +9,13 @@ import { PageSkeleton } from './history.tsx';
 // review, and their reviews of the last 30 days.
 export const isPerson = (login?: string | null) => !!login && !/\[bot\]$|^ghost$/.test(login);
 // A click on someone that opens their page (inside a link or a fold, it doesn't open those too).
-export const toPerson = (login: string) => (e: Event) => {
+// `repo`: the PR they're on (a GitLab one's people open as login@host); without one, the account on show's site.
+export const toPerson = (login: string, repo?: string) => (e: Event) => {
   if (!isPerson(login)) return;
   e.preventDefault();
   e.stopPropagation();
-  location.hash = '/person/' + encodeURIComponent(login);
+  const key = repo ? personKey(repo, login) : viewAs() && !login.includes('@') ? `${login}@${viewAs()}` : login;
+  location.hash = '/person/' + encodeURIComponent(key);
 };
 
 const hours = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.round(ms / 60_000))} min` : ms < 86_400_000 ? `${Math.round(ms / 3_600_000)} h` : `${Math.round(ms / 86_400_000)} d`);
@@ -54,7 +56,11 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
         <div>
           <h2>{p.name ?? p.login}</h2>
           <p class="note">
-            <a href={`https://github.com/${encodeURIComponent(p.login)}`} target="_blank" rel="noopener">@{p.login}</a>
+            {p.login.includes('@') ? (
+              <a href={`https://${p.login.slice(p.login.lastIndexOf('@') + 1)}/${encodeURIComponent(p.login.slice(0, p.login.lastIndexOf('@')))}`} target="_blank" rel="noopener">@{p.login.slice(0, p.login.lastIndexOf('@'))}</a>
+            ) : (
+              <a href={`https://github.com/${encodeURIComponent(p.login)}`} target="_blank" rel="noopener">@{p.login}</a>
+            )}
             {p.bio && ` · ${p.bio}`}
           </p>
           {presence && <p class={isAway(presence) ? 'ix-status away' : 'ix-status'}>{isAway(presence) && '🌴 '}{statusText(presence)}</p>}

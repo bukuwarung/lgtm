@@ -12,7 +12,7 @@ import { baselineChanges, isLintBaseline, type Suppression } from './lintbaselin
 import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, getEmails, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
   ticketPRs, earlierVerdicts, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef } from './github.ts';
@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf } from './platform.ts';
+import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { toPerson } from './person.tsx';
@@ -239,9 +239,8 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
     mark(login, 'asked');
     if (!(slack && slackOk)) return onAsked(`Asked @${login} for a review.`, true);
     try {
-      const emails = await getEmails(repo.split('/')[0], [login]);
       const message = fillSlack(text, prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
-      const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], message, `${repo}#${n}`);
+      const [r] = await notifySlack(await slackRecipients(repo, [login]), message, `${repo}#${n}`);
       onAsked(r?.ok ? `Asked @${login} for a review, on ${site(repo)} and Slack.` : `Asked @${login} on ${site(repo)}; Slack didn't reach them (${r?.error ?? 'no reply'}).`, !!r?.ok);
     } catch (e: any) {
       onAsked(`Asked @${login} on ${site(repo)}; Slack failed (${e.message}).`, false);
@@ -727,7 +726,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => {
     if (!data) return;
     const pr = data.pr;
-    rememberPeople([pr.user.login, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => !c.bot).map((c) => c.author)]);
+    rememberPeople([pr.user.login, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => !c.bot).map((c) => c.author)].map((l) => personKey(repo, l)));
   }, [data, conversation]);
 
   const sinceBase = fromSha ?? lastReviewed;
@@ -989,9 +988,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (notify && slackTo?.length) {
       // The review is in; a Slack failure is reported, not thrown.
       try {
-        const emails = await getEmails(repo.split('/')[0], slackTo);
         const results = await notifySlack(
-          slackTo.map((login) => ({ login, emails: emails[login] })),
+          await slackRecipients(repo, slackTo),
           slackText(pr, repo, n, event, body, drafts.length ? drafts.map((d) => d.path) : me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).map((t) => t.path) : []),
           `${repo}#${n}`,
         );
@@ -1177,8 +1175,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     const text = fillSlack(slackTemplate('again'), prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
     if (text && slackPeople !== null) {
       try {
-        const emails = await getEmails(repo.split('/')[0], [login]);
-        const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], text, `${repo}#${n}`);
+        const [r] = await notifySlack(await slackRecipients(repo, [login]), text, `${repo}#${n}`);
         note = r?.ok ? `Asked @${login} to review again, on ${site(repo)} and Slack.` : `Asked @${login} again on ${site(repo)}; Slack didn't reach them: ${r?.error ?? 'no reply'}`;
       } catch (e: any) {
         note = `Asked @${login} again on ${site(repo)}; Slack failed (${e.message}).`;
@@ -1192,9 +1189,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // then shows by the title.
   async function askOnSlack(login: string): Promise<boolean> {
     try {
-      const emails = await getEmails(repo.split('/')[0], [login]);
       const text = fillSlack(slackTemplate('ask'), prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
-      const [r] = await notifySlack([{ login, emails: emails[login] ?? [] }], text, `${repo}#${n}`);
+      const [r] = await notifySlack(await slackRecipients(repo, [login]), text, `${repo}#${n}`);
       setNotice(r?.ok ? { ok: true, text: `Asked @${login} for a review on Slack.` } : { ok: false, text: `Slack didn't reach @${login}: ${r?.error ?? 'no reply'}` });
       if (r?.ok) slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {});
       return !!r?.ok;
@@ -3805,7 +3801,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}
         {first?.state === 'PENDING' && <span class="badge">Pending, started on {site(ctx.repo)} · </span>}
-        <span class="t-preview"><Avatar login={first?.author?.login ?? 'ghost'} src={first?.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(first?.author?.login ?? 'ghost')}>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
+        <span class="t-preview"><Avatar login={first?.author?.login ?? 'ghost'} src={first?.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(first?.author?.login ?? 'ghost', ctx.repo)}>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
         {t.isResolved && <span class="badge"> · resolved</span>}
         {t.isOutdated && <span class="badge"> · outdated</span>}
         {ctx.sinceComment.get(t.id)?.kind === 'changed' && <span class="badge"> · code changed since</span>}
@@ -3814,7 +3810,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId}>
-          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost')}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
+          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
           {c.state === 'PENDING' && c.id ? (
@@ -4448,7 +4444,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="comment" id="pr-description">
-        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b class="person-link" onClick={toPerson(pr.user.login)}>{pr.user.login}</b> <CopyLink url={pr.html_url} />
+        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b class="person-link" onClick={toPerson(pr.user.login, repo)}>{pr.user.login}</b> <CopyLink url={pr.html_url} />
         {me === pr.user.login && !editing && (
           <button class="icon-btn" title="Edit the title and description" aria-label="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />
@@ -4476,7 +4472,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         if (replaced.has(c.id)) return null; // folded under the same person's later verdict
         const head = (
           <>
-            <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
+            <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
             {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
           </>
@@ -4517,7 +4513,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
           {items.filter((c) => c.bot).map((c) => (
             <details class="comment bot" key={c.id} id={'cv-' + c.id}>
               <summary>
-                <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author)}>{c.author}</b>{' '}
+                <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{c.author}</b>{' '}
                 <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
                 {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}{' '}
                 <span class="bot-excerpt">{botExcerpt(c.html)}</span>

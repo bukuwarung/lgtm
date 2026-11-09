@@ -12,11 +12,16 @@ export const claudeContinueLink = (id: string) => `claude://code/continue?sessio
 
 const quote = (text: string, room = 1500) => (text.length > room ? text.slice(0, room) + '…' : text).trim().replace(/^/gm, '> ');
 
+// A GitLab repo is host/group/…/project: its MRs are read with glab, given the project's address.
+const gitlab = (repo: string) => repo.split('/')[0].includes('.');
 export function prPrompt(pr: { html_url: string; number: number; title: string; base: { ref: string }; head: { ref: string } }, repo: string): string {
+  const read = gitlab(repo)
+    ? `Read it with \`glab mr view ${pr.number} -R https://${repo} --comments\` and \`glab mr diff ${pr.number} -R https://${repo}\`.`
+    : `Read it with \`gh pr view ${pr.number} --repo ${repo} --comments\` and \`gh pr diff ${pr.number} --repo ${repo}\`.`;
   return [
-    `Let's look at this pull request: ${pr.html_url}`,
-    `#${pr.number} ${pr.title} (${pr.head.ref} → ${pr.base.ref})`,
-    `Read it with \`gh pr view ${pr.number} --repo ${repo} --comments\` and \`gh pr diff ${pr.number} --repo ${repo}\`.`,
+    `Let's look at this ${gitlab(repo) ? 'merge request' : 'pull request'}: ${pr.html_url}`,
+    `${gitlab(repo) ? '!' : '#'}${pr.number} ${pr.title} (${pr.head.ref} → ${pr.base.ref})`,
+    read,
   ].join('\n');
 }
 
@@ -26,7 +31,7 @@ export function commentPrompt(
 ): string {
   const place = where.path ? ` on \`${where.path}${where.line ? `:${where.line}` : ''}\`` : '';
   return [
-    `A review comment from @${c.author}${place} in ${where.repo}#${where.number} (${where.prUrl}):`,
+    `A review comment from @${c.author}${place} in ${where.repo}${gitlab(where.repo) ? '!' : '#'}${where.number} (${where.prUrl}):`,
     '',
     quote(c.text),
     '',
@@ -47,7 +52,7 @@ export function askPrompt(
 ): string {
   const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '\n(cut here for length)' : s);
   return [
-    "You're helping someone review a GitHub pull request. They selected some code and have a question about it.",
+    `You're helping someone review a ${pr.html_url.includes('/-/merge_requests/') ? 'GitLab merge request' : 'GitHub pull request'}. They selected some code and have a question about it.`,
     'Answer in Markdown, concisely and concretely, pointing at identifiers and lines. If the answer depends on code you can\'t see here, say so.',
     '',
     `PR: ${pr.html_url} (${pr.title})`,

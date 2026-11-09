@@ -178,6 +178,9 @@ export const faceOf = (login: string, size = 40) => faces.get(login) ?? `https:/
 // GitLab through glab: the hosts it's signed in to (each with the account and where its API is), and a host's token,
 // asked of the local server (or, in the app, its command) like gh's.
 export type GlabAccount = { host: string; login: string; api: string };
+// Who someone is to lgtm's Slack people (the mapping, DMs, statuses): a GitHub login, or a GitLab one as login@host, so
+// a GitLab name never reaches the GitHub person who happens to have it.
+export const personKey = (repo: string, login: string) => (repo.slice(0, repo.indexOf('/')).includes('.') ? `${login}@${repo.slice(0, repo.indexOf('/'))}` : login);
 // Whose PRs lgtm shows (the avatar's menu): GitHub's account (''), or a GitLab host's, by its host.
 export const viewAs = () => {
   try {
@@ -363,7 +366,9 @@ export type SlackPresence = { text: string; emoji: string; until: number };
 // The same, for any part of lgtm: kept 10 minutes per person, asked once for everyone missing; every user of it
 // redraws when new statuses arrive.
 const presenceSeen = new Map<string, { at: number; v: SlackPresence | null }>();
-export function usePresence(logins: string[]): Record<string, SlackPresence> {
+// `repo`: whose site the logins are on (a GitLab repo's people are asked as login@host, and come back by login).
+export function usePresence(names: string[], repo = ''): Record<string, SlackPresence> {
+  const logins = repo ? names.filter(Boolean).map((l) => personKey(repo, l)) : names;
   const key = [...new Set(logins.filter(Boolean))].sort().join();
   const [, tick] = useState(0);
   useEffect(() => {
@@ -379,7 +384,8 @@ export function usePresence(logins: string[]): Record<string, SlackPresence> {
     }
     return () => removeEventListener('lgtm:presence', redraw);
   }, [key]);
-  return Object.fromEntries((key ? key.split(',') : []).flatMap((l) => (presenceSeen.get(l)?.v ? [[l, presenceSeen.get(l)!.v!]] : [])));
+  const back = (k: string) => (repo && k.includes('@') ? k.slice(0, k.lastIndexOf('@')) : k);
+  return Object.fromEntries((key ? key.split(',') : []).flatMap((l) => (presenceSeen.get(l)?.v ? [[back(l), presenceSeen.get(l)!.v!]] : [])));
 }
 export async function slackPresence(logins: string[]): Promise<Record<string, SlackPresence>> {
   if (!logins.length) return {};

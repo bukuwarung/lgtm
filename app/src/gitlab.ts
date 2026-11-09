@@ -6,7 +6,7 @@
 // first part says GitLab. An MR is that repo and its iid. GitLab's global IDs travel as "gl:host|gid://…", an MR's as
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
 import { fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
-import type { Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
+import type { Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
 
 export const isLab = (repo: string) => repo.slice(0, repo.indexOf('/')).includes('.');
 export const isLabId = (id: string) => id.startsWith('gl:');
@@ -124,6 +124,18 @@ const person = (host: string, u: User) => {
 };
 const isBot = (u: User) => !!u?.bot || readBots().has(u?.username ?? '');
 const agentSays = (body?: string | null) => /^\s*(<!--[\s\S]*?-->\s*)*\u{1F916}/u.test(body ?? '');
+
+// GitLab people by Slack-people key (login@host): their name and public email (what GitLab shows anyone).
+export async function labPeople(keys: string[]): Promise<Record<string, { name: string | null; emails: string[] }>> {
+  const byHost = Map.groupBy(keys, (k) => k.slice(k.lastIndexOf('@') + 1));
+  const out: Record<string, { name: string | null; emails: string[] }> = {};
+  await Promise.all([...byHost].map(async ([host, ks]) => {
+    const d = await gql(host, `query($u:[String!]){users(usernames:$u,first:100){nodes{username name publicEmail}}}`, { u: ks.map((k) => k.slice(0, k.lastIndexOf('@'))) }).catch(() => null);
+    for (const u of d?.users?.nodes ?? []) out[`${u.username}@${host}`] = { name: u.name ?? null, emails: u.publicEmail ? [u.publicEmail] : [] };
+  }));
+  for (const k of keys) out[k] ??= { name: null, emails: [] };
+  return out;
+}
 
 // --- one MR ---
 
@@ -700,10 +712,11 @@ export async function labClosed(prs: string[]): Promise<string[]> {
 }
 
 // My reviews lately (the approvals and change requests GitLab noted), for History.
-export async function getLabMyReviews(days: number, only: string): Promise<MyReview[]> {
+// Someone's (`who`, else mine) on `only`.
+export async function getLabMyReviews(days: number, only: string, who?: string): Promise<MyReview[]> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const out: MyReview[] = [];
-  for (const { host, login } of (await glabAccounts()).filter((a) => a.host === only)) {
+  for (const { host, login } of (await glabAccounts()).filter((a) => a.host === only).map((a) => ({ ...a, login: who ?? a.login }))) {
     const mrs: any[] = await json(host, `/merge_requests?scope=all&reviewer_username=${encodeURIComponent(login)}&updated_after=${since}&per_page=50`).catch(() => []);
     await Promise.all(mrs.map(async (m) => {
       const notes = await pages<any>(host, `/projects/${m.project_id}/merge_requests/${m.iid}/notes?per_page=100&sort=asc`).catch(() => []);
@@ -727,4 +740,29 @@ export async function getLabStaleBranches(only: string): Promise<StaleBranch[]> 
     }));
   }
   return out;
+}
+
+// Someone on a GitLab (#/person/login@host): who they are, their open MRs, the open MRs waiting on their review
+// (longest first), and their reviews of the last 30 days. Anywhere on that GitLab (it has no "orgs in my list").
+export async function getLabPerson(key: string, days = 30): Promise<Person> {
+  const host = key.slice(key.lastIndexOf('@') + 1), login = key.slice(0, key.lastIndexOf('@'));
+  const me = (await labMe(host)).login;
+  const list = (k: string) => gql(host, `query($u:String!){user(username:$u){${k}(state:opened,first:30){nodes{...F}}}} ${ITEM}`, { u: login }).then((d) => (d.user?.[k]?.nodes ?? []) as any[]);
+  const [u, mine, asked, reviews] = await Promise.all([
+    gql(host, `query($u:String!){user(username:$u){username name avatarUrl bio}}`, { u: login }).then((d) => d.user),
+    list('authoredMergeRequests'),
+    list('reviewRequestedMergeRequests'),
+    getLabMyReviews(days, host, login).catch(() => []),
+  ]);
+  if (!u) throw new Error(`No one called @${login} on ${host}, or you can't see them`);
+  const waitingOn = (m: any) => WAITING.includes(m.reviewers.nodes.find((r: any) => r.username === login)?.mergeRequestInteraction?.reviewState);
+  return {
+    login: key,
+    name: u.name ?? null,
+    avatar: abs(host, u.avatarUrl) ?? '',
+    bio: u.bio || null,
+    mine: mine.map((m) => itemOf(host, m, me)),
+    asked: asked.filter(waitingOn).map((m) => itemOf(host, m, me)).sort((a, b) => a.waitingSince.localeCompare(b.waitingSince)),
+    reviews: reviews.sort((a, b) => b.at.localeCompare(a.at)),
+  };
 }

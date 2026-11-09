@@ -1,6 +1,6 @@
 ---
 name: lgtm-review
-description: Open a GitHub pull request for review in lgtm, the user's local PR review app, with a link back to this session. Use when a pull request is ready for the user to review (one you opened or updated, or one they ask to review or look at) and they prefer lgtm or agree to it. Also use when the user says "check lgtm": read the messages lgtm left for this session (a comment to address, their review).
+description: Open a GitHub pull request (or GitLab merge request) for review in lgtm, the user's local PR review app, with a link back to this session. Use when a pull request is ready for the user to review (one you opened or updated, or one they ask to review or look at) and they prefer lgtm or agree to it. Also use when the user says "check lgtm": read the messages lgtm left for this session (a comment to address, their review).
 ---
 
 # Reviewing pull requests in lgtm
@@ -28,11 +28,16 @@ When a pull request is ready for the user to review:
    open "lgtm://OWNER/REPO/pull/NUMBER?claude=SESSION_ID"
    ```
 
+   A GitLab merge request (https://HOST/GROUP/PROJECT/-/merge_requests/NUMBER, groups can nest) opens the same way,
+   its host first: `open "lgtm://HOST/GROUP/PROJECT/pull/NUMBER?claude=SESSION_ID"`.
+
 3. If that fails, lgtm isn't installed: say so, and give just the GitHub link.
 
 4. Tell the user it's open, in one line, with the GitHub link written out in full:
 
    > Opened in lgtm: OWNER/REPO#NUMBER · [on GitHub](https://github.com/OWNER/REPO/pull/NUMBER)
+
+   For a GitLab one: `GROUP/PROJECT!NUMBER · [on GitLab](https://HOST/GROUP/PROJECT/-/merge_requests/NUMBER)`.
 
    Don't link the `lgtm://` address: the Claude app doesn't open those links from a chat, so it would do nothing.
    If the user wants it open again later, run step 2 again.
@@ -49,7 +54,7 @@ cat "${XDG_CONFIG_HOME:-$HOME/.config}/lgtm/outbox/SESSION_ID.md"
 lists the user's verdict and comments; a single comment is one to address. If the file isn't there, say there's
 nothing from lgtm.
 
-## Closing the loop on GitHub
+## Closing the loop on GitHub (or GitLab)
 
 After you've addressed the user's review comments and pushed, reply on each thread you addressed with one line on
 what changed (and the commit), and resolve it; on one you didn't address, reply why and leave it open. Ask the user
@@ -61,6 +66,17 @@ gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$
 # Reply on one, then resolve it:
 gh api graphql -f query='mutation($t:ID!,$b:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t,body:$b}){comment{id}}}' -f t=THREAD_ID -f b='Fixed in abc1234: …'
 gh api graphql -f query='mutation($t:ID!){resolveReviewThread(input:{threadId:$t}){thread{isResolved}}}' -f t=THREAD_ID
+```
+
+On a GitLab merge request, the same with glab (PROJECT_PATH is GROUP/PROJECT with each `/` written `%2F`; a thread is
+a discussion):
+
+```bash
+# The MR's discussions (ids, whether resolved, who said what):
+glab api "projects/PROJECT_PATH/merge_requests/NUMBER/discussions" --hostname HOST --paginate
+# Reply on one, then resolve it:
+glab api -X POST "projects/PROJECT_PATH/merge_requests/NUMBER/discussions/DISCUSSION_ID/notes" --hostname HOST -f body='Fixed in abc1234: …'
+glab api -X PUT "projects/PROJECT_PATH/merge_requests/NUMBER/discussions/DISCUSSION_ID" --hostname HOST -f resolved=true
 ```
 
 Then tell the user the PR is ready for another look. If they review in lgtm, it opens the re-review with what changed

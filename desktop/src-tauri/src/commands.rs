@@ -11,8 +11,14 @@ use std::sync::{Mutex, OnceLock};
 fn re(pattern: &str) -> Regex {
     Regex::new(pattern).unwrap()
 }
-const PR_REF: &str = r"^[\w.-]+/[\w.-]+#\d+$"; // owner/repo#12
-const LOGIN: &str = r"^[\w-]{1,39}$";
+const PR_REF: &str = r"^[\w.:-]+(/[\w.-]+)+#\d+$"; // owner/repo#12, or a GitLab MR: host/group/…/project#12
+// A GitHub login, or a GitLab person as login@host (so a GitLab name never reaches a GitHub person's Slack).
+const LOGIN: &str = r"^([\w-]{1,39}|[A-Za-z0-9_.-]{1,255}@[A-Za-z0-9.:-]{1,253})$";
+const MENTION: &str = r"<@gh:([A-Za-z0-9_.-]{1,255}@[A-Za-z0-9.:-]{1,253}|[A-Za-z0-9-]{1,39}|\*)>";
+/// Where a PR's own page is, for finding it in Slack messages: github.com's, or the GitLab MR's.
+fn pr_page(repo: &str, n: &str) -> String {
+    if repo.split('/').next().is_some_and(|h| h.contains('.')) { format!("{repo}/-/merge_requests/{n}") } else { format!("github.com/{repo}/pull/{n}") }
+}
 const SLACK_ID: &str = r"^U[A-Z0-9]{6,}$";
 const EMAIL: &str = r"^[^\s@-][^\s@]*@[^\s@]+$";
 // User ID, @handle or email: the forms slackcli resolves to a person. Also keeps flags out of the argument.
@@ -264,8 +270,9 @@ fn dm_threads(pr: &str) -> Vec<(String, Value)> {
         return v.clone();
     }
     let (repo, n) = pr.split_once('#').unwrap_or((pr, ""));
-    let link = re(&format!(r"github\.com/{}/pull/{}(\D|$)", regex::escape(repo), n));
-    let r = slackcli(&["search", "messages", &format!("github.com/{repo}/pull/{n}"), "--json", "--limit", "40"], None);
+    let page = pr_page(repo, n);
+    let link = re(&format!(r"{}(\D|$)", regex::escape(&page)));
+    let r = slackcli(&["search", "messages", &page, "--json", "--limit", "40"], None);
     let users = config::read("config.json", true).map(|c| c["slackUsers"].clone()).unwrap_or(Value::Null);
     let login_of = |id: &str| users.as_object().and_then(|m| m.iter().find(|(_, v)| v.as_str() == Some(id)).map(|(l, _)| l.clone()));
     let threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
@@ -395,7 +402,7 @@ fn mentions(text: &str, r: &Recipient, users: &Value) -> String {
     if !text.contains("<@gh:") {
         return text.to_string();
     }
-    re(r"<@gh:([A-Za-z0-9-]{1,39}|\*)>")
+    re(MENTION)
         .replace_all(text, |c: &regex::Captures| {
             let login = if &c[1] == "*" { r.login.as_str() } else { &c[1] };
             let who = users[login].as_str().map(String::from).or_else(|| if login == r.login { r.emails.first().cloned() } else { None });
@@ -411,7 +418,7 @@ fn mentions(text: &str, r: &Recipient, users: &Value) -> String {
 pub async fn slack_threads(merge: Option<HashMap<String, Value>>) -> Result<Value, String> {
     let mut threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
     let Some(incoming) = merge else { return Ok(threads) };
-    let (key, ch, ts) = (re(r"^[\w.-]+/[\w.-]+#\d+:(#qa|[\w-]{1,39})$"), re(r"^[CDG][A-Z0-9]+$"), re(r"^\d+\.\d+$"));
+    let (key, ch, ts) = (re(r"^[\w.:-]+(/[\w.-]+)+#\d+:(#qa|[\w-]{1,39}|[A-Za-z0-9_.-]{1,255}@[A-Za-z0-9.:-]{1,253})$"), re(r"^[CDG][A-Z0-9]+$"), re(r"^\d+\.\d+$"));
     let text = |v: &Value| v.is_null() || v.as_str().is_some_and(|s| s.chars().count() <= 200);
     if incoming.len() > 5000 || !incoming.iter().all(|(k, v)| key.is_match(k) && v["channel"].as_str().is_some_and(|c| ch.is_match(c)) && v["ts"].as_str().is_some_and(|t| ts.is_match(t)) && text(&v["user"]) && text(&v["name"])) {
         return Err("Bad request".into());
@@ -721,7 +728,7 @@ pub async fn slack_people_find(people: Vec<Person>) -> Result<Vec<Value>, String
                 }
             }
         }
-        let stem = p.login.split(['-', '_']).next().unwrap_or("").to_string();
+        let stem = p.login.split('@').next().unwrap_or("").split(['-', '_', '.']).next().unwrap_or("").to_string(); // a GitLab person's key is login@host
         // Who else it could be, when there's no single match, to pick from (and a search typed by hand, first).
         let mut candidates: Vec<Value> = vec![];
         // A Slack link or ID typed in: that person, a DM's other member, or a profile.
@@ -1074,6 +1081,8 @@ mod tests {
         assert!(!re(SLACK_TARGET).is_match("--dry-run") && !re(SLACK_TARGET).is_match("-x@y"));
         assert!(re(PR_REF).is_match("bukuwarung/bukuwarung-edc-app#1725") && !re(PR_REF).is_match("a/b#1;rm"));
         assert!(re(LOGIN).is_match("isfa-buku") && !re(LOGIN).is_match("../etc"));
+        assert!(re(PR_REF).is_match("gitlab.com/group/sub/proj#12") && re(LOGIN).is_match("jo.e@gitlab.com") && !re(LOGIN).is_match("a@b/c"));
+        assert_eq!(pr_page("gitlab.com/g/p", "7"), "gitlab.com/g/p/-/merge_requests/7");
         assert!(re(SLACK_ID).is_match("U0ABCDEF12") && !re(SLACK_ID).is_match("C123456"));
     }
 

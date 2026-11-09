@@ -75,18 +75,20 @@ export const slackTemplate = (k: SlackKind) => {
 };
 
 // The values every message can use, for a PR.
+const gitlabHost = (repo: string) => (repo.split('/')[0].includes('.') ? repo.split('/')[0] : '');
 export const prValues = (p: { repo: string; number: number; title: string; url: string; author: string }) => ({
-  pr: `<${p.url}|${slackEscape(`${p.repo}#${p.number} ${p.title}`)}>`,
+  pr: `<${p.url}|${slackEscape(`${p.repo}${gitlabHost(p.repo) ? '!' : '#'}${p.number} ${p.title}`)}>`,
   title: slackEscape(p.title),
   url: p.url,
   repo: p.repo,
   number: String(p.number),
   author: p.author,
+  authorKey: gitlabHost(p.repo) ? `${p.author}@${gitlabHost(p.repo)}` : p.author, // {@author}'s Slack-people key (personKey)
 });
 
 export function fillSlack(template: string, values: Record<string, string>): string {
   return template
-    .replace(/\{@([A-Za-z0-9-]{1,39})\}/g, (_, who: string) => `<@gh:${who === 'recipient' || who === 'them' ? '*' : who === 'author' ? values.author : who}>`)
+    .replace(/\{@([A-Za-z0-9-]{1,39})\}/g, (_, who: string) => `<@gh:${who === 'recipient' || who === 'them' ? '*' : who === 'author' ? values.authorKey ?? values.author : who}>`)
     .replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? values[k] : m))
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
