@@ -385,7 +385,7 @@ function PRSkeleton({ pr }: { pr?: PR | null }) {
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle);
   return (
-    <div class={showIndex ? 'review skel' : 'review no-index skel'} aria-busy="true" aria-label="Loading the pull request">
+    <div class={showIndex ? 'review skel' : 'review no-index skel'} aria-busy="true" aria-label="Loading the PR">
       <aside class="side">
         {[70, 50, 85, 40, 65, 55, 75].map((w) => (
           <span class="sk" style={{ width: `${w}%` }} />
@@ -1075,7 +1075,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     resolve: async (t, resolve) => {
       await resolveThread(t.id, resolve);
       setThreads(await getThreads(repo, n));
-      if (resolve) offerUndo('Conversation resolved', () => resolveThread(t.id, false).then(async () => setThreads(await getThreads(repo, n)), (e) => setError(`Couldn't unresolve it: ${e.message}`)));
+      if (resolve) offerUndo('Thread resolved', () => resolveThread(t.id, false).then(async () => setThreads(await getThreads(repo, n)), (e) => setError(`Couldn't unresolve it: ${e.message}`)));
     },
     // As GitHub's "Add single comment": a one-comment review on the commit on show; then its thread appears.
     postNow: async (d) => {
@@ -3820,7 +3820,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
           )}
           {(t.isResolved ? t.viewerCanUnresolve : t.viewerCanResolve) && (
             <button disabled={busy} onClick={() => act(() => ctx.resolve(t, !t.isResolved))}>
-              {t.isResolved ? 'Unresolve' : 'Resolve conversation'}
+              {t.isResolved ? 'Unresolve' : 'Resolve thread'}
             </button>
           )}
         </div>

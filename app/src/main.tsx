@@ -5,7 +5,7 @@ import { closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, d
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode } from './tags.tsx';
+import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -252,7 +252,7 @@ function BellMenu() {
 // No PR open: the queue at a glance; each number opens its tab of the list.
 function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
   const [showDrafts] = useStoredFlag('showDrafts', false);
-  if (!items) return <p class="note page empty">Pick a pull request from the list, or paste a PR link in the box at the top (⌘K).</p>;
+  if (!items) return <p class="note page empty">Pick a PR from the list, or paste a PR link in the box at the top (⌘K).</p>;
   const needs = items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts));
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
@@ -276,7 +276,7 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
         ))}
       </div>
       <p class="note">
-        Pick a pull request from the list, or paste a PR link in the box at the top (⌘K). <a href="#/history">Your reviews this month →</a>
+        Pick a PR from the list, or paste a PR link in the box at the top (⌘K). <a href="#/history">Your reviews this month →</a>
       </p>
       <RecentList max={8} />
       <StaleBranches />
@@ -521,7 +521,7 @@ function App() {
     else if (id === 'back') history.back();
     else if (id === 'forward') history.forward();
     else if (id === 'toggle-prs') togglePRs();
-    else if (id === 'review-mode') needs(queue.current, [], false).length ? startReview() : say({ text: 'No pull requests need your review right now.', action: ['Practice run', () => startReview(true)] });
+    else if (id === 'review-mode') needs(queue.current, [], false).length ? startReview() : say({ text: 'No PRs need your review right now.', action: ['Practice run', () => startReview(true)] });
     else if (id === 'text-bigger') textStep(1);
     else if (id === 'text-smaller') textStep(-1);
     else if (id === 'text-reset') textStep(0);
@@ -584,7 +584,7 @@ function App() {
             <button onClick={() => setRm(null)} title="Back to everything (Esc)">Exit <kbd>Esc</kbd></button>
           </>
         ) : (<>
-        <button title="Toggle pull request list" onClick={togglePRs}><Octicon name="three-bars" /></button>
+        <button title="Show / hide the PR list" onClick={togglePRs}><Octicon name="three-bars" /></button>
         {/* The inbox: threads and mentions waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
         <a
           href="#/inbox"
@@ -704,8 +704,8 @@ function App() {
             <p>
               {rm?.practice ? "Nothing was sent to GitHub. When PRs need your review, it's the button at the top of the Reviewing tab."
                 : rm?.skipped ? `Reviewed ${rm.done}, skipped ${rm.skipped}: those still need your review.`
-                : rm ? `Reviewed ${rm.done}. No pull requests need your review right now.`
-                : 'No pull requests need your review right now.'}
+                : rm ? `Reviewed ${rm.done}. No PRs need your review right now.`
+                : 'No PRs need your review right now.'}
             </p>
             {rm && rm.log.length > 0 && <ReviewLog log={rm.log} />}
             {rm && <button class="primary" onClick={() => setRm(null)}>Back to the list</button>}
@@ -954,6 +954,10 @@ export const noteOpened = (repo: string, n: number) => {
 const mentionNew = (i: QueueItem) => !i.reviewing && !i.authored && !!i.mentioned && Number(localStorage.getItem(openedKey(i.repo, i.number)) ?? 0) < Date.parse(i.updatedAt);
 const inReviewing = (i: QueueItem) => i.reviewing || mentionNew(i);
 
+// A group of the PR list: its open or folded kept (Fold), except a person's in the Team tab (they start folded).
+const ListGroup = ({ k, initial, class: cls, children }: { k: string; initial: boolean; class: string; children: preact.ComponentChildren }) =>
+  k ? <Fold k={`list:${k}`} initial={initial} class={cls}>{children}</Fold> : <details open={initial} class={cls}>{children}</details>;
+
 // A sidebar section: its groups in priority order, which group a PR falls in, and (if not the group's) its colour.
 // people: groups are people (the Team tab), shown with their picture and starting folded.
 // asked: (Team tab) how many PRs ask a member for a review; listed in its own tab under their name.
@@ -1152,7 +1156,7 @@ const answered: Answered = new Map(); // reviews sent from here, until the list 
 const SK_TITLES = [86, 64, 92, 72, 58, 80];
 function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolean }) {
   return (
-    <div class="list-skel" aria-busy="true" aria-label="Loading the pull requests">
+    <div class="list-skel" aria-busy="true" aria-label="Loading the PRs">
       {tabs && (
         <div class="list-skel-tabs">
           {[0, 1, 2].map(() => <span class="sk" />)}
@@ -1357,7 +1361,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
     const row = (i: QueueItem, section: 'needs' | 'mine') => ({ title: `${i.title} · ${repoLabel(i.repo)}#${i.number}`, route: `/${i.repo}/pull/${i.number}`, section, note: section === 'mine' ? standing(i) : null });
     void setTray(menuBar ? [...forMe.map((i) => row(i, 'needs')), ...items.filter((i) => i.authored).map((i) => row(i, 'mine'))] : null);
     // Notify about review requests that appeared since the last refresh (not the ones already there on open).
-    // Then, per switch (Settings → Pull request list): new replies waiting on me, a verdict on my PR, my PR's checks done.
+    // Then, per switch (Settings → PR list): new replies waiting on me, a verdict on my PR, my PR's checks done.
     // Everything goes on the bell's list (kept until acted on); a desktop notification only per its switch.
     if (seen.current) {
       const tell = (what: string, i: QueueItem, desktop: boolean) => {
@@ -1525,7 +1529,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
           const stackOf = new Map(findStacks(inGroup).flatMap((st) => st.map((i) => [i.id, st] as const)));
           const entries = inGroup.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);
           return (
-            <details key={g} open={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
+            <ListGroup key={g} k={kind.people ? '' : `${kind.name}:${g}`} initial={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
                 {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
                 {kind.people && isAway(presence[g]) && <span class="g-away" title={`Away on Slack: ${statusText(presence[g])}`}>🌴 away</span>}
@@ -1553,7 +1557,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
                       item(kind, e, layerOf.get(e.id), own(e))
                     ),
                   )}
-            </details>
+            </ListGroup>
           );
         })}
       </>
@@ -1616,7 +1620,7 @@ function PRList({ hidden, onReview, current, version, answeredTick, onItems }: {
         </>
       )}
       </div>
-      <Resizer name="prs" label="pull request list" />
+      <Resizer name="prs" label="PR list" />
     </aside>
   );
 }

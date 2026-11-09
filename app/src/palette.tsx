@@ -71,7 +71,7 @@ export function CommandBar({ queue, parse }: { queue: () => QueueItem[]; parse: 
   const shown = !list
     ? []
     : [
-        ...(pr ? [{ kind: 'Open', label: `${repoLabel(pr.repo)}#${pr.n}`, sub: 'Pull request from the link', run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
+        ...(pr ? [{ kind: 'Open', label: `${repoLabel(pr.repo)}#${pr.n}`, sub: 'PR from the link', run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
         ...(pr ? [] : list.filter((e) => matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50)),
       ];
   const go = (e?: Entry) => {

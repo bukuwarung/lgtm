@@ -134,3 +134,14 @@ export function CopyCode({ children, text }: { children: string; text?: string }
 export const Retry = ({ onClick }: { onClick: () => void }) => (
   <button type="button" class="link retry" onClick={onClick}>Retry</button>
 );
+
+// A foldable section that keeps your choice, open or folded, from one PR to the next (`k` names it; `initial` until you
+// choose). Opening one to jump into it counts as choosing.
+export function Fold({ k, initial = true, class: cls, id, children }: { k: string; initial?: boolean; class?: string; id?: string; children: ComponentChildren }) {
+  const [open, toggle] = useStoredFlag(`fold:${k}`, initial);
+  return (
+    <details class={cls} id={id} open={open} onToggle={(e) => e.currentTarget.open !== open && toggle()}>
+      {children}
+    </details>
+  );
+}

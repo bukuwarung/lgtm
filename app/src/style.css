@@ -553,6 +553,8 @@ code.copyable.copied { color: var(--addfg); }
 :is(.md a[href^="http"]:not([href*="/pull/"]):not(.user-mention), a[target="_blank"][href^="http"]:not(.md a)):not(:has(img, svg, time, .who))::after {
   content: "↗"; display: inline-block; margin-left: 1px; font-size: .8em; opacity: .6; text-decoration: none;
 }
+/* Settings' previews are pictures of the app: nothing in them reacts, so nothing looks like it would. */
+.demo-pair, .demo-pair * { cursor: default !important; }
 .bots-hidden { border-top: 1px solid var(--border); }
 .bots-hidden > summary { padding: 8px 0; color: var(--muted); font-size: calc(13px * var(--ts)); cursor: pointer; }
 .bots-hidden > summary:hover { color: var(--fg); }

@@ -457,7 +457,7 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
             </div>
           </div>
           <div class="row">
-            <button>Resolve conversation</button>
+            <button>Resolve thread</button>
           </div>
         </details>
       </div>
@@ -1181,7 +1181,7 @@ Object.assign(DEMOS, {
     ),
   },
   hideSettled: {
-    title: 'Hide resolved and outdated conversations',
+    title: 'Hide resolved and outdated threads',
     off: <div class="demo-index">{idxThread('OrderRepo.kt:42', 'you')}{idxThread('Cart.kt:7', 'rina · resolved', 'settled')}{idxThread('Api.kt:19', 'budi · outdated', 'settled')}</div>,
     on: <div class="demo-index">{idxThread('OrderRepo.kt:42', 'you')}<div class="demo-idx more">2 resolved or outdated hidden · <a>show</a></div></div>,
   },

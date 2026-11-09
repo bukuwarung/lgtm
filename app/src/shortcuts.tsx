@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { fetchJobLog, reportError, useFoldBots, usePresence, useStoredFlag } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
-import { CheckMark, Octicon, Tg, Who, Lines, Retry } from './tags.tsx';
+import { CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, earlierVerdicts, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
@@ -77,13 +77,13 @@ const VERDICT: Record<string, [string, string]> = { APPROVED: ['approved', 'appr
 
 function Section({ id, title, count, extra, children }: { id?: string; title: string; count: number; extra?: ComponentChildren; children: ComponentChildren }) {
   return (
-    <details open class="ix-sec" id={id}>
+    <Fold k={`ix:${title}`} class="ix-sec" id={id}>
       <summary>
         {title} <span class="count">{count}</span>
         {extra}
       </summary>
       {children}
-    </details>
+    </Fold>
   );
 }
 
@@ -433,7 +433,7 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
       <Section title="Conversation" count={conversation.length - replaced.size + 1 + threads.length + drafts.length}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
         {myConv + drafts.length + tiers.mine.length > 0 && (
-          <details class="ix-ckgroup" open>
+          <Fold k="ix-yours" class="ix-ckgroup">
             <summary><Octicon name="person" /> {myConv + drafts.length + tiers.mine.length} yours</summary>
             {tiers.mine.filter(waitsOnMe).map((t) => threadEntry(t))}
             {conversation.map((c, i) => !c.bot && c.author === me && !replaced.has(c.id) && convEntry(c, i))}
@@ -448,28 +448,28 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
               />
             ))}
             {tiers.mine.filter((t) => !waitsOnMe(t)).map((t) => threadEntry(t))}
-          </details>
+          </Fold>
         )}
         {othersConv + tiers.human.length > 0 && (
-          <details class="ix-ckgroup" open={minePR}>
+          <Fold k={`ix-others:${minePR ? 'mine' : 'theirs'}`} initial={minePR} class="ix-ckgroup">
             <summary><Octicon name="comment-discussion" /> {othersConv + tiers.human.length} from others</summary>
             {tiers.human.filter(waitsOnMe).map((t) => threadEntry(t))}
             {conversation.map((c, i) => !c.bot && c.author !== me && !replaced.has(c.id) && convEntry(c, i))}
             {tiers.human.filter((t) => !waitsOnMe(t)).map((t) => threadEntry(t))}
-          </details>
+          </Fold>
         )}
         {bots.length + tiers.bot.length > 0 && (
-          <details class="ix-ckgroup" open={!foldBots}>
+          <Fold k={`ix-bots:${minePR ? 'mine' : 'theirs'}`} initial={!foldBots} class="ix-ckgroup">
             <summary><Octicon name="dependabot" /> {bots.length + tiers.bot.length} from bots</summary>
             {conversation.map((c, i) => c.bot && convEntry(c, i))}
             {tiers.bot.map((t) => threadEntry(t, 'bot'))}
-          </details>
+          </Fold>
         )}
         {tiers.resolved.length > 0 && (
-          <details class="ix-ckgroup">
+          <Fold k="ix-resolved" initial={false} class="ix-ckgroup">
             <summary><Octicon name="check" /> {tiers.resolved.length} resolved</summary>
             {tiers.resolved.map((t) => threadEntry(t, 'resolved'))}
-          </details>
+          </Fold>
         )}
         {settled > 0 && (
           <button class="link ix-pad ix-hidden" onClick={onToggleSettled}>
@@ -513,10 +513,10 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
             {([['success', 'passed'], ['neutral', 'skipped or cancelled']] as const).map(([state, label]) => {
               const group = checks.filter((c) => c.state === state);
               return group.length > 0 && (
-                <details class="ix-ckgroup">
+                <Fold k={`ix-checks:${state}`} initial={false} class="ix-ckgroup">
                   <summary><CheckMark state={state} /> {group.length} {label}</summary>
                   {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
-                </details>
+                </Fold>
               );
             })}
           </>
@@ -600,13 +600,13 @@ function StepGroups({ files, steps, counts, viewed, onViewed }: { files: File[];
         const fs = s.paths.map((p) => byPath.get(p)).filter((f): f is File => !!f);
         return (
           fs.length > 0 && (
-            <details open class="tree-dir mod-group" key={s.key}>
+            <Fold k={`ix-step:${s.key}`} class="tree-dir mod-group" key={s.key}>
               <summary title={s.why}>
                 <span class="tree-dir-name"><Octicon name={stepIcon(s.key)} /> {s.title}</span> <span class="count">{fs.length}</span>
                 <ViewedMark paths={fs.map((f) => f.filename)} viewed={viewed} onViewed={onViewed} what="this step" />
               </summary>
               {fs.map((f) => <FileRow f={f} depth={1} counts={counts} viewed={viewed} onViewed={onViewed} folder />)}
-            </details>
+            </Fold>
           )
         );
       })}
