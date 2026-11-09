@@ -1203,6 +1203,12 @@ const listItem = (title: string, who: string, repo: string, ps: [string, Compone
     <span class="pills">{ps.map(([cls, t]) => <span class={`pill ${cls}`}>{t}</span>)}</span>
   </a>
 );
+const agentGroup = (g: string, label: string, items: ComponentChildren[]) => (
+  <details open class={`pr-group g-${g}`}>
+    <summary><span class="gdot" /> {label} <span class="count">{items.length}</span></summary>
+    {items}
+  </details>
+);
 const LIST_ONE = listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-time', <Tg i="⏱" n="~10 min" />]]);
 const SHORT_FILE = <File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12)} /></File>;
 const TINY_FILE = <File path="Notify.kt" add={1} del={0}><Rows rows={[[' ', 40, 40, 'if (paid) {'], ['+', '', 41, '  ship()'], [' ', 41, 42, '}']]} /></File>;
@@ -1253,6 +1259,16 @@ Object.assign(DEMOS, {
     title: `Replies on a ${T.PR} you've approved`,
     off: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />], ['p-reply', <Tg i="reply" n={2} t="awaiting your reply" />]])}</div>,
     on: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />]])}</div>,
+  },
+  agentReview: {
+    title: 'Claude Code reviews first',
+    off: <div class="demo-list">{agentGroup('needs', 'Needs your review', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-time', <Tg i="⏱" n="~10 min" />]]), listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-time', <Tg i="⏱" n="~5 min" />]])])}</div>,
+    on: (
+      <div class="demo-list">
+        {agentGroup('agents', 'Agents reviewing', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-claude', <Tg i="🤖" t="reviewing…" />]])])}
+        {agentGroup('needs', 'Needs your review', [listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-claude', <Tg i="🤖" n={3} t="findings" />], ['p-time', <Tg i="⏱" n="~5 min" />]])])}
+      </div>
+    ),
   },
   showDrafts: {
     title: `Other people's draft ${T.PRs}`,

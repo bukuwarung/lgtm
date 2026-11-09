@@ -1,6 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { agentBusy, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
 import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
@@ -717,7 +718,7 @@ function App() {
       )}
       <div class={showPRs && !rm && !narrowPRs ? 'shell' : 'shell no-prs'} key={accountKey}>{/* another account: everything again, as it */}
         {/* Hidden, not unmounted: reopening shows the list as it was, without loading it again. */}
-        <PRList hidden={(narrowPRs ? !prsOver : !showPRs) || !!rm} over={narrowPRs && prsOver} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => ((queue.current = items), setQueueItems(items), setRefreshing(false), void moveMerged(items))} />
+        <PRList hidden={(narrowPRs ? !prsOver : !showPRs) || !!rm} over={narrowPRs && prsOver} onReview={startReview} current={r} version={queueVersion} answeredTick={answeredTick} onItems={(items) => (reviewWithAgents(items.filter((i) => i.reviewing && (i.requested || backToMe(i)) && !i.isDraft && !i.authored)), (queue.current = items), setQueueItems(items), setRefreshing(false), void moveMerged(items))} />
         {r ? (
           <Review
             key={route}
@@ -1028,8 +1029,9 @@ function ThemeToggle() {
   );
 }
 
-type Group = 'needs' | 'mentioned' | 'changes' | 'commented' | 'approved';
+type Group = 'agents' | 'needs' | 'mentioned' | 'changes' | 'commented' | 'approved';
 const GROUPS: [Group, string][] = [
+  ['agents', 'Agents reviewing'], // Settings → Reviewing: Claude Code reviews it first (agentreview.ts)
   ['needs', 'Needs your review'],
   ['mentioned', 'Mentioned you'],
   ['changes', 'You requested changes'],
@@ -1050,7 +1052,7 @@ const toReview = (items: QueueItem[], showDrafts: boolean) => items.filter((i) =
 const repliesWaiting = (items: QueueItem[]) => items.reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0);
 const groupOf = (i: QueueItem): Group =>
   !i.reviewing && i.mentioned ? 'mentioned'
-  : i.requested || backToMe(i) ? 'needs'
+  : i.requested || backToMe(i) ? (agentBusy(i) ? 'agents' : 'needs')
   : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
 
 // PRs that only @-mention me show until I open them after their latest activity (opening one records when).
@@ -1287,7 +1289,35 @@ function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolea
 
 const closedAsked = new Map<string, number>(); // the bell's PRs asked about, when ("owner/repo#n")
 
+// Claude Code's review of a PR waiting for mine (Settings → Reviewing, agentreview.ts): under way, what it found and
+// where it put it, or why it couldn't (a click tries again).
+function AgentPill({ i }: { i: QueueItem }) {
+  const r = agentRunOf(i);
+  if (!r) return null;
+  if (r.state === 'queued' || r.state === 'running')
+    return <span class="pill p-claude" title={r.state === 'queued' ? 'Waiting for its turn: two at a time' : "Claude Code is reviewing it; you'll find its findings on it"}><Tg i="🤖" t={r.state === 'queued' ? 'queued' : 'reviewing…'} /></span>;
+  if (r.state === 'failed')
+    return (
+      <span class="pill p-warn" role="button" title={`Claude Code couldn't review it: ${r.error}. Click to try again.`} onClick={(e) => (e.preventDefault(), e.stopPropagation(), retryAgent(i))}>
+        <Tg i="🤖" t="couldn't review" />
+      </span>
+    );
+  const where = r.posted === 'pending' ? 'in your pending review (Finish review sends them)' : 'as comments';
+  return (
+    <span class={r.findings ? 'pill p-claude' : 'pill p-ok'} title={r.findings ? `Claude Code's adversarial review: ${r.findings} finding${r.findings > 1 ? 's' : ''}, ${where}` : 'Claude Code found nothing to point out'}>
+      {r.findings ? <Tg i="🤖" n={r.findings} t={`finding${r.findings > 1 ? 's' : ''}`} /> : <Tg i="🤖" t="nothing found" />}
+    </span>
+  );
+}
+
 function PRList({ hidden, over, onReview, current, version, answeredTick, onItems }: { hidden: boolean; over?: boolean; onReview: () => void; current: { repo: string; n: number } | null; version: number; answeredTick: number; onItems: (items: QueueItem[]) => void }) {
+  // Claude Code's reviews (agentreview.ts) move PRs between "Agents reviewing" and "Needs your review".
+  const [, agentTick] = useState(0);
+  useEffect(() => {
+    const t = () => agentTick((x) => x + 1);
+    addEventListener('lgtm:agents', t);
+    return () => removeEventListener('lgtm:agents', t);
+  }, []);
   // The last list (per account) shows at once on launch, "updating…" until GitHub's answer replaces it.
   const [loaded, setItems] = useState<QueueItem[] | null>(() => {
     try {
@@ -1609,6 +1639,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             <span class="pill p-ok" title="It merges by itself once its checks and reviews pass"><Tg i="auto" t="auto-merge on" /></span>
           ))
         )}
+        {kind === REVIEWING && <AgentPill i={i} />}
         {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>}
         {(kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} presence={presence} /> : null}
@@ -1633,6 +1664,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       <>
         {kind.groups.map(([g, label]) => {
           const inGroup = list.filter((i) => kind.groupOf(i) === g);
+          if (g === 'agents' && !inGroup.length && !agentReviewOn()) return null;
           const own = (i: QueueItem) => (kind.people ? g : kind === MINE && i.authored ? i.author : undefined);
           const stackOf = new Map(findStacks(inGroup).flatMap((st) => st.map((i) => [i.id, st] as const)));
           const entries = inGroup.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);

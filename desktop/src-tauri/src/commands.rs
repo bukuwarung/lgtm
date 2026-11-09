@@ -939,7 +939,11 @@ pub async fn claude_text(input: String) -> Result<String, String> {
         return Err("Claude Code isn't installed (see claude.com/code), or not on the PATH".into());
     }
     if !out.ok {
-        return Err(last_line(&plain(if out.stderr.trim().is_empty() { &out.stdout } else { &out.stderr })));
+        let last = last_line(&plain(if out.stderr.trim().is_empty() { &out.stdout } else { &out.stderr }));
+        if re(r"(?i)authenticat|log ?in|oauth|unauthori[sz]ed").is_match(&last) {
+            return Err("Claude Code isn't signed in: run `claude` in Terminal and sign in (/login), then try again".into());
+        }
+        return Err(last);
     }
     Ok(out.stdout.trim().to_string())
 }

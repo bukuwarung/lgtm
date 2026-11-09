@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 // its cached copy, the bell, PRs opened lately, files marked viewed on GitLab, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$)/;
 let account = '';
 // The account of last time, per site (GitHub's, or a GitLab host's): the next launch starts as it.
 const lastKey = () => (viewAs() ? `lastLogin:${viewAs()}` : 'lastLogin');

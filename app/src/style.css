@@ -216,7 +216,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .pr-tabs button { flex: 1; padding: 6px 4px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; font-weight: 600; font-size: calc(12px * var(--ts)); color: var(--muted); cursor: pointer; }
 .pr-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
 .g-m-changes { --g: var(--g-changes); } .g-m-approved { --g: var(--g-approved); } .g-m-waiting { --g: var(--g-needs); } .g-m-draft { --g: var(--g-commented); }
-.g-needs { --g: var(--g-needs); } .g-changes { --g: var(--g-changes); } .g-commented { --g: var(--g-commented); } .g-approved { --g: var(--g-approved); }
+.g-agents { --g: var(--pill-ok, var(--add)); } .g-needs { --g: var(--g-needs); } .g-changes { --g: var(--g-changes); } .g-commented { --g: var(--g-commented); } .g-approved { --g: var(--g-approved); }
 .gdot { background: var(--g); }
 .count { margin-left: 4px; padding: 0 6px; border-radius: 10px; background: var(--soft); border: 1px solid var(--border); font-weight: 400; }
 .pr-item { display: grid; gap: 1px; margin: 2px 0; padding: 6px 8px; border-left: 3px solid var(--g); border-radius: 0 6px 6px 0; color: var(--fg); }

@@ -75,6 +75,7 @@ async function ask(host: string, path: string, init: RequestInit, renewed = fals
   const url = `${await apiOf(host)}${path === '/graphql' ? '/api/graphql' : `/api/v4${path}`}`;
   const res = await fetch(url, {
     cache: 'no-cache',
+    signal: AbortSignal.timeout(60_000), // a GitLab that stops answering fails the request, not everything after it
     ...init,
     headers: { Authorization: `Bearer ${await tokenOf(host)}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}) },
   }).catch((e) => {
@@ -430,6 +431,27 @@ export async function submitLabReview(prId: string, commitOID: string, event: Re
   if (body) await send(host, `${base}/notes`, 'POST', { body });
   if (event === 'APPROVE') await send(host, `${base}/approve`, 'POST', { sha: commitOID });
   if (event === 'REQUEST_CHANGES') await mutate(host, `mutation($p:ID!,$i:String!){mergeRequestRequestChanges(input:{projectPath:$p,iid:$i}){errors}}`, { p: split(repo).path, i: String(n) });
+  forget(repo, n);
+}
+// An agent's findings (agentreview.ts): as draft notes of mine, not published (pending), or as discussions posted now
+// (comment: not as drafts, which publishing would send with any of mine), the summary with them.
+export async function postLabAgentFindings(repo: string, n: number, drafts: Draft[], summary: string, mode: 'pending' | 'comment') {
+  const { host } = split(repo);
+  const base = `/projects/${pid(repo)}/merge_requests/${n}`;
+  const refs = (await getMR(repo, n, 'diffRefs{baseSha headSha startSha}')).diffRefs;
+  const files = drafts.some((x) => x.line) ? await getLabFiles(repo, n) : [];
+  const positionOf = async (x: Draft) => {
+    const f = files.find((f) => f.filename === x.path);
+    const where = { base_sha: refs.baseSha, start_sha: refs.startSha, head_sha: refs.headSha, old_path: f?.previous_filename ?? x.path, new_path: x.path };
+    return x.line ? { ...where, position_type: 'text', ...(await linePosition(x, f?.patch)) } : { ...where, position_type: 'file' };
+  };
+  if (mode === 'pending') {
+    await send(host, `${base}/draft_notes`, 'POST', { note: summary });
+    for (const x of drafts) await send(host, `${base}/draft_notes`, 'POST', { note: x.body, position: await positionOf(x) });
+  } else {
+    await send(host, `${base}/notes`, 'POST', { body: summary });
+    for (const x of drafts) await send(host, `${base}/discussions`, 'POST', { body: x.body, position: await positionOf(x) });
+  }
   forget(repo, n);
 }
 export const replyLab = async (repo: string, n: number, commentId: number, body: string) => {

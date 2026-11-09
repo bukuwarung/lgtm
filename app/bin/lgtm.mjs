@@ -523,7 +523,9 @@ function claudeText(input) {
       { cwd: homedir(), maxBuffer: 1 << 24, timeout: 300000 },
       (err, stdout, stderr) => {
         if (err?.code === 'ENOENT') return reject(new Error('Claude Code isn\'t installed (see claude.com/code), or not on the PATH'));
-        if (err) return reject(new Error((stderr || stdout).trim().split('\n').pop() || err.message));
+        const last = (stderr || stdout).trim().split('\n').pop() || err?.message;
+        if (err && /authenticat|log ?in|oauth|unauthori[sz]ed/i.test(last ?? '')) return reject(new Error("Claude Code isn't signed in: run `claude` in Terminal and sign in (/login), then try again"));
+        if (err) return reject(new Error(last));
         resolve(stdout.trim());
       },
     );

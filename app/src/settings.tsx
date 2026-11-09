@@ -148,6 +148,23 @@ function ReadingSteps() {
   );
 }
 
+// Where Claude Code's findings go (agentreview.ts).
+function AgentPost() {
+  const [mode, setMode] = useStoredValue('agentReviewPost', 'pending');
+  return (
+    <div class="set-choices">
+      <label class="set-row">
+        <input type="radio" name="agentReviewPost" checked={mode !== 'comment'} onChange={() => setMode('pending')} />
+        <span>As your pending review<small>Draft comments, not sent: you edit or delete them, then Finish review sends them with yours.</small></span>
+      </label>
+      <label class="set-row">
+        <input type="radio" name="agentReviewPost" checked={mode === 'comment'} onChange={() => setMode('comment')} />
+        <span>As comments, posted at once<small>Everyone on the {T.PR} sees them straight away. With a review of yours in progress, they join it instead.</small></span>
+      </label>
+    </div>
+  );
+}
+
 function Flag({ k, initial, label, hint, demo, children }: { k: string; initial: boolean; label: string; hint?: string; demo?: boolean; children?: preact.ComponentChildren }) {
   const [on, toggle] = useStoredFlag(k, initial);
   return (
@@ -449,6 +466,15 @@ export function Settings() {
         <Flag k="gradleModules" initial={true} label="Group files by module" hint={`Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a ${T.PR} touches two or more, the index groups its files by them and each file says its own; with one, a pill names it.`}  demo />
         <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it."  demo />
         <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review."  demo />
+        <Flag
+          k="agentReview"
+          initial={false}
+          label={`Claude Code reviews ${T.PRs} waiting for you first`}
+          hint={`An adversarial review of each ${T.PR} as it comes to “Needs your review”, and again after new commits: Claude Code reads its description, diff and changed files (no tools, nothing run). Meanwhile it waits under “Agents reviewing”. The findings go on the ${T.PR} under your name, each starting with 🤖. Uses your Claude Code, two at a time.`}
+          demo
+        >
+          <AgentPost />
+        </Flag>
         <Flag k="nextAfterReview" initial={true} label={`After a review, open the next ${T.PR} that needs it`} hint={`Finish review starts with “Then open the next ${T.PR} that needs my review” ticked.`} demo />
         <SavedReplies />
       </section>

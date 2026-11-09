@@ -1260,6 +1260,28 @@ export async function renderGfm(text: string, repo: string): Promise<string> {
 export const reply = (repo: string, n: number, commentId: number, body: string) =>
   isLab(repo) ? lab.replyLab(repo, n, commentId, body) : json(`/repos/${repo}/pulls/${n}/comments/${commentId}/replies`, { method: 'POST', body: JSON.stringify({ body }) });
 
+// A comment (a line, lines, or the whole file) added to a pending review.
+const addReviewThread = (reviewId: string, x: Draft) =>
+  graphql(
+    `mutation($r:ID!,$path:String!,$body:String!,$line:Int,$start:Int,$side:DiffSide,$startSide:DiffSide,$subject:PullRequestReviewThreadSubjectType){
+      addPullRequestReviewThread(input:{pullRequestReviewId:$r,path:$path,body:$body,line:$line,startLine:$start,side:$side,startSide:$startSide,subjectType:$subject}){thread{id}}}`,
+    { r: reviewId, path: x.path, body: x.body, line: x.line ?? null, start: x.startLine ?? null, side: x.line ? x.side : null, startSide: x.startLine ? x.side : null, subject: x.line ? 'LINE' : 'FILE' },
+  );
+
+// An agent's findings (agentreview.ts) on a PR, under my account: in my pending review, not sent (added to one I've
+// started, else a new one with the summary), or as comments posted now. GitHub keeps one pending review per person, so
+// with one of mine open they go into it either way.
+export async function postAgentFindings(repo: string, n: number, pr: PR, drafts: Draft[], summary: string, mode: 'pending' | 'comment') {
+  if (isLab(repo)) return lab.postLabAgentFindings(repo, n, drafts, summary, mode);
+  const pending = await getPendingReview(repo, n);
+  if (mode === 'comment' && !pending) return submitReview(pr.node_id, pr.head.sha, 'COMMENT', summary, drafts);
+  const reviewId =
+    pending?.id ??
+    (await graphql(`mutation($pr:ID!,$c:GitObjectID!,$b:String){addPullRequestReview(input:{pullRequestId:$pr,commitOID:$c,body:$b}){pullRequestReview{id}}}`, { pr: pr.node_id, c: pr.head.sha, b: summary }))
+      .addPullRequestReview.pullRequestReview.id;
+  for (const x of drafts) await addReviewThread(reviewId, x);
+}
+
 // GraphQL rather than REST: only addPullRequestReviewThread supports file-level comments inside a review.
 // `pending`: my review already open on GitHub, to add to and send (never deleted here if something fails).
 export async function submitReview(prId: string, commitOID: string, event: ReviewEvent, body: string, drafts: Draft[], pending?: string) {
@@ -1275,20 +1297,7 @@ export async function submitReview(prId: string, commitOID: string, event: Revie
   const sent: string[] = []; // on a review already on GitHub, these stay there if a later step fails
   try {
     for (const x of drafts) {
-      await graphql(
-        `mutation($r:ID!,$path:String!,$body:String!,$line:Int,$start:Int,$side:DiffSide,$startSide:DiffSide,$subject:PullRequestReviewThreadSubjectType){
-          addPullRequestReviewThread(input:{pullRequestReviewId:$r,path:$path,body:$body,line:$line,startLine:$start,side:$side,startSide:$startSide,subjectType:$subject}){thread{id}}}`,
-        {
-          r: reviewId,
-          path: x.path,
-          body: x.body,
-          line: x.line ?? null,
-          start: x.startLine ?? null,
-          side: x.line ? x.side : null,
-          startSide: x.startLine ? x.side : null,
-          subject: x.line ? 'LINE' : 'FILE',
-        },
-      );
+      await addReviewThread(reviewId, x);
       sent.push(x.id);
     }
     await graphql(
