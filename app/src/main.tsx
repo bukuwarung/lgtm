@@ -338,12 +338,17 @@ function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
     </section>
   );
 }
-// Back and forward. Back holds the recently viewed PRs, as a browser's holds its history: hold it, or right-click it,
-// for the list.
+// Back and forward. Back holds the recently viewed PRs, as a browser's holds its history: its ▾, holding it or
+// right-clicking it opens the list.
 function HistoryNav({ backTo }: { backTo: string }) {
   const [open, setOpen] = useState(false);
   const hold = useRef(0);
   const held = useRef(false);
+  useEffect(() => {
+    const show = () => setOpen(true); // View → Recently Viewed
+    addEventListener('lgtm:recent', show);
+    return () => removeEventListener('lgtm:recent', show);
+  }, []);
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => !(e.target as Element).closest?.('.recent-menu') && setOpen(false);
@@ -364,12 +369,15 @@ function HistoryNav({ backTo }: { backTo: string }) {
     onContextMenu: (e: MouseEvent) => (e.preventDefault(), setOpen(true)),
     onClick: () => (held.current ? (held.current = false) : (setOpen(false), go())),
   });
-  const more = `; hold or right-click for recently viewed ${T.PRs}`;
+  const more = `; hold for recently viewed ${T.PRs}`;
   return (
     <span class="recent-menu">
       <button class={'nav-hist' + (open ? ' on' : '')} title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)${more}`} aria-label="Back" {...holds(() => history.back())}>
         <Octicon name="arrow-left" />
         {backTo && <span class="back-hint">{backTo}</span>}
+      </button>
+      <button class={'nav-hist nav-recent' + (open ? ' on' : '')} title={`Recently viewed ${T.PRs} (⌘Y)`} aria-label={`Recently viewed ${T.PRs}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        ▾
       </button>
       <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}>
         <Octicon name="arrow-right" />
@@ -567,7 +575,7 @@ function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-      const id = e.key === '=' || e.key === '+' ? 'text-bigger' : e.key === '-' ? 'text-smaller' : e.key === '0' ? 'text-reset' : '';
+      const id = e.key === '=' || e.key === '+' ? 'text-bigger' : e.key === '-' ? 'text-smaller' : e.key === '0' ? 'text-reset' : isDesktop && e.key === 'l' ? 'open-url' : '';
       if (!id) return;
       e.preventDefault();
       onMenu.current(id);
@@ -576,6 +584,15 @@ function App() {
     return () => removeEventListener('keydown', onKey);
   }, []);
 
+  // The PR list, and the PR that's open (it shows "updating…" meanwhile): the ↻ button and View → Refresh.
+  const refresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 15_000); // a failed load still stops the spinning
+    setQueueVersion((v) => v + 1);
+    dispatchEvent(new Event('lgtm:refresh'));
+  };
+  // The keyboard shortcuts: a PR's own help, or Settings' list elsewhere (the ? button and Help → Keyboard Shortcuts).
+  const shortcuts = () => (parseRoute(location.hash) ? dispatchEvent(new Event('lgtm:help')) : ((location.hash = '/settings'), jumpTo('set-keyboard-shortcuts')));
   // The app's menu bar (desktop/src-tauri/src/lib.rs). A ref, so the handler sees this render's state.
   const onMenu = useRef((_: string) => {});
   onMenu.current = (id) => {
@@ -589,7 +606,10 @@ function App() {
     }
     else if (id === 'find') dispatchEvent(new Event('lgtm:find'));
     else if (id === 'reload') location.reload();
-    else if (id === 'refresh-list') dispatchEvent(new Event('lgtm:list-refresh')); // the menu bar's Refresh
+    else if (id === 'refresh') refresh();
+    else if (id === 'recent') dispatchEvent(new Event('lgtm:recent'));
+    else if (id === 'inbox') location.hash = '/inbox';
+    else if (id === 'shortcuts') shortcuts();
     else if (id === 'back') history.back();
     else if (id === 'forward') history.forward();
     else if (id === 'toggle-prs') togglePRs();
@@ -677,15 +697,9 @@ function App() {
           <HistoryNav backTo={backTo} />
           <button
             class={`nav-hist nav-refresh${refreshing ? ' refreshing' : ''}`}
-            title={`Refresh the ${T.PR} list and the open ${T.PR} (the list also every 3 minutes)`}
+            title={`Refresh the ${T.PR} list and the open ${T.PR} (⌘R; the list also every 3 minutes)`}
             aria-label="Refresh"
-            onClick={() => {
-              // The PR list, and the PR that's open (it shows "updating…" meanwhile).
-              setRefreshing(true);
-              setTimeout(() => setRefreshing(false), 15_000); // a failed load still stops the spinning
-              setQueueVersion((v) => v + 1);
-              dispatchEvent(new Event('lgtm:refresh'));
-            }}
+            onClick={refresh}
           >
             <span><Octicon name="sync" /></span>
           </button>
@@ -706,7 +720,7 @@ function App() {
           class="help-btn"
           title={`Keyboard shortcuts${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').help)}`}
           aria-label="Keyboard shortcuts"
-          onClick={() => (r ? dispatchEvent(new Event('lgtm:help')) : ((location.hash = '/settings'), jumpTo('set-keyboard-shortcuts')))}
+          onClick={shortcuts}
         >
           ?
         </button>

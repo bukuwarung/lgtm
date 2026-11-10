@@ -62,11 +62,9 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 "File",
                 true,
                 &[
-                    &item("open-url", "Open PR or MR Link…", Some("CmdOrCtrl+L"))?,
                     &item("palette", "Go to…", Some("CmdOrCtrl+K"))?,
                     &item("review-mode", "Start Review Mode", Some("CmdOrCtrl+Shift+R"))?,
                     &sep()?,
-                    &item("reload", "Reload", Some("CmdOrCtrl+R"))?,
                     &P::close_window(app, None)?,
                 ],
             )?,
@@ -93,7 +91,12 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 &[
                     &item("back", "Back", Some("CmdOrCtrl+["))?,
                     &item("forward", "Forward", Some("CmdOrCtrl+]"))?,
+                    &item("recent", "Recently Viewed", Some("CmdOrCtrl+Y"))?,
                     &sep()?,
+                    &item("refresh", "Refresh", Some("CmdOrCtrl+R"))?,
+                    &item("reload", "Reload lgtm", Some("CmdOrCtrl+Alt+R"))?,
+                    &sep()?,
+                    &item("inbox", "Inbox", Some("CmdOrCtrl+Shift+I"))?,
                     &item("toggle-prs", "Show or Hide the List", Some("CmdOrCtrl+Shift+L"))?,
                     &sep()?,
                     &item("text-bigger", "Bigger Text", Some("CmdOrCtrl+="))?,
@@ -108,7 +111,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 app,
                 "Help",
                 true,
-                &[&item("help", "lgtm on GitHub", None)?, &item("diagnostics", "Copy Diagnostics", None)?],
+                &[&item("shortcuts", "Keyboard Shortcuts", None)?, &sep()?, &item("help", "lgtm on GitHub", None)?, &item("diagnostics", "Copy Diagnostics", None)?],
             )?,
         ],
     )
