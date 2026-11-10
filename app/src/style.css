@@ -762,7 +762,13 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .cmd-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .cmd-kbd { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); padding: 1px 6px; font: calc(11px * var(--ts))/calc(16px * var(--ts)) var(--sans); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; pointer-events: none; }
 .cmd:focus-within .cmd-kbd { display: none; }
-.top .cmd input.at-pr::placeholder { color: var(--fg); } /* where you are, not a hint */
+/* Where you are, at rest on a PR: the repo, its number quieter, centred over the box (clicks reach the box). */
+.cmd-here { position: absolute; inset: 0 34px 0 12px; display: flex; align-items: center; justify-content: center; gap: 6px; pointer-events: none; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; }
+.cmd-here .octicon { color: var(--muted); flex: none; }
+.cmd-here .cmd-repo { font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 3em; }
+.cmd-here .cmd-num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmd:focus-within .cmd-here { display: none; }
+.cmd:has(.cmd-here):not(:focus-within) :is(.cmd-icon, .cmd-kbd) { display: none; } /* the address alone, as Safari's bar at rest */
 /* Refresh at the box's right end, as Safari has reload in its address bar: a bare icon, not a button. */
 .cmd-end { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: flex; }
 .top .cmd .cmd-end button.nav-refresh.nav-refresh { height: 24px; min-width: 24px; width: 24px; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); border-radius: 6px; }

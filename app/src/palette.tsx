@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
 import { recentPRs, repoLabel, term } from './platform.ts';
+import { Octicon } from './tags.tsx';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
 const T = term();
@@ -110,8 +111,7 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
       <input
         ref={input}
         value={q}
-        class={here ? 'at-pr' : undefined}
-        placeholder={here ? `${repoLabel(here.repo)}${numRef(here.repo, here.n)}` : `Go to a ${T.PR}, file or thread, or paste a ${T.PR} link`}
+        placeholder={here ? '' : `Go to a ${T.PR}, file or thread, or paste a ${T.PR} link`}
         aria-label={`Go to, or open a ${T.PR} link`}
         onFocus={open}
         onBlur={() => setTimeout(() => (setList(null), setQ((v) => (v === url ? '' : v))), 150)}
@@ -124,6 +124,14 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
           else if (e.key === 'Escape') close();
         }}
       />
+      {here && !q && (
+        // At rest on a PR: its address, centred as Safari centres the site (focus hides it for the link).
+        <span class="cmd-here" aria-hidden="true">
+          <Octicon name="git-pull-request" />
+          <span class="cmd-repo">{repoLabel(here.repo)}</span>
+          <span class="cmd-num">{numRef(here.repo, here.n)}</span>
+        </span>
+      )}
       {end && <span class="cmd-end">{end}</span>}
       {list && (
         <ul class="cmd-list" role="listbox">
