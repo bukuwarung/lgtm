@@ -658,6 +658,24 @@ export async function initDesktop(go: (route: string) => void) {
     },
     true,
   );
+  // Right-clicking a link: WebKit's own menu (Open Link, Open Link in New Window, Download Linked File) does nothing in
+  // the app, so a web link gets Open in Browser and Copy Link instead, and lgtm's own links none. Selected text keeps
+  // WebKit's menu, for Copy and Look Up.
+  addEventListener('contextmenu', async (e) => {
+    const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+    if (!a || e.defaultPrevented || String(getSelection() ?? '').trim()) return;
+    e.preventDefault();
+    if (!/^(https?|mailto):/i.test(a.href)) return;
+    const { Menu } = await import('@tauri-apps/api/menu');
+    const href = a.href.replace(/^mailto:/i, '');
+    const menu = await Menu.new({
+      items: [
+        { text: 'Open in Browser', action: () => void openUrl(a.href) },
+        { text: a.href.startsWith('mailto:') ? 'Copy Address' : 'Copy Link', action: () => void copyText(href) },
+      ],
+    });
+    await menu.popup();
+  });
   const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
   const open = (urls: string[] | null) => {
     // lgtm://owner/repo/pull/n, or a GitLab MR's lgtm://host/group/…/project/pull/n (or …/-/merge_requests/n).
