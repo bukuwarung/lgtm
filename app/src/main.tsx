@@ -1612,11 +1612,22 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       loadPR(i.repo, i.number).then((d) => prCache.set(key, d), () => {});
     }, 350);
   };
+  // Who else it's assigned to (not the face already shown, nor the person whose list this is): their faces after an arrow.
+  const assignedTo = (i: QueueItem, who?: string) => {
+    const to = (i.assignees ?? []).filter((l) => l !== i.face && l !== who);
+    return to.length > 0 && (
+      <span class="pr-assigned" title={`Assigned to ${to.map((l) => '@' + l).join(', ')}`}>
+        {' → '}
+        {to.map((l) => <img key={l} class="pr-face" src={avatar(l)} alt={l} />)}
+        {to.length === 1 && ` ${to[0]}`}
+      </span>
+    );
+  };
   const item = (kind: Kind, i: QueueItem, layer?: string, who?: string) => (
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
-        {i.face !== who && <><span class="person-link" onClick={toPerson(i.face, i.repo)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span> ·{' '}</>}
+        {i.face !== who && <><span class="person-link" onClick={toPerson(i.face, i.repo)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span>{assignedTo(i, who)} ·{' '}</>}
         {layer && <b class="layer">{layer} </b>}
         {repoLabel(i.repo)}{numRef(i.repo, i.number)} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>

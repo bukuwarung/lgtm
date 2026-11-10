@@ -73,6 +73,7 @@ export type QueueItem = {
   base: string;
   author: string;
   face: string; // whose picture the list shows: the author, or for a bot's PR its assignee
+  assignees: string[]; // who the PR is assigned to, besides its author
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   mergeState: MergeState['mergeStateStatus'];
   ci: 'SUCCESS' | 'FAILURE' | 'ERROR' | 'PENDING' | 'EXPECTED' | null; // all checks on the head commit, rolled up
@@ -314,7 +315,7 @@ const QUEUE = `query{viewer{login}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}
   mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...F}}}
-fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login} assignees(first:1){nodes{login}}
+fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login} assignees(first:5){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} recent:commits(last:20){nodes{commit{authoredDate parents{totalCount}}}} repository{nameWithOwner}
   headRefName headRefOid baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
@@ -387,6 +388,7 @@ const toItem = (p: any): QueueItem => ({
       base: p.baseRefName,
       author: p.author?.login ?? 'ghost',
       face: (p.author?.__typename === 'Bot' && p.assignees?.nodes[0]?.login) || (p.author?.login ?? 'ghost'),
+      assignees: (p.assignees?.nodes ?? []).map((a: { login: string }) => a.login).filter((l: string) => l !== p.author?.login),
       reviewDecision: p.reviewDecision,
       mergeState: p.mergeStateStatus,
       ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,

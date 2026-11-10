@@ -1033,6 +1033,7 @@ const itemOf = (host: string, m: any, me: string): QueueItem => {
     base: m.targetBranch,
     author: m.author?.username ?? 'ghost',
     face: m.author?.username ?? 'ghost',
+    assignees: m.assignees.nodes.map((a: any) => a.username).filter((l: string) => l !== m.author?.username),
     reviewDecision: decision(m),
     mergeState: mergeStatus(m.detailedMergeStatus),
     ci: CI[m.headPipeline?.status] ?? null,

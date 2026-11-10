@@ -4734,7 +4734,14 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="comment" id="pr-description">
-        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b class="person-link" onClick={toPerson(pr.user.login, repo)}>{pr.user.login}</b> <CopyLink url={pr.html_url} />
+        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b class="person-link" onClick={toPerson(pr.user.login, repo)}>{pr.user.login}</b>
+        {pr.assignees.filter((a) => a.login !== pr.user.login).map((a, k) => (
+          <span key={a.login} class="assigned-to">
+            {k ? ', ' : ' · assigned to '}
+            <span class="person-link" onClick={toPerson(a.login, repo)}>{a.login}</span>
+          </span>
+        ))}{' '}
+        <CopyLink url={pr.html_url} />
         {me === pr.user.login && !editing && (
           <button class="icon-btn" title="Edit the title and description" aria-label="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />
