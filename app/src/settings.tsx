@@ -3,7 +3,7 @@ import { labMe } from './gitlab.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
-import { AGENTS, AGENT_IDS, agentEffort, agentModel, agentOn, detectAgents, setAgentEffort, setAgentModel, setAgentOn, useAgents, type AgentId } from './agents.ts';
+import { AGENTS, AGENT_IDS, EFFORT_NAME, effortsOf, modelsOf, agentEffort, agentModel, agentOn, detectAgents, setAgentEffort, setAgentModel, setAgentOn, useAgents, type AgentId } from './agents.ts';
 import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
@@ -1683,6 +1683,7 @@ function AgentRow({ id }: { id: AgentId }) {
   const a = AGENTS[id];
   const version = detected?.find((d) => d.id === id)?.version;
   const on = agentOn(id);
+  const models = modelsOf(id), model = agentModel(id);
   return (
     <div class="set-flag">
       <label class="set-row">
@@ -1699,18 +1700,21 @@ function AgentRow({ id }: { id: AgentId }) {
           <div class="template-run">
             <label>
               Model{' '}
-              {a.models ? (
-                <select value={agentModel(id)} onChange={(e) => setAgentModel(id, e.currentTarget.value)}>
-                  {a.models.map(([v, n]) => <option value={v}>{n}</option>)}
+              {models ? (
+                <select value={model} onChange={(e) => (setAgentModel(id, e.currentTarget.value), !effortsOf(id, e.currentTarget.value).includes(agentEffort(id)) && setAgentEffort(id, ''))}>
+                  <option value="">Default</option>
+                  {models.map(([v, n]) => <option value={v}>{n}</option>)}
+                  {model && !models.some(([v]) => v === model) && <option value={model}>{model}</option>}
                 </select>
               ) : (
-                <input class="model-input" placeholder={`${a.short}'s default`} value={agentModel(id)} onChange={(e) => setAgentModel(id, e.currentTarget.value.trim())} />
+                <input class="model-input" placeholder={`${a.short}'s default`} value={model} onChange={(e) => setAgentModel(id, e.currentTarget.value.trim())} />
               )}
             </label>
             <label>
               Effort{' '}
               <select value={agentEffort(id)} onChange={(e) => setAgentEffort(id, e.currentTarget.value)}>
-                {a.efforts.map(([v, n]) => <option value={v}>{n}</option>)}
+                <option value="">Default</option>
+                {effortsOf(id, model).map((v) => <option value={v}>{EFFORT_NAME[v]}</option>)}
               </select>
             </label>
           </div>

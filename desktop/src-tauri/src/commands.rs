@@ -971,7 +971,26 @@ pub async fn agents() -> Result<Value, String> {
         let v = o.stdout.lines().next().unwrap_or("").trim().trim_start_matches("codex-cli ").trim_end_matches(" (Claude Code)").to_string();
         if o.ok && !v.is_empty() { Value::String(v) } else { Value::Null }
     };
-    Ok(json!([{ "id": "claude", "version": version("claude") }, { "id": "codex", "version": version("codex") }]))
+    Ok(json!([{ "id": "claude", "version": version("claude") }, { "id": "codex", "version": version("codex"), "models": codex_models() }]))
+}
+
+const CODEX_EFFORTS: [&str; 7] = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+/// Codex's models as its CLI last fetched them (~/.codex/models_cache.json): the ones it lists, each with the efforts it
+/// takes; null without the cache. The server's codexModels().
+fn codex_models() -> Value {
+    let dir = std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| home().join(".codex"));
+    let Some(cache) = std::fs::read_to_string(dir.join("models_cache.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { return Value::Null };
+    let models = cache["models"].as_array().cloned().unwrap_or_default();
+    Value::Array(
+        models
+            .iter()
+            .filter(|m| m["visibility"] == "list" && m["slug"].is_string())
+            .map(|m| {
+                let efforts: Vec<Value> = m["supported_reasoning_levels"].as_array().into_iter().flatten().filter_map(|e| e["effort"].as_str()).filter(|e| CODEX_EFFORTS.contains(e)).map(|e| json!(e)).collect();
+                json!({ "id": m["slug"], "name": m["display_name"].as_str().unwrap_or(m["slug"].as_str().unwrap_or("")), "efforts": efforts })
+            })
+            .collect(),
+    )
 }
 
 /// The same through Codex's CLI (`codex login`): its last message back. Every tool it has switched off (shell, browser,
@@ -980,7 +999,7 @@ pub async fn agents() -> Result<Value, String> {
 fn codex_text(input: &str, model: Option<String>, effort: Option<String>) -> Result<String, String> {
     let model = model.filter(|m| !m.is_empty());
     let effort = effort.filter(|e| !e.is_empty());
-    if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !["minimal", "low", "medium", "high", "xhigh"].contains(&e)) {
+    if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !CODEX_EFFORTS.contains(&e)) {
         return Err("Bad request for Codex".into());
     }
     let dir = std::env::temp_dir().join(format!("lgtm-codex-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)));

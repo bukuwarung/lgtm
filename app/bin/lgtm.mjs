@@ -516,7 +516,7 @@ function jobLog(repo, job, user) {
 // others. No tools and no saved session: Claude only reads what it's given and writes text back.
 // `model` (an alias such as opus, or a full name) and `effort` (low … max): Settings → Claude Code → Prompts; none,
 // Claude Code's own.
-const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'], CODEX_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'], CODEX_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 // `agent`: Claude Code (claude), or Codex (codex).
 function claudeText(input, model, effort, agent) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
@@ -542,7 +542,14 @@ function claudeText(input, model, effort, agent) {
 // The coding agents' CLIs installed (Settings → Coding agents): each one's --version, or null.
 const agentVersion = (bin) =>
   new Promise((resolve) => execFile(bin, ['--version'], { timeout: 15000 }, (err, stdout) => resolve(err ? null : stdout.trim().split('\n')[0].replace(/^codex-cli\s+/, '').replace(/\s*\(Claude Code\)$/, '') || null)));
-const detectAgents = async () => [{ id: 'claude', version: await agentVersion('claude') }, { id: 'codex', version: await agentVersion('codex') }];
+// Codex's models as its CLI last fetched them (~/.codex/models_cache.json): the ones it lists, each with the efforts it
+// takes. None (no cache yet): the model is typed.
+const codexModels = () =>
+  readFile(join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'models_cache.json'), 'utf8').then(
+    (t) => (JSON.parse(t).models ?? []).filter((m) => m.visibility === 'list' && typeof m.slug === 'string').map((m) => ({ id: m.slug, name: m.display_name || m.slug, efforts: (m.supported_reasoning_levels ?? []).map((e) => e.effort).filter((e) => CODEX_EFFORTS.includes(e)) })),
+    () => null,
+  );
+const detectAgents = async () => [{ id: 'claude', version: await agentVersion('claude') }, { id: 'codex', version: await agentVersion('codex'), models: await codexModels() }];
 
 // The same through Codex's CLI (`codex login`), signed in like the others: its last message back. With every tool it has
 // switched off (shell, browser, computer use, apps, images, MCP servers, web search) and read-only, in an empty

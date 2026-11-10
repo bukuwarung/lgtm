@@ -8,8 +8,8 @@ export type AgentId = 'claude' | 'codex';
 export const AGENTS: Record<AgentId, {
   name: string; // in lgtm's text
   short: string; // in a button
-  models?: [string, string][]; // picked from; none, typed
-  efforts: [string, string][];
+  models?: [string, string][]; // picked from; none, its CLI's own list (detected), else typed
+  efforts: string[]; // the ones it takes, when its models don't say
   install: string;
   login: string;
   mark: string; // its official mark, a 24×24 path
@@ -18,8 +18,8 @@ export const AGENTS: Record<AgentId, {
   claude: {
     name: 'Claude Code',
     short: 'Claude',
-    models: [['', 'Default'], ['fable', 'Fable'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']],
-    efforts: [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max']],
+    models: [['fable', 'Fable'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']],
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     install: 'curl -fsSL https://claude.ai/install.sh | bash',
     login: 'claude, then /login',
     // Claude's mark (Simple Icons, CC0) in its colour.
@@ -29,7 +29,7 @@ export const AGENTS: Record<AgentId, {
   codex: {
     name: 'Codex',
     short: 'Codex',
-    efforts: [['', 'Default'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high']],
+    efforts: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     install: 'brew install codex',
     login: 'codex login',
     // Codex's mark (Lobe Icons, MIT).
@@ -40,8 +40,11 @@ export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
 // The agent a name in lgtm's text is (a review run keeps its agent's name).
 export const agentIdOf = (name?: string) => AGENT_IDS.find((id) => AGENTS[id].name === name);
 
-// Which CLIs are installed (their --version), asked once a launch.
-export type Detected = { id: AgentId; version: string | null };
+export const EFFORT_NAME: Record<string, string> = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' };
+
+// Which CLIs are installed (their --version), asked once a launch, and Codex's models as its CLI last fetched them.
+type Model = { id: string; name: string; efforts: string[] };
+export type Detected = { id: AgentId; version: string | null; models?: Model[] | null };
 let detected: Promise<Detected[]> | undefined;
 let known: Detected[] | null = null;
 export const detectAgents = (fresh = false): Promise<Detected[]> => {
@@ -68,6 +71,18 @@ const write = (k: string, v: string) => {
 export const agentOn = (id: AgentId) => read(`agentOn.${id}`) !== '0' && !!known?.find((d) => d.id === id && d.version);
 export const setAgentOn = (id: AgentId, on: boolean) => write(`agentOn.${id}`, on ? '1' : '0');
 export const enabledAgents = () => AGENT_IDS.filter(agentOn);
+// The models to pick from ([id, name]); none: typed.
+export const modelsOf = (id: AgentId): [string, string][] | undefined =>
+  AGENTS[id].models ?? known?.find((d) => d.id === id)?.models?.map((m) => [m.id, m.name]);
+// The efforts a model takes (its own list, if its CLI gave one); for the default model, any of its models' (the CLI
+// says no to one it doesn't take).
+export const effortsOf = (id: AgentId, model: string): string[] => {
+  const ms = known?.find((d) => d.id === id)?.models;
+  if (!ms?.length) return AGENTS[id].efforts;
+  const of = model ? ms.filter((m) => m.id === model) : ms;
+  const set = new Set(of.flatMap((m) => m.efforts));
+  return of.length ? AGENTS[id].efforts.filter((e) => set.has(e)) : AGENTS[id].efforts;
+};
 // Its model and effort (Settings → Coding agents); '' is the agent's own default.
 export const agentModel = (id: AgentId) => read(`agentModel.${id}`) ?? '';
 export const agentEffort = (id: AgentId) => read(`agentEffort.${id}`) ?? '';
@@ -99,7 +114,9 @@ export function useAgents() {
 
 // A prompt through an agent's CLI, its model and effort as Settings has them: the answer's text.
 export async function runAgent(input: string, id: AgentId): Promise<string> {
-  const model = agentModel(id) || undefined, effort = agentEffort(id) || undefined, agent = id;
+  await detectAgents();
+  const model = agentModel(id) || undefined, agent = id;
+  const effort = effortsOf(id, model ?? '').includes(agentEffort(id)) ? agentEffort(id) : undefined; // one the model takes
   if (isDesktop) return command<string>('claude_text', { input, model, effort, agent });
   const res = await fetch('/claude-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent }) });
   const d = await res.json().catch(() => ({ error: res.statusText }));
