@@ -306,7 +306,7 @@ test('claude links: a new session carries the prompt (capped) and the folder', a
   assert.equal(new URL(claudeNewLink('x'.repeat(5000))).searchParams.get('q')!.length, 2592);
   const pr = { html_url: 'https://github.com/o/r/pull/7', number: 7, title: 'Add X', base: { ref: 'main' }, head: { ref: 'feat' } };
   assert.match(prPrompt(pr, 'o/r'), /gh pr diff 7 --repo o\/r/);
-  assert.match(commentPrompt({ author: 'bob', text: 'Use a fake\nhere', url: 'u' }, { repo: 'o/r', number: 7, prUrl: pr.html_url, path: 'A.kt', line: 3 }), /from @bob on `A.kt:3`[\s\S]*> Use a fake\n> here/);
+  assert.match(commentPrompt({ author: 'bob', text: 'Use a fake\nhere', url: 'u' }, pr, 'o/r', { path: 'A.kt', line: 3 }), /from @bob on `A.kt:3`[\s\S]*> Use a fake\n> here/);
 });
 
 test('newer compares versions numerically', async () => {
@@ -1216,11 +1216,11 @@ test("GitLab CODEOWNERS sections: a section's default owners for patterns that n
   assert.deepEqual(codeOwners(t, 'src/x.kt'), ['@all']);
 });
 
-test('Claude prompts: the defaults read as before; your wording replaces them', async () => {
+test('Claude prompts: the defaults read as before (a comment adds itself to the PR opener); your wording replaces them', async () => {
   const { prPrompt, commentPrompt, reviewDonePrompt } = await import('../src/claude.ts');
   const pr = { html_url: 'https://github.com/o/r/pull/12', number: 12, title: 'Fix it', base: { ref: 'main' }, head: { ref: 'fix' } };
   assert.equal(prPrompt(pr, 'o/r'), "Let's look at this pull request: https://github.com/o/r/pull/12\n#12 Fix it (fix → main)\nRead it with `gh pr view 12 --repo o/r --comments` and `gh pr diff 12 --repo o/r`.");
-  assert.equal(commentPrompt({ author: 'ana', text: 'Why?', url: 'u' }, { repo: 'o/r', number: 12, prUrl: pr.html_url, path: 'a.kt', line: 3 }), 'A review comment from @ana on `a.kt:3` in o/r#12 (https://github.com/o/r/pull/12):\n\n> Why?\n\nComment: u\nHelp me address it.');
+  assert.equal(commentPrompt({ author: 'ana', text: 'Why?', url: 'u' }, pr, 'o/r', { path: 'a.kt', line: 3 }), `${prPrompt(pr, 'o/r')}\n\nA review comment from @ana on \`a.kt:3\`:\n\n> Why?\n\nComment: u\nHelp me address it.`);
   assert.equal(reviewDonePrompt(pr, 'APPROVE', '', []), 'I reviewed https://github.com/o/r/pull/12 (#12 Fix it) in lgtm and approved it.');
   const store = new Map([['claudePrompt.pr', 'Review {ref} on {site} ({kind}): {url}']]);
   (globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null };

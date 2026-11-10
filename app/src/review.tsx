@@ -3813,7 +3813,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId}>
           <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
-          <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, { repo: ctx.repo, number: ctx.pr.number, prUrl: ctx.pr.html_url, path: t.path, line: t.line })} />
+          <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
           {c.state === 'PENDING' && c.id ? (
             <PendingComment c={c} ctx={ctx} path={t.path} />
           ) : (
@@ -4484,7 +4484,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
           <>
             <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
-            {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}
+            {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}
           </>
         );
         const body = (
@@ -4525,7 +4525,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
               <summary>
                 <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{c.author}</b>{' '}
                 <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
-                {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, { repo, number: pr.number, prUrl: pr.html_url })} />}{' '}
+                {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}{' '}
                 <span class="bot-excerpt">{botExcerpt(c.html)}</span>
               </summary>
               {c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />}
