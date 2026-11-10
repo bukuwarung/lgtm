@@ -943,7 +943,7 @@ export async function commitSuggestions(headRepo: string, branch: string, head: 
 export async function getDownloadUrl(repo: string, path: string, ref: string): Promise<string | null> {
   if (isLab(repo)) return lab.getLabDownloadUrl(repo, path, ref);
   // no-store: the same URL fetched raw (getRaw) may sit in the browser cache, and that cached body isn't JSON.
-  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, { cache: 'no-store' });
+  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`, { cache: 'no-store' });
   if (res.status === 404) return null;
   return (await (await ok(res)).json()).download_url ?? null;
 }
@@ -952,15 +952,28 @@ export async function getDownloadUrl(repo: string, path: string, ref: string): P
 // private repo they only load signed in to github.com in the same browser, which lgtm isn't (it has the gh token), so
 // each is swapped for the API's signed link to that file. Once per image a session.
 const signedImages = new Map<string, Promise<string | null>>();
-const REPO_IMAGE = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:blob|raw)\/([^/]+)\/([^?#]+)/;
+const REPO_IMAGE = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:blob|raw)\/([^?#]+)/;
+// A branch may have slashes (vorflux/artifacts), so the address can't tell ref from path: shortest ref first, the
+// next split when GitHub has no such file.
+async function repoImageUrl(repo: string, rest: string): Promise<string | null> {
+  const parts = rest.split('/').map(decodeURIComponent);
+  for (let k = 1; k < Math.min(parts.length, 5); k++) {
+    const url = await getDownloadUrl(repo, parts.slice(k).join('/'), parts.slice(0, k).join('/')).catch(() => null);
+    if (url) return url;
+  }
+  return null;
+}
+// An <img src> or a <picture>'s <source srcset> (dark mode, narrow windows), which the browser picks over the img.
 export function signRepoImages(root: ParentNode | null) {
-  for (const img of root?.querySelectorAll<HTMLImageElement>('img[src^="https://github.com/"]:not([data-signed])') ?? []) {
-    const m = img.src.match(REPO_IMAGE);
+  for (const el of root?.querySelectorAll<HTMLImageElement | HTMLSourceElement>('img[src^="https://github.com/"]:not([data-signed]), source[srcset^="https://github.com/"]:not([data-signed])') ?? []) {
+    const attr = el instanceof HTMLSourceElement ? 'srcset' : 'src';
+    const src = el.getAttribute(attr)!;
+    const m = src.match(REPO_IMAGE);
     if (!m) continue;
-    img.dataset.signed = '';
-    let url = signedImages.get(img.src);
-    if (!url) signedImages.set(img.src, (url = getDownloadUrl(m[1], decodeURIComponent(m[3]), m[2]).catch(() => null)));
-    void url.then((u) => u && (img.src = u));
+    el.dataset.signed = '';
+    let url = signedImages.get(src);
+    if (!url) signedImages.set(src, (url = repoImageUrl(m[1], m[2])));
+    void url.then((u) => u && el.setAttribute(attr, u));
   }
 }
 
