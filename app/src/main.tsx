@@ -689,21 +689,26 @@ function App() {
         </a>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
         <div class="top-actions">
-          <button
-            class={`nav-refresh${refreshing ? ' refreshing' : ''}`}
-            title={`Refresh the ${T.PR} list and the open ${T.PR} (⌘R; the list also every 3 minutes)`}
-            aria-label="Refresh"
-            onClick={refresh}
-          >
-            <span><Octicon name="sync" /></span>
-          </button>
           <BellMenu />
         </div>
         <span class="spacer" />
         {/* Back and forward beside the search box, as a browser has them by its address bar. */}
         <span class="nav-go">
           <HistoryNav backTo={backTo} />
-          <CommandBar queue={() => queue.current} parse={parseRoute} />
+          <CommandBar
+            queue={() => queue.current}
+            parse={parseRoute}
+            end={
+                <button
+                  class={`nav-refresh${refreshing ? ' refreshing' : ''}`}
+                  title={`Refresh the ${T.PR} list and the open ${T.PR} (⌘R; the list also every 3 minutes)`}
+                  aria-label="Refresh"
+                  onClick={refresh}
+                >
+                  <span><Octicon name="sync" /></span>
+                </button>
+            }
+          />
         </span>
         <span class="spacer" />
         {__DEV_BUILD__ && (

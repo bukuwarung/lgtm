@@ -757,11 +757,15 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 /* The top bar's Go to / open-a-link box, centred in the bar; its results drop down below it. */
 .nav-go { display: flex; align-items: center; gap: 6px; flex: 0 1 680px; min-width: 260px; } /* back, forward and the search box, between the spacers: centred when there's room */
 .cmd { position: relative; flex: 1; min-width: 180px; }
-.top .cmd input { width: 100%; height: 32px; box-sizing: border-box; padding: 0 44px 0 32px; font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid color-mix(in srgb, var(--fg) 22%, var(--border)); border-radius: 8px; box-shadow: 0 1px 2px var(--shadow); }
+.top .cmd input { width: 100%; height: 32px; box-sizing: border-box; padding: 0 74px 0 32px; font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid color-mix(in srgb, var(--fg) 22%, var(--border)); border-radius: 8px; box-shadow: 0 1px 2px var(--shadow); }
 .top .cmd input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .cmd-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.cmd-kbd { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); padding: 1px 6px; font: calc(11px * var(--ts))/calc(16px * var(--ts)) var(--sans); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; pointer-events: none; }
+.cmd-kbd { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); padding: 1px 6px; font: calc(11px * var(--ts))/calc(16px * var(--ts)) var(--sans); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; pointer-events: none; }
 .cmd:focus-within .cmd-kbd { display: none; }
+/* Refresh at the box's right end, as Safari has reload in its address bar: a bare icon, not a button. */
+.cmd-end { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: flex; }
+.top .cmd .cmd-end button.nav-refresh.nav-refresh { height: 24px; min-width: 24px; width: 24px; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); border-radius: 6px; }
+.top .cmd .cmd-end button.nav-refresh.nav-refresh:hover { color: var(--fg); background: var(--soft); }
 .cmd-list { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); width: max(100%, 520px); z-index: 50; list-style: none; margin: 0; padding: 4px; max-height: 60vh; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
 .cmd-list li { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: calc(13px * var(--ts)); font-weight: 400; }
 .cmd-list li.on { background: var(--soft); }

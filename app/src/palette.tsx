@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { numRef } from './github.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
@@ -45,7 +46,8 @@ export const matches = (q: string, text: string) => q.toLowerCase().split(/\s+/)
 
 // The top bar's one box: type to go to a PR in your queue or within the open PR, or paste a PR link to open it.
 // ⌘K (and ⌘L in the app) puts the cursor in it.
-export function CommandBar({ queue, parse }: { queue: () => QueueItem[]; parse: (s: string) => { repo: string; n: number } | null }) {
+// `end`: what sits at the box's right end, as Safari has reload in its address bar (refresh).
+export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; parse: (s: string) => { repo: string; n: number } | null; end?: ComponentChildren }) {
   const [list, setList] = useState<Entry[] | null>(null); // open while not null
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
@@ -106,6 +108,7 @@ export function CommandBar({ queue, parse }: { queue: () => QueueItem[]; parse: 
           else if (e.key === 'Escape') close();
         }}
       />
+      {end && <span class="cmd-end">{end}</span>}
       {list && (
         <ul class="cmd-list" role="listbox">
           {shown.map((e, k) => (

@@ -1500,7 +1500,6 @@ SCENES.app = {
           <button><Octicon name="three-bars" /></button>
           <a class="nav-btn"><Octicon name="gear" /></a>
           <div class="top-actions">
-            <button><span><Octicon name="sync" /></span></button>
             <button><Octicon name="bell" /></button>
           </div>
           <span class="spacer" />
