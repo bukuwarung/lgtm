@@ -338,8 +338,8 @@ function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
     </section>
   );
 }
-// Back and forward, holding the recently viewed PRs as a browser's buttons hold their history: hold either one, or
-// right-click it, for the list.
+// Back and forward. Back holds the recently viewed PRs, as a browser's holds its history: hold it, or right-click it,
+// for the list.
 function HistoryNav({ backTo }: { backTo: string }) {
   const [open, setOpen] = useState(false);
   const hold = useRef(0);
@@ -352,7 +352,7 @@ function HistoryNav({ backTo }: { backTo: string }) {
     addEventListener('keydown', esc);
     return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
   }, [open]);
-  const props = (go: () => void) => ({
+  const holds = (go: () => void) => ({
     'aria-haspopup': 'menu' as const,
     onPointerDown: (e: PointerEvent) => {
       if (e.button !== 0) return;
@@ -367,11 +367,11 @@ function HistoryNav({ backTo }: { backTo: string }) {
   const more = `; hold or right-click for recently viewed ${T.PRs}`;
   return (
     <span class="recent-menu">
-      <button class={'nav-hist' + (open ? ' on' : '')} title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)${more}`} aria-label="Back" {...props(() => history.back())}>
+      <button class={'nav-hist' + (open ? ' on' : '')} title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)${more}`} aria-label="Back" {...holds(() => history.back())}>
         <Octicon name="arrow-left" />
         {backTo && <span class="back-hint">{backTo}</span>}
       </button>
-      <button class="nav-hist" title={`Forward (⌘])${more}`} aria-label="Forward" {...props(() => history.forward())}>
+      <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}>
         <Octicon name="arrow-right" />
       </button>
       {open && (
