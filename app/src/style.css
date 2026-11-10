@@ -1039,6 +1039,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .slack-msg { display: grid; gap: 4px; max-width: 720px; margin: 10px 0 14px; font-size: calc(13px * var(--ts)); }
 .slack-msg > span { display: flex; align-items: center; gap: 6px; }
 .slack-msg textarea { font: calc(13px * var(--ts))/1.45 var(--mono); resize: vertical; }
+.prompt-preview { margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); white-space: pre-wrap; font: calc(12px * var(--ts))/1.45 var(--mono); color: var(--muted); }
 /* Settings → Slack → Messages: each one as Slack will show it, with a sample PR. */
 .slack-preview { padding: 8px 10px; border-left: 3px solid color-mix(in srgb, var(--fg) 15%, transparent); background: color-mix(in srgb, var(--soft) 60%, transparent); border-radius: 0 6px 6px 0; font-size: calc(13px * var(--ts)); line-height: 1.5; }
 .slack-preview img { width: 1.35em; height: 1.35em; vertical-align: -.3em; object-fit: contain; }

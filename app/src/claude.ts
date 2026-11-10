@@ -14,15 +14,79 @@ const quote = (text: string, room = 1500) => (text.length > room ? text.slice(0,
 
 // A GitLab repo is host/group/…/project: its MRs are read with glab, given the project's address.
 const gitlab = (repo: string) => repo.split('/')[0].includes('.');
+const isMr = (url: string) => url.includes('/-/merge_requests/');
+
+// The prompts lgtm hands Claude, as templates you can change (Settings → Claude Code → Prompts). {name} fills in a value
+// (a name it doesn't know stays as written); what Claude must also have (the diff, the files, the answer's format) is
+// added after your text, so editing can't lose it.
+export type PromptKind = 'pr' | 'comment' | 'ask' | 'askPr' | 'agent' | 'reviewDone';
+const COMMON = '{kind} pull request or merge request · {ref} #12 or !12 · {url} · {title} · {repo} · {site} GitHub or GitLab';
+export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: string; after?: string }> = {
+  pr: {
+    label: 'Open a PR in Claude Code (✳ Claude on a PR)',
+    initial: "Let's look at this {kind}: {url}\n{ref} {title} ({branch} → {base})\nRead it with {read}.",
+    fields: `${COMMON} · {branch} its branch · {base} the one it merges into · {read} the gh or glab commands that read it`,
+  },
+  comment: {
+    label: 'Help address a comment (✳ on a comment)',
+    initial: 'A review comment from @{author}{place} in {repo}{ref} ({url}):\n\n{comment}\n\nComment: {commentUrl}\nHelp me address it.',
+    fields: `${COMMON} · {author} · {place} " on \`File.kt:41\`" for one on code · {comment} the comment, quoted · {commentUrl}`,
+  },
+  ask: {
+    label: 'Ask Claude about selected code',
+    initial: "You're helping someone review a {site} {kind}. They selected some code and have a question about it.\nAnswer in Markdown, concisely and concretely, pointing at identifiers and lines. If the answer depends on code you can't see here, say so.",
+    fields: `${COMMON} · {path} the file`,
+    after: 'Then lgtm adds the PR, the file as it is now, its diff, what you selected and your question.',
+  },
+  askPr: {
+    label: 'Ask Claude about the whole PR',
+    initial: "You're helping someone review a {site} {kind}. They have a question about the whole {kind}.\nAnswer in Markdown, concisely and concretely, naming files and identifiers. If the answer depends on code you can't see here, say so.",
+    fields: COMMON,
+    after: 'Then lgtm adds the description, the files changed, their diffs and your question.',
+  },
+  agent: {
+    label: 'Claude Code reviews first: the brief',
+    initial: "You are an adversarial code reviewer. Review this {kind} hard: find what will break. Look for bugs, wrong edge cases, race conditions, security problems, data loss, broken error handling, and risky changes without tests. No style nits, no praise, nothing you aren't confident about; at most 10 findings, the worst first. An empty list is fine.",
+    fields: COMMON,
+    after: 'Then lgtm adds the answer format it reads (findings as JSON, each with its file and line), the description, the numbered diff and the changed files.',
+  },
+  reviewDone: {
+    label: 'Your review, sent to the Claude Code session that opened the PR',
+    initial: 'I reviewed {url} ({ref} {title}) in lgtm and {verdict}.\n\n{summary}\n\n{comments}\n\n{ask}',
+    fields: `${COMMON} · {verdict} approved it, requested changes, or commented · {summary} your summary, quoted · {comments} your comments, listed · {ask} "Please address them, then tell me what changed." when there's something to address (each empty when there's nothing)`,
+  },
+};
+export const promptTemplate = (k: PromptKind) => {
+  try {
+    return localStorage.getItem('claudePrompt.' + k) || CLAUDE_PROMPTS[k].initial;
+  } catch {
+    return CLAUDE_PROMPTS[k].initial;
+  }
+};
+export const fillPrompt = (template: string, values: Record<string, string>) =>
+  template
+    .replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? values[k] : m))
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+// The fill-ins every prompt has, for a PR (its address says GitHub or GitLab).
+export function prFields(pr: { html_url: string; title: string; number?: number }, repo?: string) {
+  const lab = repo ? gitlab(repo) : isMr(pr.html_url);
+  return {
+    kind: lab ? 'merge request' : 'pull request',
+    site: lab ? 'GitLab' : 'GitHub',
+    ref: pr.number != null ? `${lab ? '!' : '#'}${pr.number}` : '',
+    url: pr.html_url,
+    title: pr.title,
+    repo: repo ?? '',
+  };
+}
+
 export function prPrompt(pr: { html_url: string; number: number; title: string; base: { ref: string }; head: { ref: string } }, repo: string): string {
   const read = gitlab(repo)
-    ? `Read it with \`glab mr view ${pr.number} -R https://${repo} --comments\` and \`glab mr diff ${pr.number} -R https://${repo}\`.`
-    : `Read it with \`gh pr view ${pr.number} --repo ${repo} --comments\` and \`gh pr diff ${pr.number} --repo ${repo}\`.`;
-  return [
-    `Let's look at this ${gitlab(repo) ? 'merge request' : 'pull request'}: ${pr.html_url}`,
-    `${gitlab(repo) ? '!' : '#'}${pr.number} ${pr.title} (${pr.head.ref} → ${pr.base.ref})`,
-    read,
-  ].join('\n');
+    ? `\`glab mr view ${pr.number} -R https://${repo} --comments\` and \`glab mr diff ${pr.number} -R https://${repo}\``
+    : `\`gh pr view ${pr.number} --repo ${repo} --comments\` and \`gh pr diff ${pr.number} --repo ${repo}\``;
+  return fillPrompt(promptTemplate('pr'), { ...prFields(pr, repo), branch: pr.head.ref, base: pr.base.ref, read });
 }
 
 export function commentPrompt(
@@ -30,14 +94,13 @@ export function commentPrompt(
   where: { repo: string; number: number; prUrl: string; path?: string; line?: number | null },
 ): string {
   const place = where.path ? ` on \`${where.path}${where.line ? `:${where.line}` : ''}\`` : '';
-  return [
-    `A review comment from @${c.author}${place} in ${where.repo}${gitlab(where.repo) ? '!' : '#'}${where.number} (${where.prUrl}):`,
-    '',
-    quote(c.text),
-    '',
-    `Comment: ${c.url}`,
-    `Help me address it.`,
-  ].join('\n');
+  return fillPrompt(promptTemplate('comment'), {
+    ...prFields({ html_url: where.prUrl, title: '', number: where.number }, where.repo),
+    author: c.author,
+    place,
+    comment: quote(c.text),
+    commentUrl: c.url,
+  });
 }
 
 // "Ask Claude" about code selected in a file: the question with the file as it is now, its diff in this PR and the
@@ -52,8 +115,7 @@ export function askPrompt(
 ): string {
   const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '\n(cut here for length)' : s);
   return [
-    `You're helping someone review a ${pr.html_url.includes('/-/merge_requests/') ? 'GitLab merge request' : 'GitHub pull request'}. They selected some code and have a question about it.`,
-    'Answer in Markdown, concisely and concretely, pointing at identifiers and lines. If the answer depends on code you can\'t see here, say so.',
+    fillPrompt(promptTemplate('ask'), { ...prFields(pr), path }),
     '',
     `PR: ${pr.html_url} (${pr.title})`,
     `File: ${path}`,
@@ -74,8 +136,7 @@ export function prAskPrompt(pr: { html_url: string; title: string; body: string 
     return take.length < d.length ? take + '\n(cut here for length)' : take;
   });
   return [
-    "You're helping someone review a GitHub pull request. They have a question about the whole PR.",
-    "Answer in Markdown, concisely and concretely, naming files and identifiers. If the answer depends on code you can't see here, say so.",
+    fillPrompt(promptTemplate('askPr'), prFields(pr)),
     '',
     `PR: ${pr.html_url} (${pr.title})`,
     `Description:\n${pr.body?.trim() || '(none)'}`,
@@ -94,11 +155,12 @@ export function reviewDonePrompt(
 ): string {
   const verdict = { APPROVE: 'approved it', REQUEST_CHANGES: 'requested changes', COMMENT: 'commented' }[event];
   const list = comments.map((c) => `- \`${c.path}${c.line ? `:${c.line}` : ''}\`: ${c.body.replace(/\s+/g, ' ').trim().slice(0, 500)}`);
-  const text = [
-    `I reviewed ${pr.html_url} (#${pr.number} ${pr.title}) in lgtm and ${verdict}.`,
-    body.trim() && `My summary:\n${quote(body, 1500)}`,
-    list.length && `My comments (${list.length}):\n${list.join('\n')}`,
-    list.length || event === 'REQUEST_CHANGES' ? 'Please address them, then tell me what changed.' : '',
-  ].filter(Boolean).join('\n\n');
+  const text = fillPrompt(promptTemplate('reviewDone'), {
+    ...prFields(pr),
+    verdict,
+    summary: body.trim() ? `My summary:\n${quote(body, 1500)}` : '',
+    comments: list.length ? `My comments (${list.length}):\n${list.join('\n')}` : '',
+    ask: list.length || event === 'REQUEST_CHANGES' ? 'Please address them, then tell me what changed.' : '',
+  });
   return text.length > 8000 ? text.slice(0, 7999) + '…' : text;
 }

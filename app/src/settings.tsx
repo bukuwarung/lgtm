@@ -1,3 +1,4 @@
+import { CLAUDE_PROMPTS, fillPrompt, type PromptKind } from './claude.ts';
 import { labMe } from './gitlab.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
@@ -1645,6 +1646,43 @@ function ClaudeFolders() {
           </tbody>
         </table>
       )}
+      <ClaudePrompts />
     </div>
+  );
+}
+
+// What lgtm says to Claude, each yours to word (claude.ts); the diff, files and answer format it also needs follow.
+const PROMPT_SAMPLE: Record<string, string> = {
+  kind: 'pull request', site: 'GitHub', ref: '#1234', url: 'https://github.com/acme/app/pull/1234', title: 'Retry payments on network errors', repo: 'acme/app',
+  branch: 'retry-payments', base: 'main', read: '`gh pr view 1234 --repo acme/app --comments` and `gh pr diff 1234 --repo acme/app`',
+  author: 'ana', place: ' on `RetryPolicy.kt:41`', comment: '> Should a declined card be retried too?', commentUrl: 'https://github.com/acme/app/pull/1234#discussion_r1',
+  path: 'RetryPolicy.kt', verdict: 'requested changes', summary: 'My summary:\n> Two things before this goes in.', comments: 'My comments (1):\n- `RetryPolicy.kt:41`: Declines shouldn\'t be retried.', ask: 'Please address them, then tell me what changed.',
+};
+function ClaudePrompts() {
+  return (
+    <>
+      <h5>Prompts</h5>
+      <p class="note">What lgtm says to Claude, yours to change. {'{name}'} fills in a value; what Claude also needs (the diff, the files, the format lgtm reads back) is added after your text.</p>
+      {(Object.keys(CLAUDE_PROMPTS) as PromptKind[]).map((k) => <ClaudePrompt k={k} />)}
+    </>
+  );
+}
+function ClaudePrompt({ k }: { k: PromptKind }) {
+  const p = CLAUDE_PROMPTS[k];
+  const [text, setText] = useStoredValue('claudePrompt.' + k, p.initial);
+  return (
+    <label class="slack-msg">
+      <span>
+        {p.label}
+        {text !== p.initial && (
+          <button class="md-reset" title="Back to lgtm's wording" onClick={(e) => (e.preventDefault(), setText(p.initial))}>
+            ↺
+          </button>
+        )}
+      </span>
+      <textarea rows={Math.min(8, text.split('\n').length + 1)} value={text} onInput={(e) => setText(e.currentTarget.value)} />
+      <pre class="prompt-preview">{fillPrompt(text || p.initial, PROMPT_SAMPLE)}{p.after ? `\n\n[${p.after}]` : ''}</pre>
+      <small>Fill-ins: {p.fields}</small>
+    </label>
   );
 }

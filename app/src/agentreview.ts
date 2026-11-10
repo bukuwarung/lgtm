@@ -10,6 +10,7 @@
 import { postAgentFindings, getRaw, loadPR, type Draft, type PRFile, type QueueItem } from './github.ts';
 import { askClaudeCli, own, term } from './platform.ts';
 import { parsePatch } from './diff.ts';
+import { fillPrompt, prFields, promptTemplate } from './claude.ts';
 
 export type AgentRun = {
   version: string; // the PR's head commit time when it ran (QueueItem.lastCommitAt): a new push runs it again
@@ -113,7 +114,7 @@ async function review(i: QueueItem): Promise<Pick<AgentRun, 'findings' | 'posted
   }
   const T = term(i.repo);
   const prompt = [
-    `You are an adversarial code reviewer. Review this ${T.pr} hard: find what will break. Look for bugs, wrong edge cases, race conditions, security problems, data loss, broken error handling, and risky changes without tests. No style nits, no praise, nothing you aren't confident about; at most 10 findings, the worst first. An empty list is fine.`,
+    fillPrompt(promptTemplate('agent'), prFields(pr, i.repo)), // yours to change (Settings → Claude Code → Prompts)
     'Answer with JSON only, no prose around it: {"summary": "one or two sentences", "findings": [{"path": "file path as in the diff", "line": 12, "side": "RIGHT", "severity": "high|medium|low", "title": "short", "body": "what is wrong and why, and what to do (Markdown)"}]}',
     'Line numbers: use the R numbers in the diff below (the new file); use side "LEFT" with an L number only for a removed line. Leave "line" out for a finding about a whole file.',
     `${T.PR}: ${pr.title}\n${pr.body ?? ''}`.slice(0, 8000),
