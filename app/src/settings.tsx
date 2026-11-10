@@ -1662,27 +1662,49 @@ function ClaudePrompts() {
   return (
     <>
       <h5>Prompts</h5>
-      <p class="note">What lgtm says to Claude, yours to change. {'{name}'} fills in a value; what Claude also needs (the diff, the files, the format lgtm reads back) is added after your text.</p>
-      {(Object.keys(CLAUDE_PROMPTS) as PromptKind[]).map((k) => <ClaudePrompt k={k} />)}
+      <p class="note">What lgtm says to Claude. Open one to change it; what Claude also needs follows your text.</p>
+      <div class="prompts">{(Object.keys(CLAUDE_PROMPTS) as PromptKind[]).map((k) => <ClaudePrompt k={k} />)}</div>
     </>
   );
 }
+// One prompt: folded to its name; open, its text beside a preview on a sample PR, and its fill-ins as chips that go in
+// where the cursor is.
 function ClaudePrompt({ k }: { k: PromptKind }) {
   const p = CLAUDE_PROMPTS[k];
   const [text, setText] = useStoredValue('claudePrompt.' + k, p.initial);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const edited = text !== p.initial;
+  const insert = (name: string) => {
+    const t = box.current;
+    const [a, b] = t ? [t.selectionStart, t.selectionEnd] : [text.length, text.length];
+    setText(text.slice(0, a) + `{${name}}` + text.slice(b));
+    requestAnimationFrame(() => t && (t.focus(), t.setSelectionRange(a + name.length + 2, a + name.length + 2)));
+  };
   return (
-    <label class="slack-msg">
-      <span>
-        {p.label}
-        {text !== p.initial && (
+    <details class="prompt">
+      <summary>
+        <span class="prompt-name">{p.label}</span>
+        {edited && <span class="prompt-edited">edited</span>}
+        {edited && (
           <button class="md-reset" title="Back to lgtm's wording" onClick={(e) => (e.preventDefault(), setText(p.initial))}>
             ↺
           </button>
         )}
-      </span>
-      <textarea rows={Math.min(8, text.split('\n').length + 1)} value={text} onInput={(e) => setText(e.currentTarget.value)} />
-      <pre class="prompt-preview">{fillPrompt(text || p.initial, PROMPT_SAMPLE)}{p.after ? `\n\n[${p.after}]` : ''}</pre>
-      <small>Fill-ins: {p.fields}</small>
-    </label>
+      </summary>
+      <div class="prompt-body">
+        <div class="prompt-edit">
+          <textarea ref={box} rows={Math.max(5, text.split('\n').length + 1)} value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label={p.label} />
+          <div class="prompt-fields">
+            {Object.entries(p.fields).map(([name, means]) => (
+              <button class="prompt-chip" title={means} onClick={() => insert(name)}>{`{${name}}`}</button>
+            ))}
+          </div>
+        </div>
+        <div class="prompt-see">
+          <pre class="prompt-preview">{fillPrompt(text || p.initial, PROMPT_SAMPLE)}</pre>
+          {p.after && <small class="note">Then lgtm adds {p.after}.</small>}
+        </div>
+      </div>
+    </details>
   );
 }

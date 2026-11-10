@@ -20,40 +20,43 @@ const isMr = (url: string) => url.includes('/-/merge_requests/');
 // (a name it doesn't know stays as written); what Claude must also have (the diff, the files, the answer's format) is
 // added after your text, so editing can't lose it.
 export type PromptKind = 'pr' | 'comment' | 'ask' | 'askPr' | 'agent' | 'reviewDone';
-const COMMON = '{kind} pull request or merge request · {ref} #12 or !12 · {url} · {title} · {repo} · {site} GitHub or GitLab';
-export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: string; after?: string }> = {
+// Each fill-in and what it becomes.
+const COMMON: Record<string, string> = {
+  kind: 'pull request, or merge request', ref: '#12, or !12', url: "the PR's address", title: 'its title', repo: 'owner/repo', site: 'GitHub or GitLab',
+};
+export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: Record<string, string>; after?: string }> = {
   pr: {
-    label: 'Open a PR in Claude Code (✳ Claude on a PR)',
+    label: 'Open a PR in Claude Code',
     initial: "Let's look at this {kind}: {url}\n{ref} {title} ({branch} → {base})\nRead it with {read}.",
-    fields: `${COMMON} · {branch} its branch · {base} the one it merges into · {read} the gh or glab commands that read it`,
+    fields: { ...COMMON, branch: 'its branch', base: 'the branch it merges into', read: 'the gh or glab commands that read it' },
   },
   comment: {
-    label: 'Help address a comment (✳ on a comment)',
+    label: 'Help address a comment',
     initial: 'A review comment from @{author}{place} in {repo}{ref} ({url}):\n\n{comment}\n\nComment: {commentUrl}\nHelp me address it.',
-    fields: `${COMMON} · {author} · {place} " on \`File.kt:41\`" for one on code · {comment} the comment, quoted · {commentUrl}`,
+    fields: { ...COMMON, author: "who wrote it", place: ' on `File.kt:41`, for one on code', comment: 'the comment, quoted', commentUrl: "the comment's address" },
   },
   ask: {
-    label: 'Ask Claude about selected code',
+    label: 'Ask about selected code',
     initial: "You're helping someone review a {site} {kind}. They selected some code and have a question about it.\nAnswer in Markdown, concisely and concretely, pointing at identifiers and lines. If the answer depends on code you can't see here, say so.",
-    fields: `${COMMON} · {path} the file`,
-    after: 'Then lgtm adds the PR, the file as it is now, its diff, what you selected and your question.',
+    fields: { ...COMMON, path: 'the file' },
+    after: 'the PR, the file as it is now, its diff, what you selected and your question',
   },
   askPr: {
-    label: 'Ask Claude about the whole PR',
+    label: 'Ask about the whole PR',
     initial: "You're helping someone review a {site} {kind}. They have a question about the whole {kind}.\nAnswer in Markdown, concisely and concretely, naming files and identifiers. If the answer depends on code you can't see here, say so.",
     fields: COMMON,
-    after: 'Then lgtm adds the description, the files changed, their diffs and your question.',
+    after: 'the description, the files changed, their diffs and your question',
   },
   agent: {
-    label: 'Claude Code reviews first: the brief',
+    label: 'Claude Code reviews first',
     initial: "You are an adversarial code reviewer. Review this {kind} hard: find what will break. Look for bugs, wrong edge cases, race conditions, security problems, data loss, broken error handling, and risky changes without tests. No style nits, no praise, nothing you aren't confident about; at most 10 findings, the worst first. An empty list is fine.",
     fields: COMMON,
-    after: 'Then lgtm adds the answer format it reads (findings as JSON, each with its file and line), the description, the numbered diff and the changed files.',
+    after: 'the answer format lgtm reads (findings as JSON, each with its file and line), the description, the numbered diff and the changed files',
   },
   reviewDone: {
-    label: 'Your review, sent to the Claude Code session that opened the PR',
+    label: 'Your review, back to its Claude Code session',
     initial: 'I reviewed {url} ({ref} {title}) in lgtm and {verdict}.\n\n{summary}\n\n{comments}\n\n{ask}',
-    fields: `${COMMON} · {verdict} approved it, requested changes, or commented · {summary} your summary, quoted · {comments} your comments, listed · {ask} "Please address them, then tell me what changed." when there's something to address (each empty when there's nothing)`,
+    fields: { ...COMMON, verdict: 'approved it, requested changes, or commented', summary: 'your summary, quoted (empty without one)', comments: 'your comments, listed (empty without)', ask: '"Please address them…", when there\'s something to address' },
   },
 };
 export const promptTemplate = (k: PromptKind) => {
