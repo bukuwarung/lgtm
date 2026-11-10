@@ -4362,6 +4362,29 @@ function AgentsMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   );
 }
 
+// Ask's conversations, kept (per account) so closing the panel loses nothing: by PR and commit, then what they're
+// about. ponytail: the latest 30 kept; an older one starts over.
+type Turn = { q: string; text: string; html: string; by: AgentId };
+const CONVOS = 'askConvos';
+const readConvos = (): Record<string, { at: number; turns: Turn[] }> => {
+  try {
+    return JSON.parse(localStorage.getItem(own(CONVOS)) ?? '{}');
+  } catch {
+    return {};
+  }
+};
+const convoOf = (k: string) => readConvos()[k]?.turns ?? [];
+function keepConvo(k: string, turns: Turn[]) {
+  const all = readConvos();
+  if (turns.length) all[k] = { at: Date.now(), turns };
+  else delete all[k];
+  const latest = Object.entries(all).sort((a, b) => b[1].at - a[1].at).slice(0, 30);
+  try {
+    localStorage.setItem(own(CONVOS), JSON.stringify(Object.fromEntries(latest)));
+  } catch {}
+}
+const hashOf = (t: string) => [...t].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7).toString(36);
+
 // Select code in a file, then "Ask": a question about it, answered by a coding agent's CLI (picked in the panel, the last one
 // remembered) with the file, its diff in this PR and the selection.
 function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
@@ -4373,7 +4396,16 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
   const [busy, setBusy] = useState(false);
   // The conversation so far: each question with its answer; a follow-up sends the earlier ones along (the CLI keeps
   // no session).
-  const [turns, setTurns] = useState<{ q: string; text: string; html: string; by: AgentId }[]>([]);
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const keyOf = (p: Panel) => `${repo}#${pr.number}@${pr.head.sha}:${p.ci ? `ci:${p.ci.check}` : p.path ? `sel:${p.path}:${hashOf(p.text)}` : 'pr'}`;
+  const asking = useRef(new Set<string>()); // conversations with a question under way
+  const shown = useRef(''); // the conversation on show, so one finishing after it's closed is kept, not shown
+  const open = (p: Panel) => {
+    const k = keyOf(p);
+    shown.current = k;
+    setPanel(p), setQ(''), setError(''), setTurns(convoOf(k));
+    return convoOf(k).length > 0;
+  };
   const [error, setError] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
   const { on: agents } = useAgents();
@@ -4393,13 +4425,13 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
         setSel({ path: file.id.slice(2), text: text.slice(0, 4000), x: Math.min(r.right, innerWidth - 140), y: r.bottom + 4 });
       });
     const away = () => setSel(null);
-    const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setTurns([]), setError('')); // the Agents menu's Ask
+    const whole = () => void open({ path: '', text: '' }); // the Agents menu's Ask
     // Why did it fail? (a failed check in the index): asked of the agent picked there, at once.
     const ci = (e: Event) => {
       const d = (e as CustomEvent<{ check: string; onBase: string | null; log: string; agent: AgentId }>).detail;
       const p = { path: '', text: '', ci: { check: d.check, onBase: d.onBase, log: d.log } };
-      setPanel(p), setQ(''), setTurns([]), setError(''), pickAgent(d.agent);
-      void send(p, 'Why did it fail?', d.agent, []);
+      pickAgent(d.agent);
+      if (!open(p)) void send(p, 'Why did it fail?', d.agent, []); // asked before, on this commit: as it was
     };
     addEventListener('lgtm:ask-pr', whole);
     addEventListener('lgtm:ask-ci', ci);
@@ -4408,7 +4440,10 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
     return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away), removeEventListener('lgtm:ask-pr', whole), removeEventListener('lgtm:ask-ci', ci));
   }, []);
   const ask = () => panel && q.trim() && who && !busy && send(panel, q.trim(), who, turns);
-  async function send(panel: Panel, asked: string, who: AgentId, turns: { q: string; text: string }[]) {
+  async function send(panel: Panel, asked: string, who: AgentId, turns: Turn[]) {
+    const k = keyOf(panel);
+    if (asking.current.has(k)) return; // already under way (closed and opened again meanwhile)
+    asking.current.add(k);
     setBusy(true);
     setError('');
     // ponytail: the earlier answers go along whole; a long conversation is cut to its last 6 turns.
@@ -4426,14 +4461,20 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
       }
       const text = await runAgent(prompt, who);
       const html = await renderGfm(text, repo); // GitHub sanitizes the HTML
-      setTurns((t) => [...t, { q: asked, text, html, by: who }]);
-      setQ('');
-      requestAnimationFrame(() => panelRef.current?.scrollTo({ top: panelRef.current.scrollHeight, behavior: 'smooth' }));
+      const all = [...turns, { q: asked, text, html, by: who }];
+      keepConvo(keyOf(panel), all);
+      if (shown.current === keyOf(panel)) {
+        // still on show (else it's kept for when it's opened again)
+        setTurns(all);
+        setQ('');
+        requestAnimationFrame(() => panelRef.current?.scrollTo({ top: panelRef.current.scrollHeight, behavior: 'smooth' }));
+      }
       if (panel.ci && !turns.length) notifyAgentDone(`${AGENTS[who].name}: why ${panel.ci.check} failed`, text.replace(/[`*_>#]/g, '').split('\n').find((l) => l.trim())?.slice(0, 160) ?? '', `/${repo}/pull/${pr.number}`);
     } catch (e: any) {
       setError(e.message);
     }
-    setBusy(false);
+    asking.current.delete(k);
+    setBusy(asking.current.size > 0);
   }
   return (
     <>
@@ -4442,7 +4483,7 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
           class="ask-btn primary"
           style={{ left: sel.x, top: sel.y }}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => (setPanel({ path: sel.path, text: sel.text }), setSel(null), setQ(''), setTurns([]), setError(''))}
+          onClick={() => (open({ path: sel.path, text: sel.text }), setSel(null))}
         >
           <AgentMark id={who} /> Ask {AGENTS[who].short}
         </button>
@@ -4462,7 +4503,12 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
               about {panel.ci ? `the failed check ${panel.ci.check}` : panel.path ? fileLabel(panel.path) : `this ${pageTerm().PR}`}
             </b>
             <span class="spacer" />
-            <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
+            {turns.length > 0 && !busy && (
+              <button class="link" title="Forget this conversation and ask again" onClick={() => (keepConvo(keyOf(panel), []), setTurns([]), panel.ci && void send(panel, 'Why did it fail?', who, []))}>
+                Start over
+              </button>
+            )}
+            <button title="Close" onClick={() => ((shown.current = ''), setPanel(null))}><Octicon name="x" /></button>
           </div>
           {panel.text ? <pre class="ask-sel">{panel.text}</pre> : <p class="note">{AGENTS[who].short} reads {panel.ci ? "the end of the job's log and the diff" : "the description and every file's diff, specs included"}.</p>}
           {turns.map((t) => (
