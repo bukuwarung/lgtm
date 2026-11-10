@@ -1238,3 +1238,16 @@ test("an agent's fix is shifted back to the indentation of the lines it replaces
   assert.equal(reindent('    kept();', '    old();'), '    kept();'); // already indented
   assert.equal(reindent('a();\n\nb();', '\tx();'), '\ta();\n\n\tb();'); // blank lines stay blank
 });
+
+test("an agent finding's fix becomes a suggestion only for lines in the diff, re-indented; GitLab ranges say their size", async () => {
+  const { suggestedFix } = await import('../src/agentreview.ts');
+  const { noteBody } = await import('../src/gitlab.ts');
+  const patch = '@@ -1,3 +1,3 @@\n fun a() {\n-  return x\n+  return y\n }';
+  assert.equal(suggestedFix(patch, 2, 2, 'return z'), '```suggestion\n  return z\n```');
+  assert.equal(suggestedFix(patch, 2, 3, '```kotlin\n  return z\n}\n```'), '```suggestion\n  return z\n}\n```');
+  assert.equal(suggestedFix(patch, 2, 5, 'x'), null); // line 5 isn't in the diff
+  assert.equal(suggestedFix(patch, 2, 2, '  return y'), null); // no change
+  const body = 'Fix it\n\n```suggestion\n  return z\n}\n```';
+  assert.equal(noteBody({ body, line: 3, startLine: 2 }), 'Fix it\n\n```suggestion:-1+0\n  return z\n}\n```');
+  assert.equal(noteBody({ body, line: 3 }), body);
+});

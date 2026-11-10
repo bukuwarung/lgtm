@@ -126,9 +126,9 @@ export function fixPrompt(pr: { html_url: string; title: string }, path: string,
 
 // An agent's answer comes back with its leading spaces trimmed: shifted right to where the lines it replaces start.
 export function reindent(text: string, like: string) {
-  const ind = (t: string) => Math.min(...t.split('\n').filter((l) => l.trim()).map((l) => l.match(/^[ \t]*/)![0].length));
-  const want = like.split('\n').find((l) => l.trim())?.match(/^[ \t]*/)![0] ?? '';
-  const add = want.length - (text.trim() ? ind(text) : want.length);
+  const first = (t: string) => t.split('\n').find((l) => l.trim())?.match(/^[ \t]*/)![0] ?? '';
+  const want = first(like);
+  const add = text.trim() ? want.length - first(text).length : 0; // their first lines lined up
   return add > 0 ? text.split('\n').map((l) => (l.trim() ? want.slice(0, add) + l : l)).join('\n') : text;
 }
 

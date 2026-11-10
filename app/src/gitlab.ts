@@ -425,7 +425,7 @@ export async function submitLabReview(prId: string, commitOID: string, event: Re
     const f = files.find((f) => f.filename === x.path);
     const where = { base_sha: refs.baseSha, start_sha: refs.startSha, head_sha: refs.headSha, old_path: f?.previous_filename ?? x.path, new_path: x.path };
     const position = x.line ? { ...where, position_type: 'text', ...(await linePosition(x, f?.patch)) } : { ...where, position_type: 'file' };
-    await send(host, `${base}/draft_notes`, 'POST', { note: x.body, position });
+    await send(host, `${base}/draft_notes`, 'POST', { note: noteBody(x), position });
   }
   if (drafts.length || (await getLabPending(repo, n))) await send(host, `${base}/draft_notes/bulk_publish`, 'POST');
   if (body) await send(host, `${base}/notes`, 'POST', { body });
@@ -433,6 +433,10 @@ export async function submitLabReview(prId: string, commitOID: string, event: Re
   if (event === 'REQUEST_CHANGES') await mutate(host, `mutation($p:ID!,$i:String!){mergeRequestRequestChanges(input:{projectPath:$p,iid:$i}){errors}}`, { p: split(repo).path, i: String(n) });
   forget(repo, n);
 }
+// A suggested change on GitLab covers only the comment's own (last) line unless it says how many lines above it
+// takes: a comment on a range says so for its suggestion blocks.
+export const noteBody = (x: Pick<Draft, 'body' | 'line' | 'startLine'>) =>
+  x.startLine && x.line && x.startLine < x.line ? x.body.replace(/^```suggestion[ \t]*$/gm, '```suggestion:-' + (x.line - x.startLine) + '+0') : x.body;
 // An agent's findings (agentreview.ts): as draft notes of mine, not published (pending), or as discussions posted now
 // (comment: not as drafts, which publishing would send with any of mine), the summary with them.
 export async function postLabAgentFindings(repo: string, n: number, drafts: Draft[], summary: string, mode: 'pending' | 'comment') {
@@ -447,10 +451,10 @@ export async function postLabAgentFindings(repo: string, n: number, drafts: Draf
   };
   if (mode === 'pending') {
     await send(host, `${base}/draft_notes`, 'POST', { note: summary });
-    for (const x of drafts) await send(host, `${base}/draft_notes`, 'POST', { note: x.body, position: await positionOf(x) });
+    for (const x of drafts) await send(host, `${base}/draft_notes`, 'POST', { note: noteBody(x), position: await positionOf(x) });
   } else {
     await send(host, `${base}/notes`, 'POST', { body: summary });
-    for (const x of drafts) await send(host, `${base}/discussions`, 'POST', { body: x.body, position: await positionOf(x) });
+    for (const x of drafts) await send(host, `${base}/discussions`, 'POST', { body: noteBody(x), position: await positionOf(x) });
   }
   forget(repo, n);
 }

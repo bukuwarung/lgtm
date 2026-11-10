@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
+import { notifyAgentDone, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
@@ -250,6 +250,7 @@ function CheckEntry({ c, repo, onRefresh, base, pr, files }: { c: Check; repo: s
       if (log === null) setLog(text);
       const answer = await runAgent(ciPrompt(pr, c.name, c.onBase ?? null, text, files), by);
       setWhy({ by, html: await renderGfm(answer, repo) }); // GitHub sanitizes the HTML
+      notifyAgentDone(`${AGENTS[by].name}: why ${c.name} failed`, answer.replace(/[`*_>#]/g, '').split('\n').find((l) => l.trim())?.slice(0, 160) ?? '', `/${repo}/pull/${pr.number}`);
     } catch (e: any) {
       setWhy({ by, error: e.message });
     }

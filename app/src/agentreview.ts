@@ -9,10 +9,10 @@
 // file instead. One run per PR and head commit, two at a time; the list shows the PRs being reviewed above "Needs your
 // review" (main.tsx), and each run is remembered per account (platform.ts own).
 import { postAgentFindings, getCompare, getRaw, loadPR, type Draft, type PRFile, type QueueItem } from './github.ts';
-import { own, term } from './platform.ts';
+import { notifyAgentDone, own, term } from './platform.ts';
 import { AGENTS, agentIdOf, autoAgent, detectAgents, runAgent, type AgentId } from './agents.ts';
 import { parsePatch } from './diff.ts';
-import { fillPrompt, prFields, promptTemplate } from './claude.ts';
+import { fillPrompt, prFields, promptTemplate, reindent } from './claude.ts';
 
 export type AgentRun = {
   version: string; // the PR's head commit when it ran: a new push runs it again
@@ -142,18 +142,21 @@ function pump() {
     review(i)
       .then((r) => {
         set(i.id, { ...base, state: 'done', at: Date.now(), ...r });
-        if (manual) say(`${by} reviewed ${i.repo.split('/').pop()}${term(i.repo).PR === 'MR' ? '!' : '#'}${i.number}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}, ${r.posted === 'pending' ? 'in your pending review' : 'posted as comments'}` : 'nothing to point out'}`);
+        notifyAgentDone(`${by} reviewed it`, `${ref(i)}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}` : 'nothing found'}`, `/${i.repo}/pull/${i.number}`);
+        if (manual) say(`${by} reviewed ${ref(i)}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}, ${r.posted === 'pending' ? 'in your pending review' : 'posted as comments'}` : 'nothing to point out'}`);
       })
       .catch((e: Error) => {
         set(i.id, { ...base, state: 'failed', at: Date.now(), error: e.message });
+        notifyAgentDone(`${by} couldn't review it`, `${ref(i)}: ${e.message}`, `/${i.repo}/pull/${i.number}`);
         if (manual) say(`${by} couldn't review it: ${e.message}`);
       })
       .finally(() => (active--, inflight.delete(i.id), pump()));
   }
 }
+const ref = (i: Target) => `${i.repo.split('/').pop()}${term(i.repo).PR === 'MR' ? '!' : '#'}${i.number}`;
 const say = (text: string) => (dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text } })), dispatchEvent(new Event('lgtm:refresh')));
 
-type Finding = { path: string; line?: number; side?: 'RIGHT' | 'LEFT'; severity?: string; title: string; body: string };
+type Finding = { path: string; line?: number; start_line?: number; side?: 'RIGHT' | 'LEFT'; severity?: string; title: string; body: string; fix?: string };
 const SKIP = /(^|\/)([\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.(min\.js|map|svg|png|jpe?g|gif|webp|pdf|zip|jar)$/i;
 
 async function review(i: Target & { agent: AgentId; since?: string }): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
@@ -179,6 +182,7 @@ async function review(i: Target & { agent: AgentId; since?: string }): Promise<P
     fillPrompt(promptTemplate('agent'), prFields(pr, i.repo)), // yours to change (Settings → Coding agents → Prompts)
     'Answer with JSON only, no prose around it: {"summary": "one or two sentences", "findings": [{"path": "file path as in the diff", "line": 12, "side": "RIGHT", "severity": "high|medium|low", "title": "short", "body": "what is wrong and why, and what to do (Markdown)"}]}',
     'Line numbers: use the R numbers in the diff below (the new file); use side "LEFT" with an L number only for a removed line. Leave "line" out for a finding about a whole file.',
+    'A simple fix: when a finding\'s fix is small and certain (a few lines, nothing to decide), add "fix": the replacement for its R lines, from "start_line" (add it when it is more than one line) to "line", whole lines with their indentation, no code fences. They must all be lines of the diff. Otherwise leave "fix" out.',
     since ? `This is a re-review: you reviewed this ${T.PR} before, and its author asked again. The diff below is only what changed since then (from commit ${since.slice(0, 7)}): review those changes, including whether they break anything around them.` : '',
     `${T.PR}: ${pr.title}\n${pr.body ?? ''}`.slice(0, 8000),
     `The diff, each line numbered (R: the new file, L: the old):\n${shown.map((f) => numbered(f)).join('\n\n')}`.slice(0, 200_000),
@@ -200,7 +204,10 @@ async function review(i: Target & { agent: AgentId; since?: string }): Promise<P
     const ok = f.line != null && !(since && f.side === 'LEFT') && commentable(file, f.side === 'LEFT' ? 'LEFT' : 'RIGHT', f.line);
     const sev = f.severity ? `${f.severity[0].toUpperCase()}${f.severity.slice(1)}: ` : '';
     const where = !ok && f.line ? ` (line ${f.line})` : '';
-    return [{ id: `agent-${k}`, path: f.path, side: f.side === 'LEFT' ? 'LEFT' : 'RIGHT', ...(ok ? { line: f.line } : {}), body: `🤖 **${sev}${f.title}**${where}\n\n${f.body}` }];
+    const start = f.start_line && f.start_line < f.line! ? f.start_line : f.line!;
+    const fix = ok && f.side !== 'LEFT' && typeof f.fix === 'string' ? suggestedFix(file.patch ?? '', start, f.line!, f.fix) : null;
+    const range = fix && start < f.line! ? { startLine: start } : {};
+    return [{ id: `agent-${k}`, path: f.path, side: f.side === 'LEFT' ? 'LEFT' : 'RIGHT', ...(ok ? { line: f.line } : {}), ...range, body: `🤖 **${sev}${f.title}**${where}\n\n${f.body}${fix ? `\n\n${fix}` : ''}` }];
   });
   const mode = postMode();
   const summary = `🤖 ${since ? `Re-review of the changes since ${since.slice(0, 7)}` : 'Adversarial review'} by ${AGENTS[i.agent].name} (from lgtm): ${drafts.length ? `${drafts.length} finding${drafts.length > 1 ? 's' : ''}` : 'nothing found'}.${parsed.summary ? `\n\n${parsed.summary}` : ''}`;
@@ -218,6 +225,20 @@ function numbered(f: PRFile) {
   return out.join('\n');
 }
 // A line a comment can go on: in the diff, on that side.
+// A finding's fix as a suggested change: the new-side lines it replaces must all be in the diff (else none); its
+// indentation put back where the agent dropped it (GitLab's range: gitlab.ts noteBody).
+export function suggestedFix(patch: string, start: number, end: number, fix: string): string | null {
+  const text = new Map(parsePatch(patch).flatMap((h) => h.lines.flatMap((l) => (l.kind !== '-' && l.new ? [[l.new, l.text] as const] : []))));
+  const old: string[] = [];
+  for (let n = start; n <= end; n++) {
+    if (!text.has(n)) return null;
+    old.push(text.get(n)!);
+  }
+  const lines = fix.replace(/^\s*```[\w-]*\n?|\n?```\s*$/g, '').replace(/^\n+|\s+$/g, '');
+  if (lines === old.join('\n').trimEnd()) return null; // no change
+  return `\`\`\`suggestion\n${reindent(lines, old.join('\n'))}\n\`\`\``;
+}
+
 function commentable(f: PRFile, side: 'LEFT' | 'RIGHT', line: number) {
   return parsePatch(f.patch ?? '').some((h) => h.lines.some((l) => (side === 'LEFT' ? l.kind === '-' && l.old === line : l.kind !== '-' && l.new === line)));
 }

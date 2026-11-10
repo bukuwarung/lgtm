@@ -472,6 +472,7 @@ export function Settings() {
           <Flag k="notifyReady" initial={true} label={`Your ${T.PR} is ready to merge`} hint="Approved, checks passed, nothing in the way and no auto-merge on: the notification opens its merge box." />
           <Flag k="notifyMentions" initial={true} label={`Someone mentions you in a ${T.PR}`} />
           <Flag k="notifyQueue" initial={true} label={`Your ${T.PR} left the merge queue, or its auto-merge turned off`} />
+          <Flag k="notifyAgents" initial={true} label="A coding agent finished" hint={`A review, why a check failed, or the check of your threads, done while lgtm was in the background: the notification opens the ${T.PR}.`} />
         </fieldset>
         <label class="set-row">
           <span>

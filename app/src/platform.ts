@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 // its cached copy, the bell, PRs opened lately, files marked viewed on GitLab, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|threadCheck:)/;
 let account = '';
 // The account of last time, per site (GitHub's, or a GitLab host's): the next launch starts as it.
 const lastKey = () => (viewAs() ? `lastLogin:${viewAs()}` : 'lastLogin');
@@ -592,6 +592,19 @@ export async function askNotifications(): Promise<boolean> {
   return (await n.isPermissionGranted()) || (await n.requestPermission()) === 'granted';
 }
 // `route`: the PR a click opens ("/owner/repo/pull/n"); empty, just lgtm.
+// A coding agent's work done (a review, a CI diagnosis, a thread check) while lgtm isn't in front: a desktop
+// notification that opens the PR, per Settings → Desktop notifications.
+export function notifyAgentDone(title: string, body: string, route: string) {
+  if (document.hasFocus()) return; // in front, the page says it
+  const on = (k: string) => {
+    try {
+      return localStorage.getItem(own(k)) !== '0';
+    } catch {
+      return true;
+    }
+  };
+  if (on('notifyRequests') && on('notifyAgents')) void notify(title, body, route);
+}
 export async function notify(title: string, body: string, route: string) {
   let sound = true; // Settings → Desktop notifications: Play a sound
   try {
