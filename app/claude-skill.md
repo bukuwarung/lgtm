@@ -6,7 +6,7 @@ description: Open a GitHub pull request (or GitLab merge request) for review in 
 # Reviewing pull requests in lgtm
 
 lgtm is the user's PR review app, a macOS app. It can open a PR
-straight from a link that also carries this session's ID, so the user can come back here from lgtm: its ✳ Claude button
+straight from a link that also carries this session's ID, so the user can come back here from lgtm: the Agents menu
 on that PR opens this session, and from there lgtm leaves messages for it (their review, a comment to address).
 
 ## When

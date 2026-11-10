@@ -1487,3 +1487,6 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .t-verdict.v-open { color: var(--muted); }
 .ix-why { margin: 2px 8px 8px 14px; padding: 6px 8px; border-left: 3px solid var(--accent); background: var(--soft); border-radius: 4px; font-size: calc(13px * var(--ts)); }
 .ix-icon-btn .agent-mark { width: 13px; height: 13px; }
+.set-fold { margin: 6px 0; }
+.set-fold > summary { cursor: pointer; padding: 4px 0; }
+.set-fold > summary small { display: inline; margin-left: 6px; color: var(--muted); }

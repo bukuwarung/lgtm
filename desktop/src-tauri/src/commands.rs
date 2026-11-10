@@ -1144,15 +1144,23 @@ pub async fn claude_mod() -> Value {
 /// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md, built in by build.rs),
 /// installed for the user in ~/.claude/skills; as the server's claudeSkill().
 const SKILL: &str = include_str!(concat!(env!("OUT_DIR"), "/claude-skill.md"));
+const CODEX_SKILL: &str = include_str!(concat!(env!("OUT_DIR"), "/codex-skill.md"));
+/// Codex's (agent "codex") goes in $CODEX_HOME/skills.
 #[tauri::command]
-pub async fn claude_skill(install: bool) -> Result<Value, String> {
-    let path = home().join(".claude").join("skills").join("lgtm-review").join("SKILL.md");
+pub async fn claude_skill(install: bool, agent: Option<String>) -> Result<Value, String> {
+    let codex = agent.as_deref() == Some("codex");
+    let (root, text) = if codex {
+        (std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| home().join(".codex")), CODEX_SKILL)
+    } else {
+        (home().join(".claude"), SKILL)
+    };
+    let path = root.join("skills").join("lgtm-review").join("SKILL.md");
     if install {
         std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-        std::fs::write(&path, SKILL).map_err(|e| e.to_string())?;
+        std::fs::write(&path, text).map_err(|e| e.to_string())?;
     }
     let have = std::fs::read_to_string(&path).ok();
-    Ok(json!({ "installed": have.is_some(), "current": have.as_deref() == Some(SKILL), "path": path.to_string_lossy() }))
+    Ok(json!({ "installed": have.is_some(), "current": have.as_deref() == Some(text), "path": path.to_string_lossy() }))
 }
 
 /// Text onto the clipboard (Help → Copy Diagnostics comes from the menu, without the click a web page needs).

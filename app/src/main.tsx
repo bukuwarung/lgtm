@@ -1464,7 +1464,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
   // The Claude Code sessions linked to listed PRs, and what each is doing, every 15 seconds.
   const [claude, setClaude] = useState<Map<string, 'working' | 'waiting' | 'idle'>>(new Map());
-  const linkedIds = [...new Set((items ?? []).map((i) => linkedClaude(i.repo, i.number)?.id).filter((x): x is string => !!x))].sort().join(' ');
+  const linkedIds = [...new Set((items ?? []).map((i) => linkedClaude(i.repo, i.number)).filter((l) => l && l.agent !== 'codex').map((l) => l!.id))].sort().join(' ');
   useEffect(() => {
     if (!linkedIds) return setClaude(new Map());
     let stop = false;
@@ -1645,7 +1645,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         )}
         {kind === REVIEWING && <AgentPill i={i} />}
         {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
-        {clauded(i) && <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>}
+        {clauded(i) && (linkedClaude(i.repo, i.number)?.agent === 'codex'
+          ? <span class="pill p-claude" title="Its Codex conversation pushed commits since you last opened it here"><Tg i="codex" t="updated" /></span>
+          : <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>)}
         {(kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} presence={presence} /> : null}
         {i.estimate && <span
           class="pill p-time"
@@ -1769,12 +1771,13 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   );
 }
 
-// A PR opened with ?claude=<session> (the lgtm-review skill): remember the session for that PR, and drop it from the route.
+// A PR opened with ?claude=<session> or ?codex=<conversation> (the lgtm-review skill): remember it for that PR, and drop
+// it from the route.
 function takeClaudeLink() {
-  const from = location.hash.match(/[?&]claude=([\w-]{1,80})/)?.[1];
+  const from = location.hash.match(/[?&](claude|codex)=([\w-]{1,80})/);
   const r = from && parseRoute(location.hash);
   if (!r) return;
-  linkClaude(r.repo, r.n, from!);
+  linkClaude(r.repo, r.n, from![2], from![1] === 'codex' ? 'codex' : undefined);
   history.replaceState(null, '', `#/${r.repo}/pull/${r.n}`);
 }
 takeClaudeLink();

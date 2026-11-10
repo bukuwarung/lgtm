@@ -1010,13 +1010,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       throw e;
     });
     setPending(null);
-    // A Claude Code session sent this PR here: offer to send it the outcome (a message stays up past moving on).
+    // A Claude Code session or Codex conversation sent this PR here: offer to send it the outcome (a message stays up
+    // past moving on).
     const from = linkedClaude(repo, n);
     if (from) {
       const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
       dispatchEvent(
         new CustomEvent('lgtm:toast', {
-          detail: { text: `This ${pageTerm().PR} has a Claude Code session.`, action: ['Send it your review', () => void backToClaude(from.id, text).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
+          detail: { text: `This ${pageTerm().PR} has a ${from.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'}.`, action: ['Send it your review', () => void backToClaude(from.id, text, from.agent).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
         }),
       );
     }
@@ -4225,7 +4226,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   const [note, setNote] = useState('');
   const [menu, setMenu] = useState(false);
   const { on: agents } = useAgents();
-  const claudeOn = agents.includes('claude');
+  const claudeOn = agents.includes('claude'), codexOn = agents.includes('codex');
   useEffect(() => {
     if (!menu) return;
     const away = (e: Event) => !(e.target as Element).closest?.('.claude-menu') && setMenu(false);
@@ -4234,7 +4235,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
     addEventListener('keydown', esc);
     return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
   }, [menu]);
-  const [offer, setOffer] = useState(false); // the lgtm-review skill isn't installed: offer it
+  const [offer, setOffer] = useState<AgentId | null>(null); // that agent's lgtm-review skill isn't installed: offer it
   const [offerSkill, noOffer] = useStoredFlag('offerSkill', true);
   const [offerMod, setOfferMod] = useState(false); // the lgtm-links mod isn't installed: suggest it
   const [suggestMod, noModOffer] = useStoredFlag('offerMod', true);
@@ -4243,6 +4244,9 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   const [, setTick] = useState(0);
   const pr = parsePrUrl(prUrl) ?? { repo: '', n: 0 };
   const from = linkedClaude(pr.repo, pr.n);
+  const linkAgent: AgentId = from?.agent === 'codex' ? 'codex' : 'claude'; // whose session (conversation) it is
+  // A comment's button: the linked session's agent, else Claude Code's new session, else Codex's.
+  const sessAgent: AgentId | null = from && agents.includes(linkAgent) ? linkAgent : claudeOn ? 'claude' : codexOn ? 'codex' : null;
   useEffect(() => {
     const t = () => setTick((x) => x + 1);
     addEventListener('lgtm:claude-link', t);
@@ -4251,7 +4255,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   // The linked session's title and state (working, waiting for you), every 10 seconds; an app session that's gone
   // (archived, deleted) is let go.
   useEffect(() => {
-    if (!from) return setSession(null);
+    if (!from || from.agent === 'codex') return setSession(null); // Codex keeps no state lgtm can read
     let stop = false;
     const look = () =>
       claudeSessionState(from.id).then((s) => {
@@ -4267,27 +4271,36 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
     setNote(text);
     setTimeout(() => setNote(''), 4000);
   };
-  const go = async (e: { altKey: boolean }) => {
+  // To its linked session (conversation), with the comment left for it; or a new one with the PR or comment in the
+  // prompt: Claude Code's in the repo's folder, then linked once the Claude app records it; Codex's linked once its
+  // skill sends the PR back here.
+  const go = async (e: { altKey: boolean }, a: AgentId) => {
     setMenu(false);
-    if (from && !e.altKey) return flash(await backToClaude(from.id, label ? '' : prompt));
+    if (from && !e.altKey && linkAgent === a) return flash(await backToClaude(from.id, label ? '' : prompt, from.agent));
+    if (a === 'codex') {
+      await openClaude(`codex://threads/new?prompt=${encodeURIComponent(prompt)}`);
+      if (offerSkill && !(await claudeSkill(false, 'codex').catch(() => null))?.installed) setOffer('codex');
+      return;
+    }
     await openClaude(claudeNewLink(prompt, claudeFolder(repo)));
     linkNewClaude(pr.repo, pr.n, prUrl);
-    if (offerSkill && !(await claudeSkill().catch(() => null))?.installed) return setOffer(true);
+    if (offerSkill && !(await claudeSkill().catch(() => null))?.installed) return setOffer('claude');
     if (suggestMod && (await claudeMod().catch(() => null))?.installed === false) setOfferMod(true);
   };
-  const install = () => claudeSkill(true).then(() => (setOffer(false), flash(`Skill installed: Claude can now send ${pageTerm().PRs} here`)), (e) => flash(`Couldn't install it: ${e.message}`));
+  const install = (a: AgentId) => claudeSkill(true, a).then(() => (setOffer(null), flash(`Skill installed: ${AGENTS[a].short} can now send ${pageTerm().PRs} here`)), (e) => flash(`Couldn't install it: ${e.message}`));
   const what = label ? `this ${pageTerm().PR}` : 'this comment';
-  if (!label && !claudeOn) return null;
+  const place = (a: AgentId) => (a === 'codex' ? 'Codex conversation' : 'Claude Code session');
+  if (!label && !sessAgent) return null;
   return (
     <span class="claude-menu">
       <button
         class={`${label ? 'claude-btn' : 'copy-link'}${from ? ' linked' : ''}`}
-        title={label ? `Coding agents: a review or a question about this ${pageTerm().PR}${claudeOn ? ', or its Claude Code session' : ''}` : from ? `Open its Claude Code session${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
+        title={label ? `Coding agents: a review or a question about this ${pageTerm().PR}, or its session` : from && sessAgent === linkAgent ? `Open its ${place(sessAgent!)}${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new one)` : `Start a ${place(sessAgent!)} on ${what}`}
         aria-haspopup={label ? 'menu' : undefined}
         aria-expanded={label ? menu : undefined}
-        onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e))}
+        onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e, sessAgent ?? 'claude'))}
       >
-        {!label ? <AgentMark id="claude" /> : agents.length === 1 ? <><AgentMark id={agents[0]} /> {AGENTS[agents[0]].short}</> : <><Octicon name="dependabot" /> {label}</>}
+        {!label ? <AgentMark id={sessAgent!} /> : agents.length === 1 ? <><AgentMark id={agents[0]} /> {AGENTS[agents[0]].short}</> : <><Octicon name="dependabot" /> {label}</>}
         {from && <span class={`claude-dot${session?.state === 'waiting' ? ' waiting' : ''}`} aria-label="linked to a session" />}
         {label && session?.state === 'working' && <span class="claude-state"> working…</span>}
         {label && session?.state === 'waiting' && <span class="claude-state waiting"> waiting for you</span>}
@@ -4309,17 +4322,22 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
               <Octicon name="comment-discussion" /> Ask a question about this {pageTerm().PR} <small>no session</small>
             </button>
           )}
-          {claudeOn && (
-            <button role="menuitem" onClick={() => go({ altKey: false })}>
-              <AgentMark id="claude" /> {from ? 'Open its Claude Code session' : 'Start a Claude Code session'}
-              {from && title && <small>{title}</small>}
-            </button>
-          )}
-          {claudeOn && from && (
-            <button role="menuitem" onClick={() => go({ altKey: true })}>
-              <AgentMark id="claude" /> New Claude Code session <small>⌥-click</small>
-            </button>
-          )}
+          {(['claude', 'codex'] as const).filter((a) => agents.includes(a)).map((a) => {
+            const mine = !!from && linkAgent === a;
+            return (
+              [
+                <button key={a} role="menuitem" onClick={() => go({ altKey: false }, a)}>
+                  <AgentMark id={a} /> {mine ? `Open its ${place(a)}` : `Start a ${place(a)}`}
+                  {mine && title && <small>{title}</small>}
+                </button>,
+                mine && (
+                  <button key={a + '-new'} role="menuitem" onClick={() => go({ altKey: true }, a)}>
+                    <AgentMark id={a} /> New {place(a)} <small>⌥-click</small>
+                  </button>
+                ),
+              ]
+            );
+          })}
           {!agents.length && <p class="note">No coding agent is on. Install Claude Code or Codex, or switch one on in Settings → Coding agents.</p>}
         </div>
       )}
@@ -4333,8 +4351,8 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
       )}
       {offer && !note && (
         <span class="claude-note">
-          Add the lgtm skill so Claude sends PRs ready for review here, linked to its session.{' '}
-          <button class="link" onClick={install}>Add it</button> · <button class="link" onClick={() => (setOffer(false), noOffer())}>Don't ask again</button>
+          Add the lgtm skill so {AGENTS[offer].short} sends {pageTerm().PRs} ready for review here, linked to its {offer === 'codex' ? 'conversation' : 'session'}.{' '}
+          <button class="link" onClick={() => install(offer)}>Add it</button> · <button class="link" onClick={() => (setOffer(null), noOffer())}>Don't ask again</button>
         </span>
       )}
     </span>

@@ -227,8 +227,8 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
 
 - Claude Code and Codex, each found through its CLI and switched on or off in Settings → Coding agents, with its own model and effort. They run with no tools: they read what lgtm gives them and answer.
 - A PR's **Agents** menu asks any of them for an adversarial review, or a question about the PR; select code to ask about just that. Or have one review each PR before it reaches “Needs your review” (Settings → Reviewing picks which).
-- With Claude Code, the menu also opens the PR's Claude Code session, or starts one with the PR in the prompt; you see whether it's working or waiting for you.
-- Claude sends PRs here for review, and gets your review back to act on.
+- The menu also opens the PR's Claude Code session or Codex conversation, or starts one with the PR in the prompt; for Claude Code you see whether it's working or waiting for you.
+- With the lgtm-review skill (Settings → Coding agents, for each agent), Claude Code and Codex send PRs here for review, and get your review back to act on.
 - The `lgtm-links` mod for Claude Code puts an **Open in lgtm** button under replies that link a PR and under `gh pr create`, and adds `/lgtm` (the PR given, else the last one linked, else this branch's). PRs it opens are linked to the session, so the Agents menu comes back to it, and a review or comment you send the session from lgtm reaches it by itself, no "check lgtm" needed. At the prompt of a terminal session:
 
   ```

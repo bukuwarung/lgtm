@@ -26,7 +26,7 @@ const COMMON: Record<string, string> = {
 };
 export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: Record<string, string>; after?: string }> = {
   pr: {
-    label: 'Claude Code session',
+    label: 'Start a session',
     initial: "Let's look at this {kind}: {url}\n{ref} {title} ({branch} → {base})\nRead it with {read}.",
     fields: { ...COMMON, branch: 'its branch', base: 'the branch it merges into', read: 'the gh or glab commands that read it' },
     after: 'from a comment: the comment, quoted, and "Help me address it."',

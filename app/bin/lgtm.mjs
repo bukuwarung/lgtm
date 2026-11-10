@@ -694,9 +694,12 @@ async function claudeSessions() {
   return out.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
-// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md), installed for the user.
-const SKILL = join(homedir(), '.claude', 'skills', 'lgtm-review', 'SKILL.md');
-const skillText = () => readFile(new URL('../claude-skill.md', import.meta.url), 'utf8');
+// The lgtm-review skill that sends PRs ready for review to lgtm, installed for the user: Claude Code's
+// (app/claude-skill.md, in ~/.claude/skills) or Codex's (app/codex-skill.md, in $CODEX_HOME/skills).
+const SKILLS = {
+  claude: { file: join(homedir(), '.claude', 'skills', 'lgtm-review', 'SKILL.md'), text: '../claude-skill.md' },
+  codex: { file: join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'skills', 'lgtm-review', 'SKILL.md'), text: '../codex-skill.md' },
+};
 // Messages lgtm leaves for a Claude Code session (a comment to address, a review), read by its lgtm-review skill when
 // the user says "check lgtm" there: ~/.config/lgtm/outbox/<session>.md, appended to, deleted by the skill once read.
 const SESSION_ID = /^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -750,11 +753,12 @@ async function claudeMod() {
   return { installed: Object.keys(d?.plugins ?? {}).some((k) => k.startsWith('lgtm-links@')) };
 }
 
-async function claudeSkill(install) {
-  const want = await skillText();
-  if (install) await mkdir(dirname(SKILL), { recursive: true }).then(() => writeFile(SKILL, want));
-  const have = await readFile(SKILL, 'utf8').catch(() => null);
-  return { installed: have != null, current: have === want, path: SKILL };
+async function claudeSkill(install, agent = 'claude') {
+  const s = SKILLS[agent] ?? SKILLS.claude;
+  const want = await readFile(new URL(s.text, import.meta.url), 'utf8');
+  if (install) await mkdir(dirname(s.file), { recursive: true }).then(() => writeFile(s.file, want));
+  const have = await readFile(s.file, 'utf8').catch(() => null);
+  return { installed: have != null, current: have === want, path: s.file };
 }
 
 const json = (res, status, value) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(value));
@@ -814,7 +818,7 @@ const server = createServer(async (req, res) => {
   if (path === '/claude-outbox' && req.method === 'POST') return readJson(req).then(leaveForClaude).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-session') return claudeSession(new URL(req.url ?? '/', ORIGIN).searchParams.get('id')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-mod') return claudeMod().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
-  if (path === '/claude-skill') return claudeSkill(req.method === 'POST').then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
+  if (path === '/claude-skill') return claudeSkill(req.method === 'POST', new URL(req.url ?? '/', ORIGIN).searchParams.get('agent') ?? 'claude').then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-sessions') return claudeSessions().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/integrations') {
     const plain = (s = '') => s.replace(/\x1b\[[0-9;]*m/g, ''); // the CLIs colour their output

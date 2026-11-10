@@ -1644,20 +1644,21 @@ function BackupSection() {
   );
 }
 
-// The lgtm-review skill for Claude Code: lets Claude open PRs ready for review here, linked back to its session.
-function ClaudeSkill() {
+// An agent's lgtm-review skill (Claude Code's or Codex's): it opens PRs ready for review here, linked to its session or
+// conversation, and reads your review back.
+function AgentSkill({ agent }: { agent: AgentId }) {
   const [s, setS] = useState<SkillStatus | null>(null);
   const [err, setErr] = useState('');
-  useEffect(() => void claudeSkill().then(setS, (e) => setErr(e.message)), []);
-  const install = () => claudeSkill(true).then((x) => (setS(x), setErr('')), (e) => setErr(e.message));
+  useEffect(() => void claudeSkill(false, agent).then(setS, (e) => setErr(e.message)), []);
+  const install = () => claudeSkill(true, agent).then((x) => (setS(x), setErr('')), (e) => setErr(e.message));
+  const where = agent === 'codex' ? 'conversation' : 'session';
   return (
     <div class="set-row">
       <span>
-        Claude Code skill
+        lgtm-review skill
         <small>
-          Lets Claude open a PR that's ready for review here, linked to its session: the PR's Agents menu goes back to it, and after
-          your review lgtm offers to send it the outcome. Claude asks once whether you want this.
-          {s?.installed && <> Installed in <code>{s.path}</code>.</>}
+          {AGENTS[agent].short} opens {T.PRs} ready for review here, linked to its {where} (the Agents menu goes back to it), and reads your review when you say
+          “check lgtm” there.{s?.installed && <> In <code>{s.path}</code>.</>}
         </small>
         {err && <small class="error">{err}</small>}
       </span>
@@ -1674,10 +1675,10 @@ function ClaudeMod() {
   return (
     <div class="set-row">
       <span>
-        Claude Code mod
+        lgtm-links mod
         <small>
-          An Open in lgtm button under replies that link a PR and under <code>gh pr create</code>, <code>/lgtm</code>, and your reviews reaching the session by
-          themselves. {installed === false && <>Install it from a terminal: <code>{MOD_INSTALL}</code></>}
+          An Open in lgtm button under replies that link a {T.PR}, <code>/lgtm</code>, and your reviews reaching the session by themselves.
+          {installed === false && <> From a terminal: <code>{MOD_INSTALL}</code></>}
         </small>
       </span>
       {installed ? <CheckMark state="success" title="Installed" /> : installed === false && <button onClick={() => copyText(MOD_INSTALL).then(() => setCopied(true))}>{copied ? 'Copied' : 'Copy the install command'}</button>}
@@ -1726,32 +1727,37 @@ function AgentRow({ id }: { id: AgentId }) {
               </select>
             </label>
           </div>
+          <AgentSkill agent={id} />
+          {id === 'claude' && (
+            <>
+              <ClaudeMod />
+              <ClaudeFolders />
+            </>
+          )}
         </fieldset>
       )}
     </div>
   );
 }
 
-// The coding agents (agents.ts): each one's switch, model and effort; Claude Code's extras while it's on; the prompts.
+// The coding agents (agents.ts): each one's switch, model and effort, and what links it to lgtm; then the prompts.
 function CodingAgents() {
-  const { on, detected } = useAgents();
+  const { detected } = useAgents();
   return (
     <div class="set-group">
       <h4>Coding agents</h4>
       <p class="note">
-        lgtm runs them through their CLIs, signed in as you are, with no tools: they read what lgtm gives them and answer. A review or a question picks its
-        agent each time (the {T.PR}'s Agents menu, the Ask panel); the automatic review uses the one under Reviewing.{' '}
+        Each one found through its CLI, signed in as you are. Reviews and questions run with no tools: the agent reads what lgtm gives it and answers.{' '}
         {detected && <button class="link" onClick={() => detectAgents(true).then(() => dispatchEvent(new Event('lgtm:agents-set')))}>Look again</button>}
       </p>
       {AGENT_IDS.map((id) => <AgentRow key={id} id={id} />)}
-      {on.includes('claude') && <ClaudeFolders />}
       <ClaudePrompts />
     </div>
   );
 }
 
-// Claude Code: its skill and mod, and which local checkout a new session for each repo opens in (the Agents menu).
-// Without one, Claude asks for a folder itself.
+// Which local checkout a new Claude Code session for each repo opens in (the Agents menu). Without one, Claude asks
+// for a folder itself.
 function ClaudeFolders() {
   const [raw, setRaw] = useStoredValue('claudeFolders', '{}');
   const folders: Record<string, string> = (() => {
@@ -1771,15 +1777,12 @@ function ClaudeFolders() {
     else delete next[repo];
     setRaw(JSON.stringify(next));
   };
+  const set_n = Object.keys(folders).length;
   return (
-    <>
-      <h5><AgentMark id="claude" /> Claude Code sessions</h5>
-      <p class="note">
-        The {T.PR}'s Agents menu, and the Claude mark on a comment, open a Claude Code session in the Claude desktop app with the {T.PR} or comment in the prompt.
-        Set where each repo is checked out so the session starts there.
-      </p>
-      <ClaudeSkill />
-      <ClaudeMod />
+    <details class="set-fold">
+      <summary>
+        Where a new session starts, per repo <small>{set_n ? `${set_n} set` : 'none set: Claude asks'}</small>
+      </summary>
       {!repos ? (
         <Lines />
       ) : (
@@ -1796,7 +1799,7 @@ function ClaudeFolders() {
           </tbody>
         </table>
       )}
-    </>
+    </details>
   );
 }
 

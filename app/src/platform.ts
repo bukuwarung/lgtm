@@ -662,8 +662,8 @@ export async function initDesktop(go: (route: string) => void) {
   const open = (urls: string[] | null) => {
     // lgtm://owner/repo/pull/n, or a GitLab MR's lgtm://host/group/…/project/pull/n (or …/-/merge_requests/n).
     const m = urls?.[0]?.replace(/^lgtm:\/\//, '').split(/[?#]/)[0].replace('/-/merge_requests/', '/pull/').match(/^([\w.:-]+(?:\/[\w.-]+)+)\/pull\/(\d+)\/?$/);
-    const from = urls?.[0]?.match(/[?&]claude=([\w-]{1,80})/)?.[1]; // the Claude Code session that sent it (its skill)
-    if (m) go(`/${m[1]}/pull/${m[2]}${from ? `?claude=${from}` : ''}`);
+    const from = urls?.[0]?.match(/[?&](claude|codex)=([\w-]{1,80})/); // the Claude Code session or Codex conversation that sent it (its skill)
+    if (m) go(`/${m[1]}/pull/${m[2]}${from ? `?${from[1]}=${from[2]}` : ''}`);
   };
   open(await getCurrent()); // the link that launched the app
   await onOpenUrl(open);
@@ -707,10 +707,11 @@ export async function availableUpdate(): Promise<string | null> {
 // The Claude Code session that sent a PR here (its lgtm-review skill opens lgtm://owner/repo/pull/n?claude=<id>): the
 // Claude app's id (local_…) or the CLI's (a UUID), kept per PR.
 const SESSION_ID = /^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
-export function linkClaude(repo: string, n: number, id: string) {
+// agent: 'codex' for a Codex conversation (its skill's ?codex=<id>), else a Claude Code session.
+export function linkClaude(repo: string, n: number, id: string, agent?: 'codex') {
   if (!SESSION_ID.test(id)) return;
   try {
-    localStorage.setItem(own(`claudeFrom:${repo}#${n}`), JSON.stringify({ id, at: Date.now() }));
+    localStorage.setItem(own(`claudeFrom:${repo}#${n}`), JSON.stringify({ id, at: Date.now(), ...(agent ? { agent } : {}) }));
   } catch {}
   dispatchEvent(new Event('lgtm:claude-link')); // ✳ Claude buttons show it
 }
@@ -737,7 +738,8 @@ export function linkNewClaude(repo: string, n: number, prUrl: string) {
   };
   setTimeout(look, 3000);
 }
-export function linkedClaude(repo: string, n: number): { id: string; at: number; seen?: number } | null {
+export type SessionLink = { id: string; at: number; seen?: number; agent?: 'codex' };
+export function linkedClaude(repo: string, n: number): SessionLink | null {
   try {
     const v = JSON.parse(localStorage.getItem(own(`claudeFrom:${repo}#${n}`)) ?? 'null');
     return v && SESSION_ID.test(v.id) ? v : null;
@@ -774,13 +776,19 @@ export async function claudeSessionState(id: string): Promise<SessionState> {
 // Back to a session, with a message if there is one: the message is left for it (the user says "check lgtm" there;
 // copied to paste if that fails), then the Claude app's session opens, or a Terminal session's `claude --resume` is
 // copied. Says what it did.
-export async function backToClaude(id: string, message = ''): Promise<string> {
+// A Codex conversation (agent 'codex') opens in the ChatGPT app the same way.
+export async function backToClaude(id: string, message = '', agent?: 'codex'): Promise<string> {
   let note = '';
+  const what = agent === 'codex' ? 'conversation' : 'session';
   if (message)
     note = await leaveForClaude(id, message).then(
-      () => 'Left for the session: say “check lgtm” there',
-      async () => (await copyText(message).catch(() => {}), 'Copied: paste it in the session (⌘V)'),
+      () => `Left for the ${what}: say “check lgtm” there`,
+      async () => (await copyText(message).catch(() => {}), `Copied: paste it in the ${what} (⌘V)`),
     );
+  if (agent === 'codex') {
+    await openClaude(`codex://threads/${encodeURIComponent(id)}`);
+    return note;
+  }
   const local = id.startsWith('local_') ? id : (await claudeSessionState(id).catch(() => null))?.id;
   if (local) {
     await openClaude(`claude://code/continue?session=${encodeURIComponent(local)}`);
@@ -792,15 +800,18 @@ export async function backToClaude(id: string, message = ''): Promise<string> {
 
 // The installed skill, kept the same as this lgtm's (after an update), without asking: only if it's installed.
 export async function keepSkillCurrent() {
-  const s = await claudeSkill().catch(() => null);
-  if (s?.installed && !s.current) await claudeSkill(true).catch(() => {});
+  for (const agent of ['claude', 'codex'] as const) {
+    const s = await claudeSkill(false, agent).catch(() => null);
+    if (s?.installed && !s.current) await claudeSkill(true, agent).catch(() => {});
+  }
 }
 
-// The Claude Code skill (app/claude-skill.md) in ~/.claude/skills: whether it's there and current; install writes it.
+// The lgtm-review skill, Claude Code's (app/claude-skill.md, in ~/.claude/skills) or Codex's (app/codex-skill.md, in
+// ~/.codex/skills): whether it's there and current; install writes it.
 export type SkillStatus = { installed: boolean; current: boolean; path: string };
-export async function claudeSkill(install = false): Promise<SkillStatus> {
-  if (isDesktop) return command<SkillStatus>('claude_skill', { install });
-  const res = await fetch('/claude-skill', { method: install ? 'POST' : 'GET' });
+export async function claudeSkill(install = false, agent: 'claude' | 'codex' = 'claude'): Promise<SkillStatus> {
+  if (isDesktop) return command<SkillStatus>('claude_skill', { install, agent });
+  const res = await fetch(`/claude-skill?agent=${agent}`, { method: install ? 'POST' : 'GET' });
   const d = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(d.error ?? 'Could not reach the skill');
   return d;

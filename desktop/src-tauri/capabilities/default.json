@@ -49,6 +49,9 @@
       "allow": [
         {
           "url": "claude://*"
+        },
+        {
+          "url": "codex://*"
         }
       ]
     },
