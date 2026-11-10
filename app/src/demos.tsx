@@ -1262,6 +1262,27 @@ Object.assign(DEMOS, {
     off: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />], ['p-reply', <Tg i="reply" n={2} t="awaiting your reply" />]])}</div>,
     on: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />]])}</div>,
   },
+  agentThreads: {
+    title: 'Did they address my comments?',
+    off: (
+      <div class="demo-panel">
+        <span class="since-sum">Since your last review: <a>2 new commits</a> · code changed under 2 threads of yours</span>
+        <details class="thread"><summary><span class="t-preview"><b>you</b> Retry only on network errors</span><span class="badge"> · code changed since</span></summary></details>
+        <details class="thread"><summary><span class="t-preview"><b>you</b> Log the attempt number</span><span class="badge"> · code changed since</span></summary></details>
+      </div>
+    ),
+    on: (
+      <div class="demo-panel">
+        <span class="since-sum">Since your last review: <a>2 new commits</a> · <span class="check-state"><AgentMark id="claude" /> Claude: 1 of 2 open threads addressed · <a>1 not yet</a></span></span>
+        <details class="thread"><summary><span class="t-preview"><b>you</b> Retry only on network errors</span><span class="badge v-done"> · addressed</span></summary></details>
+        <details class="thread" open>
+          <summary />
+          <p class="t-verdict v-open"><AgentMark id="claude" /> Not addressed yet: the log line still leaves the attempt out.</p>
+          <div class="comment"><b>you</b> Log the attempt number, so we can see how often it retries.</div>
+        </details>
+      </div>
+    ),
+  },
   agentReview: {
     title: 'An agent reviews first',
     off: <div class="demo-list">{agentGroup('needs', 'Needs your review', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-time', <Tg i="⏱" n="~10 min" />]]), listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-time', <Tg i="⏱" n="~5 min" />]])])}</div>,

@@ -1478,3 +1478,10 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .ed-fix { position: relative; display: inline-flex; }
 .ed-fix-pick { position: absolute; right: 0; top: 100%; z-index: 20; min-width: 200px; }
 .ed-fix-err { margin: 4px 8px; }
+.ask-turn { display: grid; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.ask-q { margin: 0; font-weight: 600; white-space: pre-wrap; }
+.check-state .agent-mark { margin-right: 2px; }
+.badge.v-done, .t-verdict.v-done { color: var(--addfg); }
+.badge.v-open { color: var(--warnfg, var(--muted)); }
+.t-verdict { margin: 4px 0 6px; font-size: calc(12px * var(--ts)); }
+.t-verdict.v-open { color: var(--muted); }

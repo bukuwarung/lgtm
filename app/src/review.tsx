@@ -36,7 +36,8 @@ import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaTh
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
-import { AGENTS, askAgent, setAskAgent, runAgent, useAgents, type AgentId } from './agents.ts';
+import { AGENTS, askAgent, autoAgent, detectAgents, setAskAgent, runAgent, useAgents, type AgentId } from './agents.ts';
+import { checkThreads, savedCheck, type ThreadCheck, type Verdict } from './threadcheck.ts';
 import { toPerson } from './person.tsx';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
@@ -64,6 +65,8 @@ type Ctx = {
   mentions: string[]; // people on this PR, for @-completion
   suggestion: (t: Target) => string | null; // the target's lines, for a ```suggestion block
   files: File[]; // the PR's files, for an agent's fix (their diffs)
+  checked: Record<string, Verdict>; // an agent's word on whether my threads were addressed (threadcheck.ts)
+  checkBy?: AgentId;
   pending: boolean; // a review of mine is open on GitHub: comments join it, none post on their own
   editPending: (id: string, body: string | null) => Promise<void>; // one of its comments changed, or (null) deleted
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
@@ -694,6 +697,30 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     }
   }, [reloads]);
 
+  // Did they address my comments? (threadcheck.ts): back with new commits since my review, an agent reads my open
+  // threads against them, once a push (Settings → Reviewing).
+  const [checkOn] = useStoredFlag('agentThreads', true);
+  const [check, setCheck] = useState<ThreadCheck | null>(null);
+  const [checkTry, setCheckTry] = useState(0);
+  const checking = useRef('');
+  const head = data?.pr.head.sha ?? '';
+  const myOpen = me ? threads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)) : [];
+  const myOpenIds = myOpen.map((t) => t.id).join();
+  useEffect(() => {
+    if (!data || !checkOn || !lastReviewed || !myOpen.length) return setCheck(null);
+    const saved = savedCheck(repo, n, head);
+    if (saved) return setCheck(saved);
+    const run = `${head}:${checkTry}`;
+    if (checking.current === run) return;
+    checking.current = run;
+    void detectAgents().then(() => {
+      const agent = autoAgent();
+      if (!agent) return;
+      setCheck({ sha: head, by: agent, state: 'running', verdicts: {} });
+      checkThreads({ repo, n, headRepo: data.headRepo, head, since: lastReviewed, threads: myOpen, agent }).then((c) => checking.current === run && setCheck(c));
+    });
+  }, [head, lastReviewed, myOpenIds, checkOn, checkTry]);
+
   // Slack, with the PR and on each reload; while it isn't reachable (lgtm just launched, or the Mac just woke: slackcli
   // can fail for a moment), again every 15 seconds for 2 minutes, and whenever the window is back in focus or online.
   const [slackTry, setSlackTry] = useState(0);
@@ -1129,6 +1156,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       ),
     ],
     files,
+    checked: check?.state === 'done' ? check.verdicts : {},
+    checkBy: check?.by,
     // GitHub suggestions replace head-side lines, which (being commentable) are all in the diff's hunks.
     suggestion: (t) => {
       const f = files.find((x) => x.filename === t.path);
@@ -1758,6 +1787,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 newCommits={newCommits}
                 sinceComment={sinceComment}
                 onCommits={() => setSince(true)}
+                check={check}
+                onRecheck={() => setCheckTry((k) => k + 1)}
               />}
               {since ? (
                 <>
@@ -1786,7 +1817,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {plan && <ReviewPlan plan={plan} viewed={viewed} />}
           {pending && (
             <p class="warn">
-              You have a review in progress on GitHub ({pending.count} comment{pending.count === 1 ? '' : 's'}): Finish review sends it, with your comments here.{' '}
+              You have a review in progress on {site(repo)} ({pending.count} comment{pending.count === 1 ? '' : 's'}): Finish review sends it, with your comments here.{' '}
               <button
                 class="link"
                 disabled={discarding}
@@ -3783,6 +3814,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const bot = foldBots && t.comments.nodes.every((c) => c.author?.__typename === 'Bot');
   // On someone else's PR, other people's threads start folded too: mine (and ones waiting on me) stay open.
   const others = !!ctx.me && ctx.pr.user.login !== ctx.me && !t.comments.nodes.some((c) => c.author?.login === ctx.me);
+  const verdict = ctx.checked[t.id];
 
   async function act(f: () => Promise<void>) {
     setBusy(true);
@@ -3810,7 +3842,14 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         {t.isOutdated && <span class="badge"> · outdated</span>}
         {ctx.sinceComment.get(t.id)?.kind === 'changed' && <span class="badge"> · code changed since</span>}
         {ctx.sinceComment.get(t.id)?.kind === 'same' && <span class="badge"> · code unchanged</span>}
+        {!t.isResolved && verdict && <span class={`badge ${verdict.addressed ? 'v-done' : 'v-open'}`} title={verdict.why}> · {verdict.addressed ? 'addressed' : 'not addressed yet'}</span>}
       </summary>
+      {!t.isResolved && verdict && ctx.checkBy && (
+        <p class={`t-verdict ${verdict.addressed ? 'v-done' : 'v-open'}`}>
+          <AgentMark id={ctx.checkBy} /> {verdict.addressed ? 'Addressed' : 'Not addressed yet'}: {verdict.why}
+          {verdict.addressed && t.viewerCanResolve && <> <button class="link" disabled={busy} onClick={() => act(() => ctx.resolve(t, true))}>Resolve</button></>}
+        </p>
+      )}
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId}>
@@ -3959,7 +3998,25 @@ function LookAgain({ conv, pr, again }: { conv: ConversationItem[]; pr: PR; agai
 
 // "Since your last review": new commits, my threads with replies, code changed under my threads, my threads
 // resolved. Each count jumps to the first one (or shows just the new commits).
-function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; newCommits: number | null; sinceComment: Map<string, SinceComment>; onCommits: () => void }) {
+// The agent's thread check, in the since-review line: under way, how many it found addressed (the first one not yet,
+// a click away), or why it couldn't.
+function agentCheck(c: ThreadCheck | null, again: () => void) {
+  if (!c) return null;
+  const who = AGENTS[c.by].short;
+  if (c.state === 'running') return <span class="check-state"><AgentMark id={c.by} /> {who} is checking your open threads…</span>;
+  if (c.state === 'failed') return <span class="check-state" title={c.error}><AgentMark id={c.by} /> {who} couldn't check your threads <button class="link" onClick={again}>Try again</button></span>;
+  const all = Object.entries(c.verdicts), done = all.filter(([, v]) => v.addressed).length;
+  const open = all.find(([, v]) => !v.addressed)?.[0];
+  if (!all.length) return null;
+  return (
+    <span class="check-state">
+      <AgentMark id={c.by} /> {who}: {done} of {all.length} open thread{all.length > 1 ? 's' : ''} addressed
+      {open && <> · <button class="link" onClick={() => jumpTo('t-' + open)}>{all.length - done} not yet</button></>}
+    </span>
+  );
+}
+
+function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; newCommits: number | null; sinceComment: Map<string, SinceComment>; onCommits: () => void; check: ThreadCheck | null; onRecheck: () => void }) {
   const mine = p.me ? p.threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === p.me)) : [];
   const replied = mine.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login !== p.me && c.createdAt > p.lastReviewAt));
   const changed = mine.filter((t) => p.sinceComment.get(t.id)?.kind === 'changed');
@@ -3971,6 +4028,7 @@ function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; 
     replied.length ? <button class="link" onClick={() => go(replied[0])}>{n(replied.length, 'thread')} with new replies</button> : null,
     changed.length ? <button class="link" onClick={() => go(changed[0])}>code changed under {n(changed.length, 'thread')} of yours</button> : null,
     resolved.length ? <span>{resolved.length} of your {n(mine.length, 'thread')} resolved</span> : null,
+    agentCheck(p.check, p.onRecheck),
   ].filter(Boolean);
   if (!parts.length) return <span class="since-sum">New commits since your last review.</span>;
   return (
@@ -4258,7 +4316,11 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
   const [panel, setPanel] = useState<{ path: string; text: string } | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
-  const [answer, setAnswer] = useState<{ html?: string; error?: string } | null>(null);
+  // The conversation so far: each question with its answer; a follow-up sends the earlier ones along (the CLI keeps
+  // no session).
+  const [turns, setTurns] = useState<{ q: string; text: string; html: string; by: AgentId }[]>([]);
+  const [error, setError] = useState('');
+  const panelRef = useRef<HTMLDivElement>(null);
   const { on: agents } = useAgents();
   const [agent, pickAgent] = useState<AgentId | null>(null);
   const who = agent && agents.includes(agent) ? agent : askAgent();
@@ -4276,28 +4338,36 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
         setSel({ path: file.id.slice(2), text: text.slice(0, 4000), x: Math.min(r.right, innerWidth - 140), y: r.bottom + 4 });
       });
     const away = () => setSel(null);
-    const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setAnswer(null)); // the Claude menu's Ask
+    const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setTurns([]), setError('')); // the Agents menu's Ask
     addEventListener('lgtm:ask-pr', whole);
     addEventListener('mouseup', up);
     addEventListener('scroll', away, { passive: true });
     return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away), removeEventListener('lgtm:ask-pr', whole));
   }, []);
   const ask = async () => {
-    if (!panel || !q.trim() || !who) return;
+    if (!panel || !q.trim() || !who || busy) return;
+    const asked = q.trim();
     setBusy(true);
-    setAnswer(null);
+    setError('');
+    // ponytail: the earlier answers go along whole; a long conversation is cut to its last 6 turns.
+    const question = turns.length
+      ? `Earlier in this conversation (oldest first):\n\n${turns.slice(-6).map((t) => `Q: ${t.q}\nA: ${t.text}`).join('\n\n')}\n\nTheir follow-up question: ${asked}`
+      : asked;
     try {
       let prompt: string;
-      if (!panel.path) prompt = prAskPrompt(pr, files, q.trim()); // the whole PR (the Claude menu's Ask)
+      if (!panel.path) prompt = prAskPrompt(pr, files, question); // the whole PR (the Agents menu's Ask)
       else {
         const f = files.find((f) => f.filename === panel.path);
         const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
-        prompt = askPrompt(pr, panel.path, f?.patch, source, panel.text, q.trim());
+        prompt = askPrompt(pr, panel.path, f?.patch, source, panel.text, question);
       }
       const text = await runAgent(prompt, who);
-      setAnswer({ html: await renderGfm(text, repo) }); // GitHub sanitizes the HTML
+      const html = await renderGfm(text, repo); // GitHub sanitizes the HTML
+      setTurns((t) => [...t, { q: asked, text, html, by: who }]);
+      setQ('');
+      requestAnimationFrame(() => panelRef.current?.scrollTo({ top: panelRef.current.scrollHeight, behavior: 'smooth' }));
     } catch (e: any) {
-      setAnswer({ error: e.message });
+      setError(e.message);
     }
     setBusy(false);
   };
@@ -4308,13 +4378,13 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
           class="ask-btn primary"
           style={{ left: sel.x, top: sel.y }}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => (setPanel({ path: sel.path, text: sel.text }), setSel(null), setQ(''), setAnswer(null))}
+          onClick={() => (setPanel({ path: sel.path, text: sel.text }), setSel(null), setQ(''), setTurns([]), setError(''))}
         >
           <AgentMark id={who} /> Ask {AGENTS[who].short}
         </button>
       )}
       {panel && who && (
-        <div class="ask-panel" role="dialog" aria-label={`Ask ${AGENTS[who].short}`}>
+        <div class="ask-panel" role="dialog" aria-label={`Ask ${AGENTS[who].short}`} ref={panelRef}>
           <div class="row">
             <b>
               Ask{' '}
@@ -4331,10 +4401,16 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
             <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
           </div>
           {panel.text ? <pre class="ask-sel">{panel.text}</pre> : <p class="note">{AGENTS[who].short} reads the description and every file's diff, specs included.</p>}
+          {turns.map((t) => (
+            <div class="ask-turn">
+              <p class="ask-q">{t.q}</p>
+              <div class="md ask-answer" title={`${AGENTS[t.by].name}'s answer`} dangerouslySetInnerHTML={{ __html: t.html }} />
+            </div>
+          ))}
           <textarea
             rows={2}
             autoFocus
-            placeholder={panel.path ? 'Your question · ↵ to ask' : "What's risky here? Does it match the spec? · ↵ to ask"}
+            placeholder={turns.length ? 'A follow-up · ↵ to ask' : panel.path ? 'Your question · ↵ to ask' : "What's risky here? Does it match the spec? · ↵ to ask"}
             value={q}
             onInput={(e) => setQ(e.currentTarget.value)}
             onKeyDown={(e) => {
@@ -4343,13 +4419,12 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
             }}
           />
           <button class="primary" disabled={busy || !q.trim()} onClick={ask}>{busy ? `${AGENTS[who].short} is reading…` : 'Ask'}</button>
-          {answer?.error && (
+          {error && (
             <p class="error">
-              {answer.error}
-              {/authenticat|oauth|log ?in/i.test(answer.error) && <> Sign {AGENTS[who].name} in: run <code>{who === 'codex' ? 'codex login' : 'claude'}</code> in Terminal{who === 'claude' && <>, then <code>/login</code></>}.</>}
+              {error}
+              {/authenticat|oauth|log ?in/i.test(error) && <> Sign {AGENTS[who].name} in: run <code>{who === 'codex' ? 'codex login' : 'claude'}</code> in Terminal{who === 'claude' && <>, then <code>/login</code></>}.</>}
             </p>
           )}
-          {answer?.html && <div class="md ask-answer" dangerouslySetInnerHTML={{ __html: answer.html }} />}
         </div>
       )}
     </>

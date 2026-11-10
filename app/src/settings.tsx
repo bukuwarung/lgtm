@@ -512,6 +512,13 @@ export function Settings() {
           <AgentPost />
           <AgentLimit />
         </Flag>
+        <Flag
+          k="agentThreads"
+          initial={true}
+          label="An agent checks whether your comments were addressed"
+          hint={`When a ${T.PR} you reviewed comes back with new commits, the coding agent under the switch above reads each of your open threads against them and marks it addressed (with a Resolve) or not yet. Once a push.`}
+          demo
+        />
         <Flag k="nextAfterReview" initial={true} label={`After a review, open the next ${T.PR} that needs it`} hint={`Finish review starts with “Then open the next ${T.PR} that needs my review” ticked.`} demo />
         <SavedReplies />
       </section>
