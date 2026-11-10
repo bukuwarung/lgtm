@@ -346,8 +346,8 @@ function HistoryNav({ backTo }: { backTo: string }) {
   const held = useRef(false);
   useEffect(() => {
     const show = () => setOpen(true); // View → Recently Viewed
-    addEventListener('lgtm:recent', show);
-    return () => removeEventListener('lgtm:recent', show);
+    addEventListener('lgtm:recent-menu', show);
+    return () => removeEventListener('lgtm:recent-menu', show);
   }, []);
   useEffect(() => {
     if (!open) return;
@@ -607,7 +607,7 @@ function App() {
     else if (id === 'find') dispatchEvent(new Event('lgtm:find'));
     else if (id === 'reload') location.reload();
     else if (id === 'refresh') refresh();
-    else if (id === 'recent') dispatchEvent(new Event('lgtm:recent'));
+    else if (id === 'recent') dispatchEvent(new Event('lgtm:recent-menu'));
     else if (id === 'inbox') location.hash = '/inbox';
     else if (id === 'shortcuts') shortcuts();
     else if (id === 'back') history.back();
