@@ -372,6 +372,7 @@ function HistoryNav({ backTo }: { backTo: string }) {
   const more = `; hold for recently viewed ${T.PRs}`;
   return (
     <span class="recent-menu">
+      <span class="split">
       <button class={'nav-hist' + (open ? ' on' : '')} title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)${more}`} aria-label="Back" {...holds(() => history.back())}>
         <Octicon name="arrow-left" />
         {backTo && <span class="back-hint">{backTo}</span>}
@@ -379,6 +380,7 @@ function HistoryNav({ backTo }: { backTo: string }) {
       <button class={'nav-hist nav-recent' + (open ? ' on' : '')} title={`Recently viewed ${T.PRs} (⌘Y)`} aria-label={`Recently viewed ${T.PRs}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         ▾
       </button>
+      </span>
       <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}>
         <Octicon name="arrow-right" />
       </button>
