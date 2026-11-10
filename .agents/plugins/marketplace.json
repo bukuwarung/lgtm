@@ -1,0 +1,12 @@
+{
+  "name": "lgtm",
+  "interface": { "displayName": "lgtm" },
+  "plugins": [
+    {
+      "name": "lgtm-links",
+      "source": { "source": "local", "path": "./mods/lgtm-links-codex" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}

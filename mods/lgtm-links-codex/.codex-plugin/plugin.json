@@ -1,0 +1,15 @@
+{
+  "name": "lgtm-links",
+  "version": "0.1.0",
+  "description": "lgtm for Codex: what you send a conversation from lgtm (your review, a comment to address) reaches it by itself, and /lgtm opens a pull request in lgtm.",
+  "author": { "name": "BukuWarung", "url": "https://github.com/bukuwarung/lgtm" },
+  "homepage": "https://github.com/bukuwarung/lgtm",
+  "license": "MIT",
+  "keywords": ["lgtm", "code review", "pull request", "merge request"],
+  "interface": {
+    "displayName": "lgtm",
+    "shortDescription": "Your lgtm reviews reach Codex by themselves",
+    "longDescription": "lgtm is a GitHub and GitLab code review app for your Mac. With this plugin, a review or a comment you send a Codex conversation from lgtm is handed to it on your next message, without saying \"check lgtm\"; /lgtm opens a pull request in lgtm, linked to the conversation.",
+    "category": "Developer Tools"
+  }
+}

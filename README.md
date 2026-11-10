@@ -235,6 +235,12 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
   /plugin install lgtm-links --marketplace bukuwarung/lgtm
   ```
 
+- The `lgtm-links` plugin for Codex hands a review or comment you send a conversation from lgtm to it on your next message, no "check lgtm" needed, and adds `/lgtm`. Codex asks you to trust its hook once. In a terminal:
+
+  ```
+  codex plugin marketplace add bukuwarung/lgtm && codex plugin add lgtm-links@lgtm
+  ```
+
 ## Themes
 
 <picture>

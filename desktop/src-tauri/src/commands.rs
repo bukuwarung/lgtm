@@ -1133,12 +1133,36 @@ static SESSION_FILES: std::sync::Mutex<Vec<(String, std::path::PathBuf)>> = std:
 
 /// Is the lgtm-links mod (mods/lgtm-links in the repo) installed in Claude Code? Its record of installed plugins
 /// (~/.claude, or CLAUDE_CONFIG_DIR) names it as lgtm-links@<marketplace>; as the server's claudeMod().
+/// Codex's (agent "codex"): its config.toml names lgtm-links@<marketplace> among its plugins, switched on.
 #[tauri::command]
-pub async fn claude_mod() -> Value {
+pub async fn claude_mod(agent: Option<String>) -> Value {
+    if agent.as_deref() == Some("codex") {
+        let dir = std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| home().join(".codex"));
+        let config = std::fs::read_to_string(dir.join("config.toml")).unwrap_or_default();
+        return json!({ "installed": codex_plugin_on(&config) });
+    }
     let dir = std::env::var("CLAUDE_CONFIG_DIR").map(std::path::PathBuf::from).unwrap_or_else(|_| home().join(".claude"));
     let d: Value = std::fs::read_to_string(dir.join("plugins").join("installed_plugins.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
     let installed = d["plugins"].as_object().is_some_and(|p| p.keys().any(|k| k.starts_with("lgtm-links@")));
     json!({ "installed": installed })
+}
+
+/// Whether a Codex config.toml has a [plugins."lgtm-links@…"] table that isn't switched off.
+fn codex_plugin_on(config: &str) -> bool {
+    let mut inside = false;
+    let mut found = false;
+    for line in config.lines().map(str::trim) {
+        if line.starts_with('[') {
+            if inside {
+                return true;
+            }
+            inside = line.starts_with("[plugins.\"lgtm-links@");
+            found |= inside;
+        } else if inside && line.replace(' ', "") == "enabled=false" {
+            return false;
+        }
+    }
+    found
 }
 
 /// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md, built in by build.rs),
@@ -1383,4 +1407,16 @@ pub fn set_tray(app: tauri::AppHandle, items: Option<Vec<TrayItem>>) -> Result<(
     .build(&app)
     .map_err(e)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod codex_plugin_tests {
+    use super::codex_plugin_on;
+    #[test]
+    fn lgtm_links_on_unless_switched_off() {
+        assert!(codex_plugin_on("model = \"x\"\n\n[plugins.\"lgtm-links@lgtm\"]\nenabled = true\n\n[mcp_servers.a]\n"));
+        assert!(codex_plugin_on("[plugins.\"lgtm-links@lgtm\"]\n"));
+        assert!(!codex_plugin_on("[plugins.\"lgtm-links@lgtm\"]\nenabled = false\n[plugins.\"pdf@x\"]\nenabled = true\n"));
+        assert!(!codex_plugin_on("[plugins.\"pdf@x\"]\nenabled = true\n"));
+    }
 }

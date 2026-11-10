@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
 import { AGENTS, AGENT_IDS, EFFORT_NAME, effortsOf, modelsOf, agentEffort, agentModel, agentOn, detectAgents, setAgentEffort, setAgentModel, setAgentOn, useAgents, type AgentId } from './agents.ts';
-import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel } from './platform.ts';
+import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, CODEX_MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -1667,21 +1667,26 @@ function AgentSkill({ agent }: { agent: AgentId }) {
   );
 }
 
-// The lgtm-links mod for Claude Code: installed or not; lgtm only gives the line that installs it.
-function ClaudeMod() {
+// The lgtm-links mod for Claude Code, or plugin for Codex: installed or not; lgtm only gives the line that installs it.
+function AgentMod({ agent }: { agent: AgentId }) {
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
-  useEffect(() => void claudeMod().then((m) => setInstalled(m.installed), () => setInstalled(null)), []);
+  useEffect(() => void claudeMod(agent).then((m) => setInstalled(m.installed), () => setInstalled(null)), []);
+  const line = agent === 'codex' ? CODEX_MOD_INSTALL : MOD_INSTALL;
   return (
     <div class="set-row">
       <span>
-        lgtm-links mod
+        lgtm-links {agent === 'codex' ? 'plugin' : 'mod'}
         <small>
-          An Open in lgtm button under replies that link a {T.PR}, <code>/lgtm</code>, and your reviews reaching the session by themselves.
-          {installed === false && <> From a terminal: <code>{MOD_INSTALL}</code></>}
+          {agent === 'codex' ? (
+            <>Your reviews and comments from lgtm reach the conversation on your next message, without “check lgtm”, and <code>/lgtm</code> opens its {T.PR} here.</>
+          ) : (
+            <>An Open in lgtm button under replies that link a {T.PR}, <code>/lgtm</code>, and your reviews reaching the session by themselves.</>
+          )}
+          {installed === false && <> From a terminal: <code>{line}</code></>}
         </small>
       </span>
-      {installed ? <CheckMark state="success" title="Installed" /> : installed === false && <button onClick={() => copyText(MOD_INSTALL).then(() => setCopied(true))}>{copied ? 'Copied' : 'Copy the install command'}</button>}
+      {installed ? <CheckMark state="success" title="Installed" /> : installed === false && <button onClick={() => copyText(line).then(() => setCopied(true))}>{copied ? 'Copied' : 'Copy the install command'}</button>}
     </div>
   );
 }
@@ -1728,12 +1733,8 @@ function AgentRow({ id }: { id: AgentId }) {
             </label>
           </div>
           <AgentSkill agent={id} />
-          {id === 'claude' && (
-            <>
-              <ClaudeMod />
-              <ClaudeFolders />
-            </>
-          )}
+          <AgentMod agent={id} />
+          {id === 'claude' && <ClaudeFolders />}
         </fieldset>
       )}
     </div>

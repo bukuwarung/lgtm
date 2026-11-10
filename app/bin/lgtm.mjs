@@ -747,7 +747,13 @@ async function claudeSession(id) {
 
 // Is the lgtm-links mod (mods/lgtm-links in this repo) installed in Claude Code? Its record of installed plugins
 // (~/.claude, or CLAUDE_CONFIG_DIR) names it as lgtm-links@<marketplace>.
-async function claudeMod() {
+// Codex's (agent "codex"): its config.toml has a [plugins."lgtm-links@…"] table that isn't switched off.
+async function claudeMod(agent) {
+  if (agent === 'codex') {
+    const config = await readFile(join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'config.toml'), 'utf8').catch(() => '');
+    const table = config.match(/^\[plugins\."lgtm-links@[^\]]*\]([^[]*)/m);
+    return { installed: !!table && !/^\s*enabled\s*=\s*false/m.test(table[1]) };
+  }
   const dir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
   const d = JSON.parse(await readFile(join(dir, 'plugins', 'installed_plugins.json'), 'utf8').catch(() => '{}'));
   return { installed: Object.keys(d?.plugins ?? {}).some((k) => k.startsWith('lgtm-links@')) };
@@ -817,7 +823,7 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/claude-outbox' && req.method === 'POST') return readJson(req).then(leaveForClaude).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-session') return claudeSession(new URL(req.url ?? '/', ORIGIN).searchParams.get('id')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
-  if (path === '/claude-mod') return claudeMod().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
+  if (path === '/claude-mod') return claudeMod(new URL(req.url ?? '/', ORIGIN).searchParams.get('agent')).then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-skill') return claudeSkill(req.method === 'POST', new URL(req.url ?? '/', ORIGIN).searchParams.get('agent') ?? 'claude').then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-sessions') return claudeSessions().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/integrations') {

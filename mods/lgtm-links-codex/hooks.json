@@ -1,0 +1,6 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "./scripts/outbox.sh" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "./scripts/outbox.sh" }] }]
+  }
+}

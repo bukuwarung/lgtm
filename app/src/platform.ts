@@ -820,9 +820,11 @@ export async function claudeSkill(install = false, agent: 'claude' | 'codex' = '
 // The lgtm-links mod for Claude Code (in lgtm's repo): whether it's installed, and the line that installs it. lgtm
 // only suggests it: installing changes the person's Claude Code setup.
 export const MOD_INSTALL = 'claude plugin install lgtm-links --marketplace bukuwarung/lgtm';
-export async function claudeMod(): Promise<{ installed: boolean }> {
-  if (isDesktop) return command<{ installed: boolean }>('claude_mod');
-  const res = await fetch('/claude-mod');
+// Codex's lgtm-links plugin (mods/lgtm-links-codex, listed in the repo's .agents/plugins/marketplace.json).
+export const CODEX_MOD_INSTALL = 'codex plugin marketplace add bukuwarung/lgtm && codex plugin add lgtm-links@lgtm';
+export async function claudeMod(agent: 'claude' | 'codex' = 'claude'): Promise<{ installed: boolean }> {
+  if (isDesktop) return command<{ installed: boolean }>('claude_mod', { agent });
+  const res = await fetch(`/claude-mod?agent=${agent}`);
   const d = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(d.error ?? 'Could not check for the mod');
   return d;
