@@ -242,9 +242,10 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
 
 **While you review**
 
-- **Ask** about the PR, or select code to ask about just that; follow-up questions keep the conversation.
+- **Ask** about the PR, or select code to ask about just that; follow-up questions keep the conversation. Conversations are kept: closing the panel loses nothing, and the Agents menu reopens any of this commit's.
+- An answer becomes yours to send: a comment on the code you asked about, or a paragraph of your review's summary, marked 🤖 and editable first.
 - **Fix** in a line comment's box: the agent rewrites the lines as your comment asks, as a suggested change to edit before it goes.
-- **Why did it fail?** on a failed check: the agent reads the job's log and the diff, and says the cause, whether the PR caused it, and the fix.
+- **Why did it fail?** on a failed check: the agent reads the job's log and the diff, and says the cause, whether the PR caused it, and the fix; ask it more from there.
 
 **Coming back to a PR**
 
