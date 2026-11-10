@@ -647,24 +647,31 @@ function App() {
           {replies > 0 && <span class="nav-count">{replies}</span>}
         </a>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
-        <TopActions
-          refreshing={refreshing}
-          onRefresh={() => {
-            // The PR list, and the PR that's open (it shows "updating…" meanwhile).
-            setRefreshing(true);
-            setTimeout(() => setRefreshing(false), 15_000); // a failed load still stops the spinning
-            setQueueVersion((v) => v + 1);
-            dispatchEvent(new Event('lgtm:refresh'));
-          }}
-        />
+        <div class="top-actions">
+          <BellMenu />
+        </div>
         <span class="spacer" />
-        {/* Back and forward beside the search box, as a browser has them by its address bar. */}
+        {/* Back, forward and refresh beside the search box, as a browser has them by its address bar. */}
         <span class="nav-go">
           <button class="nav-hist" title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)`} aria-label="Back" onClick={() => history.back()}>
             <Octicon name="arrow-left" />
             {backTo && <span class="back-hint">{backTo}</span>}
           </button>
           <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}><Octicon name="arrow-right" /></button>
+          <button
+            class={`nav-hist nav-refresh${refreshing ? ' refreshing' : ''}`}
+            title={`Refresh the ${T.PR} list and the open ${T.PR} (the list also every 3 minutes)`}
+            aria-label="Refresh"
+            onClick={() => {
+              // The PR list, and the PR that's open (it shows "updating…" meanwhile).
+              setRefreshing(true);
+              setTimeout(() => setRefreshing(false), 15_000); // a failed load still stops the spinning
+              setQueueVersion((v) => v + 1);
+              dispatchEvent(new Event('lgtm:refresh'));
+            }}
+          >
+            <span><Octicon name="sync" /></span>
+          </button>
           <RecentMenu />
           <CommandBar queue={() => queue.current} parse={parseRoute} />
         </span>
@@ -914,18 +921,6 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
         {busy ? 'Checking…' : 'Check again'}
       </button>
       <p class="note">Slack messages and Jira tickets are optional: set them up later in Settings.</p>
-    </div>
-  );
-}
-
-// The top bar's actions: refresh the PR list and the open PR, and the bell (BellMenu).
-function TopActions({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
-  return (
-    <div class="top-actions">
-      <button type="button" class={refreshing ? 'refreshing' : ''} title={`Refresh the ${T.PR} list and the open ${T.PR} (the list also every 3 minutes)`} onClick={onRefresh}>
-        <span><Octicon name="sync" /></span>
-      </button>
-      <BellMenu />
     </div>
   );
 }

@@ -1500,13 +1500,13 @@ SCENES.app = {
           <button><Octicon name="three-bars" /></button>
           <a class="nav-btn"><Octicon name="gear" /></a>
           <div class="top-actions">
-            <button><span><Octicon name="sync" /></span></button>
             <button><Octicon name="bell" /></button>
           </div>
           <span class="spacer" />
           <span class="nav-go">
             <button class="nav-hist"><Octicon name="arrow-left" /></button>
             <button class="nav-hist"><Octicon name="arrow-right" /></button>
+            <button class="nav-hist nav-refresh"><span><Octicon name="sync" /></span></button>
             <div class="cmd">
               <svg class="cmd-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
                 <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
