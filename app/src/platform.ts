@@ -138,7 +138,7 @@ if (typeof window !== 'undefined')
   });
 const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => (await import('@tauri-apps/api/core')).invoke<T>(cmd, args);
 // Tauri rejects with the command's error string; make it an Error like the web path's.
-const command = <T>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
+export const command = <T>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
   invoke<T>(cmd, args).catch((e) => {
     throw e instanceof Error ? e : new Error(String(e));
   });
@@ -691,33 +691,6 @@ export async function availableUpdate(): Promise<string | null> {
   }
   return newer(saved.latest, __APP_VERSION__) ? saved.latest.replace(/^v/, '') : null;
 }
-// Claude Code's answer (the claude CLI) to a prompt the page builds (claude.ts: Ask Claude).
-// The agent a prompt lgtm runs itself goes to (Settings → Claude Code → Prompts: claudeAgent.<k>): Claude Code, or Codex.
-export const agentOf = (use: string): { id: 'claude' | 'codex'; name: string; short: string } => {
-  let id = '';
-  try {
-    id = localStorage.getItem(`claudeAgent.${use}`) ?? '';
-  } catch {}
-  return id === 'codex' ? { id: 'codex', name: 'Codex', short: 'Codex' } : { id: 'claude', name: 'Claude Code', short: 'Claude' };
-};
-// `use`: whose agent, model and effort to run with (Settings → Claude Code → Prompts: claudeAgent.<k>, claudeModel.<k>,
-// claudeEffort.<k>).
-export async function askClaudeCli(input: string, use?: string): Promise<string> {
-  const pick = (k: string) => {
-    try {
-      return use ? localStorage.getItem(`${k}.${use}`) || undefined : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-  const model = pick('claudeModel'), effort = pick('claudeEffort'), agent = use ? agentOf(use).id : 'claude';
-  if (isDesktop) return command<string>('claude_text', { input, model, effort, agent });
-  const res = await fetch('/claude-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent }) });
-  const d = await res.json().catch(() => ({ error: res.statusText }));
-  if (!res.ok) throw new Error(d.error ?? 'Claude failed');
-  return d.text;
-}
-
 // The Claude Code session that sent a PR here (its lgtm-review skill opens lgtm://owner/repo/pull/n?claude=<id>): the
 // Claude app's id (local_…) or the CLI's (a UUID), kept per PR.
 const SESSION_ID = /^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;

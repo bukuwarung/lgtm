@@ -3,7 +3,7 @@ import { highlightCode, rainbow, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
 import { FileIcon, ModuleIcon } from './shortcuts.tsx';
 import { folderIcon } from './fileicons.ts';
-import { CheckMark, Octicon, Tg, Who } from './tags.tsx';
+import { AgentMark, CheckMark, Octicon, Tg, Who } from './tags.tsx';
 import { markProps, themeStyle } from './look.ts';
 import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
@@ -445,7 +445,7 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
         <details class="thread" open>
           <summary />
           <div class="comment">
-            <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time> <button class="copy-link">🔗</button> <span class="claude-menu"><button class="copy-link">✳</button></span>
+            <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time> <button class="copy-link">🔗</button> <span class="claude-menu"><button class="copy-link"><AgentMark id="claude" /></button></span>
             <div class="md" dangerouslySetInnerHTML={{ __html: html }} />
           </div>
           <div class="editor">
@@ -478,13 +478,15 @@ const Bar = ({ linked, menu }: { linked?: boolean; menu?: boolean }) => (
       <a class="bar-slack">💬</a>
       <span class="claude-menu">
         <button class={linked ? 'claude-btn linked' : 'claude-btn'}>
-          ✳ Claude{linked && <span class="claude-dot" />}
+          <AgentMark id="claude" /><AgentMark id="codex" /> Agents{linked && <span class="claude-dot" />}
         </button>
         {menu && (
           <div class="account-menu claude-pop" role="menu">
-            <button role="menuitem">✳ Open its Claude Code session <small>Retry payments</small></button>
-            <button role="menuitem">✳ New Claude Code session <small>⌥-click</small></button>
+            <button role="menuitem"><AgentMark id="claude" /> Review with Claude Code <small>adversarial</small></button>
+            <button role="menuitem"><AgentMark id="codex" /> Review with Codex <small>adversarial</small></button>
             <button role="menuitem"><Octicon name="comment-discussion" /> Ask a question about this {T.PR} <small>no session</small></button>
+            <button role="menuitem"><AgentMark id="claude" /> Open its Claude Code session <small>Retry payments</small></button>
+            <button role="menuitem"><AgentMark id="claude" /> New Claude Code session <small>⌥-click</small></button>
           </div>
         )}
       </span>
@@ -647,7 +649,7 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
       </File>
     ),
   },
-  claude: { title: 'Claude Code', width: 860, body: <div class="scene-claude"><Bar linked menu /></div> },
+  claude: { title: 'Coding agents', width: 860, body: <div class="scene-claude"><Bar linked menu /></div> },
   themes: {
     title: 'Themes',
     width: 760,
@@ -1238,7 +1240,7 @@ const GLASS = (on: boolean) => (
   <div class={on ? 'demo-glass glass' : 'demo-glass demo-solid'}>
     <Rows rows={dedent(NESTED, 12)} />
     <div class="bar">
-      <button>✳ Claude</button>
+      <button><AgentMark id="claude" /> Agents</button>
       <button class="primary">Finish review</button>
     </div>
   </div>
@@ -1261,12 +1263,12 @@ Object.assign(DEMOS, {
     on: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="approved" t="approved" />]])}</div>,
   },
   agentReview: {
-    title: 'Claude Code reviews first',
+    title: 'An agent reviews first',
     off: <div class="demo-list">{agentGroup('needs', 'Needs your review', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-time', <Tg i="⏱" n="~10 min" />]]), listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-time', <Tg i="⏱" n="~5 min" />]])])}</div>,
     on: (
       <div class="demo-list">
-        {agentGroup('agents', 'Agents reviewing', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-claude', <Tg i="🤖" t="reviewing…" />]])])}
-        {agentGroup('needs', 'Needs your review', [listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-claude', <Tg i="🤖" n={3} t="findings" />], ['p-time', <Tg i="⏱" n="~5 min" />]])])}
+        {agentGroup('agents', 'Agents reviewing', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-claude', <Tg i="claude" t="reviewing…" />]])])}
+        {agentGroup('needs', 'Needs your review', [listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-claude', <Tg i="claude" n={3} t="findings" />], ['p-time', <Tg i="⏱" n="~5 min" />]])])}
       </div>
     ),
   },

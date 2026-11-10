@@ -78,7 +78,7 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-review-dark.png">
-  <img alt="A PR: the bar with ✳ Claude and Finish review, the Jira ticket, status pills, changes since your last review, and a diff" src="docs/features/scene-review-light.png" width="760">
+  <img alt="A PR: the bar with Agents and Finish review, the Jira ticket, status pills, changes since your last review, and a diff" src="docs/features/scene-review-light.png" width="760">
 </picture>
 
 - Files in reading order: specs and docs, build and config, models, the implementation (each test right below its class), other tests, then resources. Drag the steps into your own order; the index groups files by step, or as folders.
@@ -218,16 +218,18 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
 - Merging moves the Jira ticket on; a PR waiting a day can nudge its reviewers on Slack.
 - **Ask QA** posts your QA request to the QA channel on Slack, filled in from the PR and yours to edit first. When QA replies, the PR, the list and the merge box say whether they signed off or raised an issue.
 
-## Claude Code
+## Coding agents
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-claude-dark.png">
-  <img alt="✳ Claude with a linked session (the green dot), its menu open: the session, a new one, and a question about the PR" src="docs/features/scene-claude-light.png" width="760">
+  <img alt="The Agents menu on a PR: a review by Claude Code or Codex, a question about the PR, and its linked Claude Code session (the green dot)" src="docs/features/scene-claude-light.png" width="760">
 </picture>
 
-- ✳ Claude opens a PR's Claude Code session, or starts one with the PR in the prompt; you see whether it's working or waiting for you. Its menu also asks a question about the PR, no session needed.
+- Claude Code and Codex, each found through its CLI and switched on or off in Settings → Coding agents, with its own model and effort. They run with no tools: they read what lgtm gives them and answer.
+- A PR's **Agents** menu asks any of them for an adversarial review, or a question about the PR; select code to ask about just that. Or have one review each PR before it reaches “Needs your review” (Settings → Reviewing picks which).
+- With Claude Code, the menu also opens the PR's Claude Code session, or starts one with the PR in the prompt; you see whether it's working or waiting for you.
 - Claude sends PRs here for review, and gets your review back to act on.
-- The `lgtm-links` mod for Claude Code puts an **Open in lgtm** button under replies that link a PR and under `gh pr create`, and adds `/lgtm` (the PR given, else the last one linked, else this branch's). PRs it opens are linked to the session, so ✳ Claude comes back to it, and a review or comment you send the session from lgtm reaches it by itself, no "check lgtm" needed. At the prompt of a terminal session:
+- The `lgtm-links` mod for Claude Code puts an **Open in lgtm** button under replies that link a PR and under `gh pr create`, and adds `/lgtm` (the PR given, else the last one linked, else this branch's). PRs it opens are linked to the session, so the Agents menu comes back to it, and a review or comment you send the session from lgtm reaches it by itself, no "check lgtm" needed. At the prompt of a terminal session:
 
   ```
   /plugin install lgtm-links --marketplace bukuwarung/lgtm

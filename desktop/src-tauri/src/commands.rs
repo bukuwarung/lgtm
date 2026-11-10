@@ -963,6 +963,17 @@ pub async fn claude_text(input: String, model: Option<String>, effort: Option<St
     Ok(out.stdout.trim().to_string())
 }
 
+/// The coding agents' CLIs installed (Settings → Coding agents): each one's --version, or null. The server's detectAgents().
+#[tauri::command]
+pub async fn agents() -> Result<Value, String> {
+    let version = |bin: &str| {
+        let o = run(bin, &["--version"], None, std::time::Duration::from_secs(15));
+        let v = o.stdout.lines().next().unwrap_or("").trim().trim_start_matches("codex-cli ").trim_end_matches(" (Claude Code)").to_string();
+        if o.ok && !v.is_empty() { Value::String(v) } else { Value::Null }
+    };
+    Ok(json!([{ "id": "claude", "version": version("claude") }, { "id": "codex", "version": version("codex") }]))
+}
+
 /// The same through Codex's CLI (`codex login`): its last message back. Every tool it has switched off (shell, browser,
 /// computer use, apps, images, MCP servers, web search), read-only, in an empty folder: like Claude above, it only
 /// reads what it's given. The server's codexText().

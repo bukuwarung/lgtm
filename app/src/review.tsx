@@ -23,7 +23,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
+import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
@@ -32,10 +32,11 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, agentOf } from './platform.ts';
+import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
+import { AGENTS, askAgent, setAskAgent, runAgent, useAgents, type AgentId } from './agents.ts';
 import { toPerson } from './person.tsx';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
@@ -4111,14 +4112,17 @@ function ReviewThreads({ review, threads, reveal }: { review: ConversationItem; 
   );
 }
 
-// "✳ Claude": this PR's Claude Code session, one click away. With one linked (a dot: the session that sent the PR here,
-// or one this button started), it opens it; a comment's ✳ copies that comment as a prompt to paste. Without one, it
-// starts a session with the PR or comment in the prompt (in the repo's folder, if set in Settings) and links it once
-// the Claude app records it. ⌥-click starts a new one anyway. The bar's (`label`) opens a menu: that, a new session,
-// and a question about the whole PR (Ask, answered by the claude CLI without a session).
+// "Agents" (the PR bar, `label`): a menu of what the coding agents on (Settings → Coding agents) can do here: a review
+// by each one, a question about the whole PR (the Ask panel, its agent picked there) and, with Claude Code on, this PR's
+// Claude Code session. A comment's Claude mark is that session alone. With one linked (a dot: the session that sent
+// the PR here, or one this button started), it opens it, with a comment left for it; without one, it starts a session
+// with the PR or comment in the prompt (in the repo's folder, if set in Settings) and links it once the Claude app
+// records it. ⌥-click starts a new one anyway.
 function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo: string; prUrl: string; label?: string; full?: PR }) {
   const [note, setNote] = useState('');
   const [menu, setMenu] = useState(false);
+  const { on: agents } = useAgents();
+  const claudeOn = agents.includes('claude');
   useEffect(() => {
     if (!menu) return;
     const away = (e: Event) => !(e.target as Element).closest?.('.claude-menu') && setMenu(false);
@@ -4170,43 +4174,51 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   };
   const install = () => claudeSkill(true).then(() => (setOffer(false), flash(`Skill installed: Claude can now send ${pageTerm().PRs} here`)), (e) => flash(`Couldn't install it: ${e.message}`));
   const what = label ? `this ${pageTerm().PR}` : 'this comment';
+  if (!label && !claudeOn) return null;
   return (
     <span class="claude-menu">
       <button
         class={`${label ? 'claude-btn' : 'copy-link'}${from ? ' linked' : ''}`}
-        title={label ? `Claude: its Claude Code session, or a question about this ${pageTerm().PR}` : from ? `Open its Claude Code session${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
+        title={label ? `Coding agents: a review or a question about this ${pageTerm().PR}${claudeOn ? ', or its Claude Code session' : ''}` : from ? `Open its Claude Code session${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new session)` : `Start a Claude Code session on ${what}`}
         aria-haspopup={label ? 'menu' : undefined}
         aria-expanded={label ? menu : undefined}
         onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e))}
       >
-        ✳{label ? ` ${label}` : ''}
+        {label ? (agents.length ? agents.map((a) => <AgentMark key={a} id={a} />) : <Octicon name="dependabot" />) : <AgentMark id="claude" />}
+        {label ? ` ${label}` : ''}
         {from && <span class={`claude-dot${session?.state === 'waiting' ? ' waiting' : ''}`} aria-label="linked to a session" />}
         {label && session?.state === 'working' && <span class="claude-state"> working…</span>}
         {label && session?.state === 'waiting' && <span class="claude-state waiting"> waiting for you</span>}
       </button>
       {menu && (
         <div class="account-menu claude-pop" role="menu">
-          <button role="menuitem" onClick={() => go({ altKey: false })}>
-            ✳ {from ? 'Open its Claude Code session' : 'Start a Claude Code session'}
-            {from && title && <small>{title}</small>}
-          </button>
-          {from && (
-            <button role="menuitem" onClick={() => go({ altKey: true })}>
-              ✳ New Claude Code session <small>⌥-click</small>
-            </button>
-          )}
-          <button role="menuitem" onClick={() => (setMenu(false), dispatchEvent(new Event('lgtm:ask-pr')))}>
-            <Octicon name="comment-discussion" /> Ask a question about this {pageTerm().PR} <small>no session</small>
-          </button>
-          {full && (
+          {full && agents.map((a) => (
             <button
+              key={a}
               role="menuitem"
-              title={`An adversarial review of this ${pageTerm().PR} by ${agentOf('agent').name}: its findings go on it under your name, each starting with 🤖 (Settings → Reviewing: as your pending review or as comments)`}
-              onClick={() => (setMenu(false), flash(reviewNow({ id: full.node_id, repo, number: full.number, headSha: full.head.sha }) ? `${agentOf('agent').name} is reviewing it: you'll hear when it's done` : `${agentOf('agent').name} is already on it`))}
+              title={`An adversarial review of this ${pageTerm().PR} by ${AGENTS[a].name}: its findings go on it under your name, each starting with 🤖 (Settings → Reviewing: as your pending review or as comments)`}
+              onClick={() => (setMenu(false), flash(reviewNow({ id: full.node_id, repo, number: full.number, headSha: full.head.sha }, a) ? `${AGENTS[a].name} is reviewing it: you'll hear when it's done` : 'An agent is already on it'))}
             >
-              🤖 Review with {agentOf('agent').name} <small>adversarial</small>
+              <AgentMark id={a} /> Review with {AGENTS[a].name} <small>adversarial</small>
+            </button>
+          ))}
+          {agents.length > 0 && (
+            <button role="menuitem" onClick={() => (setMenu(false), dispatchEvent(new Event('lgtm:ask-pr')))}>
+              <Octicon name="comment-discussion" /> Ask a question about this {pageTerm().PR} <small>no session</small>
             </button>
           )}
+          {claudeOn && (
+            <button role="menuitem" onClick={() => go({ altKey: false })}>
+              <AgentMark id="claude" /> {from ? 'Open its Claude Code session' : 'Start a Claude Code session'}
+              {from && title && <small>{title}</small>}
+            </button>
+          )}
+          {claudeOn && from && (
+            <button role="menuitem" onClick={() => go({ altKey: true })}>
+              <AgentMark id="claude" /> New Claude Code session <small>⌥-click</small>
+            </button>
+          )}
+          {!agents.length && <p class="note">No coding agent is on. Install Claude Code or Codex, or switch one on in Settings → Coding agents.</p>}
         </div>
       )}
       {note && <span class="claude-note">{note}</span>}
@@ -4227,13 +4239,17 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   );
 }
 
-// Select code in a file, then "Ask Claude": a question about it, answered by the claude CLI with the file, its diff in this PR and the selection.
+// Select code in a file, then "Ask": a question about it, answered by a coding agent's CLI (picked in the panel, the last one
+// remembered) with the file, its diff in this PR and the selection.
 function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
   const [sel, setSel] = useState<{ path: string; text: string; x: number; y: number } | null>(null);
   const [panel, setPanel] = useState<{ path: string; text: string } | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<{ html?: string; error?: string } | null>(null);
+  const { on: agents } = useAgents();
+  const [agent, pickAgent] = useState<AgentId | null>(null);
+  const who = agent && agents.includes(agent) ? agent : askAgent();
   useEffect(() => {
     const up = () =>
       setTimeout(() => {
@@ -4255,7 +4271,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
     return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away), removeEventListener('lgtm:ask-pr', whole));
   }, []);
   const ask = async () => {
-    if (!panel || !q.trim()) return;
+    if (!panel || !q.trim() || !who) return;
     setBusy(true);
     setAnswer(null);
     try {
@@ -4266,7 +4282,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
         const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
         prompt = askPrompt(pr, panel.path, f?.patch, source, panel.text, q.trim());
       }
-      const text = await askClaudeCli(prompt, 'ask');
+      const text = await runAgent(prompt, who);
       setAnswer({ html: await renderGfm(text, repo) }); // GitHub sanitizes the HTML
     } catch (e: any) {
       setAnswer({ error: e.message });
@@ -4275,24 +4291,34 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
   };
   return (
     <>
-      {sel && !panel && (
+      {sel && !panel && who && (
         <button
           class="ask-btn primary"
           style={{ left: sel.x, top: sel.y }}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => (setPanel({ path: sel.path, text: sel.text }), setSel(null), setQ(''), setAnswer(null))}
         >
-          <Octicon name="comment-discussion" /> Ask {agentOf('ask').short}
+          <AgentMark id={who} /> Ask {AGENTS[who].short}
         </button>
       )}
-      {panel && (
-        <div class="ask-panel" role="dialog" aria-label={`Ask ${agentOf('ask').short}`}>
+      {panel && who && (
+        <div class="ask-panel" role="dialog" aria-label={`Ask ${AGENTS[who].short}`}>
           <div class="row">
-            <b>Ask {agentOf('ask').short} about {panel.path ? fileLabel(panel.path) : `this ${pageTerm().PR}`}</b>
+            <b>
+              Ask{' '}
+              {agents.length > 1 ? (
+                <select aria-label="Agent" value={who} onChange={(e) => (pickAgent(e.currentTarget.value as AgentId), setAskAgent(e.currentTarget.value as AgentId))}>
+                  {agents.map((a) => <option key={a} value={a}>{AGENTS[a].short}</option>)}
+                </select>
+              ) : (
+                <><AgentMark id={who} /> {AGENTS[who].short}</>
+              )}{' '}
+              about {panel.path ? fileLabel(panel.path) : `this ${pageTerm().PR}`}
+            </b>
             <span class="spacer" />
             <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
           </div>
-          {panel.text ? <pre class="ask-sel">{panel.text}</pre> : <p class="note">Claude reads the description and every file's diff, specs included.</p>}
+          {panel.text ? <pre class="ask-sel">{panel.text}</pre> : <p class="note">{AGENTS[who].short} reads the description and every file's diff, specs included.</p>}
           <textarea
             rows={2}
             autoFocus
@@ -4304,11 +4330,11 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
               else if (e.key === 'Escape') setPanel(null);
             }}
           />
-          <button class="primary" disabled={busy || !q.trim()} onClick={ask}>{busy ? `${agentOf('ask').short} is reading…` : 'Ask'}</button>
+          <button class="primary" disabled={busy || !q.trim()} onClick={ask}>{busy ? `${AGENTS[who].short} is reading…` : 'Ask'}</button>
           {answer?.error && (
             <p class="error">
               {answer.error}
-              {/authenticat|oauth|log ?in/i.test(answer.error) && (agentOf('ask').id === 'codex' ? <> Sign Codex in: run <code>codex login</code> in Terminal.</> : <> Sign Claude Code in again: run <code>claude</code> in Terminal, then <code>/login</code>.</>)}
+              {/authenticat|oauth|log ?in/i.test(answer.error) && <> Sign {AGENTS[who].name} in: run <code>{who === 'codex' ? 'codex login' : 'claude'}</code> in Terminal{who === 'claude' && <>, then <code>/login</code></>}.</>}
             </p>
           )}
           {answer?.html && <div class="md ask-answer" dangerouslySetInnerHTML={{ __html: answer.html }} />}

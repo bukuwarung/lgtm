@@ -11,7 +11,8 @@ import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, agentOf } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
+import { agentIdOf } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -1289,25 +1290,26 @@ function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolea
 
 const closedAsked = new Map<string, number>(); // the bell's PRs asked about, when ("owner/repo#n")
 
-// Claude Code's review of a PR waiting for mine (Settings → Reviewing, agentreview.ts): under way, what it found and
-// where it put it, or why it couldn't (a click tries again).
+// A coding agent's review of a PR waiting for mine (Settings → Reviewing, agentreview.ts), with its mark: under way,
+// what it found and where it put it, or why it couldn't (a click tries again).
 function AgentPill({ i }: { i: QueueItem }) {
   const r = agentRunOf(i);
   if (!r) return null;
+  const mark = agentIdOf(r.by) ?? '🤖';
   if (r.state === 'queued' || r.state === 'running')
-    return <span class="pill p-claude" title={r.state === 'queued' ? 'Waiting for its turn: two at a time' : `${agentOf('agent').name} is reviewing it; you'll find its findings on it`}><Tg i="🤖" t={r.state === 'queued' ? 'queued' : 'reviewing…'} /></span>;
+    return <span class="pill p-claude" title={r.state === 'queued' ? 'Waiting for its turn: two at a time' : `${r.by ?? 'The agent'} is reviewing it; you'll find its findings on it`}><Tg i={mark} t={r.state === 'queued' ? 'queued' : 'reviewing…'} /></span>;
   if (r.state === 'limited')
-    return <span class="pill p-warn" title={`Today's ${agentLimit()} agent reviews are used up: this one waits for tomorrow (Settings → Reviewing), or ask for it from the ${T.PR}'s ✳ Claude menu`}><Tg i="🤖" t="limit reached" /></span>;
+    return <span class="pill p-warn" title={`Today's ${agentLimit()} agent reviews are used up: this one waits for tomorrow (Settings → Reviewing), or ask for it from the ${T.PR}'s Agents menu`}><Tg i={mark} t="limit reached" /></span>;
   if (r.state === 'failed')
     return (
       <span class="pill p-warn" role="button" title={`${r.by ?? 'The agent'} couldn't review it: ${r.error}. Click to try again.`} onClick={(e) => (e.preventDefault(), e.stopPropagation(), retryAgent(i))}>
-        <Tg i="🤖" t="couldn't review" />
+        <Tg i={mark} t="couldn't review" />
       </span>
     );
   const where = r.posted === 'pending' ? 'in your pending review (Finish review sends them)' : 'as comments';
   return (
     <span class={r.findings ? 'pill p-claude' : 'pill p-ok'} title={r.findings ? `${r.by ?? 'The agent'}'s adversarial review: ${r.findings} finding${r.findings > 1 ? 's' : ''}, ${where}` : `${r.by ?? 'The agent'} found nothing to point out`}>
-      {r.findings ? <Tg i="🤖" n={r.findings} t={`finding${r.findings > 1 ? 's' : ''}`} /> : <Tg i="🤖" t="nothing found" />}
+      {r.findings ? <Tg i={mark} n={r.findings} t={`finding${r.findings > 1 ? 's' : ''}`} /> : <Tg i={mark} t="nothing found" />}
     </span>
   );
 }

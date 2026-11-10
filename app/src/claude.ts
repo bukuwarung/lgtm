@@ -16,33 +16,29 @@ const quote = (text: string, room = 1500) => (text.length > room ? text.slice(0,
 const gitlab = (repo: string) => repo.split('/')[0].includes('.');
 const isMr = (url: string) => url.includes('/-/merge_requests/');
 
-// The prompts lgtm hands Claude, as templates you can change (Settings → Claude Code → Prompts). {name} fills in a value
-// (a name it doesn't know stays as written); what Claude must also have (the diff, the files, the answer's format) is
+// The prompts lgtm hands Claude, as templates you can change (Settings → Coding agents → Prompts). {name} fills in a value
+// (a name it doesn't know stays as written); what the agent must also have (the diff, the files, the answer's format) is
 // added after your text, so editing can't lose it.
 export type PromptKind = 'pr' | 'ask' | 'agent';
 // Each fill-in and what it becomes.
 const COMMON: Record<string, string> = {
   kind: 'pull request, or merge request', ref: '#12, or !12', url: "the PR's address", title: 'its title', repo: 'owner/repo', site: 'GitHub or GitLab',
 };
-// cli: run by lgtm through Claude Code's CLI, so its model and effort can be picked (Open in Claude Code opens the app,
-// where the session picks them).
-export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: Record<string, string>; after?: string; cli?: boolean }> = {
+export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: Record<string, string>; after?: string }> = {
   pr: {
-    label: 'Open in Claude Code',
+    label: 'Claude Code session',
     initial: "Let's look at this {kind}: {url}\n{ref} {title} ({branch} → {base})\nRead it with {read}.",
     fields: { ...COMMON, branch: 'its branch', base: 'the branch it merges into', read: 'the gh or glab commands that read it' },
     after: 'from a comment: the comment, quoted, and "Help me address it."',
   },
   ask: {
     label: 'Ask a question',
-    cli: true,
     initial: "You're helping someone review a {site} {kind}. Answer their question in Markdown, concisely and concretely, naming files, identifiers and lines. If the answer depends on code you can't see here, say so.",
     fields: COMMON,
     after: 'what the question is about (the code you selected, or the whole PR), the code itself and your question',
   },
   agent: {
     label: 'Review first',
-    cli: true,
     initial: "You are an adversarial code reviewer. Review this {kind} hard: find what will break. Look for bugs, wrong edge cases, race conditions, security problems, data loss, broken error handling, and risky changes without tests. No style nits, no praise, nothing you aren't confident about; at most 10 findings, the worst first. An empty list is fine.",
     fields: COMMON,
     after: 'the answer format lgtm reads (findings as JSON, each with its file and line), the description, the numbered diff and the changed files',
@@ -82,13 +78,13 @@ export function prPrompt(pr: PrLike, repo: string): string {
   return fillPrompt(promptTemplate('pr'), { ...prFields(pr, repo), branch: pr.head.ref, base: pr.base.ref, read });
 }
 
-// A comment to address: the PR as "Open in Claude Code" puts it, then the comment.
+// A comment to address: the PR as "Claude Code session" puts it, then the comment.
 export function commentPrompt(c: { author: string; text: string; url: string }, pr: PrLike, repo: string, at?: { path: string; line?: number | null }): string {
   const place = at ? ` on \`${at.path}${at.line ? `:${at.line}` : ''}\`` : '';
   return [prPrompt(pr, repo), `A review comment from @${c.author}${place}:`, quote(c.text), `Comment: ${c.url}\nHelp me address it.`].join('\n\n');
 }
 
-// "Ask Claude" about code selected in a file: the question with the file as it is now, its diff in this PR and the
+// "Ask" about code selected in a file: the question with the file as it is now, its diff in this PR and the
 // selection.
 export function askPrompt(
   pr: { html_url: string; title: string },

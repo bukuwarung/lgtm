@@ -1,5 +1,5 @@
 // Captures each feature example (src/demos.tsx) as docs/features/<key>-<theme>.png for the README.
-// Needs a running lgtm (LGTM_PORT if not 4517) and Google Chrome. Talks to Chrome over its DevTools protocol with
+// Needs a running lgtm (LGTM_PORT if not 4517) and Google Chrome. Talks to Chrome over its DevTools protocol with Give keys to capture only those (node scripts/demos.mjs scene-claude).
 // Node's built-in WebSocket, so there's nothing to install. Chrome runs headless on a throwaway profile, then quits.
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -37,7 +37,7 @@ try {
 
   for (const theme of ['light', 'dark']) {
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
-    for (const k of KEYS) {
+    for (const k of process.argv.length > 2 ? process.argv.slice(2) : KEYS) {
       await send('Page.navigate', { url: `${ORIGIN}/#/demo/${k}/${theme}` });
       await sleep(900);
       const box = await evaluate(`(() => { const r = document.querySelector('.demo-page').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })()`);

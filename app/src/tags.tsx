@@ -1,4 +1,5 @@
 import type { ComponentChildren } from 'preact';
+import { AGENTS, type AgentId } from './agents.ts';
 
 import { OCTICONS } from './octicons.ts';
 import { ago, copyText, useStoredFlag, faceOf } from './platform.ts';
@@ -67,7 +68,14 @@ const ICONS: Record<string, string> = {
 };
 
 export const TagIcon = ({ i }: { i: string }) =>
-  ICONS[i] ? <Octicon name={ICONS[i].replace('/', '')} slash={ICONS[i].endsWith('/')} /> : <>{i}</>;
+  i === '✳' ? <AgentMark id="claude" /> : i in AGENTS ? <AgentMark id={i as AgentId} /> : ICONS[i] ? <Octicon name={ICONS[i].replace('/', '')} slash={ICONS[i].endsWith('/')} /> : <>{i}</>;
+
+// A coding agent's official mark (agents.ts), at the text's size.
+export const AgentMark = ({ id }: { id: AgentId }) => (
+  <svg class="agent-mark" viewBox="0 0 24 24" aria-label={AGENTS[id].name} role="img" style={AGENTS[id].color ? { fill: AGENTS[id].color } : undefined}>
+    <path d={AGENTS[id].mark} fill-rule="evenodd" />
+  </svg>
+);
 
 // A tag's or pill's contents: its icon, any number (always shown) and its words, shown as text, icons or both (Settings →
 // Appearance; style.css hides one or the other). The icon carries the words on hover for when they're hidden.

@@ -2,7 +2,8 @@ import { CLAUDE_PROMPTS, fillPrompt, type PromptKind } from './claude.ts';
 import { labMe } from './gitlab.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
-import { CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
+import { AgentMark, CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
+import { AGENTS, AGENT_IDS, agentEffort, agentModel, agentOn, detectAgents, setAgentEffort, setAgentModel, setAgentOn, useAgents, type AgentId } from './agents.ts';
 import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
@@ -156,13 +157,32 @@ function AgentLimit() {
     <label class="set-row">
       <span>
         At most <input type="number" min={0} max={500} class="num-input" value={limit} onChange={(e) => setLimit(String(Math.max(0, Math.round(Number(e.currentTarget.value) || 0))))} /> a day
-        <small>The rest wait for tomorrow, marked “limit reached”. 0: no limit. Reviews you ask for (✳ Claude → Review with Claude Code) don't count.</small>
+        <small>The rest wait for tomorrow, marked “limit reached”. 0: no limit. Reviews you ask for (the {T.PR}'s Agents → Review with…) don't count.</small>
       </span>
     </label>
   );
 }
 
-// Where Claude Code's findings go (agentreview.ts).
+// Which coding agent does the automatic review (agentreview.ts), among those on (Settings → Coding agents).
+function AutoAgent() {
+  const { on } = useAgents();
+  const [pick, setPick] = useStoredValue('agentReviewAgent', '');
+  if (!on.length) return <p class="note">No coding agent is on: install Claude Code or Codex, or switch one on under Coding agents.</p>;
+  const cur = on.includes(pick as AgentId) ? pick : on[0];
+  return (
+    <label class="set-row">
+      <span>
+        Reviewed by{' '}
+        <select value={cur} onChange={(e) => setPick(e.currentTarget.value)}>
+          {on.map((a) => <option value={a}>{AGENTS[a].name}</option>)}
+        </select>
+        <small>Its model and effort: under Coding agents. Reviews and questions you ask for pick their agent each time.</small>
+      </span>
+    </label>
+  );
+}
+
+// Where the agent's findings go (agentreview.ts).
 function AgentPost() {
   const [mode, setMode] = useStoredValue('agentReviewPost', 'pending');
   return (
@@ -248,7 +268,7 @@ function Status({ ok, children }: { ok: boolean | null; children: preact.Compone
 
 // Everything lgtm remembers, in one place, plus whether the tools it drives (gh, slackcli, acli) are signed in.
 // Preferences live in this browser; changing one here updates the open views at once.
-// Each section's icon in the list beside them (Octicons; Claude Code keeps its ✳, as on its buttons).
+// Each section's icon in the list beside them (Octicons).
 const SECTION_ICON: Record<string, string> = {
   Accounts: 'person',
   Slack: 'comment-discussion',
@@ -268,6 +288,7 @@ const SECTION_ICON: Record<string, string> = {
   Backup: 'archive',
   'Keyboard shortcuts': 'command-palette',
   'Saved replies': 'reply',
+  'Coding agents': 'dependabot',
 };
 
 export function Settings() {
@@ -345,7 +366,7 @@ export function Settings() {
       <nav class="set-toc" aria-label="Settings sections">
         {toc.map((t) => (
           <button class={`${cur === t.id ? 'on' : ''}${t.sub ? ' sub' : ''}`} onClick={() => document.getElementById(t.id)?.scrollIntoView({ block: 'start' })}>
-            {SECTION_ICON[t.name] ? <Octicon name={SECTION_ICON[t.name]} /> : <span class="set-toc-glyph">✳</span>} {t.name}
+            <Octicon name={SECTION_ICON[t.name] ?? 'gear'} /> {t.name}
           </button>
         ))}
       </nav>
@@ -417,7 +438,7 @@ export function Settings() {
           </Flag>
           <SlackMessages />
         </div>
-        <ClaudeFolders />
+        <CodingAgents />
       </section>
 
 
@@ -484,9 +505,10 @@ export function Settings() {
           k="agentReview"
           initial={false}
           label={`An agent reviews ${T.PRs} waiting for you first`}
-          hint={`An adversarial review of each ${T.PR} as it comes to “Needs your review”, and again after new commits: Claude Code or Codex (Claude Code → Prompts → Review first) reads its description, diff and changed files, with no tools. Meanwhile it waits under “Agents reviewing”. The findings go on the ${T.PR} under your name, each starting with 🤖. Two at a time.`}
+          hint={`An adversarial review of each ${T.PR} as it comes to “Needs your review”, and again after new commits: the coding agent below reads its description, diff and changed files (Coding agents → Prompts → Review first), with no tools. Meanwhile it waits under “Agents reviewing”. The findings go on the ${T.PR} under your name, each starting with 🤖. Two at a time.`}
           demo
         >
+          <AutoAgent />
           <AgentPost />
           <AgentLimit />
         </Flag>
@@ -1008,9 +1030,9 @@ function SlackMessage({ k, emoji, names }: { k: SlackKind; emoji: (name: string)
 // A text lgtm sends that you can word (a Slack message, a Claude prompt): folded to its name (an edited one marked, ↺
 // back to lgtm's); open, the text beside its preview on a sample PR, the fill-ins as chips that go in at the cursor
 // (what each becomes on hover), and a line about it.
-function Template({ label, text, setText, initial, fields, box, preview, note, extra }: {
+function Template({ label, text, setText, initial, fields, box, preview, note }: {
   label: string; text: string; setText: (v: string) => void; initial: string; fields: Record<string, string>;
-  box: (ref: { current: HTMLTextAreaElement | null }) => preact.ComponentChildren; preview: preact.ComponentChildren; note?: string; extra?: preact.ComponentChildren;
+  box: (ref: { current: HTMLTextAreaElement | null }) => preact.ComponentChildren; preview: preact.ComponentChildren; note?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const edited = text !== initial;
@@ -1045,7 +1067,6 @@ function Template({ label, text, setText, initial, fields, box, preview, note, e
         <div class="template-see">
           {preview}
           {note && <small class="note">{note}</small>}
-          {extra}
         </div>
       </div>
     </details>
@@ -1626,7 +1647,7 @@ function ClaudeSkill() {
       <span>
         Claude Code skill
         <small>
-          Lets Claude open a PR that's ready for review here, linked to its session: ✳ Claude on that PR goes back to it, and after
+          Lets Claude open a PR that's ready for review here, linked to its session: the PR's Agents menu goes back to it, and after
           your review lgtm offers to send it the outcome. Claude asks once whether you want this.
           {s?.installed && <> Installed in <code>{s.path}</code>.</>}
         </small>
@@ -1656,8 +1677,69 @@ function ClaudeMod() {
   );
 }
 
-// Claude Code: which local checkout a new session for each repo opens in (the ✳ Claude menu). Without one, Claude
-// asks for a folder itself.
+// One coding agent (agents.ts): installed or not, switched on or off, and the model and effort lgtm runs it with.
+function AgentRow({ id }: { id: AgentId }) {
+  const { detected } = useAgents();
+  const a = AGENTS[id];
+  const version = detected?.find((d) => d.id === id)?.version;
+  const on = agentOn(id);
+  return (
+    <div class="set-flag">
+      <label class="set-row">
+        <input type="checkbox" checked={on} disabled={!version} onChange={() => setAgentOn(id, !on)} />
+        <span>
+          <AgentMark id={id} /> {a.name}
+          <small>
+            {!detected ? 'Looking for it…' : version ? <>{version}. Sign in from a terminal: <code>{a.login}</code></> : <>Not installed. Install it from a terminal: <code>{a.install}</code></>}
+          </small>
+        </span>
+      </label>
+      {version && (
+        <fieldset class="set-sub" disabled={!on}>
+          <div class="template-run">
+            <label>
+              Model{' '}
+              {a.models ? (
+                <select value={agentModel(id)} onChange={(e) => setAgentModel(id, e.currentTarget.value)}>
+                  {a.models.map(([v, n]) => <option value={v}>{n}</option>)}
+                </select>
+              ) : (
+                <input class="model-input" placeholder={`${a.short}'s default`} value={agentModel(id)} onChange={(e) => setAgentModel(id, e.currentTarget.value.trim())} />
+              )}
+            </label>
+            <label>
+              Effort{' '}
+              <select value={agentEffort(id)} onChange={(e) => setAgentEffort(id, e.currentTarget.value)}>
+                {a.efforts.map(([v, n]) => <option value={v}>{n}</option>)}
+              </select>
+            </label>
+          </div>
+        </fieldset>
+      )}
+    </div>
+  );
+}
+
+// The coding agents (agents.ts): each one's switch, model and effort; Claude Code's extras while it's on; the prompts.
+function CodingAgents() {
+  const { on, detected } = useAgents();
+  return (
+    <div class="set-group">
+      <h4>Coding agents</h4>
+      <p class="note">
+        lgtm runs them through their CLIs, signed in as you are, with no tools: they read what lgtm gives them and answer. A review or a question picks its
+        agent each time (the {T.PR}'s Agents menu, the Ask panel); the automatic review uses the one under Reviewing.{' '}
+        {detected && <button class="link" onClick={() => detectAgents(true).then(() => dispatchEvent(new Event('lgtm:agents-set')))}>Look again</button>}
+      </p>
+      {AGENT_IDS.map((id) => <AgentRow key={id} id={id} />)}
+      {on.includes('claude') && <ClaudeFolders />}
+      <ClaudePrompts />
+    </div>
+  );
+}
+
+// Claude Code: its skill and mod, and which local checkout a new session for each repo opens in (the Agents menu).
+// Without one, Claude asks for a folder itself.
 function ClaudeFolders() {
   const [raw, setRaw] = useStoredValue('claudeFolders', '{}');
   const folders: Record<string, string> = (() => {
@@ -1678,14 +1760,14 @@ function ClaudeFolders() {
     setRaw(JSON.stringify(next));
   };
   return (
-    <div class="set-group">
-      <h4>Claude Code</h4>
+    <>
+      <h5><AgentMark id="claude" /> Claude Code sessions</h5>
       <p class="note">
-        ✳ Claude (on a PR or a comment) opens a Claude Code session in the Claude desktop app with the PR or comment in the prompt. Set where each repo is checked
-        out so the session starts there.
+        The {T.PR}'s Agents menu, and the Claude mark on a comment, open a Claude Code session in the Claude desktop app with the {T.PR} or comment in the prompt.
+        Set where each repo is checked out so the session starts there.
       </p>
       <ClaudeSkill />
-          <ClaudeMod />
+      <ClaudeMod />
       {!repos ? (
         <Lines />
       ) : (
@@ -1702,8 +1784,7 @@ function ClaudeFolders() {
           </tbody>
         </table>
       )}
-      <ClaudePrompts />
-    </div>
+    </>
   );
 }
 
@@ -1723,46 +1804,6 @@ function ClaudePrompts() {
     </>
   );
 }
-// The agent a prompt lgtm runs itself goes to (Claude Code, or Codex: both through their CLIs, with no tools), and its
-// model and effort; Default, the agent's own setting. Codex's models are named in full (gpt-…), so typed.
-const MODELS = [['', 'Default'], ['fable', 'Fable'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']];
-const EFFORTS: Record<string, string[][]> = {
-  claude: [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max']],
-  codex: [['', 'Default'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high']],
-};
-function ModelPick({ k }: { k: PromptKind }) {
-  const [agent, setAgent] = useStoredValue('claudeAgent.' + k, '');
-  const [model, setModel] = useStoredValue('claudeModel.' + k, '');
-  const [effort, setEffort] = useStoredValue('claudeEffort.' + k, '');
-  const codex = agent === 'codex';
-  return (
-    <div class="template-run">
-      <label>
-        Agent{' '}
-        <select value={agent} onChange={(e) => (setAgent(e.currentTarget.value), setModel(''), setEffort(''))}>
-          <option value="">Claude Code</option>
-          <option value="codex">Codex</option>
-        </select>
-      </label>
-      <label>
-        Model{' '}
-        {codex ? (
-          <input class="model-input" placeholder="Codex's default" value={model} onChange={(e) => setModel(e.currentTarget.value.trim())} />
-        ) : (
-          <select value={model} onChange={(e) => setModel(e.currentTarget.value)}>
-            {MODELS.map(([v, n]) => <option value={v}>{n}</option>)}
-          </select>
-        )}
-      </label>
-      <label>
-        Effort{' '}
-        <select value={effort} onChange={(e) => setEffort(e.currentTarget.value)}>
-          {EFFORTS[codex ? 'codex' : 'claude'].map(([v, n]) => <option value={v}>{n}</option>)}
-        </select>
-      </label>
-    </div>
-  );
-}
 function ClaudePrompt({ k }: { k: PromptKind }) {
   const p = CLAUDE_PROMPTS[k];
   const [text, setText] = useStoredValue('claudePrompt.' + k, p.initial);
@@ -1776,7 +1817,6 @@ function ClaudePrompt({ k }: { k: PromptKind }) {
       box={(ref) => <textarea ref={ref} rows={Math.max(5, text.split('\n').length + 1)} value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label={p.label} />}
       preview={<pre class="prompt-preview">{fillPrompt(text || p.initial, PROMPT_SAMPLE)}</pre>}
       note={p.after && `Then lgtm adds ${p.after}.`}
-      extra={p.cli ? <ModelPick k={k} /> : <small class="note">The model and effort: picked in the Claude Code session it opens.</small>}
     />
   );
 }

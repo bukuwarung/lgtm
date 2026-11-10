@@ -1472,3 +1472,6 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .num-input { width: 4.5em; margin: 0 4px; padding: 1px 4px; }
 .template-run { display: flex; gap: 12px; flex-wrap: wrap; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .model-input { width: 12em; }
+.template-run > label { display: inline-flex; align-items: center; gap: 4px; }
+.agent-mark { width: 1em; height: 1em; fill: currentColor; flex: none; vertical-align: -0.15em; }
+.agent-mark + .agent-mark { margin-left: 3px; }

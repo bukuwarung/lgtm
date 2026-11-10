@@ -539,6 +539,11 @@ function claudeText(input, model, effort, agent) {
   });
 }
 
+// The coding agents' CLIs installed (Settings → Coding agents): each one's --version, or null.
+const agentVersion = (bin) =>
+  new Promise((resolve) => execFile(bin, ['--version'], { timeout: 15000 }, (err, stdout) => resolve(err ? null : stdout.trim().split('\n')[0].replace(/^codex-cli\s+/, '').replace(/\s*\(Claude Code\)$/, '') || null)));
+const detectAgents = async () => [{ id: 'claude', version: await agentVersion('claude') }, { id: 'codex', version: await agentVersion('codex') }];
+
 // The same through Codex's CLI (`codex login`), signed in like the others: its last message back. With every tool it has
 // switched off (shell, browser, computer use, apps, images, MCP servers, web search) and read-only, in an empty
 // folder: like Claude above, it only reads what it's given (a PR's text could otherwise steer it to read files and
@@ -774,7 +779,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-mod', '/claude-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-mod', '/claude-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => claudeText(b?.input, b?.model, b?.effort, b?.agent))
@@ -852,6 +857,7 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/gh-accounts') return ghAccounts().then((r) => json(res, 200, r));
   if (path === '/glab-accounts') return glabAccounts().then((r) => json(res, 200, r));
+  if (path === '/agents') return detectAgents().then((r) => json(res, 200, r));
   if (path === '/glab-token') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams, host = q.get('host') ?? '';
     try {
