@@ -1475,3 +1475,6 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .template-run > label { display: inline-flex; align-items: center; gap: 4px; }
 .agent-mark { width: 1em; height: 1em; fill: currentColor; flex: none; vertical-align: -0.15em; }
 .agent-mark + .agent-mark { margin-left: 3px; }
+.ed-fix { position: relative; display: inline-flex; }
+.ed-fix-pick { position: absolute; right: 0; top: 100%; z-index: 20; min-width: 200px; }
+.ed-fix-err { margin: 4px 8px; }

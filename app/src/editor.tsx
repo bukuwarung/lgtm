@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { getEmojis, renderGfm } from './github.ts';
 import { renderMermaid } from './mermaid.ts';
 import { useSavedReplies } from './platform.ts';
+import { AGENTS, type AgentId } from './agents.ts';
+import { AgentMark } from './tags.tsx';
 
 type Props = {
   value: string;
@@ -11,6 +13,7 @@ type Props = {
   repo: string; // for the preview's #refs and @mentions
   mentions: string[]; // logins offered after "@"
   suggestion?: string | null; // the commented lines, for a ```suggestion block (line comments only)
+  fix?: { agents: AgentId[]; run: (agent: AgentId, comment: string) => Promise<string> }; // an agent writes the suggestion
   autoFocus?: boolean;
   rows?: number;
   placeholder?: string;
@@ -28,6 +31,8 @@ export function Editor(p: Props) {
   const [emojis, setEmojis] = useState<Record<string, string>>({});
   const [ac, setAc] = useState<Completion | null>(null);
   const [replies] = useSavedReplies();
+  const [fixing, setFixing] = useState<AgentId | 'pick' | null>(null);
+  const [fixErr, setFixErr] = useState('');
 
   useEffect(() => {
     getEmojis(p.repo).then(setEmojis, () => {});
@@ -135,6 +140,15 @@ export function Editor(p: Props) {
   };
 
   // Toolbar buttons keep the textarea's selection: act on mousedown and don't take focus.
+  // An agent's rewrite of the commented lines, from the comment so far, as a suggestion block at the caret.
+  const fix = (agent: AgentId) => {
+    setFixing(agent);
+    setFixErr('');
+    p.fix!.run(agent, p.value).then(
+      (t) => insertBlock('```suggestion\n' + t + '\n```'),
+      (e: Error) => setFixErr(`${AGENTS[agent].name} couldn't: ${e.message}`),
+    ).finally(() => setFixing(null));
+  };
   const tool = (label: string, title: string, run: () => void) => (
     <button type="button" class="ed-tool" title={title} onMouseDown={(e) => { e.preventDefault(); run(); }}>
       {label}
@@ -158,9 +172,32 @@ export function Editor(p: Props) {
             {tool('☐', 'Task', () => prefix('- [ ] '))}
             {replies.length > 0 && tool('↩︎ Replies', 'Saved replies (or type / at the start of a line)', () => offerReplies('', sel().s))}
             {p.suggestion != null && tool('± Suggest', 'Suggest a change to these lines', () => insertBlock('```suggestion\n' + p.suggestion + '\n```'))}
+            {p.suggestion != null && !!p.fix?.agents.length && (
+              <span class="ed-fix">
+                <button
+                  type="button"
+                  class="ed-tool"
+                  disabled={!!fixing && fixing !== 'pick'}
+                  title={`A coding agent writes the change your comment asks for (or a fix, with no comment yet), as a suggestion to edit`}
+                  onMouseDown={(e) => (e.preventDefault(), p.fix!.agents.length > 1 ? setFixing(fixing === 'pick' ? null : 'pick') : fix(p.fix!.agents[0]))}
+                >
+                  {fixing && fixing !== 'pick' ? <><AgentMark id={fixing} /> Fixing…</> : p.fix.agents.length > 1 ? '✦ Fix' : <><AgentMark id={p.fix.agents[0]} /> Fix</>}
+                </button>
+                {fixing === 'pick' && (
+                  <span class="account-menu ed-fix-pick" role="menu">
+                    {p.fix.agents.map((a) => (
+                      <button type="button" role="menuitem" onMouseDown={(e) => (e.preventDefault(), fix(a))}>
+                        <AgentMark id={a} /> Fix with {AGENTS[a].name}
+                      </button>
+                    ))}
+                  </span>
+                )}
+              </span>
+            )}
           </>
         )}
       </div>
+      {fixErr && <p class="error ed-fix-err">{fixErr}</p>}
       {tab === 'write' ? (
         <div class="ed-write">
           <textarea

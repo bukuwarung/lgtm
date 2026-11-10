@@ -108,6 +108,30 @@ export function askPrompt(
   ].join('\n\n');
 }
 
+// "Fix" in the comment box (a line comment's suggested change): the lines commented on, rewritten by an agent from
+// what the comment says so far, as the replacement lines alone.
+export function fixPrompt(pr: { html_url: string; title: string }, path: string, from: number, to: number, lines: string, source: string | null, patch: string | undefined, comment: string): string {
+  const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '\n(cut here for length)' : s);
+  return [
+    `You're helping someone review a pull request. They're commenting on ${from === to ? `line ${from}` : `lines ${from}-${to}`} of ${path} and want to suggest replacement code for exactly ${from === to ? 'that line' : 'those lines'}.`,
+    comment.trim() ? 'Make the change their comment asks for.' : "Fix what's wrong with these lines (a bug, an unhandled case, a mistake); if nothing is, improve them the least you can.",
+    "Answer with the replacement lines only: no code fences, no explanation, the file's indentation kept. They replace the lines below, all of them.",
+    `PR: ${pr.html_url} (${pr.title})`,
+    `The file now:\n${source == null ? '(not available)' : cut(source, 150_000)}`,
+    `Its diff in this PR:\n${patch ? cut(patch, 100_000) : '(none)'}`,
+    `The lines to replace:\n${lines}`,
+    comment.trim() ? `Their comment so far:\n${comment.trim()}` : '',
+  ].filter(Boolean).join('\n\n');
+}
+
+// An agent's answer comes back with its leading spaces trimmed: shifted right to where the lines it replaces start.
+export function reindent(text: string, like: string) {
+  const ind = (t: string) => Math.min(...t.split('\n').filter((l) => l.trim()).map((l) => l.match(/^[ \t]*/)![0].length));
+  const want = like.split('\n').find((l) => l.trim())?.match(/^[ \t]*/)![0] ?? '';
+  const add = want.length - (text.trim() ? ind(text) : want.length);
+  return add > 0 ? text.split('\n').map((l) => (l.trim() ? want.slice(0, add) + l : l)).join('\n') : text;
+}
+
 // A question about the whole PR: its description, then every file's diff (the specs among them), as much as fits.
 export function prAskPrompt(pr: { html_url: string; title: string; body: string | null }, files: { filename: string; patch?: string }[], question: string): string {
   let room = 400_000;

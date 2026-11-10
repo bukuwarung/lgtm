@@ -1230,3 +1230,11 @@ test('Claude prompts: the defaults read as before (a comment adds itself to the 
     delete (globalThis as any).localStorage;
   }
 });
+
+test("an agent's fix is shifted back to the indentation of the lines it replaces", async () => {
+  const { reindent } = await import('../src/claude.ts');
+  assert.equal(reindent('for (;;) x++;', '  for (;;) x--;'), '  for (;;) x++;');
+  assert.equal(reindent('if (a) {\n  b();\n}', '    if (a) {\n      c();\n    }'), '    if (a) {\n      b();\n    }');
+  assert.equal(reindent('    kept();', '    old();'), '    kept();'); // already indented
+  assert.equal(reindent('a();\n\nb();', '\tx();'), '\ta();\n\n\tb();'); // blank lines stay blank
+});

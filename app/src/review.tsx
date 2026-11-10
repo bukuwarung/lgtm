@@ -25,7 +25,7 @@ import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
 import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { claudeContinueLink, claudeNewLink, askPrompt, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
+import { claudeContinueLink, claudeNewLink, askPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
@@ -63,6 +63,7 @@ type Ctx = {
   repo: string;
   mentions: string[]; // people on this PR, for @-completion
   suggestion: (t: Target) => string | null; // the target's lines, for a ```suggestion block
+  files: File[]; // the PR's files, for an agent's fix (their diffs)
   pending: boolean; // a review of mine is open on GitHub: comments join it, none post on their own
   editPending: (id: string, body: string | null) => Promise<void>; // one of its comments changed, or (null) deleted
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
@@ -1127,6 +1128,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           .filter((l) => l && !l.endsWith('[bot]') && l !== 'ghost'),
       ),
     ],
+    files,
     // GitHub suggestions replace head-side lines, which (being commentable) are all in the diff's hunks.
     suggestion: (t) => {
       const f = files.find((x) => x.filename === t.path);
@@ -3984,6 +3986,16 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
   const [nowPref] = useStoredFlag('commentNow', false); // Settings → Reviewing: post at once, or keep for Finish review
   const now = nowPref && !ctx.pending; // with a review open on GitHub, comments join it
   const [posting, setPosting] = useState<'' | 'posting' | string>('');
+  const { on: agents } = useAgents();
+  // "Fix" in the editor: the commented lines rewritten by the agent picked, from the comment so far.
+  const fix = async (agent: AgentId, comment: string) => {
+    const lines = ctx.suggestion(target) ?? '';
+    const f = ctx.files.find((x) => x.filename === target.path);
+    const source = await getRaw(ctx.headRepo, target.path, ctx.pr.head.sha).catch(() => null);
+    const out = (await runAgent(fixPrompt(ctx.pr, target.path, target.startLine ?? target.line!, target.line!, lines, source, f?.patch, comment), agent))
+      .replace(/^\s*```[\w-]*\n?|\n?```\s*$/g, '').replace(/^\n+|\s+$/g, '');
+    return reindent(out, lines);
+  };
 
   function save(post = now && !target.editId) {
     if (!body.trim() || posting === 'posting') return;
@@ -4007,6 +4019,7 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
         repo={ctx.repo}
         mentions={ctx.mentions}
         suggestion={ctx.suggestion(target)}
+        fix={agents.length ? { agents, run: fix } : undefined}
         autoFocus
       />
       {posting && posting !== 'posting' && <p class="error">{posting}</p>}

@@ -505,7 +505,7 @@ export function Settings() {
           k="agentReview"
           initial={false}
           label={`An agent reviews ${T.PRs} waiting for you first`}
-          hint={`An adversarial review of each ${T.PR} as it comes to “Needs your review”, and again after new commits: the coding agent below reads its description, diff and changed files (Coding agents → Prompts → Review first), with no tools. Meanwhile it waits under “Agents reviewing”. The findings go on the ${T.PR} under your name, each starting with 🤖. Two at a time.`}
+          hint={`An adversarial review of each ${T.PR} as it comes to “Needs your review”, and again when you’re asked to review it again (only what changed since its last review): the coding agent below reads its description, diff and changed files (Coding agents → Prompts → Review first), with no tools. Meanwhile it waits under “Agents reviewing”. The findings go on the ${T.PR} under your name, each starting with 🤖. Two at a time.`}
           demo
         >
           <AutoAgent />

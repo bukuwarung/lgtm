@@ -8,7 +8,7 @@
 // (agents.ts runAgent). Its findings are checked against the diff: a line it names that the diff doesn't have goes on the
 // file instead. One run per PR and head commit, two at a time; the list shows the PRs being reviewed above "Needs your
 // review" (main.tsx), and each run is remembered per account (platform.ts own).
-import { postAgentFindings, getRaw, loadPR, type Draft, type PRFile, type QueueItem } from './github.ts';
+import { postAgentFindings, getCompare, getRaw, loadPR, type Draft, type PRFile, type QueueItem } from './github.ts';
 import { own, term } from './platform.ts';
 import { AGENTS, agentIdOf, autoAgent, detectAgents, runAgent, type AgentId } from './agents.ts';
 import { parsePatch } from './diff.ts';
@@ -21,6 +21,8 @@ export type AgentRun = {
   day?: string; // the day an automatic run was queued, for the daily limit
   manual?: boolean; // asked for from the PR (its Agents menu): not counted against the limit
   by?: string; // the agent that did it (Claude Code, Codex)
+  asked?: string; // the review request it answered (QueueItem.waitingSince): only a new one runs it again
+  since?: string; // a re-review: the commit it read the changes from (the last run's)
   findings?: number;
   posted?: 'pending' | 'comment';
   error?: string;
@@ -58,18 +60,17 @@ const postMode = (): 'pending' | 'comment' => {
     return 'pending';
   }
 };
-type Target = Pick<QueueItem, 'id' | 'repo' | 'number'> & { headSha?: string };
-export const agentRunOf = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => {
-  const r = runs[i.id];
-  return r && r.version === (i.headSha ?? '') ? r : undefined;
-};
+type Target = Pick<QueueItem, 'id' | 'repo' | 'number'> & { headSha?: string; waitingSince?: string };
+// Its latest run, on whichever commit: new pushes alone don't run it again.
+export const agentRunOf = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => runs[i.id];
 // Whether a PR sits in "Agents reviewing" rather than "Needs your review".
 export const agentBusy = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => {
   const r = agentRunOf(i);
   return !!r && (r.state === 'queued' || r.state === 'running');
 };
 
-// The PRs waiting for my review that haven't had this commit reviewed: queued, two run at a time. A run left
+// The PRs waiting for my review: each reviewed once, then again only when I'm asked to review it again (a new review
+// request, with new commits): that time only the changes since its last run. Queued, two run at a time. A run left
 // "running" by a closed window starts again.
 // At most this many automatic runs a day (Settings → Reviewing); 0, no limit.
 export const agentLimit = () => {
@@ -80,7 +81,7 @@ export const agentLimit = () => {
   }
 };
 let active = 0;
-const queue: (Target & { manual?: boolean; agent: AgentId })[] = [];
+const queue: (Target & { manual?: boolean; agent: AgentId; since?: string })[] = [];
 const inflight = new Set<string>(); // queued or running in this window
 export async function reviewWithAgents(waiting: QueueItem[]) {
   if (!agentReviewOn()) return;
@@ -90,16 +91,26 @@ export async function reviewWithAgents(waiting: QueueItem[]) {
   const today = new Date().toDateString();
   let used = Object.values(runs).filter((r) => !r.manual && r.state !== 'limited' && r.day === today).length;
   for (const i of waiting) {
-    const r = agentRunOf(i);
-    if (!i.headSha || inflight.has(i.id) || (r && (r.state === 'done' || r.state === 'failed'))) continue;
+    const r = runs[i.id];
+    if (!i.headSha || inflight.has(i.id)) continue;
+    let since = r?.since;
+    if (r && (r.state === 'done' || r.state === 'failed')) {
+      // Runs from before `asked` was kept count as answering the request there is now.
+      const again = i.requested && !!i.waitingSince && (r.asked ?? i.waitingSince) !== i.waitingSince && r.version !== i.headSha;
+      if (!again) {
+        if (!r.asked && i.waitingSince) set(i.id, { ...r, asked: i.waitingSince });
+        continue;
+      }
+      if (r.state === 'done') since = r.version; // else from where the failed one started
+    }
     if (agentLimit() && used >= agentLimit()) {
-      if (r?.state !== 'limited') set(i.id, { version: i.headSha, state: 'limited', at: Date.now() });
+      if (r?.state !== 'limited') set(i.id, { version: i.headSha, state: 'limited', at: Date.now(), since });
       continue;
     }
     used++;
     inflight.add(i.id);
-    set(i.id, { version: i.headSha, state: 'queued', at: Date.now(), day: today });
-    queue.push({ ...i, agent });
+    set(i.id, { version: i.headSha, state: 'queued', at: Date.now(), day: today, asked: i.waitingSince, since });
+    queue.push({ ...i, agent, since });
   }
   pump();
 }
@@ -115,7 +126,7 @@ export function retryAgent(i: QueueItem) {
 export function reviewNow(i: Target, agent: AgentId) {
   if (!i.headSha || inflight.has(i.id)) return false;
   inflight.add(i.id);
-  set(i.id, { version: i.headSha, state: 'queued', at: Date.now(), manual: true, by: AGENTS[agent].name });
+  set(i.id, { version: i.headSha, state: 'queued', at: Date.now(), manual: true, by: AGENTS[agent].name, asked: runs[i.id]?.asked ?? i.waitingSince });
   queue.unshift({ ...i, manual: true, agent });
   pump();
   return true;
@@ -124,16 +135,17 @@ function pump() {
   while (active < 2 && queue.length) {
     const i = queue.shift()!;
     const v = i.headSha ?? '', manual = i.manual, by = AGENTS[i.agent].name;
-    const day = runs[i.id]?.day;
+    const { day, asked, since } = runs[i.id] ?? {};
+    const base = { version: v, day, manual, by, asked, since };
     active++;
-    set(i.id, { version: v, state: 'running', at: Date.now(), day, manual, by });
+    set(i.id, { ...base, state: 'running', at: Date.now() });
     review(i)
       .then((r) => {
-        set(i.id, { version: v, state: 'done', at: Date.now(), day, manual, by, ...r });
+        set(i.id, { ...base, state: 'done', at: Date.now(), ...r });
         if (manual) say(`${by} reviewed ${i.repo.split('/').pop()}${term(i.repo).PR === 'MR' ? '!' : '#'}${i.number}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}, ${r.posted === 'pending' ? 'in your pending review' : 'posted as comments'}` : 'nothing to point out'}`);
       })
       .catch((e: Error) => {
-        set(i.id, { version: v, state: 'failed', at: Date.now(), day, manual, by, error: e.message });
+        set(i.id, { ...base, state: 'failed', at: Date.now(), error: e.message });
         if (manual) say(`${by} couldn't review it: ${e.message}`);
       })
       .finally(() => (active--, inflight.delete(i.id), pump()));
@@ -144,9 +156,14 @@ const say = (text: string) => (dispatchEvent(new CustomEvent('lgtm:toast', { det
 type Finding = { path: string; line?: number; side?: 'RIGHT' | 'LEFT'; severity?: string; title: string; body: string };
 const SKIP = /(^|\/)([\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.(min\.js|map|svg|png|jpe?g|gif|webp|pdf|zip|jar)$/i;
 
-async function review(i: Target & { agent: AgentId }): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
+async function review(i: Target & { agent: AgentId; since?: string }): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
   const { pr, files } = await loadPR(i.repo, i.number);
-  const shown = files.filter((f) => f.patch && !SKIP.test(f.filename)).slice(0, 60);
+  // A re-review reads the changes since the last run, in the PR's files; after a rebase (no shared history), all of it.
+  // ponytail: a merge of the base branch in those commits shows its changes to the PR's files too.
+  const cmp = i.since ? await getCompare(i.repo, i.since, pr.head.sha).catch(() => null) : null;
+  const since = cmp && cmp.status !== 'diverged' ? i.since : undefined;
+  const changed = since ? cmp!.files.filter((f) => files.some((p) => p.filename === f.filename)) : files;
+  const shown = changed.filter((f) => f.patch && !SKIP.test(f.filename)).slice(0, 60);
   // The changed files as they are now, while the prompt has room (about 300 KB in all, 60 KB a file).
   let room = 300_000;
   const texts: string[] = [];
@@ -162,10 +179,11 @@ async function review(i: Target & { agent: AgentId }): Promise<Pick<AgentRun, 'f
     fillPrompt(promptTemplate('agent'), prFields(pr, i.repo)), // yours to change (Settings → Coding agents → Prompts)
     'Answer with JSON only, no prose around it: {"summary": "one or two sentences", "findings": [{"path": "file path as in the diff", "line": 12, "side": "RIGHT", "severity": "high|medium|low", "title": "short", "body": "what is wrong and why, and what to do (Markdown)"}]}',
     'Line numbers: use the R numbers in the diff below (the new file); use side "LEFT" with an L number only for a removed line. Leave "line" out for a finding about a whole file.',
+    since ? `This is a re-review: you reviewed this ${T.PR} before, and its author asked again. The diff below is only what changed since then (from commit ${since.slice(0, 7)}): review those changes, including whether they break anything around them.` : '',
     `${T.PR}: ${pr.title}\n${pr.body ?? ''}`.slice(0, 8000),
     `The diff, each line numbered (R: the new file, L: the old):\n${shown.map((f) => numbered(f)).join('\n\n')}`.slice(0, 200_000),
     texts.join('\n\n'),
-  ].join('\n\n');
+  ].filter(Boolean).join('\n\n');
   const answer = await runAgent(prompt, i.agent);
   const json = answer.slice(answer.indexOf('{'), answer.lastIndexOf('}') + 1);
   let parsed: { summary?: string; findings?: Finding[] };
@@ -178,13 +196,14 @@ async function review(i: Target & { agent: AgentId }): Promise<Pick<AgentRun, 'f
   const drafts: Draft[] = findings.flatMap((f, k) => {
     const file = files.find((x) => x.filename === f.path);
     if (!file) return [];
-    const ok = f.line != null && commentable(file, f.side === 'LEFT' ? 'LEFT' : 'RIGHT', f.line);
+    // A re-review's removed lines are numbered as the last run's commit had them, not as the PR's diff: on the file.
+    const ok = f.line != null && !(since && f.side === 'LEFT') && commentable(file, f.side === 'LEFT' ? 'LEFT' : 'RIGHT', f.line);
     const sev = f.severity ? `${f.severity[0].toUpperCase()}${f.severity.slice(1)}: ` : '';
     const where = !ok && f.line ? ` (line ${f.line})` : '';
     return [{ id: `agent-${k}`, path: f.path, side: f.side === 'LEFT' ? 'LEFT' : 'RIGHT', ...(ok ? { line: f.line } : {}), body: `🤖 **${sev}${f.title}**${where}\n\n${f.body}` }];
   });
   const mode = postMode();
-  const summary = `🤖 Adversarial review by ${AGENTS[i.agent].name} (from lgtm): ${drafts.length ? `${drafts.length} finding${drafts.length > 1 ? 's' : ''}` : 'nothing found'}.${parsed.summary ? `\n\n${parsed.summary}` : ''}`;
+  const summary = `🤖 ${since ? `Re-review of the changes since ${since.slice(0, 7)}` : 'Adversarial review'} by ${AGENTS[i.agent].name} (from lgtm): ${drafts.length ? `${drafts.length} finding${drafts.length > 1 ? 's' : ''}` : 'nothing found'}.${parsed.summary ? `\n\n${parsed.summary}` : ''}`;
   if (drafts.length || mode === 'pending') await postAgentFindings(i.repo, i.number, pr, drafts, summary, mode);
   return { findings: drafts.length, posted: mode };
 }
