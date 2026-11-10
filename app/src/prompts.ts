@@ -133,7 +133,8 @@ export function reindent(text: string, like: string) {
 }
 
 // "Why did it fail?" on a failed check: the end of its job log and the PR's diff, for a short diagnosis.
-export function ciPrompt(pr: { html_url: string; title: string }, check: string, onBase: string | null, log: string, files: { filename: string; patch?: string }[]): string {
+// question: a follow-up (with the conversation so far); none, the diagnosis itself.
+export function ciPrompt(pr: { html_url: string; title: string }, check: string, onBase: string | null, log: string, files: { filename: string; patch?: string }[], question?: string): string {
   let room = 150_000;
   const diffs = files.map((f) => {
     const d = `--- ${f.filename}\n${f.patch ?? '(binary, too large, or only renamed)'}`.slice(0, Math.max(0, room));
@@ -141,12 +142,15 @@ export function ciPrompt(pr: { html_url: string; title: string }, check: string,
     return d;
   }).filter(Boolean);
   return [
-    `A CI check failed on a pull request. Say why, in Markdown, short: first the cause in one or two sentences (quote the line of the log that shows it), then whether this PR's changes caused it, it looks flaky, or it's unrelated (and why you think so), then the fix in a few concrete steps. If the log doesn't show enough to tell, say what's missing.`,
+    question
+      ? "A CI check failed on a pull request, and someone is asking about it. Answer their question in Markdown, concisely and concretely, from the log and the diff below."
+      : `A CI check failed on a pull request. Say why, in Markdown, short: first the cause in one or two sentences (quote the line of the log that shows it), then whether this PR's changes caused it, it looks flaky, or it's unrelated (and why you think so), then the fix in a few concrete steps. If the log doesn't show enough to tell, say what's missing.`,
     `PR: ${pr.html_url} (${pr.title})`,
     `The check: ${check}${onBase === 'failure' ? ' (it fails on the base branch\'s latest commit too)' : onBase === 'success' ? ' (it passes on the base branch\'s latest commit)' : ''}`,
     `The end of its log:\n${log.slice(-40_000)}`,
     `The PR's diff:\n${diffs.join('\n\n')}`,
-  ].join('\n\n');
+    question ? `Their question: ${question}` : '',
+  ].filter(Boolean).join('\n\n');
 }
 
 // A question about the whole PR: its description, then every file's diff (the specs among them), as much as fits.

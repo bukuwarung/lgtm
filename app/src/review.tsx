@@ -25,7 +25,7 @@ import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
 import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { claudeContinueLink, claudeNewLink, askPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
+import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
@@ -4366,7 +4366,9 @@ function AgentsMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
 // remembered) with the file, its diff in this PR and the selection.
 function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
   const [sel, setSel] = useState<{ path: string; text: string; x: number; y: number } | null>(null);
-  const [panel, setPanel] = useState<{ path: string; text: string } | null>(null);
+  // What it's about: code selected in a file (path, text), the whole PR (neither), or a failed check (ci).
+  type Panel = { path: string; text: string; ci?: { check: string; onBase: string | null; log: string } };
+  const [panel, setPanel] = useState<Panel | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   // The conversation so far: each question with its answer; a follow-up sends the earlier ones along (the CLI keeps
@@ -4392,14 +4394,21 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
       });
     const away = () => setSel(null);
     const whole = () => (setPanel({ path: '', text: '' }), setQ(''), setTurns([]), setError('')); // the Agents menu's Ask
+    // Why did it fail? (a failed check in the index): asked of the agent picked there, at once.
+    const ci = (e: Event) => {
+      const d = (e as CustomEvent<{ check: string; onBase: string | null; log: string; agent: AgentId }>).detail;
+      const p = { path: '', text: '', ci: { check: d.check, onBase: d.onBase, log: d.log } };
+      setPanel(p), setQ(''), setTurns([]), setError(''), pickAgent(d.agent);
+      void send(p, 'Why did it fail?', d.agent, []);
+    };
     addEventListener('lgtm:ask-pr', whole);
+    addEventListener('lgtm:ask-ci', ci);
     addEventListener('mouseup', up);
     addEventListener('scroll', away, { passive: true });
-    return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away), removeEventListener('lgtm:ask-pr', whole));
+    return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away), removeEventListener('lgtm:ask-pr', whole), removeEventListener('lgtm:ask-ci', ci));
   }, []);
-  const ask = async () => {
-    if (!panel || !q.trim() || !who || busy) return;
-    const asked = q.trim();
+  const ask = () => panel && q.trim() && who && !busy && send(panel, q.trim(), who, turns);
+  async function send(panel: Panel, asked: string, who: AgentId, turns: { q: string; text: string }[]) {
     setBusy(true);
     setError('');
     // ponytail: the earlier answers go along whole; a long conversation is cut to its last 6 turns.
@@ -4408,7 +4417,8 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
       : asked;
     try {
       let prompt: string;
-      if (!panel.path) prompt = prAskPrompt(pr, files, question); // the whole PR (the Agents menu's Ask)
+      if (panel.ci) prompt = ciPrompt(pr, panel.ci.check, panel.ci.onBase, panel.ci.log, files, turns.length ? question : undefined); // the first: the diagnosis
+      else if (!panel.path) prompt = prAskPrompt(pr, files, question); // the whole PR (the Agents menu's Ask)
       else {
         const f = files.find((f) => f.filename === panel.path);
         const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
@@ -4419,11 +4429,12 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
       setTurns((t) => [...t, { q: asked, text, html, by: who }]);
       setQ('');
       requestAnimationFrame(() => panelRef.current?.scrollTo({ top: panelRef.current.scrollHeight, behavior: 'smooth' }));
+      if (panel.ci && !turns.length) notifyAgentDone(`${AGENTS[who].name}: why ${panel.ci.check} failed`, text.replace(/[`*_>#]/g, '').split('\n').find((l) => l.trim())?.slice(0, 160) ?? '', `/${repo}/pull/${pr.number}`);
     } catch (e: any) {
       setError(e.message);
     }
     setBusy(false);
-  };
+  }
   return (
     <>
       {sel && !panel && who && (
@@ -4448,12 +4459,12 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
               ) : (
                 <><AgentMark id={who} /> {AGENTS[who].short}</>
               )}{' '}
-              about {panel.path ? fileLabel(panel.path) : `this ${pageTerm().PR}`}
+              about {panel.ci ? `the failed check ${panel.ci.check}` : panel.path ? fileLabel(panel.path) : `this ${pageTerm().PR}`}
             </b>
             <span class="spacer" />
             <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
           </div>
-          {panel.text ? <pre class="ask-sel">{panel.text}</pre> : <p class="note">{AGENTS[who].short} reads the description and every file's diff, specs included.</p>}
+          {panel.text ? <pre class="ask-sel">{panel.text}</pre> : <p class="note">{AGENTS[who].short} reads {panel.ci ? "the end of the job's log and the diff" : "the description and every file's diff, specs included"}.</p>}
           {turns.map((t) => (
             <div class="ask-turn">
               <p class="ask-q">{t.q}</p>
@@ -4463,7 +4474,7 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
           <textarea
             rows={2}
             autoFocus
-            placeholder={turns.length ? 'A follow-up · ↵ to ask' : panel.path ? 'Your question · ↵ to ask' : "What's risky here? Does it match the spec? · ↵ to ask"}
+            placeholder={turns.length || panel.ci ? 'A follow-up · ↵ to ask' : panel.path ? 'Your question · ↵ to ask' : "What's risky here? Does it match the spec? · ↵ to ask"}
             value={q}
             onInput={(e) => setQ(e.currentTarget.value)}
             onKeyDown={(e) => {

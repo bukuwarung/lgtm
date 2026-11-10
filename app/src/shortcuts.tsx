@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { notifyAgentDone, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
+import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
-import { AGENTS, runAgent, useAgents, type AgentId } from './agents.ts';
-import { ciPrompt } from './prompts.ts';
+import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { awaitsMe, earlierVerdicts, jobLog, renderGfm, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { awaitsMe, earlierVerdicts, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -239,11 +238,22 @@ export const OnBase = ({ c, branch: full }: { c: Check; branch: string }) => {
   ) : null;
 };
 
-function CheckEntry({ c, repo, onRefresh, base, pr, files }: { c: Check; repo: string; onRefresh: () => void; base: string; pr: PR; files: PRFile[] }) {
+function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRefresh: () => void; base: string }) {
   const { on: agents } = useAgents();
-  // Why did it fail? An agent reads the log's end and the diff (prompts.ts ciPrompt); its answer shows below.
-  const [why, setWhy] = useState<{ by: AgentId; html?: string; error?: string } | null>(null);
-  const running = !!why && !why.html && !why.error;
+  // Why did it fail? The Ask panel (review.tsx) asks the agent picked, with the end of the job's log and the diff,
+  // and takes follow-up questions; here only the log is fetched (the button busy meanwhile).
+  const [running, setRunning] = useState(false);
+  const explain = async (by: AgentId) => {
+    setRunning(true);
+    try {
+      const text = log ?? (await jobLog(repo, c.jobId!));
+      if (log === null) setLog(text);
+      dispatchEvent(new CustomEvent('lgtm:ask-ci', { detail: { check: c.name, onBase: c.onBase ?? null, log: text, agent: by } }));
+    } catch (e: any) {
+      setLogErr(e.message), setOpen(true);
+    }
+    setRunning(false);
+  };
   const [pick, setPick] = useState(false); // the agent menu, with more than one on
   useEffect(() => {
     if (!pick) return;
@@ -251,18 +261,6 @@ function CheckEntry({ c, repo, onRefresh, base, pr, files }: { c: Check; repo: s
     addEventListener('pointerdown', away);
     return () => removeEventListener('pointerdown', away);
   }, [pick]);
-  const explain = async (by: AgentId) => {
-    setWhy({ by });
-    try {
-      const text = log ?? (await jobLog(repo, c.jobId!));
-      if (log === null) setLog(text);
-      const answer = await runAgent(ciPrompt(pr, c.name, c.onBase ?? null, text, files), by);
-      setWhy({ by, html: await renderGfm(answer, repo) }); // GitHub sanitizes the HTML
-      notifyAgentDone(`${AGENTS[by].name}: why ${c.name} failed`, answer.replace(/[`*_>#]/g, '').split('\n').find((l) => l.trim())?.slice(0, 160) ?? '', `/${repo}/pull/${pr.number}`);
-    } catch (e: any) {
-      setWhy({ by, error: e.message });
-    }
-  };
   const [log, setLog] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [rerun, setRerun] = useState<'' | 'asking' | 'queued' | string>('');
@@ -352,12 +350,6 @@ function CheckEntry({ c, repo, onRefresh, base, pr, files }: { c: Check; repo: s
           </>
         )}
       </div>
-      {why && (
-        <div class="ix-why">
-          {why.error ? <p class="error">{AGENTS[why.by].name} couldn't tell: {why.error}</p> : why.html ? <div class="md" dangerouslySetInnerHTML={{ __html: why.html }} /> : <p class="note"><AgentMark id={why.by} /> {AGENTS[why.by].short} is reading the log…</p>}
-          {(why.html || why.error) && <button class="link" onClick={() => setWhy(null)}>Close</button>}
-        </div>
-      )}
       {open && (logErr ? <p class="note ix-pad">Couldn't load the log: {logErr} <Retry onClick={loadLog} /></p> : log == null ? <Lines n={4} /> : <pre class="ix-log">{log}</pre>)}
     </>
   );
@@ -585,13 +577,13 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
           <p class="note ix-pad">No checks.</p>
         ) : (
           <>
-            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} pr={pr} files={files} />)}
+            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
             {([['success', 'passed'], ['neutral', 'skipped or cancelled']] as const).map(([state, label]) => {
               const group = checks.filter((c) => c.state === state);
               return group.length > 0 && (
                 <Fold k={`ix-checks:${state}`} initial={false} class="ix-ckgroup">
                   <summary><CheckMark state={state} /> {group.length} {label}</summary>
-                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} pr={pr} files={files} />)}
+                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
                 </Fold>
               );
             })}
