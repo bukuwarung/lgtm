@@ -1,6 +1,6 @@
 [package]
 name = "lgtm"
-version = "0.10.0"
+version = "0.10.1"
 description = "Say LGTM and mean it: fast GitHub and GitLab code review"
 edition = "2021"
 
