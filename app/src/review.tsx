@@ -4266,7 +4266,7 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
         const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
         prompt = askPrompt(pr, panel.path, f?.patch, source, panel.text, q.trim());
       }
-      const text = await askClaudeCli(prompt);
+      const text = await askClaudeCli(prompt, 'ask');
       setAnswer({ html: await renderGfm(text, repo) }); // GitHub sanitizes the HTML
     } catch (e: any) {
       setAnswer({ error: e.message });

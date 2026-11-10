@@ -158,7 +158,7 @@ async function review(i: Target): Promise<Pick<AgentRun, 'findings' | 'posted'>>
     `The diff, each line numbered (R: the new file, L: the old):\n${shown.map((f) => numbered(f)).join('\n\n')}`.slice(0, 200_000),
     texts.join('\n\n'),
   ].join('\n\n');
-  const answer = await askClaudeCli(prompt);
+  const answer = await askClaudeCli(prompt, 'agent');
   const json = answer.slice(answer.indexOf('{'), answer.lastIndexOf('}') + 1);
   let parsed: { summary?: string; findings?: Finding[] };
   try {

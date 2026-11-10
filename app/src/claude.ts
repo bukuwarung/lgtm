@@ -24,7 +24,9 @@ export type PromptKind = 'pr' | 'ask' | 'agent';
 const COMMON: Record<string, string> = {
   kind: 'pull request, or merge request', ref: '#12, or !12', url: "the PR's address", title: 'its title', repo: 'owner/repo', site: 'GitHub or GitLab',
 };
-export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: Record<string, string>; after?: string }> = {
+// cli: run by lgtm through Claude Code's CLI, so its model and effort can be picked (Open in Claude Code opens the app,
+// where the session picks them).
+export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: Record<string, string>; after?: string; cli?: boolean }> = {
   pr: {
     label: 'Open in Claude Code',
     initial: "Let's look at this {kind}: {url}\n{ref} {title} ({branch} → {base})\nRead it with {read}.",
@@ -33,12 +35,14 @@ export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string
   },
   ask: {
     label: 'Ask Claude',
+    cli: true,
     initial: "You're helping someone review a {site} {kind}. Answer their question in Markdown, concisely and concretely, naming files, identifiers and lines. If the answer depends on code you can't see here, say so.",
     fields: COMMON,
     after: 'what the question is about (the code you selected, or the whole PR), the code itself and your question',
   },
   agent: {
     label: 'Claude Code reviews first',
+    cli: true,
     initial: "You are an adversarial code reviewer. Review this {kind} hard: find what will break. Look for bugs, wrong edge cases, race conditions, security problems, data loss, broken error handling, and risky changes without tests. No style nits, no praise, nothing you aren't confident about; at most 10 findings, the worst first. An empty list is fine.",
     fields: COMMON,
     after: 'the answer format lgtm reads (findings as JSON, each with its file and line), the description, the numbered diff and the changed files',

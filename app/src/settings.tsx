@@ -1008,9 +1008,9 @@ function SlackMessage({ k, emoji, names }: { k: SlackKind; emoji: (name: string)
 // A text lgtm sends that you can word (a Slack message, a Claude prompt): folded to its name (an edited one marked, ↺
 // back to lgtm's); open, the text beside its preview on a sample PR, the fill-ins as chips that go in at the cursor
 // (what each becomes on hover), and a line about it.
-function Template({ label, text, setText, initial, fields, box, preview, note }: {
+function Template({ label, text, setText, initial, fields, box, preview, note, extra }: {
   label: string; text: string; setText: (v: string) => void; initial: string; fields: Record<string, string>;
-  box: (ref: { current: HTMLTextAreaElement | null }) => preact.ComponentChildren; preview: preact.ComponentChildren; note?: string;
+  box: (ref: { current: HTMLTextAreaElement | null }) => preact.ComponentChildren; preview: preact.ComponentChildren; note?: string; extra?: preact.ComponentChildren;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const edited = text !== initial;
@@ -1045,6 +1045,7 @@ function Template({ label, text, setText, initial, fields, box, preview, note }:
         <div class="template-see">
           {preview}
           {note && <small class="note">{note}</small>}
+          {extra}
         </div>
       </div>
     </details>
@@ -1722,6 +1723,29 @@ function ClaudePrompts() {
     </>
   );
 }
+// The model and effort a prompt lgtm runs through Claude Code's CLI uses; Default, Claude Code's own setting.
+const MODELS = [['', 'Default'], ['fable', 'Fable'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']];
+const EFFORTS = [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max']];
+function ModelPick({ k }: { k: PromptKind }) {
+  const [model, setModel] = useStoredValue('claudeModel.' + k, '');
+  const [effort, setEffort] = useStoredValue('claudeEffort.' + k, '');
+  return (
+    <div class="template-run">
+      <label>
+        Model{' '}
+        <select value={model} onChange={(e) => setModel(e.currentTarget.value)}>
+          {MODELS.map(([v, n]) => <option value={v}>{n}</option>)}
+        </select>
+      </label>
+      <label>
+        Effort{' '}
+        <select value={effort} onChange={(e) => setEffort(e.currentTarget.value)}>
+          {EFFORTS.map(([v, n]) => <option value={v}>{n}</option>)}
+        </select>
+      </label>
+    </div>
+  );
+}
 function ClaudePrompt({ k }: { k: PromptKind }) {
   const p = CLAUDE_PROMPTS[k];
   const [text, setText] = useStoredValue('claudePrompt.' + k, p.initial);
@@ -1735,6 +1759,7 @@ function ClaudePrompt({ k }: { k: PromptKind }) {
       box={(ref) => <textarea ref={ref} rows={Math.max(5, text.split('\n').length + 1)} value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label={p.label} />}
       preview={<pre class="prompt-preview">{fillPrompt(text || p.initial, PROMPT_SAMPLE)}</pre>}
       note={p.after && `Then lgtm adds ${p.after}.`}
+      extra={p.cli ? <ModelPick k={k} /> : <small class="note">The model and effort: picked in the Claude Code session it opens.</small>}
     />
   );
 }

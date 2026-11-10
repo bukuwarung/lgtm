@@ -514,12 +514,16 @@ function jobLog(repo, job, user) {
 
 // Ask Claude: the page's prompt (instructions, the file and the question) through Claude Code's CLI, signed in like the
 // others. No tools and no saved session: Claude only reads what it's given and writes text back.
-function claudeText(input) {
+// `model` (an alias such as opus, or a full name) and `effort` (low … max): Settings → Claude Code → Prompts; none,
+// Claude Code's own.
+const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+function claudeText(input, model, effort) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
+  if ((model && !CLAUDE_MODEL.test(model)) || (effort && !EFFORTS.includes(effort))) return Promise.reject(new Error('Bad request for Claude'));
   return new Promise((resolve, reject) => {
     const child = execFile(
       'claude',
-      ['-p', '--tools', '', '--no-session-persistence', '--output-format', 'text'],
+      ['-p', '--tools', '', '--no-session-persistence', '--output-format', 'text', ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])],
       { cwd: homedir(), maxBuffer: 1 << 24, timeout: 300000 },
       (err, stdout, stderr) => {
         if (err?.code === 'ENOENT') return reject(new Error('Claude Code isn\'t installed (see claude.com/code), or not on the PATH'));
@@ -739,7 +743,7 @@ const server = createServer(async (req, res) => {
   if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-mod', '/claude-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
-      .then((b) => claudeText(b?.input))
+      .then((b) => claudeText(b?.input, b?.model, b?.effort))
       .then((text) => json(res, 200, { text }), (e) => json(res, 500, { error: e.message }));
   }
   if (path === '/job-log') {

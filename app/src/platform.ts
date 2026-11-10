@@ -692,9 +692,18 @@ export async function availableUpdate(): Promise<string | null> {
   return newer(saved.latest, __APP_VERSION__) ? saved.latest.replace(/^v/, '') : null;
 }
 // Claude Code's answer (the claude CLI) to a prompt the page builds (claude.ts: Ask Claude).
-export async function askClaudeCli(input: string): Promise<string> {
-  if (isDesktop) return command<string>('claude_text', { input });
-  const res = await fetch('/claude-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }) });
+// `use`: whose model and effort to run with (Settings → Claude Code → Prompts: claudeModel.<k>, claudeEffort.<k>).
+export async function askClaudeCli(input: string, use?: string): Promise<string> {
+  const pick = (k: string) => {
+    try {
+      return use ? localStorage.getItem(`${k}.${use}`) || undefined : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const model = pick('claudeModel'), effort = pick('claudeEffort');
+  if (isDesktop) return command<string>('claude_text', { input, model, effort });
+  const res = await fetch('/claude-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort }) });
   const d = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(d.error ?? 'Claude failed');
   return d.text;

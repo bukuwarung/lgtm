@@ -1470,3 +1470,4 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .demo-dock-icon b { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font-size: 12px; line-height: 20px; text-align: center; background: #ef4444; box-sizing: border-box; }
 .demo-dock small { color: var(--muted); }
 .num-input { width: 4.5em; margin: 0 4px; padding: 1px 4px; }
+.template-run { display: flex; gap: 12px; flex-wrap: wrap; font-size: calc(12px * var(--ts)); color: var(--muted); }

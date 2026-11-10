@@ -929,11 +929,23 @@ pub async fn clipboard_pr() -> Option<String> {
 /// Ask Claude: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
 /// claudeText()).
 #[tauri::command]
-pub async fn claude_text(input: String) -> Result<String, String> {
+pub async fn claude_text(input: String, model: Option<String>, effort: Option<String>) -> Result<String, String> {
     if input.is_empty() || input.len() > 800_000 {
         return Err("Bad request for Claude".into());
     }
-    let args = ["-p", "--tools", "", "--no-session-persistence", "--output-format", "text"];
+    // The model and effort Settings picked for this prompt; none, Claude Code's own.
+    let model = model.filter(|m| !m.is_empty());
+    let effort = effort.filter(|e| !e.is_empty());
+    if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !["low", "medium", "high", "xhigh", "max"].contains(&e)) {
+        return Err("Bad request for Claude".into());
+    }
+    let mut args = vec!["-p", "--tools", "", "--no-session-persistence", "--output-format", "text"];
+    if let Some(m) = model.as_deref() {
+        args.extend(["--model", m]);
+    }
+    if let Some(e) = effort.as_deref() {
+        args.extend(["--effort", e]);
+    }
     let out = run("claude", &args, Some(&input), std::time::Duration::from_secs(300));
     if out.missing {
         return Err("Claude Code isn't installed (see claude.com/code), or not on the PATH".into());
