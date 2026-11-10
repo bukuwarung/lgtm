@@ -85,7 +85,8 @@ export function stepOrder(saved: string): StepKey[] {
 }
 export const PLAN_AT = 50; // files: below this a PR reads fine top to bottom
 const MODELS = /(^|\/)(api|apis|model|models|domain|dto|dtos|entity|entities|contract|contracts|types|interfaces?)\//i;
-const CONFIG = /\.(gradle|kts|toml|properties|ya?ml|json|pro|cfg|ini|xml|lock)$|(^|\/)(Dockerfile|Makefile|\.gitattributes|\.gitignore)$/;
+// Also any dotfile (.editorconfig, .gitignore, .nvmrc, .prettierrc…) but a folder's placeholder, and the files named for a tool.
+const CONFIG = /\.(gradle|kts|toml|properties|ya?ml|json|pro|cfg|ini|xml|lock)$|(^|\/)(Dockerfile|Makefile|Jenkinsfile|Gemfile|Podfile|Brewfile|Procfile|CODEOWNERS|\.(?!gitkeep$|keep$)[^/]+)$/;
 // Which step a path is in: the first that has it, in this order (not the reading order).
 const HAS: [StepKey, (p: string) => boolean][] = [
   ['specs', (p) => isMarkdown(p) || /(^|\/)(openspec|docs)\//.test(p)],

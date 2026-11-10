@@ -856,6 +856,7 @@ test('reviewPlan: specs, build, models, code (each with its tests), other tests,
     'app/src/main/java/a/CardReader.kt',
     'app/src/test/java/a/CardReaderTest.kt',
     'app/build.gradle.kts',
+    '.editorconfig',
     'app/src/main/AndroidManifest.xml',
     'app/src/main/res/values/strings.xml',
     'app/src/main/assets/fw.bin',
@@ -864,7 +865,7 @@ test('reviewPlan: specs, build, models, code (each with its tests), other tests,
     'app/src/test/java/a/PinPadTest.kt', // its subject isn't in the PR
   ]);
   assert.deepEqual(plan.map((s) => [s.title, s.paths.length]), [
-    ['Specs and docs', 1], ['Build and config', 2], ['Models and contracts', 2], ['Implementation', 3], ['Tests', 1], ['Resources and assets', 2],
+    ['Specs and docs', 1], ['Build and config', 3], ['Models and contracts', 2], ['Implementation', 3], ['Tests', 1], ['Resources and assets', 2],
   ]);
   // A test right below what it tests, in that file's step.
   assert.deepEqual(plan[3].paths, ['app/src/main/java/a/CardReader.kt', 'app/src/test/java/a/CardReaderTest.kt', 'app/src/test/java/a/CardReaderIT.kt']);
