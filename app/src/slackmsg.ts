@@ -4,31 +4,41 @@ import { slackEscape, words } from './platform.ts';
 // {@recipient} (who gets it; {@them}, its first name, too), {@author} and {@any-github-login} tag that person on Slack (the sender turns <@gh:…> into a Slack mention,
 // through the Slack people mapping; someone it can't place stays @login).
 export type SlackKind = 'review' | 'nudge' | 'ask' | 'again' | 'qa';
-export const SLACK_MESSAGES: Record<SlackKind, { label: string; initial: string; fields: string }> = {
+// Each fill-in and what it becomes; {@login} tags anyone, by their login.
+export const SLACK_FIELDS: Record<string, string> = {
+  pr: 'the PR, linked', title: 'its title', url: 'its address', repo: 'owner/repo', number: 'its number', author: "its author's login",
+  '@recipient': 'tags who gets it', '@author': 'tags the author',
+};
+export const SLACK_MESSAGES: Record<SlackKind, { label: string; note: string; initial: string; fields: Record<string, string> }> = {
   review: {
-    label: 'After your review, to the author and assignees',
+    label: 'After your review',
+    note: 'To the author and assignees.',
     initial: '{verdict} {pr}{comments}\n{note}',
-    fields: '{verdict} Approved, Requested changes on, Reviewed · {comments} " · 3 comments on PaymentService.kt, RetryPolicy.kt" · {note} your review summary, quoted',
+    fields: { verdict: 'Approved, Requested changes on, or Reviewed', comments: '" · 3 comments on PaymentService.kt, RetryPolicy.kt"', note: 'your review summary, quoted' },
   },
   nudge: {
-    label: words('Nudging the reviewers of your PR that has waited a day or more'),
+    label: 'Nudge the reviewers',
+    note: words('To the reviewers of your PR once it has waited a day or more.'),
     initial: "👋 Could you take a look at {pr}? It's been waiting for review for {days}.",
-    fields: '{days} "2 days"',
+    fields: { days: '"2 days"' },
   },
   ask: {
-    label: words('Asking someone to review your PR (editable when you ask)'),
+    label: 'Ask for a review',
+    note: 'You can still change it each time you ask.',
     initial: 'Hi! Could you review my PR when you have a moment? Thank you 🙏\n{pr}',
-    fields: '',
+    fields: {},
   },
   again: {
-    label: words('Asking a reviewer to look again (re-request on your PR); empty: no Slack message'),
+    label: 'Ask to look again',
+    note: words('When you re-request a review on your PR. Leave it empty to send nothing.'),
     initial: 'Addressed your comments 🙏 Could you take another look at {pr}?',
-    fields: '',
+    fields: {},
   },
   qa: {
-    label: words('Asking QA to test your PR, in the QA channel (editable when you ask)'),
+    label: 'Ask QA to test',
+    note: words('In the QA channel; you can still change it each time. <!subteam^ID> tags a Slack group (its ID: on Slack, the group → ⋯ → Copy group ID).'),
     initial: 'Need bandwidth to test: *{title}*{jira}\n*What changed:* {description}\nPR: {pr}',
-    fields: '{jira} " (Jira: BUKU-123)", linked, from the title or branch · {description} the PR description\'s first paragraph · <!subteam^ID> tags a Slack group (its ID: on Slack, the group → ⋯ → Copy group ID)',
+    fields: { jira: '" (Jira: BUKU-123)", linked, from the title or branch', description: "the PR description's first paragraph" },
   },
 };
 // The PR description's first paragraph, as plain text for Slack: hidden <!-- comments -->, headings, images, quotes and
@@ -62,7 +72,6 @@ export function statusText(s: { text: string; emoji: string; until: number }) {
   return `${s.text || s.emoji} · until ${when}`;
 }
 
-export const COMMON_FIELDS = '{pr} the PR, linked · {title} · {url} · {repo} · {number} · {author} · {@recipient} tags who gets it · {@author} tags the author · {@login} tags anyone';
 
 // Your wording, else lgtm's. Emptied, "again" sends nothing; the others fall back to lgtm's.
 export const slackTemplate = (k: SlackKind) => {

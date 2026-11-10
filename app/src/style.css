@@ -1039,20 +1039,20 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .slack-msg { display: grid; gap: 4px; max-width: 720px; margin: 10px 0 14px; font-size: calc(13px * var(--ts)); }
 .slack-msg > span { display: flex; align-items: center; gap: 6px; }
 .slack-msg textarea { font: calc(13px * var(--ts))/1.45 var(--mono); resize: vertical; }
-.prompts { max-width: 960px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.prompt + .prompt { border-top: 1px solid var(--border); }
-.prompt > summary { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-size: calc(13px * var(--ts)); }
-.prompt > summary:hover { background: var(--soft); }
-.prompt[open] > summary { font-weight: 600; }
-.prompt-edited { font-size: calc(11px * var(--ts)); color: var(--accent); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; font-weight: 400; }
-.prompt-body { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 4px 12px 12px; }
-@media (max-width: 900px) { .prompt-body { grid-template-columns: 1fr; } }
-.prompt-edit { display: grid; gap: 6px; align-content: start; }
-.prompt-edit textarea { font: calc(12px * var(--ts))/1.5 var(--mono); resize: vertical; }
-.prompt-fields { display: flex; flex-wrap: wrap; gap: 4px; }
-.prompt-chip { padding: 0 6px; border-radius: 999px; font: calc(11px * var(--ts)) var(--mono); color: var(--muted); background: var(--soft); }
-.prompt-chip:hover { color: var(--fg); }
-.prompt-see { display: grid; gap: 6px; align-content: start; }
+.templates { max-width: 960px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 6px 0 14px; }
+.template + .template { border-top: 1px solid var(--border); }
+.template > summary { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-size: calc(13px * var(--ts)); }
+.template > summary:hover { background: var(--soft); }
+.template[open] > summary { font-weight: 600; }
+.template-edited { font-size: calc(11px * var(--ts)); color: var(--accent); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; font-weight: 400; }
+.template-body { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 4px 12px 12px; }
+@media (max-width: 900px) { .template-body { grid-template-columns: 1fr; } }
+.template-edit { display: grid; gap: 6px; align-content: start; }
+.template-edit textarea { width: 100%; box-sizing: border-box; font: calc(12px * var(--ts))/1.5 var(--mono); resize: vertical; }
+.template-fields { display: flex; flex-wrap: wrap; gap: 4px; }
+.template-chip { padding: 0 6px; border-radius: 999px; font: calc(11px * var(--ts)) var(--mono); color: var(--muted); background: var(--soft); }
+.template-chip:hover { color: var(--fg); }
+.template-see { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .prompt-preview { margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); white-space: pre-wrap; font: calc(12px * var(--ts))/1.5 var(--sans); }
 /* Settings → Slack → Messages: each one as Slack will show it, with a sample PR. */
 .slack-preview { padding: 8px 10px; border-left: 3px solid color-mix(in srgb, var(--fg) 15%, transparent); background: color-mix(in srgb, var(--soft) 60%, transparent); border-radius: 0 6px 6px 0; font-size: calc(13px * var(--ts)); line-height: 1.5; }

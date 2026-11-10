@@ -16,7 +16,7 @@ import { ThemeThumb } from './themecard.tsx';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
 import { md } from './markdown.ts';
 import { EmojiTextarea, useSlackEmoji } from './emojibox.tsx';
-import { COMMON_FIELDS, fillSlack, prValues, QA_CHANNEL, slackParts, SLACK_MESSAGES, type SlackKind } from './slackmsg.ts';
+import { fillSlack, prValues, QA_CHANNEL, slackParts, SLACK_FIELDS, SLACK_MESSAGES, type SlackKind } from './slackmsg.ts';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
 const T = term();
@@ -955,14 +955,12 @@ function SlackMessages() {
   return (
     <>
       <h5>Messages</h5>
-      <p class="note">
-        What lgtm says on Slack. Fill-ins: {COMMON_FIELDS}. A tag becomes a Slack mention for people in People above (or, for who gets it, by their
-        email); anyone else stays @login.
-      </p>
-      <p class="note">Slack emoji work as on Slack, your workspace's own too: <code>:approved:</code>, <code>:tada:</code>.</p>
-      {(Object.keys(SLACK_MESSAGES) as SlackKind[]).map((k) => (
-        <SlackMessage k={k} emoji={emoji} names={names} />
-      ))}
+      <p class="note">What lgtm says on Slack. Open one to change it. Tags mention people mapped above (or who gets it, by email); Slack emoji work, your workspace's too.</p>
+      <div class="templates">
+        {(Object.keys(SLACK_MESSAGES) as SlackKind[]).map((k) => (
+          <SlackMessage k={k} emoji={emoji} names={names} />
+        ))}
+      </div>
     </>
   );
 }
@@ -980,19 +978,62 @@ function SlackMessage({ k, emoji, names }: { k: SlackKind; emoji: (name: string)
   const m = SLACK_MESSAGES[k];
   const [text, setText] = useStoredValue('slackMsg.' + k, m.initial);
   return (
-    <label class="slack-msg">
-      <span>
-        {m.label}
-        {text !== m.initial && (
-          <button class="md-reset" title="Back to lgtm's wording" onClick={(e) => (e.preventDefault(), setText(m.initial))}>
+    <Template
+      label={m.label}
+      text={text}
+      setText={setText}
+      initial={m.initial}
+      fields={{ ...SLACK_FIELDS, ...m.fields }}
+      box={(ref) => <EmojiTextarea value={text} onInput={setText} names={names} emoji={emoji} boxRef={ref} rows={Math.max(3, text.split('\n').length + 1)} label={m.label} />}
+      preview={<SlackPreview message={fillSlack(text, SLACK_SAMPLE)} emoji={emoji} />}
+      note={m.note}
+    />
+  );
+}
+
+// A text lgtm sends that you can word (a Slack message, a Claude prompt): folded to its name (an edited one marked, ↺
+// back to lgtm's); open, the text beside its preview on a sample PR, the fill-ins as chips that go in at the cursor
+// (what each becomes on hover), and a line about it.
+function Template({ label, text, setText, initial, fields, box, preview, note }: {
+  label: string; text: string; setText: (v: string) => void; initial: string; fields: Record<string, string>;
+  box: (ref: { current: HTMLTextAreaElement | null }) => preact.ComponentChildren; preview: preact.ComponentChildren; note?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const edited = text !== initial;
+  const insert = (name: string) => {
+    const t = ref.current;
+    const [a, b] = t ? [t.selectionStart, t.selectionEnd] : [text.length, text.length];
+    setText(text.slice(0, a) + `{${name}}` + text.slice(b));
+    requestAnimationFrame(() => t && (t.focus(), t.setSelectionRange(a + name.length + 2, a + name.length + 2)));
+  };
+  return (
+    <details class="template">
+      <summary>
+        <span class="template-name">{label}</span>
+        {edited && <span class="template-edited">edited</span>}
+        {edited && (
+          <button class="md-reset" title="Back to lgtm's wording" onClick={(e) => (e.preventDefault(), setText(initial))}>
             ↺
           </button>
         )}
-      </span>
-      <EmojiTextarea value={text} onInput={setText} names={names} emoji={emoji} />
-      <SlackPreview message={fillSlack(text, SLACK_SAMPLE)} emoji={emoji} />
-      {m.fields && <small>Also: {m.fields}</small>}
-    </label>
+      </summary>
+      <div class="template-body">
+        <div class="template-edit">
+          {box(ref)}
+          {Object.keys(fields).length > 0 && (
+            <div class="template-fields">
+              {Object.entries(fields).map(([name, means]) => (
+                <button class="template-chip" title={means} onClick={() => insert(name)}>{`{${name}}`}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div class="template-see">
+          {preview}
+          {note && <small class="note">{note}</small>}
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -1663,48 +1704,23 @@ function ClaudePrompts() {
     <>
       <h5>Prompts</h5>
       <p class="note">What lgtm says to Claude. Open one to change it; what Claude also needs follows your text.</p>
-      <div class="prompts">{(Object.keys(CLAUDE_PROMPTS) as PromptKind[]).map((k) => <ClaudePrompt k={k} />)}</div>
+      <div class="templates">{(Object.keys(CLAUDE_PROMPTS) as PromptKind[]).map((k) => <ClaudePrompt k={k} />)}</div>
     </>
   );
 }
-// One prompt: folded to its name; open, its text beside a preview on a sample PR, and its fill-ins as chips that go in
-// where the cursor is.
 function ClaudePrompt({ k }: { k: PromptKind }) {
   const p = CLAUDE_PROMPTS[k];
   const [text, setText] = useStoredValue('claudePrompt.' + k, p.initial);
-  const box = useRef<HTMLTextAreaElement>(null);
-  const edited = text !== p.initial;
-  const insert = (name: string) => {
-    const t = box.current;
-    const [a, b] = t ? [t.selectionStart, t.selectionEnd] : [text.length, text.length];
-    setText(text.slice(0, a) + `{${name}}` + text.slice(b));
-    requestAnimationFrame(() => t && (t.focus(), t.setSelectionRange(a + name.length + 2, a + name.length + 2)));
-  };
   return (
-    <details class="prompt">
-      <summary>
-        <span class="prompt-name">{p.label}</span>
-        {edited && <span class="prompt-edited">edited</span>}
-        {edited && (
-          <button class="md-reset" title="Back to lgtm's wording" onClick={(e) => (e.preventDefault(), setText(p.initial))}>
-            ↺
-          </button>
-        )}
-      </summary>
-      <div class="prompt-body">
-        <div class="prompt-edit">
-          <textarea ref={box} rows={Math.max(5, text.split('\n').length + 1)} value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label={p.label} />
-          <div class="prompt-fields">
-            {Object.entries(p.fields).map(([name, means]) => (
-              <button class="prompt-chip" title={means} onClick={() => insert(name)}>{`{${name}}`}</button>
-            ))}
-          </div>
-        </div>
-        <div class="prompt-see">
-          <pre class="prompt-preview">{fillPrompt(text || p.initial, PROMPT_SAMPLE)}</pre>
-          {p.after && <small class="note">Then lgtm adds {p.after}.</small>}
-        </div>
-      </div>
-    </details>
+    <Template
+      label={p.label}
+      text={text}
+      setText={setText}
+      initial={p.initial}
+      fields={p.fields}
+      box={(ref) => <textarea ref={ref} rows={Math.max(5, text.split('\n').length + 1)} value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label={p.label} />}
+      preview={<pre class="prompt-preview">{fillPrompt(text || p.initial, PROMPT_SAMPLE)}</pre>}
+      note={p.after && `Then lgtm adds ${p.after}.`}
+    />
   );
 }

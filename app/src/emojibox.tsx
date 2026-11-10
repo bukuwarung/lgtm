@@ -22,8 +22,9 @@ export function useSlackEmoji() {
 
 // A textarea that suggests Slack emoji as you type ":" and a few letters: ↑↓ to pick, ↵ or Tab to put it in, Esc to
 // close; a click works too. The workspace's own come first.
-export function EmojiTextarea({ value, onInput, names, emoji, rows = 3, label }: { value: string; onInput: (v: string) => void; names: string[]; emoji: (name: string) => string | undefined; rows?: number; label?: string }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
+export function EmojiTextarea({ value, onInput, names, emoji, rows = 3, label, boxRef }: { value: string; onInput: (v: string) => void; names: string[]; emoji: (name: string) => string | undefined; rows?: number; label?: string; boxRef?: { current: HTMLTextAreaElement | null } }) {
+  const own = useRef<HTMLTextAreaElement>(null);
+  const ref = boxRef ?? own;
   const [q, setQ] = useState<{ word: string; at: number } | null>(null);
   const [active, setActive] = useState(0);
   const look = () => {
