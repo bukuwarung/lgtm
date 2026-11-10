@@ -3,7 +3,7 @@ import { numRef, prWebUrl } from './github.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
-import { recentPRs, repoLabel, term } from './platform.ts';
+import { faceOf, recentPRs, repoLabel, term, useRecentPRs } from './platform.ts';
 import { Octicon } from './tags.tsx';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
@@ -64,6 +64,8 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
   const here = parse(route);
   const url = here ? prWebUrl(here.repo, here.n) : '';
   const atHere = !!url && q === url; // the link on show, not a search
+  // Its author's face where Safari shows the site's icon (the PR mark until lgtm has the PR).
+  const author = useRecentPRs().find((r) => here && r.repo === here.repo && r.n === here.n)?.author;
   const open = () => {
     setList(entries(queue()));
     setSel(0);
@@ -127,7 +129,7 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
       {here && !q && (
         // At rest on a PR: its address, centred as Safari centres the site (focus hides it for the link).
         <span class="cmd-here" aria-hidden="true">
-          <Octicon name="git-pull-request" />
+          {author ? <img class="cmd-face" src={faceOf(author, 32)} alt="" /> : <Octicon name="git-pull-request" />}
           <span class="cmd-repo">{repoLabel(here.repo)}</span>
           <span class="cmd-num">{numRef(here.repo, here.n)}</span>
         </span>
