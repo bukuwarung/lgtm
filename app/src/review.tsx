@@ -1860,7 +1860,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />
-          <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
+          <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} onComment={(path, line, body) => ctx.suggest(path, line && ctx.suggestion({ path, side: 'RIGHT', line }) != null ? line : undefined, body)} />
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} />
           {inOrder.map(section)}
           {generated.length > 0 &&
@@ -1944,7 +1944,10 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   const [err, setErr] = useState('');
   const labels: Record<ReviewEvent, string> = { COMMENT: 'Comment', APPROVE: 'Approve', REQUEST_CHANGES: 'Request changes' };
   useEffect(() => {
-    const show = () => {
+    // detail.append: text for the summary, after what's there (an agent's answer, from Ask).
+    const show = (e: Event) => {
+      const add = (e as CustomEvent<{ append?: string } | null>).detail?.append;
+      if (add) setBody((b) => (b.trim() ? `${b.trimEnd()}\n\n${add}` : add));
       setOpen(true);
       setTimeout(() => document.querySelector<HTMLTextAreaElement>('.panel textarea')?.focus());
     };
@@ -4325,6 +4328,11 @@ function AgentsMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
               <Octicon name="comment-discussion" /> Ask a question about this {pageTerm().PR} <small>no session</small>
             </button>
           )}
+          {full && convosOn(repo, full.number, full.head.sha).map((c) => (
+            <button key={c.key} role="menuitem" title={`Asked about ${c.about}: open the conversation (${c.n} answer${c.n > 1 ? 's' : ''})`} onClick={() => (setMenu(false), dispatchEvent(new CustomEvent('lgtm:ask-again', { detail: c.key })))}>
+              <Octicon name="history" /> <span class="ask-again-label">{c.label}</span> <small>{c.about}</small>
+            </button>
+          ))}
           {(['claude', 'codex'] as const).filter((a) => agents.includes(a)).map((a) => {
             const mine = !!from && linkAgent === a;
             return (
@@ -4365,8 +4373,9 @@ function AgentsMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
 // Ask's conversations, kept (per account) so closing the panel loses nothing: by PR and commit, then what they're
 // about. ponytail: the latest 30 kept; an older one starts over.
 type Turn = { q: string; text: string; html: string; by: AgentId };
+type AskPanel = { path: string; text: string; line?: number; ci?: { check: string; onBase: string | null; log: string } };
 const CONVOS = 'askConvos';
-const readConvos = (): Record<string, { at: number; turns: Turn[] }> => {
+const readConvos = (): Record<string, { at: number; turns: Turn[]; panel?: AskPanel }> => {
   try {
     return JSON.parse(localStorage.getItem(own(CONVOS)) ?? '{}');
   } catch {
@@ -4374,23 +4383,30 @@ const readConvos = (): Record<string, { at: number; turns: Turn[] }> => {
   }
 };
 const convoOf = (k: string) => readConvos()[k]?.turns ?? [];
-function keepConvo(k: string, turns: Turn[]) {
+function keepConvo(k: string, turns: Turn[], panel?: AskPanel) {
   const all = readConvos();
-  if (turns.length) all[k] = { at: Date.now(), turns };
+  if (turns.length) all[k] = { at: Date.now(), turns, panel: panel && (panel.ci ? { ...panel, ci: { ...panel.ci, log: panel.ci.log.slice(-40_000) } } : panel) };
   else delete all[k];
   const latest = Object.entries(all).sort((a, b) => b[1].at - a[1].at).slice(0, 30);
   try {
     localStorage.setItem(own(CONVOS), JSON.stringify(Object.fromEntries(latest)));
   } catch {}
 }
+// This commit's conversations, newest first, for the Agents menu: what each was about and its first question.
+export const convosOn = (repo: string, n: number, sha: string) =>
+  Object.entries(readConvos())
+    .filter(([k, c]) => k.startsWith(`${repo}#${n}@${sha}:`) && c.panel && c.turns.length)
+    .sort((a, b) => b[1].at - a[1].at)
+    .map(([k, c]) => ({ key: k, label: c.panel!.ci ? `${c.panel!.ci.check}: why it failed` : c.turns[0].q, about: c.panel!.ci ? 'failed check' : c.panel!.path ? fileLabel(c.panel!.path) : 'the whole PR', n: c.turns.length }));
 const hashOf = (t: string) => [...t].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7).toString(36);
 
 // Select code in a file, then "Ask": a question about it, answered by a coding agent's CLI (picked in the panel, the last one
 // remembered) with the file, its diff in this PR and the selection.
-function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
-  const [sel, setSel] = useState<{ path: string; text: string; x: number; y: number } | null>(null);
-  // What it's about: code selected in a file (path, text), the whole PR (neither), or a failed check (ci).
-  type Panel = { path: string; text: string; ci?: { check: string; onBase: string | null; log: string } };
+// onComment: a comment form on the file (at the line, when the selection's in the diff), written with the answer.
+function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: string; headRepo: string; files: File[]; onComment: (path: string, line: number | undefined, body: string) => void }) {
+  const [sel, setSel] = useState<{ path: string; text: string; line?: number; x: number; y: number } | null>(null);
+  // What it's about: code selected in a file (path, text, its last line), the whole PR (neither), or a failed check (ci).
+  type Panel = AskPanel;
   const [panel, setPanel] = useState<Panel | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
@@ -4422,7 +4438,9 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
         const file = el?.closest('main > .file');
         if (!s || !text || !file || el!.closest('.editor, .notes, .note-host')) return setSel(null);
         const r = s.getRangeAt(0).getBoundingClientRect();
-        setSel({ path: file.id.slice(2), text: text.slice(0, 4000), x: Math.min(r.right, innerWidth - 140), y: r.bottom + 4 });
+        const fe = s.focusNode && (s.focusNode.nodeType === 1 ? (s.focusNode as Element) : s.focusNode.parentElement);
+        const line = Number([...(fe?.closest('tr.ln')?.querySelectorAll('td.num') ?? [])].at(-1)?.textContent) || undefined; // the new side's
+        setSel({ path: file.id.slice(2), text: text.slice(0, 4000), line, x: Math.min(r.right, innerWidth - 140), y: r.bottom + 4 });
       });
     const away = () => setSel(null);
     const whole = () => void open({ path: '', text: '' }); // the Agents menu's Ask
@@ -4433,11 +4451,17 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
       pickAgent(d.agent);
       if (!open(p)) void send(p, 'Why did it fail?', d.agent, []); // asked before, on this commit: as it was
     };
+    // One of this commit's conversations, from the Agents menu.
+    const again = (e: Event) => {
+      const c = readConvos()[(e as CustomEvent<string>).detail];
+      if (c?.panel) open(c.panel);
+    };
     addEventListener('lgtm:ask-pr', whole);
     addEventListener('lgtm:ask-ci', ci);
+    addEventListener('lgtm:ask-again', again);
     addEventListener('mouseup', up);
     addEventListener('scroll', away, { passive: true });
-    return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away), removeEventListener('lgtm:ask-pr', whole), removeEventListener('lgtm:ask-ci', ci));
+    return () => (removeEventListener('mouseup', up), removeEventListener('scroll', away), removeEventListener('lgtm:ask-pr', whole), removeEventListener('lgtm:ask-ci', ci), removeEventListener('lgtm:ask-again', again));
   }, []);
   const ask = () => panel && q.trim() && who && !busy && send(panel, q.trim(), who, turns);
   async function send(panel: Panel, asked: string, who: AgentId, turns: Turn[]) {
@@ -4462,7 +4486,7 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
       const text = await runAgent(prompt, who);
       const html = await renderGfm(text, repo); // GitHub sanitizes the HTML
       const all = [...turns, { q: asked, text, html, by: who }];
-      keepConvo(keyOf(panel), all);
+      keepConvo(keyOf(panel), all, panel);
       if (shown.current === keyOf(panel)) {
         // still on show (else it's kept for when it's opened again)
         setTurns(all);
@@ -4483,7 +4507,7 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
           class="ask-btn primary"
           style={{ left: sel.x, top: sel.y }}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => (open({ path: sel.path, text: sel.text }), setSel(null))}
+          onClick={() => (open({ path: sel.path, text: sel.text, line: sel.line }), setSel(null))}
         >
           <AgentMark id={who} /> Ask {AGENTS[who].short}
         </button>
@@ -4511,12 +4535,26 @@ function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRep
             <button title="Close" onClick={() => ((shown.current = ''), setPanel(null))}><Octicon name="x" /></button>
           </div>
           {panel.text ? <pre class="ask-sel">{panel.text}</pre> : <p class="note">{AGENTS[who].short} reads {panel.ci ? "the end of the job's log and the diff" : "the description and every file's diff, specs included"}.</p>}
-          {turns.map((t) => (
-            <div class="ask-turn">
-              <p class="ask-q">{t.q}</p>
-              <div class="md ask-answer" title={`${AGENTS[t.by].name}'s answer`} dangerouslySetInnerHTML={{ __html: t.html }} />
-            </div>
-          ))}
+          {turns.map((t) => {
+            // The answer as a comment of yours, marked as the agent's (🤖, as its review findings are), to edit before it goes.
+            const body = `🤖 ${AGENTS[t.by].name}${panel.ci ? ` on why ${panel.ci.check} failed` : ''}:\n\n${t.text}`;
+            return (
+              <div class="ask-turn">
+                <p class="ask-q">{t.q}</p>
+                <div class="md ask-answer" title={`${AGENTS[t.by].name}'s answer`} dangerouslySetInnerHTML={{ __html: t.html }} />
+                <div class="ask-use">
+                  {panel.path && (
+                    <button class="link" onClick={() => (onComment(panel.path, panel.line, body), (shown.current = ''), setPanel(null))}>
+                      <Octicon name="comment" /> Comment on {fileLabel(panel.path)}{panel.line ? `:${panel.line}` : ''}
+                    </button>
+                  )}
+                  <button class="link" onClick={() => ((shown.current = ''), setPanel(null), dispatchEvent(new CustomEvent('lgtm:finish', { detail: { append: body } })))}>
+                    <Octicon name="list-unordered" /> Add to the review's summary
+                  </button>
+                </div>
+              </div>
+            );
+          })}
           <textarea
             rows={2}
             autoFocus
