@@ -716,6 +716,7 @@ export async function slackRecipients(repo: string, logins: string[]): Promise<{
   return keys.map((login) => ({ login, emails: people[login]?.emails ?? [] }));
 }
 
+let noEmailScope = false;
 // GitHub name and emails per login (verified company emails first), to find people on Slack. A GitLab person's key
 // (login@host) is asked of that GitLab: their name and public email.
 export async function getPeople(org: string, logins: string[]): Promise<Record<string, { name: string | null; emails: string[] }>> {
@@ -725,11 +726,20 @@ export async function getPeople(org: string, logins: string[]): Promise<Record<s
     return { ...hub, ...labs };
   }
   if (!logins.length) return {};
-  const query = (ls: string[], withOrg: boolean) => {
+  const query = async (ls: string[], withOrg: boolean): Promise<any[]> => {
     const vars = Object.fromEntries(ls.map((l, i) => [`l${i}`, l]));
-    const fields = ls.map((_, i) => `u${i}:user(login:$l${i}){name email${withOrg ? ' organizationVerifiedDomainEmails(login:$org)' : ''}}`).join(' ');
+    const fields = ls.map((_, i) => `u${i}:user(login:$l${i}){name${noEmailScope ? '' : ' email'}${withOrg ? ' organizationVerifiedDomainEmails(login:$org)' : ''}}`).join(' ');
     const decl = [...ls.map((_, i) => `$l${i}:String!`), ...(withOrg ? ['$org:String!'] : [])].join(',');
-    return graphql(`query(${decl}){${fields}}`, withOrg ? { ...vars, org } : vars, true).then((d) => ls.map((_, i) => d[`u${i}`] ?? null));
+    try {
+      const d = await graphql(`query(${decl}){${fields}}`, withOrg ? { ...vars, org } : vars, true);
+      return ls.map((_, i) => d[`u${i}`] ?? null);
+    } catch (e) {
+      // A public email needs the read:user or user:email scope, which gh's own login doesn't ask for: without it, the
+      // org's verified emails and names still find people.
+      if (noEmailScope || !/'email' field requires/.test(String(e))) throw e;
+      noEmailScope = true;
+      return query(ls, withOrg);
+    }
   };
   // Apps and bots aren't users (null). The org's verified emails need org membership: whoever came back empty is
   // asked again for public details only.
