@@ -1,10 +1,11 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 // Pull request links in a text, as "owner/repo#n": each once, in the order written. A GitLab merge request
-// (https://host/group/…/project/-/merge_requests/n) as "host/group/…/project#n", as lgtm names it.
-const PR_LINK = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)|https:\/\/([\w-]+(?:\.[\w-]+)+(?::\d+)?(?:\/[\w.-]+){2,}?)\/-\/merge_requests\/(\d+)/g
+// (https://host/group/…/project/-/merge_requests/n) as "host/group/…/project#n", as lgtm names it. Also a bare
+// "owner/repo#n": the desktop app hands a reply's markdown links over as their labels, [owner/repo#n](…) as owner/repo#n.
+const PR_LINK = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)|https:\/\/([\w-]+(?:\.[\w-]+)+(?::\d+)?(?:\/[\w.-]+){2,}?)\/-\/merge_requests\/(\d+)|(?<![\w/.-])([\w-]+\/[\w.-]+)#(\d+)\b/g
 export const prsIn = (text: string): string[] =>
-  [...new Set([...text.matchAll(PR_LINK)].map(m => (m[1] ? `${m[1]}#${m[2]}` : `${m[3]}#${m[4]}`)))]
+  [...new Set([...text.matchAll(PR_LINK)].map(m => `${m[1] ?? m[3] ?? m[5]}#${m[2] ?? m[4] ?? m[6]}`))]
 
 // lgtm (the Mac app) opens a PR from its own link. ?claude= names this session (the Claude app's ID when it hosts it,
 // else the CLI's), so the PR's ✳ Claude in lgtm comes back here, as the lgtm-review skill's links do.

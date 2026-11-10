@@ -25,8 +25,14 @@ test('a reply that links a pull request gets a button that opens it in lgtm, lin
   }
   expect(runs).toEqual([['open', 'lgtm://acme/shop/pull/412?claude=local_abc'], ['open', 'lgtm://acme/shop/pull/412?claude=local_abc']])
 
+  // A markdown link the desktop app hands over as its label alone, after a PR's URL already named: each PR once.
+  const labelled = await $.ui.mount({ ...reply('Pushed to bukuwarung/lgtm#12 (https://github.com/acme/shop/pull/412, acme/shop#412).'), surface: 'desktop' })
+  expect((await labelled.find({ key: 'bukuwarung/lgtm#12' }))?.text).toContain('bukuwarung/lgtm#12')
+  expect(await labelled.find({ key: 'acme/shop#412' })).toBeDefined()
+  await labelled.unmount()
+
   // No link, no button.
-  const plain = await $.ui.mount({ ...reply('Nothing to review.'), surface: 'desktop' })
+  const plain = await $.ui.mount({ ...reply('Nothing to review: see PR #12 and src/a.ts#L3.'), surface: 'desktop' })
   expect(await plain.find({ key: 'acme/shop#412' })).toBeUndefined()
   await plain.unmount()
 })
