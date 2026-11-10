@@ -4,6 +4,9 @@
 # with every build, and macOS asks again. The certificate comes as LGTM_SIGNING_P12 (the .p12, base64) and
 # LGTM_SIGNING_PASSWORD, and lives in a throwaway keychain while it signs.
 set -euo pipefail
+# It puts a keychain of its own on the search list while it signs: fine on a throwaway CI runner, not on your Mac
+# (a list that isn't put back exactly loses your login keychain, and every saved sign-in with it).
+[ "${CI:-}" = true ] || { echo "scripts/sign.sh runs on CI only (.github/workflows/release.yml): it changes the keychain search list" >&2; exit 1; }
 app=${1:?usage: scripts/sign.sh path/to/lgtm.app}
 : "${LGTM_SIGNING_P12:?the .p12, base64}" "${LGTM_SIGNING_PASSWORD:?its password}"
 tmp=$(mktemp -d)
