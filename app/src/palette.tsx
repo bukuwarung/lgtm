@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { numRef } from './github.ts';
+import { numRef, prWebUrl } from './github.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
@@ -52,9 +52,24 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  // Where you are, as Safari's bar shows the site: on a PR, its address (repo#n) at rest, and its link on focus,
+  // selected (⌘C copies it; typing searches).
+  const [route, setRoute] = useState(location.hash);
+  useEffect(() => {
+    const moved = () => setRoute(location.hash);
+    addEventListener('hashchange', moved);
+    return () => removeEventListener('hashchange', moved);
+  }, []);
+  const here = parse(route);
+  const url = here ? prWebUrl(here.repo, here.n) : '';
+  const atHere = !!url && q === url; // the link on show, not a search
   const open = () => {
     setList(entries(queue()));
     setSel(0);
+    if (url && !q) {
+      setQ(url);
+      setTimeout(() => input.current?.select());
+    }
   };
   const close = () => {
     setList(null);
@@ -73,12 +88,12 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
     addEventListener('lgtm:palette', focus);
     return () => (removeEventListener('keydown', onKey), removeEventListener('lgtm:palette', focus));
   }, []);
-  const pr = parse(q);
+  const pr = atHere ? null : parse(q);
   const shown = !list
     ? []
     : [
         ...(pr ? [{ kind: 'Open', label: `${repoLabel(pr.repo)}${numRef(pr.repo, pr.n)}`, sub: `${term(pr.repo).PR} from the link`, run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
-        ...(pr ? [] : list.filter((e) => matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50)),
+        ...(pr ? [] : list.filter((e) => atHere || matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50)),
       ];
   const go = (e?: Entry) => {
     if (!e) return;
@@ -95,10 +110,11 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
       <input
         ref={input}
         value={q}
-        placeholder={`Go to a ${T.PR}, file or thread, or paste a ${T.PR} link`}
+        class={here ? 'at-pr' : undefined}
+        placeholder={here ? `${repoLabel(here.repo)}${numRef(here.repo, here.n)}` : `Go to a ${T.PR}, file or thread, or paste a ${T.PR} link`}
         aria-label={`Go to, or open a ${T.PR} link`}
         onFocus={open}
-        onBlur={() => setTimeout(() => setList(null), 150)}
+        onBlur={() => setTimeout(() => (setList(null), setQ((v) => (v === url ? '' : v))), 150)}
         onInput={(e) => (setQ(e.currentTarget.value), setSel(0), list || open())}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
