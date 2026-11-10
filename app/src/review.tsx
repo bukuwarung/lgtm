@@ -1487,7 +1487,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 </a>
               ),
             )}
-            <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" full={pr} />
+            <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Agents" full={pr} />
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
@@ -4184,7 +4184,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
         aria-expanded={label ? menu : undefined}
         onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e))}
       >
-        {label ? (agents.length ? agents.map((a) => <AgentMark key={a} id={a} />) : <Octicon name="dependabot" />) : <AgentMark id="claude" />}
+        {label ? <Octicon name="dependabot" /> : <AgentMark id="claude" />}
         {label ? ` ${label}` : ''}
         {from && <span class={`claude-dot${session?.state === 'waiting' ? ' waiting' : ''}`} aria-label="linked to a session" />}
         {label && session?.state === 'working' && <span class="claude-state"> working…</span>}

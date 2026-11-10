@@ -478,7 +478,7 @@ const Bar = ({ linked, menu }: { linked?: boolean; menu?: boolean }) => (
       <a class="bar-slack">💬</a>
       <span class="claude-menu">
         <button class={linked ? 'claude-btn linked' : 'claude-btn'}>
-          <AgentMark id="claude" /><AgentMark id="codex" /> Agents{linked && <span class="claude-dot" />}
+          <Octicon name="dependabot" /> Agents{linked && <span class="claude-dot" />}
         </button>
         {menu && (
           <div class="account-menu claude-pop" role="menu">
@@ -1240,7 +1240,7 @@ const GLASS = (on: boolean) => (
   <div class={on ? 'demo-glass glass' : 'demo-glass demo-solid'}>
     <Rows rows={dedent(NESTED, 12)} />
     <div class="bar">
-      <button><AgentMark id="claude" /> Agents</button>
+      <button><Octicon name="dependabot" /> Agents</button>
       <button class="primary">Finish review</button>
     </div>
   </div>
