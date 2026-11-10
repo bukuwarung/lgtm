@@ -101,7 +101,7 @@ code, pre { font-family: var(--mono); }
 .recent-row small { grid-column: 2; color: var(--muted); font-size: calc(12px * var(--ts)); }
 .recent-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .recent-open { color: var(--addfg); } .recent-merged { color: var(--c-merged); } .recent-closed { color: var(--delfg); } .recent-draft { color: var(--muted); }
-.recent-menu { position: relative; }
+.recent-menu { position: relative; display: flex; align-items: center; gap: 6px; }
 .recent-pop { left: 0; right: auto; width: min(460px, 80vw); max-height: 70vh; overflow: auto; }
 .stale { display: grid; justify-items: center; gap: 6px; font-size: calc(13px * var(--ts)); }
 .stale ul { margin: 0; padding: 0; list-style: none; max-height: 200px; overflow: auto; text-align: left; }

@@ -338,8 +338,12 @@ function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
     </section>
   );
 }
-function RecentMenu() {
+// Back and forward, holding the recently viewed PRs as a browser's buttons hold their history: hold either one, or
+// right-click it, for the list.
+function HistoryNav({ backTo }: { backTo: string }) {
   const [open, setOpen] = useState(false);
+  const hold = useRef(0);
+  const held = useRef(false);
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => !(e.target as Element).closest?.('.recent-menu') && setOpen(false);
@@ -348,10 +352,27 @@ function RecentMenu() {
     addEventListener('keydown', esc);
     return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
   }, [open]);
+  const props = (go: () => void) => ({
+    'aria-haspopup': 'menu' as const,
+    onPointerDown: (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      held.current = false;
+      hold.current = window.setTimeout(() => ((held.current = true), setOpen(true)), 450);
+    },
+    onPointerUp: () => clearTimeout(hold.current),
+    onPointerLeave: () => clearTimeout(hold.current),
+    onContextMenu: (e: MouseEvent) => (e.preventDefault(), setOpen(true)),
+    onClick: () => (held.current ? (held.current = false) : (setOpen(false), go())),
+  });
+  const more = `; hold or right-click for recently viewed ${T.PRs}`;
   return (
     <span class="recent-menu">
-      <button class={'nav-hist' + (open ? ' on' : '')} title={`Recently viewed ${T.PRs}`} aria-label={`Recently viewed ${T.PRs}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Octicon name="history" />
+      <button class={'nav-hist' + (open ? ' on' : '')} title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)${more}`} aria-label="Back" {...props(() => history.back())}>
+        <Octicon name="arrow-left" />
+        {backTo && <span class="back-hint">{backTo}</span>}
+      </button>
+      <button class="nav-hist" title={`Forward (⌘])${more}`} aria-label="Forward" {...props(() => history.forward())}>
+        <Octicon name="arrow-right" />
       </button>
       {open && (
         <div class="account-menu recent-pop" role="menu">
@@ -653,11 +674,7 @@ function App() {
         <span class="spacer" />
         {/* Back, forward and refresh beside the search box, as a browser has them by its address bar. */}
         <span class="nav-go">
-          <button class="nav-hist" title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)`} aria-label="Back" onClick={() => history.back()}>
-            <Octicon name="arrow-left" />
-            {backTo && <span class="back-hint">{backTo}</span>}
-          </button>
-          <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}><Octicon name="arrow-right" /></button>
+          <HistoryNav backTo={backTo} />
           <button
             class={`nav-hist nav-refresh${refreshing ? ' refreshing' : ''}`}
             title={`Refresh the ${T.PR} list and the open ${T.PR} (the list also every 3 minutes)`}
@@ -672,7 +689,6 @@ function App() {
           >
             <span><Octicon name="sync" /></span>
           </button>
-          <RecentMenu />
           <CommandBar queue={() => queue.current} parse={parseRoute} />
         </span>
         <span class="spacer" />
