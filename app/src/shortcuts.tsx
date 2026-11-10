@@ -243,6 +243,14 @@ function CheckEntry({ c, repo, onRefresh, base, pr, files }: { c: Check; repo: s
   const { on: agents } = useAgents();
   // Why did it fail? An agent reads the log's end and the diff (prompts.ts ciPrompt); its answer shows below.
   const [why, setWhy] = useState<{ by: AgentId; html?: string; error?: string } | null>(null);
+  const running = !!why && !why.html && !why.error;
+  const [pick, setPick] = useState(false); // the agent menu, with more than one on
+  useEffect(() => {
+    if (!pick) return;
+    const away = (e: Event) => !(e.target as Element).closest?.('.agents-menu') && setPick(false);
+    addEventListener('pointerdown', away);
+    return () => removeEventListener('pointerdown', away);
+  }, [pick]);
   const explain = async (by: AgentId) => {
     setWhy({ by });
     try {
@@ -316,11 +324,31 @@ function CheckEntry({ c, repo, onRefresh, base, pr, files }: { c: Check; repo: s
             <button class={open ? 'ix-icon-btn on' : 'ix-icon-btn'} title={open ? 'Hide the job log' : 'Show the end of the job log'} aria-label="Job log" aria-pressed={open} onClick={toggle}>
               <Icon name="list-unordered" />
             </button>
-            {agents.map((a) => (
-              <button key={a} class={`ix-icon-btn${why?.by === a && !why.html && !why.error ? ' busy' : ''}`} title={`Why did it fail? ${AGENTS[a].name} reads the log and the diff`} aria-label={`Ask ${AGENTS[a].name} why it failed`} disabled={!!why && !why.html && !why.error} onClick={() => explain(a)}>
-                <AgentMark id={a} />
-              </button>
-            ))}
+            {agents.length > 0 && (
+              // As the PR bar's Agents: the one agent on, straight away; with more, a menu to pick one.
+              <span class="agents-menu">
+                <button
+                  class={`ix-icon-btn${running ? ' busy' : pick ? ' on' : ''}`}
+                  title={agents.length === 1 ? `Why did it fail? ${AGENTS[agents[0]].name} reads the log and the diff` : 'Why did it fail? A coding agent reads the log and the diff'}
+                  aria-label="Why did it fail?"
+                  aria-haspopup={agents.length > 1 ? 'menu' : undefined}
+                  aria-expanded={agents.length > 1 ? pick : undefined}
+                  disabled={running}
+                  onClick={() => (agents.length === 1 ? explain(agents[0]) : setPick(!pick))}
+                >
+                  {agents.length === 1 ? <AgentMark id={agents[0]} /> : <Icon name="dependabot" />}
+                </button>
+                {pick && (
+                  <div class="account-menu agents-pop" role="menu">
+                    {agents.map((a) => (
+                      <button key={a} role="menuitem" onClick={() => (setPick(false), explain(a))}>
+                        <AgentMark id={a} /> Ask {AGENTS[a].name} why it failed
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </span>
+            )}
           </>
         )}
       </div>
