@@ -7,12 +7,12 @@ import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, 
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { isAway, statusText } from './slackmsg.ts';
-import { CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry } from './tags.tsx';
+import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
 import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
-import { agentIdOf } from './agents.ts';
+import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -786,7 +786,8 @@ function SetupCheck() {
     }
   });
   const [ints, setInts] = useState<Integrations | null>(null);
-  const [skill, setSkill] = useState<SkillStatus | null>(null);
+  const [found, setFound] = useState<AgentId[] | null>(null); // the coding agents' CLIs installed
+  const [skills, setSkills] = useState<Partial<Record<AgentId, SkillStatus>>>({});
   const [hub, setHub] = useState<boolean | null>(null);
   const [labs, setLabs] = useState<GlabAccount[] | null>(null);
   const check = () => {
@@ -794,7 +795,8 @@ function SetupCheck() {
     getGitHubViewer().then(() => setHub(true), () => setHub(false));
     glabAccounts(true).then(setLabs);
     fetchIntegrations().then(setInts, () => setInts({ slack: { ok: false, error: "couldn't check" }, jira: { ok: false, error: "couldn't check" } }));
-    claudeSkill().then(setSkill, () => setSkill(null));
+    detectAgents(true).then((d) => setFound(d.filter((a) => a.version).map((a) => a.id)));
+    for (const a of AGENT_IDS) claudeSkill(false, a).then((x) => setSkills((s) => ({ ...s, [a]: x })), () => {});
   };
   useEffect(() => void (open && check()), []);
   const done = () => {
@@ -828,8 +830,19 @@ function SetupCheck() {
         {row(labs == null ? null : labs.length > 0, 'GitLab', labs?.length ? `MRs, reviews and comments, through the GitLab CLI (${labs.map((a) => a.host).join(', ')}).` : 'MRs, reviews and comments, through the GitLab CLI, on gitlab.com or your own GitLab.', <pre>brew install glab && glab auth login</pre>)}
         {row(ints ? ints.slack.ok : null, 'Slack', '(optional) DM the author when you finish a review.', <pre>brew install shaharia-lab/tap/slackcli && slackcli auth login-auto</pre>)}
         {row(ints ? ints.jira.ok : null, 'Jira', `(optional) The ${T.PRs_} ticket above its files.`, <pre>brew install atlassian/homebrew-acli/acli && acli jira auth login --web</pre>)}
-        {row(skill ? skill.current : null, 'Claude Code skill', `(optional) Claude opens ${T.PRs} ready for review here, linked to its session.`, (
-          <button onClick={() => claudeSkill(true).then(setSkill, () => {})}>{skill?.installed ? 'Update the skill' : 'Install the skill'}</button>
+        {row(
+          found && found.length > 0,
+          'Coding agents',
+          found?.length
+            ? `(optional) ${found.map((a) => AGENTS[a].name).join(' and ')}: agent reviews, questions and fixes, through ${found.length > 1 ? 'their CLIs' : 'its CLI'}.`
+            : '(optional) Claude Code or Codex: agent reviews, questions and fixes, through their CLIs.',
+          <pre>{AGENT_IDS.map((a) => `${AGENTS[a].install}   # ${AGENTS[a].name}`).join('\n')}</pre>,
+        )}
+        {found?.filter((a) => skills[a] && !skills[a]!.current).map((a) => (
+          <div class="setup-fix setup-skill">
+            <AgentMark id={a} /> {AGENTS[a].short} can send {T.PRs} ready for review here, linked to its {a === 'codex' ? 'conversation' : 'session'}.{' '}
+            <button onClick={() => claudeSkill(true, a).then((x) => setSkills((s) => ({ ...s, [a]: x })), () => {})}>{skills[a]!.installed ? 'Update its skill' : 'Install its skill'}</button>
+          </div>
         ))}
       </div>
     </div>

@@ -19,6 +19,7 @@ export const ACTIONS = [
   ['merge', words('Open / close the merge box (your PRs)'), 'm'],
   ['stack', "Open / close the stack's overview", 's'],
   ['githubDev', 'Open the file in view on github.dev', '.'],
+  ['agents', 'Open / close the Agents menu (coding agents)', 'a'],
   ['docCode', 'Jump between the specs (Markdown) and the code', 'g'],
   ['skip', words('Skip to the next PR (review mode)'), 'N'],
   ['help', 'Keyboard shortcuts', '?'],

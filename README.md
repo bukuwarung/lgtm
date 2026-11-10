@@ -35,7 +35,8 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 - **Review mode.** Your PRs to review, one after another, with nothing else on screen.
 - **An inbox.** Every thread and mention waiting on your reply, answered or put away without opening the PR.
 - **The right reviewers.** Suggested by who wrote the code you changed and who's least busy, asked on GitHub and Slack in one click.
-- **Your whole loop.** Merge box, Jira tickets moved on merge, Slack nudges, QA requests, and Claude Code linked to your PRs.
+- **Coding agents.** Claude Code or Codex reviews each PR before you do, explains a failed check, checks whether your comments were addressed, and writes fixes as suggested changes.
+- **Your whole loop.** Merge box, Jira tickets moved on merge, Slack nudges, QA requests, and your Claude Code sessions and Codex conversations linked to your PRs.
 
 ## Your queue
 
@@ -226,8 +227,38 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
 </picture>
 
 - Claude Code and Codex, each found through its CLI and switched on or off in Settings → Coding agents, with its own model and effort. They run with no tools: they read what lgtm gives them and answer.
-- A PR's **Agents** menu asks any of them for an adversarial review, or a question about the PR; select code to ask about just that. Or have one review each PR before it reaches “Needs your review” (Settings → Reviewing picks which).
-- The menu also opens the PR's Claude Code session or Codex conversation, or starts one with the PR in the prompt; for Claude Code you see whether it's working or waiting for you.
+- A PR's **Agents** menu (<kbd>a</kbd>) runs any of them on it: you pick the agent each time.
+
+**Reviews**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/agentReview-dark.png">
+  <img alt="An agent reviews first, off and on: PRs wait under Agents reviewing, then come to Needs your review with the agent's findings" src="docs/features/agentReview-light.png" width="760">
+</picture>
+
+- An adversarial review from the Agents menu, or of every PR before it reaches “Needs your review” (Settings → Reviewing picks the agent, and a daily limit). The findings go on the PR under your name, each starting with 🤖: in your pending review, or posted at once.
+- A finding with a small, certain fix carries it as a suggested change, so the author applies it in one click.
+- Asked to review again, the agent reads only what changed since its last review; new pushes alone don't run it again.
+
+**While you review**
+
+- **Ask** about the PR, or select code to ask about just that; follow-up questions keep the conversation.
+- **Fix** in a line comment's box: the agent rewrites the lines as your comment asks, as a suggested change to edit before it goes.
+- **Why did it fail?** on a failed check: the agent reads the job's log and the diff, and says the cause, whether the PR caused it, and the fix.
+
+**Coming back to a PR**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/features/agentThreads-dark.png">
+  <img alt="Did they address my comments, off and on: the agent marks each of your open threads addressed or not yet" src="docs/features/agentThreads-light.png" width="760">
+</picture>
+
+- When a PR you reviewed comes back with new commits, the agent checks each of your open threads against them: addressed (Resolve, or all at once) or not yet, and why. On your own PRs, the same for the reviewers who asked for changes, before you ask them to look again.
+- A desktop notification when an agent finishes while lgtm is in the background.
+
+**Sessions**
+
+- The Agents menu also opens the PR's Claude Code session or Codex conversation, or starts one with the PR in the prompt; for Claude Code you see whether it's working or waiting for you.
 - With the lgtm-review skill (Settings → Coding agents, for each agent), Claude Code and Codex send PRs here for review, and get your review back to act on.
 - The `lgtm-links` mod for Claude Code puts an **Open in lgtm** button under replies that link a PR and under `gh pr create`, and adds `/lgtm` (the PR given, else the last one linked, else this branch's). PRs it opens are linked to the session, so the Agents menu comes back to it, and a review or comment you send the session from lgtm reaches it by itself, no "check lgtm" needed. At the prompt of a terminal session:
 

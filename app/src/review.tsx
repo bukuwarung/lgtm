@@ -1403,6 +1403,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       docCode: () => dispatchEvent(new Event('lgtm:doc-code')), // DocCodeJump
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
+      agents: () => dispatchEvent(new Event('lgtm:agents-menu')), // the PR bar's Agents (ClaudeMenu)
       // The file in view on github.dev, at the first line showing below the bars.
       githubDev: () => {
         const sec = sections[Math.max(cur, 0)];
@@ -4250,7 +4251,9 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   useEffect(() => {
     const t = () => setTick((x) => x + 1);
     addEventListener('lgtm:claude-link', t);
-    return () => removeEventListener('lgtm:claude-link', t);
+    const toggle = () => label && setMenu((m) => !m); // its shortcut (a), on the PR bar's
+    addEventListener('lgtm:agents-menu', toggle);
+    return () => (removeEventListener('lgtm:claude-link', t), removeEventListener('lgtm:agents-menu', toggle));
   }, []);
   // The linked session's title and state (working, waiting for you), every 10 seconds; an app session that's gone
   // (archived, deleted) is let go.
@@ -4295,7 +4298,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
     <span class="claude-menu">
       <button
         class={`${label ? 'claude-btn' : 'copy-link'}${from ? ' linked' : ''}`}
-        title={label ? `Coding agents: a review or a question about this ${pageTerm().PR}, or its session` : from && sessAgent === linkAgent ? `Open its ${place(sessAgent!)}${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new one)` : `Start a ${place(sessAgent!)} on ${what}`}
+        title={label ? `Coding agents: a review or a question about this ${pageTerm().PR}, or its session${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').agents)}` : from && sessAgent === linkAgent ? `Open its ${place(sessAgent!)}${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new one)` : `Start a ${place(sessAgent!)} on ${what}`}
         aria-haspopup={label ? 'menu' : undefined}
         aria-expanded={label ? menu : undefined}
         onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e, sessAgent ?? 'claude'))}
