@@ -1,0 +1,77 @@
+# A pushed tag vX.Y.Z (scripts/release.sh makes it) releases lgtm X.Y.Z: the universal Mac app, checked end to end,
+# signed with lgtm's certificate (scripts/sign.sh: the same one every time, so macOS keeps people's permissions across
+# updates), published with docs/releases/X.Y.Z.md as its notes, and Casks/lgtm.rb pointed at it on main.
+# Run by hand ("Run workflow"), it builds and signs only, and keeps the zip as the run's artifact.
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: release
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            desktop/package-lock.json
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Version
+        id: v
+        run: |
+          v=$(node -p "require('./app/package.json').version")
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$v" ]; then echo "The tag $GITHUB_REF_NAME isn't app/package.json's version $v"; exit 1; fi
+          echo "v=$v" >> "$GITHUB_OUTPUT"
+      - name: Test
+        working-directory: app
+        run: npm ci && npx tsc --noEmit -p . && npm test
+      - name: Build
+        working-directory: desktop
+        env:
+          LGTM_RELEASE: 1 # no DEV badge
+        run: npm ci && npm run build -- --target universal-apple-darwin
+      - name: Smoke test
+        working-directory: app
+        env:
+          GH_TOKEN: not-a-real-token # the smoke test answers GitHub itself
+        run: npm run smoke
+      - name: Sign
+        env:
+          LGTM_SIGNING_P12: ${{ secrets.LGTM_SIGNING_P12 }}
+          LGTM_SIGNING_PASSWORD: ${{ secrets.LGTM_SIGNING_PASSWORD }}
+        run: scripts/sign.sh desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/lgtm.app
+      - name: Zip
+        id: zip
+        run: |
+          zip="lgtm-${{ steps.v.outputs.v }}.zip"
+          ditto -c -k --keepParent desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/lgtm.app "$zip"
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          echo "sha=$(shasum -a 256 "$zip" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.zip.outputs.zip }}
+          path: ${{ steps.zip.outputs.zip }}
+      - name: Publish
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=${{ steps.v.outputs.v }}
+          notes=(--generate-notes)
+          [ -f "docs/releases/$v.md" ] && notes=(--notes-file "docs/releases/$v.md")
+          gh release create "v$v" --title "lgtm $v" "${notes[@]}" "${{ steps.zip.outputs.zip }}"
+      - name: Point the cask at it
+        if: github.ref_type == 'tag'
+        run: |
+          git fetch origin main && git checkout main
+          sed -i '' -E 's/^  version "[^"]*"/  version "${{ steps.v.outputs.v }}"/; s/^  sha256 "[^"]*"/  sha256 "${{ steps.zip.outputs.sha }}"/' Casks/lgtm.rb
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -am "Casks/lgtm.rb: ${{ steps.v.outputs.v }}"
+          git push origin main

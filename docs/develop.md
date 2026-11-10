@@ -37,12 +37,14 @@ Settings → Backup moves preferences and pending comments between it and the ap
 
 ## Releasing
 
-Needs both Mac targets (`rustup target add aarch64-apple-darwin x86_64-apple-darwin`):
+Write the notes in `docs/releases/X.Y.Z.md`, then:
 
 ```bash
 scripts/release.sh X.Y.Z
 ```
 
-It sets the version everywhere, runs the tests, builds a universal `lgtm.app`, points [`Casks/lgtm.rb`](../Casks/lgtm.rb) at it, and prints the two publishing commands. This repo is its own Homebrew tap, so `brew upgrade` picks the release up once it's out.
+It sets the version everywhere, refreshes the third-party notices, runs the tests, and commits and tags `vX.Y.Z`. Pushing the tag (the script prints the command) releases: [GitHub Actions](../.github/workflows/release.yml) builds a universal `lgtm.app`, runs the smoke test on it, signs it, publishes the release with your notes, and points [`Casks/lgtm.rb`](../Casks/lgtm.rb) at it. This repo is its own Homebrew tap, so `brew upgrade` picks the release up once it's out. Running the workflow by hand builds and signs only, and keeps the zip.
+
+**Signing.** Releases are signed with lgtm's own certificate, "lgtm Code Signing" (self-signed, valid to 2046), by [`scripts/sign.sh`](../scripts/sign.sh). It must be the same certificate every time: macOS remembers what people allowed lgtm (Files and Folders, data from other apps) by it, and asks again if it changes. It's in the repo's secrets as `LGTM_SIGNING_P12` (the `.p12`, base64) and `LGTM_SIGNING_PASSWORD`; keep the `.p12` and its password somewhere safe too, since secrets can't be read back. It isn't an Apple Developer ID, so lgtm still isn't notarized: the cask clears the quarantine flag as before.
 
 Design and specs: [`openspec/`](../openspec).
