@@ -1449,11 +1449,13 @@ function SlackPeople({ team }: { team: string }) {
   const [err, setErr] = useState('');
   useEffect(() => {
     getSlackPeople().then(setMap, (e) => setErr(e.message));
-    Promise.all([team ? getTeamMembers(team).catch(() => []) : [], getReviewQueue().catch(() => []), getGitHubViewer()]).then(([members, queue, me]) => {
+    const mine = Promise.all([getGhAccounts().catch(() => []), glabAccounts()]).then(([gh, lab]) => [...gh.map((a) => a.login), ...lab.map((a) => `${a.login}@${a.host}`)]);
+    Promise.all([team ? getTeamMembers(team).catch(() => []) : [], getReviewQueue().catch(() => []), getGitHubViewer(), mine]).then(([members, queue, me, yours]) => {
       setOrg(team.split('/')[0] || queue[0]?.repo.split('/')[0] || '');
       // Your team, the people in your PR list (authors, and reviewers asked), and everyone met on PRs you've opened.
       const people = new Set([...members.map((m) => (team.split('/')[0].includes('.') ? `${m}@${team.split('/')[0]}` : m)), ...queue.flatMap((i) => [i.author, ...i.pendingReviewers].map((l) => personKey(i.repo, l))), ...peopleSeen(), ...(focus ? [focus] : [])]);
-      people.delete(me);
+      // Not you, on any of your accounts (GitHub's and GitLab's).
+      for (const l of [me, ...yours]) people.delete(l);
       if (viewAs()) labMe(viewAs()).then((u) => setLogins((l) => l && l.filter((x) => x !== `${u.login}@${viewAs()}`)), () => {});
       setLogins([...people].filter((l) => !l.endsWith('[bot]') && l !== 'ghost').sort((a, b) => a.localeCompare(b)));
     });
