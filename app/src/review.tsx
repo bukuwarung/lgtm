@@ -1037,7 +1037,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : ''));
         result = {
           ok: !failed.length,
-          text: [sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${r.error}`)].filter(Boolean).join(' '),
+          text: [sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${slackWhy(r)}`)].filter(Boolean).join(' '),
         };
       } catch (e: any) {
         result = { ok: false, text: `Review submitted, but Slack failed: ${e.message}` };
@@ -1547,7 +1547,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} thread={`${repo}#${n}`} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -1905,6 +1905,7 @@ type SubmitProps = {
   count: number;
   myOpenThreads: number; // unresolved review threads I'm in
   slackTo: string[] | null;
+  thread: string;
   slackNote: string;
   onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean) => Promise<boolean>;
   repo: string;
@@ -1933,7 +1934,11 @@ const APPROVE_NOTE = 'Approved, but please address the comments';
 // The verdict to start from: pending comments → request changes; my earlier threads still open → comment; else approve.
 export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEvent => (pending ? 'REQUEST_CHANGES' : myOpenThreads ? 'COMMENT' : 'APPROVE');
 
-function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, onSubmit, saveAs, repo, mentions, authored, stillOpen = [] }: SubmitProps) {
+// Why Slack couldn't reach someone, in words: a Slack sign-in from the browser can't look people up by email.
+const slackWhy = (r: { login: string; error?: string }) =>
+  /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
+
+function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, thread, onSubmit, saveAs, repo, mentions, authored, stillOpen = [] }: SubmitProps) {
   const [open, setOpen] = useState(false);
   useDismiss(open, () => setOpen(false), '.review-submit');
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
@@ -1943,6 +1948,22 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const labels: Record<ReviewEvent, string> = { COMMENT: 'Comment', APPROVE: 'Approve', REQUEST_CHANGES: 'Request changes' };
+  // Before you submit: can Slack reach each of them? A dry run (nothing sent), once per panel and set of people, so a
+  // missing mapping, a GitHub scope or a Slack sign-in shows here, not after the review is in.
+  const [slackWarn, setSlackWarn] = useState('');
+  const checked = useRef('');
+  const who = slackTo?.join(',') ?? '';
+  useEffect(() => {
+    if (!open || !notify || !slackTo?.length || checked.current === who) return;
+    checked.current = who;
+    setSlackWarn('');
+    slackRecipients(repo, slackTo)
+      .then((r) => notifySlack(r, 'check', thread, true))
+      .then(
+        (rs) => setSlackWarn(rs.filter((r) => !r.ok).map((r) => `Slack won't reach @${r.login}: ${slackWhy(r)}`).join(' ')),
+        (e) => setSlackWarn(`Slack will fail: ${e.message}`),
+      );
+  }, [open, notify, who]);
   useEffect(() => {
     // detail.append: text for the summary, after what's there (an agent's answer, from Ask).
     const show = (e: Event) => {
@@ -2024,6 +2045,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
             </label>
           )}
           {slackNote && <p class="note">{slackNote}</p>}
+          {notify && slackWarn && <p class="warn">{slackWarn}</p>}
           {event === 'APPROVE' && stillOpen.length > 0 && (
             <p class="warn approve-open">
               {stillOpen.length === 1 ? 'A thread you started is' : `${stillOpen.length} threads you started are`} still open, and{' '}

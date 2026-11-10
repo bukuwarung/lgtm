@@ -466,10 +466,11 @@ export const slackStatus = (pr: string): Promise<{ configured: boolean; error?: 
     .then((d) => ({ configured: !!d.configured, error: d.error, threads: d.threads ?? [] }), (e) => ({ configured: false, error: e.message, threads: [] }));
 
 export type SlackResult = { login: string; ok: boolean; threaded?: boolean; error?: string };
-// `thread` ("owner/repo#12") keeps one Slack thread per PR and person; later reviews reply in it.
-export async function notifySlack(recipients: { login: string; emails: string[] }[], text: string, thread: string): Promise<SlackResult[]> {
-  if (isDesktop) return command<SlackResult[]>('slack_notify', { recipients, text, thread });
-  const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text, thread }) });
+// `thread` ("owner/repo#12") keeps one Slack thread per PR and person; later reviews reply in it. `check`: a dry run,
+// nothing sent: can each be reached?
+export async function notifySlack(recipients: { login: string; emails: string[] }[], text: string, thread: string, check = false): Promise<SlackResult[]> {
+  if (isDesktop) return command<SlackResult[]>('slack_notify', { recipients, text, thread, check });
+  const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text, thread, check }) });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;

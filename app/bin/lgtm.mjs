@@ -437,7 +437,9 @@ async function checkChannel(channel) {
   return read.ok ? { ok: true, id: target?.id ?? channel } : { ok: false, error: read.error };
 }
 
-async function notify({ recipients, text, thread }) {
+// check: a dry run that sends nothing (the submit panel asks before you submit whether each recipient can be reached).
+async function notify({ recipients, text, thread, check }) {
+  const DRY = DRY_RUN || check === true;
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
     typeof thread === 'string' && PR_REF.test(thread) &&
     recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string'));
@@ -447,12 +449,12 @@ async function notify({ recipients, text, thread }) {
   const results = await Promise.all(
     recipients.map(async ({ login, emails }) => {
       const body = await mentions(text, { login, emails }, users);
-      const send = (args) => slackcli(['messages', 'send', ...args, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], body);
+      const send = (args) => slackcli(['messages', 'send', ...args, '--message-file', '-', '--json', ...(DRY ? ['--dry-run'] : [])], body);
       const key = `${thread}:${login}`;
       const prev = threads[key];
       if (prev && /^[CDG][A-Z0-9]+$/.test(prev.channel) && /^\d+\.\d+$/.test(prev.ts)) {
         const r = await send([`--recipient-id=${prev.channel}`, `--thread-ts=${prev.ts}`]);
-        if (r.ok) return { login, ok: true, threaded: true, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
+        if (r.ok) return { login, ok: true, threaded: true, ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
       }
       const targets = [users[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
       if (!targets.length) return { login, ok: false, error: `no Slack user known: map @${login} in Settings → Slack → People` };
@@ -460,18 +462,18 @@ async function notify({ recipients, text, thread }) {
       for (const target of targets) {
         const r = await send([`--recipient-id=${target}`]);
         if (r.ok) {
-          if (!DRY_RUN) {
+          if (!DRY) {
             const sent = parseJson(r.stdout);
             if (sent?.channel_id) threads[key] = { channel: sent.channel_id, ts: sent.ts, user: target }; // who it's with, for their name and picture
           }
-          return { login, ok: true, threaded: false, ...(DRY_RUN ? { dryRun: r.stdout.trim() } : {}) };
+          return { login, ok: true, threaded: false, ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
         }
         error = r.error;
       }
       return { login, ok: false, error };
     }),
   );
-  if (!DRY_RUN) await saveThreads(threads);
+  if (!DRY) await saveThreads(threads);
   return results;
 }
 

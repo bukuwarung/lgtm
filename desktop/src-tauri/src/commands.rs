@@ -607,15 +607,16 @@ pub struct Recipient {
 }
 
 /// DM each recipient: the mapping first, then their GitHub emails. Each PR gets one thread per person; later reviews
-/// reply in it (a fresh DM starts a new thread if the old one is gone).
+/// reply in it (a fresh DM starts a new thread if the old one is gone). `check`: a dry run that sends nothing, so the
+/// submit panel can tell before you submit whether each recipient can be reached.
 #[tauri::command]
-pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: String) -> Result<Vec<Value>, String> {
+pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: String, check: Option<bool>) -> Result<Vec<Value>, String> {
     if recipients.len() > 10 || text.chars().count() > 4000 || !re(PR_REF).is_match(&thread) {
         return Err("Bad Slack request".into());
     }
     let users = config::read("config.json", true)?["slackUsers"].clone();
     let threads = Mutex::new(config::read("slack-threads.json", false).unwrap_or(json!({})));
-    let dry = dry_run();
+    let dry = dry_run() || check == Some(true);
     let target = re(SLACK_TARGET);
     let send = |args: Vec<String>, text: &str| {
         let mut all: Vec<&str> = vec!["messages", "send"];
@@ -1298,7 +1299,7 @@ mod live {
         assert_eq!(status["configured"], json!(true));
         let people = block_on(slack_people_get()).expect("people");
         println!("slack people mapped: {}", people["mine"].as_object().map(|m| m.len()).unwrap_or(0));
-        let sent = block_on(slack_notify(vec![Recipient { login: "nobody-unmapped".into(), emails: vec![] }], "test".into(), "bukuwarung/lgtm#1".into())).expect("notify");
+        let sent = block_on(slack_notify(vec![Recipient { login: "nobody-unmapped".into(), emails: vec![] }], "test".into(), "bukuwarung/lgtm#1".into(), None)).expect("notify");
         println!("slack_notify (dry run, unmapped): {}", sent[0]["error"]);
         assert_eq!(sent[0]["ok"], json!(false));
         assert!(block_on(job_log("bad repo".into(), 1, None)).is_err());
