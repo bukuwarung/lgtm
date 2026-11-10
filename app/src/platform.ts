@@ -660,10 +660,12 @@ export async function initDesktop(go: (route: string) => void) {
   );
   // Right-clicking a link: WebKit's own menu (Open Link, Open Link in New Window, Download Linked File) does nothing in
   // the app, so a web link gets Open in Browser and Copy Link instead, and lgtm's own links none. Selected text keeps
-  // WebKit's menu, for Copy and Look Up.
+  // WebKit's menu, for Copy and Look Up: text selected before the click, as a right-click selects the word under it.
+  let selected = false;
+  addEventListener('mousedown', (e) => void (e.button === 2 || e.ctrlKey ? (selected = !!String(getSelection() ?? '').trim()) : 0), true);
   addEventListener('contextmenu', async (e) => {
     const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
-    if (!a || e.defaultPrevented || String(getSelection() ?? '').trim()) return;
+    if (!a || e.defaultPrevented || selected) return;
     e.preventDefault();
     if (!/^(https?|mailto):/i.test(a.href)) return;
     const { Menu } = await import('@tauri-apps/api/menu');
