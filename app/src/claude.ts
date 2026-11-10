@@ -34,14 +34,14 @@ export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string
     after: 'from a comment: the comment, quoted, and "Help me address it."',
   },
   ask: {
-    label: 'Ask Claude',
+    label: 'Ask a question',
     cli: true,
     initial: "You're helping someone review a {site} {kind}. Answer their question in Markdown, concisely and concretely, naming files, identifiers and lines. If the answer depends on code you can't see here, say so.",
     fields: COMMON,
     after: 'what the question is about (the code you selected, or the whole PR), the code itself and your question',
   },
   agent: {
-    label: 'Claude Code reviews first',
+    label: 'Review first',
     cli: true,
     initial: "You are an adversarial code reviewer. Review this {kind} hard: find what will break. Look for bugs, wrong edge cases, race conditions, security problems, data loss, broken error handling, and risky changes without tests. No style nits, no praise, nothing you aren't confident about; at most 10 findings, the worst first. An empty list is fine.",
     fields: COMMON,

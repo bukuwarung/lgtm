@@ -692,7 +692,16 @@ export async function availableUpdate(): Promise<string | null> {
   return newer(saved.latest, __APP_VERSION__) ? saved.latest.replace(/^v/, '') : null;
 }
 // Claude Code's answer (the claude CLI) to a prompt the page builds (claude.ts: Ask Claude).
-// `use`: whose model and effort to run with (Settings → Claude Code → Prompts: claudeModel.<k>, claudeEffort.<k>).
+// The agent a prompt lgtm runs itself goes to (Settings → Claude Code → Prompts: claudeAgent.<k>): Claude Code, or Codex.
+export const agentOf = (use: string): { id: 'claude' | 'codex'; name: string; short: string } => {
+  let id = '';
+  try {
+    id = localStorage.getItem(`claudeAgent.${use}`) ?? '';
+  } catch {}
+  return id === 'codex' ? { id: 'codex', name: 'Codex', short: 'Codex' } : { id: 'claude', name: 'Claude Code', short: 'Claude' };
+};
+// `use`: whose agent, model and effort to run with (Settings → Claude Code → Prompts: claudeAgent.<k>, claudeModel.<k>,
+// claudeEffort.<k>).
 export async function askClaudeCli(input: string, use?: string): Promise<string> {
   const pick = (k: string) => {
     try {
@@ -701,9 +710,9 @@ export async function askClaudeCli(input: string, use?: string): Promise<string>
       return undefined;
     }
   };
-  const model = pick('claudeModel'), effort = pick('claudeEffort');
-  if (isDesktop) return command<string>('claude_text', { input, model, effort });
-  const res = await fetch('/claude-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort }) });
+  const model = pick('claudeModel'), effort = pick('claudeEffort'), agent = use ? agentOf(use).id : 'claude';
+  if (isDesktop) return command<string>('claude_text', { input, model, effort, agent });
+  const res = await fetch('/claude-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent }) });
   const d = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(d.error ?? 'Claude failed');
   return d.text;

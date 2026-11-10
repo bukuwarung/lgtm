@@ -1471,3 +1471,4 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .demo-dock small { color: var(--muted); }
 .num-input { width: 4.5em; margin: 0 4px; padding: 1px 4px; }
 .template-run { display: flex; gap: 12px; flex-wrap: wrap; font-size: calc(12px * var(--ts)); color: var(--muted); }
+.model-input { width: 12em; }

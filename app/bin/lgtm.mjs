@@ -4,9 +4,9 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -516,9 +516,11 @@ function jobLog(repo, job, user) {
 // others. No tools and no saved session: Claude only reads what it's given and writes text back.
 // `model` (an alias such as opus, or a full name) and `effort` (low … max): Settings → Claude Code → Prompts; none,
 // Claude Code's own.
-const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
-function claudeText(input, model, effort) {
+const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'], CODEX_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+// `agent`: Claude Code (claude), or Codex (codex).
+function claudeText(input, model, effort, agent) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
+  if (agent === 'codex') return codexText(input, model, effort);
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !EFFORTS.includes(effort))) return Promise.reject(new Error('Bad request for Claude'));
   return new Promise((resolve, reject) => {
     const child = execFile(
@@ -535,6 +537,38 @@ function claudeText(input, model, effort) {
     );
     child.stdin.end(input);
   });
+}
+
+// The same through Codex's CLI (`codex login`), signed in like the others: its last message back. With every tool it has
+// switched off (shell, browser, computer use, apps, images, MCP servers, web search) and read-only, in an empty
+// folder: like Claude above, it only reads what it's given (a PR's text could otherwise steer it to read files and
+// put them in a review lgtm posts).
+const CODEX_OFF = ['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'computer_use', 'in_app_browser', 'apps', 'view_image'];
+async function codexText(input, model, effort) {
+  if ((model && !CLAUDE_MODEL.test(model)) || (effort && !CODEX_EFFORTS.includes(effort))) throw new Error('Bad request for Codex');
+  const dir = await mkdtemp(join(tmpdir(), 'lgtm-codex-'));
+  const out = join(dir, 'answer.txt');
+  try {
+    await new Promise((resolve, reject) => {
+      const child = execFile(
+        'codex',
+        ['exec', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only', '--color', 'never', '-C', dir, ...CODEX_OFF.flatMap((f) => ['--disable', f]),
+          '-c', 'mcp_servers={}', '-c', 'web_search="disabled"', ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort=${effort}`] : []), '-o', out, '-'],
+        { cwd: dir, maxBuffer: 1 << 24, timeout: 300000 },
+        (err, stdout, stderr) => {
+          if (err?.code === 'ENOENT') return reject(new Error("Codex isn't installed (brew install codex), or not on the PATH"));
+          const last = (stderr || stdout).trim().split('\n').pop() || err?.message;
+          if (err && /log ?in|auth|unauthori[sz]ed|401/i.test(last ?? '')) return reject(new Error("Codex isn't signed in: run `codex login` in Terminal, then try again"));
+          if (err) return reject(new Error(last));
+          resolve();
+        },
+      );
+      child.stdin.end(input);
+    });
+    return (await readFile(out, 'utf8')).trim();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 // A Jira ticket, via the Atlassian CLI (`acli jira auth login`), which owns the sign-in like gh and slackcli do.
@@ -743,7 +777,7 @@ const server = createServer(async (req, res) => {
   if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-mod', '/claude-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/claude-text' && req.method === 'POST') {
     return readJson(req)
-      .then((b) => claudeText(b?.input, b?.model, b?.effort))
+      .then((b) => claudeText(b?.input, b?.model, b?.effort, b?.agent))
       .then((text) => json(res, 200, { text }), (e) => json(res, 500, { error: e.message }));
   }
   if (path === '/job-log') {

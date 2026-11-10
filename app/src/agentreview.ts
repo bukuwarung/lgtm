@@ -1,4 +1,5 @@
-// Agents review first (Settings → Reviewing): each PR that comes to "Needs your review" goes to Claude Code for an
+// Agents review first (Settings → Reviewing): each PR that comes to "Needs your review" goes to an agent (Claude Code,
+// or Codex: Settings → Claude Code → Prompts) for an
 // adversarial review before you look, and its findings go on the PR under your account, each opening with 🤖 (lgtm
 // and readers tell them from yours; with "🤖 comments are a bot's" on, lgtm folds them with bot comments). As a pending
 // review you finish yourself, or as comments posted straight away (agentReviewPost).
@@ -8,7 +9,7 @@
 // file instead. One run per PR and head commit, two at a time; the list shows the PRs being reviewed above "Needs your
 // review" (main.tsx), and each run is remembered per account (platform.ts own).
 import { postAgentFindings, getRaw, loadPR, type Draft, type PRFile, type QueueItem } from './github.ts';
-import { askClaudeCli, own, term } from './platform.ts';
+import { agentOf, askClaudeCli, own, term } from './platform.ts';
 import { parsePatch } from './diff.ts';
 import { fillPrompt, prFields, promptTemplate } from './claude.ts';
 
@@ -17,7 +18,8 @@ export type AgentRun = {
   state: 'queued' | 'running' | 'done' | 'failed' | 'limited'; // limited: over today's limit, it waits for tomorrow
   at: number;
   day?: string; // the day an automatic run was queued, for the daily limit
-  manual?: boolean; // asked for from the PR (Review with Claude Code): not counted against the limit
+  manual?: boolean; // asked for from the PR (its ✳ Claude menu): not counted against the limit
+  by?: string; // the agent that did it (Claude Code, Codex)
   findings?: number;
   posted?: 'pending' | 'comment';
   error?: string;
@@ -121,12 +123,12 @@ function pump() {
     set(i.id, { version: v, state: 'running', at: Date.now(), day, manual });
     review(i)
       .then((r) => {
-        set(i.id, { version: v, state: 'done', at: Date.now(), day, manual, ...r });
-        if (manual) say(`Claude Code reviewed ${i.repo.split('/').pop()}${term(i.repo).PR === 'MR' ? '!' : '#'}${i.number}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}, ${r.posted === 'pending' ? 'in your pending review' : 'posted as comments'}` : 'nothing to point out'}`);
+        set(i.id, { version: v, state: 'done', at: Date.now(), day, manual, by: agentOf('agent').name, ...r });
+        if (manual) say(`${agentOf('agent').name} reviewed ${i.repo.split('/').pop()}${term(i.repo).PR === 'MR' ? '!' : '#'}${i.number}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}, ${r.posted === 'pending' ? 'in your pending review' : 'posted as comments'}` : 'nothing to point out'}`);
       })
       .catch((e: Error) => {
-        set(i.id, { version: v, state: 'failed', at: Date.now(), day, manual, error: e.message });
-        if (manual) say(`Claude Code couldn't review it: ${e.message}`);
+        set(i.id, { version: v, state: 'failed', at: Date.now(), day, manual, by: agentOf('agent').name, error: e.message });
+        if (manual) say(`${agentOf('agent').name} couldn't review it: ${e.message}`);
       })
       .finally(() => (active--, inflight.delete(i.id), pump()));
   }
@@ -164,7 +166,7 @@ async function review(i: Target): Promise<Pick<AgentRun, 'findings' | 'posted'>>
   try {
     parsed = JSON.parse(json);
   } catch {
-    throw new Error("Claude's answer wasn't the JSON asked for");
+    throw new Error(`${agentOf('agent').name}'s answer wasn't the JSON asked for`);
   }
   const findings = (parsed.findings ?? []).filter((f) => f && typeof f.path === 'string' && f.title && f.body).slice(0, 10);
   const drafts: Draft[] = findings.flatMap((f, k) => {
@@ -176,7 +178,7 @@ async function review(i: Target): Promise<Pick<AgentRun, 'findings' | 'posted'>>
     return [{ id: `agent-${k}`, path: f.path, side: f.side === 'LEFT' ? 'LEFT' : 'RIGHT', ...(ok ? { line: f.line } : {}), body: `🤖 **${sev}${f.title}**${where}\n\n${f.body}` }];
   });
   const mode = postMode();
-  const summary = `🤖 Adversarial review by Claude Code (from lgtm): ${drafts.length ? `${drafts.length} finding${drafts.length > 1 ? 's' : ''}` : 'nothing found'}.${parsed.summary ? `\n\n${parsed.summary}` : ''}`;
+  const summary = `🤖 Adversarial review by ${agentOf('agent').name} (from lgtm): ${drafts.length ? `${drafts.length} finding${drafts.length > 1 ? 's' : ''}` : 'nothing found'}.${parsed.summary ? `\n\n${parsed.summary}` : ''}`;
   if (drafts.length || mode === 'pending') await postAgentFindings(i.repo, i.number, pr, drafts, summary, mode);
   return { findings: drafts.length, posted: mode };
 }

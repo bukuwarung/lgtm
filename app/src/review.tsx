@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
+import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, agentOf } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -4201,10 +4201,10 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
           {full && (
             <button
               role="menuitem"
-              title={`An adversarial review of this ${pageTerm().PR} by Claude Code: its findings go on it under your name, each starting with 🤖 (Settings → Reviewing: as your pending review or as comments)`}
-              onClick={() => (setMenu(false), flash(reviewNow({ id: full.node_id, repo, number: full.number, headSha: full.head.sha }) ? "Claude Code is reviewing it: you'll hear when it's done" : 'Claude Code is already on it'))}
+              title={`An adversarial review of this ${pageTerm().PR} by ${agentOf('agent').name}: its findings go on it under your name, each starting with 🤖 (Settings → Reviewing: as your pending review or as comments)`}
+              onClick={() => (setMenu(false), flash(reviewNow({ id: full.node_id, repo, number: full.number, headSha: full.head.sha }) ? `${agentOf('agent').name} is reviewing it: you'll hear when it's done` : `${agentOf('agent').name} is already on it`))}
             >
-              🤖 Review with Claude Code <small>adversarial</small>
+              🤖 Review with {agentOf('agent').name} <small>adversarial</small>
             </button>
           )}
         </div>
@@ -4282,13 +4282,13 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => (setPanel({ path: sel.path, text: sel.text }), setSel(null), setQ(''), setAnswer(null))}
         >
-          <Octicon name="comment-discussion" /> Ask Claude
+          <Octicon name="comment-discussion" /> Ask {agentOf('ask').short}
         </button>
       )}
       {panel && (
-        <div class="ask-panel" role="dialog" aria-label="Ask Claude">
+        <div class="ask-panel" role="dialog" aria-label={`Ask ${agentOf('ask').short}`}>
           <div class="row">
-            <b>Ask Claude about {panel.path ? fileLabel(panel.path) : `this ${pageTerm().PR}`}</b>
+            <b>Ask {agentOf('ask').short} about {panel.path ? fileLabel(panel.path) : `this ${pageTerm().PR}`}</b>
             <span class="spacer" />
             <button title="Close" onClick={() => setPanel(null)}><Octicon name="x" /></button>
           </div>
@@ -4304,11 +4304,11 @@ function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRe
               else if (e.key === 'Escape') setPanel(null);
             }}
           />
-          <button class="primary" disabled={busy || !q.trim()} onClick={ask}>{busy ? 'Claude is reading…' : 'Ask'}</button>
+          <button class="primary" disabled={busy || !q.trim()} onClick={ask}>{busy ? `${agentOf('ask').short} is reading…` : 'Ask'}</button>
           {answer?.error && (
             <p class="error">
               {answer.error}
-              {/authenticat|oauth|log ?in/i.test(answer.error) && <> Sign Claude Code in again: run <code>claude</code> in Terminal, then <code>/login</code>.</>}
+              {/authenticat|oauth|log ?in/i.test(answer.error) && (agentOf('ask').id === 'codex' ? <> Sign Codex in: run <code>codex login</code> in Terminal.</> : <> Sign Claude Code in again: run <code>claude</code> in Terminal, then <code>/login</code>.</>)}
             </p>
           )}
           {answer?.html && <div class="md ask-answer" dangerouslySetInnerHTML={{ __html: answer.html }} />}

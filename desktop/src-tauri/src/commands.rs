@@ -929,9 +929,12 @@ pub async fn clipboard_pr() -> Option<String> {
 /// Ask Claude: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
 /// claudeText()).
 #[tauri::command]
-pub async fn claude_text(input: String, model: Option<String>, effort: Option<String>) -> Result<String, String> {
+pub async fn claude_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>) -> Result<String, String> {
     if input.is_empty() || input.len() > 800_000 {
         return Err("Bad request for Claude".into());
+    }
+    if agent.as_deref() == Some("codex") {
+        return codex_text(&input, model, effort);
     }
     // The model and effort Settings picked for this prompt; none, Claude Code's own.
     let model = model.filter(|m| !m.is_empty());
@@ -958,6 +961,48 @@ pub async fn claude_text(input: String, model: Option<String>, effort: Option<St
         return Err(last);
     }
     Ok(out.stdout.trim().to_string())
+}
+
+/// The same through Codex's CLI (`codex login`): its last message back. Every tool it has switched off (shell, browser,
+/// computer use, apps, images, MCP servers, web search), read-only, in an empty folder: like Claude above, it only
+/// reads what it's given. The server's codexText().
+fn codex_text(input: &str, model: Option<String>, effort: Option<String>) -> Result<String, String> {
+    let model = model.filter(|m| !m.is_empty());
+    let effort = effort.filter(|e| !e.is_empty());
+    if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !["minimal", "low", "medium", "high", "xhigh"].contains(&e)) {
+        return Err("Bad request for Codex".into());
+    }
+    let dir = std::env::temp_dir().join(format!("lgtm-codex-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let out = dir.join("answer.txt");
+    let (dir_s, out_s) = (dir.to_string_lossy().to_string(), out.to_string_lossy().to_string());
+    let effort_c = effort.as_deref().map(|e| format!("model_reasoning_effort={e}"));
+    let mut args: Vec<&str> = vec!["exec", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "--color", "never", "-C", &dir_s];
+    for f in ["shell_tool", "unified_exec", "browser_use", "browser_use_external", "computer_use", "in_app_browser", "apps", "view_image"] {
+        args.extend(["--disable", f]);
+    }
+    args.extend(["-c", "mcp_servers={}", "-c", "web_search=\"disabled\""]);
+    if let Some(m) = model.as_deref() {
+        args.extend(["-m", m]);
+    }
+    if let Some(e) = effort_c.as_deref() {
+        args.extend(["-c", e]);
+    }
+    args.extend(["-o", &out_s, "-"]);
+    let res = run("codex", &args, Some(input), std::time::Duration::from_secs(300));
+    let text = std::fs::read_to_string(&out).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&dir);
+    if res.missing {
+        return Err("Codex isn't installed (brew install codex), or not on the PATH".into());
+    }
+    if !res.ok {
+        let last = last_line(&plain(if res.stderr.trim().is_empty() { &res.stdout } else { &res.stderr }));
+        if re(r"(?i)log ?in|auth|unauthori[sz]ed|401").is_match(&last) {
+            return Err("Codex isn't signed in: run `codex login` in Terminal, then try again".into());
+        }
+        return Err(last);
+    }
+    Ok(text.trim().to_string())
 }
 
 /// Settings → "Update now": Homebrew refreshes its taps and upgrades the cask, then lgtm restarts as the new version.

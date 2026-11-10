@@ -483,8 +483,8 @@ export function Settings() {
         <Flag
           k="agentReview"
           initial={false}
-          label={`Claude Code reviews ${T.PRs} waiting for you first`}
-          hint={`An adversarial review of each ${T.PR} as it comes to “Needs your review”, and again after new commits: Claude Code reads its description, diff and changed files (no tools, nothing run). Meanwhile it waits under “Agents reviewing”. The findings go on the ${T.PR} under your name, each starting with 🤖. Uses your Claude Code, two at a time.`}
+          label={`An agent reviews ${T.PRs} waiting for you first`}
+          hint={`An adversarial review of each ${T.PR} as it comes to “Needs your review”, and again after new commits: Claude Code or Codex (Claude Code → Prompts → Review first) reads its description, diff and changed files, with no tools. Meanwhile it waits under “Agents reviewing”. The findings go on the ${T.PR} under your name, each starting with 🤖. Two at a time.`}
           demo
         >
           <AgentPost />
@@ -1718,29 +1718,46 @@ function ClaudePrompts() {
   return (
     <>
       <h5>Prompts</h5>
-      <p class="note">What lgtm says to Claude. Open one to change it; what Claude also needs follows your text.</p>
+      <p class="note">What lgtm says to the agent. Open one to change it; what the agent also needs follows your text.</p>
       <div class="templates">{(Object.keys(CLAUDE_PROMPTS) as PromptKind[]).map((k) => <ClaudePrompt k={k} />)}</div>
     </>
   );
 }
-// The model and effort a prompt lgtm runs through Claude Code's CLI uses; Default, Claude Code's own setting.
+// The agent a prompt lgtm runs itself goes to (Claude Code, or Codex: both through their CLIs, with no tools), and its
+// model and effort; Default, the agent's own setting. Codex's models are named in full (gpt-…), so typed.
 const MODELS = [['', 'Default'], ['fable', 'Fable'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']];
-const EFFORTS = [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max']];
+const EFFORTS: Record<string, string[][]> = {
+  claude: [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max']],
+  codex: [['', 'Default'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high']],
+};
 function ModelPick({ k }: { k: PromptKind }) {
+  const [agent, setAgent] = useStoredValue('claudeAgent.' + k, '');
   const [model, setModel] = useStoredValue('claudeModel.' + k, '');
   const [effort, setEffort] = useStoredValue('claudeEffort.' + k, '');
+  const codex = agent === 'codex';
   return (
     <div class="template-run">
       <label>
-        Model{' '}
-        <select value={model} onChange={(e) => setModel(e.currentTarget.value)}>
-          {MODELS.map(([v, n]) => <option value={v}>{n}</option>)}
+        Agent{' '}
+        <select value={agent} onChange={(e) => (setAgent(e.currentTarget.value), setModel(''), setEffort(''))}>
+          <option value="">Claude Code</option>
+          <option value="codex">Codex</option>
         </select>
+      </label>
+      <label>
+        Model{' '}
+        {codex ? (
+          <input class="model-input" placeholder="Codex's default" value={model} onChange={(e) => setModel(e.currentTarget.value.trim())} />
+        ) : (
+          <select value={model} onChange={(e) => setModel(e.currentTarget.value)}>
+            {MODELS.map(([v, n]) => <option value={v}>{n}</option>)}
+          </select>
+        )}
       </label>
       <label>
         Effort{' '}
         <select value={effort} onChange={(e) => setEffort(e.currentTarget.value)}>
-          {EFFORTS.map(([v, n]) => <option value={v}>{n}</option>)}
+          {EFFORTS[codex ? 'codex' : 'claude'].map(([v, n]) => <option value={v}>{n}</option>)}
         </select>
       </label>
     </div>
