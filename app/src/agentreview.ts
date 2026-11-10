@@ -13,9 +13,11 @@ import { parsePatch } from './diff.ts';
 import { fillPrompt, prFields, promptTemplate } from './claude.ts';
 
 export type AgentRun = {
-  version: string; // the PR's head commit time when it ran (QueueItem.lastCommitAt): a new push runs it again
-  state: 'queued' | 'running' | 'done' | 'failed';
+  version: string; // the PR's head commit when it ran: a new push runs it again
+  state: 'queued' | 'running' | 'done' | 'failed' | 'limited'; // limited: over today's limit, it waits for tomorrow
   at: number;
+  day?: string; // the day an automatic run was queued, for the daily limit
+  manual?: boolean; // asked for from the PR (Review with Claude Code): not counted against the limit
   findings?: number;
   posted?: 'pending' | 'comment';
   error?: string;
@@ -53,53 +55,88 @@ const postMode = (): 'pending' | 'comment' => {
     return 'pending';
   }
 };
-export const agentRunOf = (i: Pick<QueueItem, 'id' | 'lastCommitAt'>) => {
+type Target = Pick<QueueItem, 'id' | 'repo' | 'number'> & { headSha?: string };
+export const agentRunOf = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => {
   const r = runs[i.id];
-  return r && r.version === i.lastCommitAt ? r : undefined;
+  return r && r.version === (i.headSha ?? '') ? r : undefined;
 };
 // Whether a PR sits in "Agents reviewing" rather than "Needs your review".
-export const agentBusy = (i: Pick<QueueItem, 'id' | 'lastCommitAt'>) => {
+export const agentBusy = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => {
   const r = agentRunOf(i);
   return !!r && (r.state === 'queued' || r.state === 'running');
 };
 
 // The PRs waiting for my review that haven't had this commit reviewed: queued, two run at a time. A run left
 // "running" by a closed window starts again.
+// At most this many automatic runs a day (Settings → Reviewing); 0, no limit.
+export const agentLimit = () => {
+  try {
+    return Math.max(0, Number(localStorage.getItem(own('agentReviewLimit')) ?? 20) || 0);
+  } catch {
+    return 20;
+  }
+};
 let active = 0;
-const queue: QueueItem[] = [];
+const queue: (Target & { manual?: boolean })[] = [];
 const inflight = new Set<string>(); // queued or running in this window
 export function reviewWithAgents(waiting: QueueItem[]) {
   if (!agentReviewOn()) return;
+  const today = new Date().toDateString();
+  let used = Object.values(runs).filter((r) => !r.manual && r.state !== 'limited' && r.day === today).length;
   for (const i of waiting) {
     const r = agentRunOf(i);
-    if (inflight.has(i.id) || (r && (r.state === 'done' || r.state === 'failed'))) continue;
+    if (!i.headSha || inflight.has(i.id) || (r && (r.state === 'done' || r.state === 'failed'))) continue;
+    if (agentLimit() && used >= agentLimit()) {
+      if (r?.state !== 'limited') set(i.id, { version: i.headSha, state: 'limited', at: Date.now() });
+      continue;
+    }
+    used++;
     inflight.add(i.id);
-    set(i.id, { version: i.lastCommitAt, state: 'queued', at: Date.now() });
+    set(i.id, { version: i.headSha, state: 'queued', at: Date.now(), day: today });
     queue.push(i);
   }
   pump();
 }
-// Again, after it failed (the pill's retry).
+// Again, after it failed (the pill's retry): asked for, so not against the limit.
 export function retryAgent(i: QueueItem) {
   delete runs[i.id];
-  reviewWithAgents([i]);
+  reviewNow(i);
+}
+// A review asked for from the PR (its ✳ Claude menu): next in line, the automatic setting on or off, your own PRs too.
+// What it found is said when it's done, and the PR reloads to show it.
+export function reviewNow(i: Target) {
+  if (!i.headSha || inflight.has(i.id)) return false;
+  inflight.add(i.id);
+  set(i.id, { version: i.headSha, state: 'queued', at: Date.now(), manual: true });
+  queue.unshift({ ...i, manual: true });
+  pump();
+  return true;
 }
 function pump() {
   while (active < 2 && queue.length) {
     const i = queue.shift()!;
+    const v = i.headSha ?? '', manual = i.manual;
+    const day = runs[i.id]?.day;
     active++;
-    set(i.id, { version: i.lastCommitAt, state: 'running', at: Date.now() });
+    set(i.id, { version: v, state: 'running', at: Date.now(), day, manual });
     review(i)
-      .then((r) => set(i.id, { version: i.lastCommitAt, state: 'done', at: Date.now(), ...r }))
-      .catch((e: Error) => set(i.id, { version: i.lastCommitAt, state: 'failed', at: Date.now(), error: e.message }))
+      .then((r) => {
+        set(i.id, { version: v, state: 'done', at: Date.now(), day, manual, ...r });
+        if (manual) say(`Claude Code reviewed ${i.repo.split('/').pop()}${term(i.repo).PR === 'MR' ? '!' : '#'}${i.number}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}, ${r.posted === 'pending' ? 'in your pending review' : 'posted as comments'}` : 'nothing to point out'}`);
+      })
+      .catch((e: Error) => {
+        set(i.id, { version: v, state: 'failed', at: Date.now(), day, manual, error: e.message });
+        if (manual) say(`Claude Code couldn't review it: ${e.message}`);
+      })
       .finally(() => (active--, inflight.delete(i.id), pump()));
   }
 }
+const say = (text: string) => (dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text } })), dispatchEvent(new Event('lgtm:refresh')));
 
 type Finding = { path: string; line?: number; side?: 'RIGHT' | 'LEFT'; severity?: string; title: string; body: string };
 const SKIP = /(^|\/)([\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.(min\.js|map|svg|png|jpe?g|gif|webp|pdf|zip|jar)$/i;
 
-async function review(i: QueueItem): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
+async function review(i: Target): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
   const { pr, files } = await loadPR(i.repo, i.number);
   const shown = files.filter((f) => f.patch && !SKIP.test(f.filename)).slice(0, 60);
   // The changed files as they are now, while the prompt has room (about 300 KB in all, 60 KB a file).

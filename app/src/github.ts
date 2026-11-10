@@ -100,6 +100,7 @@ export type QueueItem = {
   noReviewers: boolean;
   mentioned?: boolean; // someone @-mentions me in it (shown, when that's all, until I open it after its latest activity) // nobody asked (people or teams) and no person has reviewed: bots don't count
   lastCommitAt: string; // the head commit's time
+  headSha?: string; // the head commit
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
 export type ConversationItem = { id: string; author: string; avatar?: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
@@ -315,7 +316,7 @@ const QUEUE = `query{viewer{login}
   mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...F}}}
 fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login} assignees(first:1){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} recent:commits(last:20){nodes{commit{authoredDate parents{totalCount}}}} repository{nameWithOwner}
-  headRefName baseRefName headRepository{nameWithOwner} createdAt
+  headRefName headRefOid baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
   latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
@@ -390,6 +391,7 @@ const toItem = (p: any): QueueItem => ({
       mergeState: p.mergeStateStatus,
       ci: p.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
       lastCommitAt: p.commits.nodes[0]?.commit.committedDate ?? '',
+      headSha: p.headRefOid,
       additions: p.additions,
       deletions: p.deletions,
       files: p.changedFiles,

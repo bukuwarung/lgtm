@@ -149,6 +149,19 @@ function ReadingSteps() {
   );
 }
 
+// How many automatic reviews a day, at most (agentreview.ts); ones you ask for don't count.
+function AgentLimit() {
+  const [limit, setLimit] = useStoredValue('agentReviewLimit', '20');
+  return (
+    <label class="set-row">
+      <span>
+        At most <input type="number" min={0} max={500} class="num-input" value={limit} onChange={(e) => setLimit(String(Math.max(0, Math.round(Number(e.currentTarget.value) || 0))))} /> a day
+        <small>The rest wait for tomorrow, marked “limit reached”. 0: no limit. Reviews you ask for (✳ Claude → Review with Claude Code) don't count.</small>
+      </span>
+    </label>
+  );
+}
+
 // Where Claude Code's findings go (agentreview.ts).
 function AgentPost() {
   const [mode, setMode] = useStoredValue('agentReviewPost', 'pending');
@@ -475,6 +488,7 @@ export function Settings() {
           demo
         >
           <AgentPost />
+          <AgentLimit />
         </Flag>
         <Flag k="nextAfterReview" initial={true} label={`After a review, open the next ${T.PR} that needs it`} hint={`Finish review starts with “Then open the next ${T.PR} that needs my review” ticked.`} demo />
         <SavedReplies />

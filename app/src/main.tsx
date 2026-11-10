@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { agentBusy, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
+import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
 import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
@@ -1296,6 +1296,8 @@ function AgentPill({ i }: { i: QueueItem }) {
   if (!r) return null;
   if (r.state === 'queued' || r.state === 'running')
     return <span class="pill p-claude" title={r.state === 'queued' ? 'Waiting for its turn: two at a time' : "Claude Code is reviewing it; you'll find its findings on it"}><Tg i="🤖" t={r.state === 'queued' ? 'queued' : 'reviewing…'} /></span>;
+  if (r.state === 'limited')
+    return <span class="pill p-warn" title={`Today's ${agentLimit()} Claude Code reviews are used up: this one waits for tomorrow (Settings → Reviewing), or ask for it from the ${T.PR}'s ✳ Claude menu`}><Tg i="🤖" t="limit reached" /></span>;
   if (r.state === 'failed')
     return (
       <span class="pill p-warn" role="button" title={`Claude Code couldn't review it: ${r.error}. Click to try again.`} onClick={(e) => (e.preventDefault(), e.stopPropagation(), retryAgent(i))}>

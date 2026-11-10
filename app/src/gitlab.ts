@@ -1007,7 +1007,7 @@ export async function labEstimateInputs(items: { id: string }[]): Promise<Map<st
   return out;
 }
 
-const ITEM = `fragment F on MergeRequest{id iid title updatedAt createdAt draft detailedMergeStatus approved autoMergeEnabled availableAutoMergeStrategies
+const ITEM = `fragment F on MergeRequest{detailedMergeStatus id iid title updatedAt createdAt draft diffHeadSha approved autoMergeEnabled availableAutoMergeStrategies
   project{fullPath} sourceProject{fullPath} sourceBranch targetBranch author{username bot avatarUrl} assignees{nodes{username}}
   reviewers{nodes{username bot mergeRequestInteraction{reviewState}}} headPipeline{status} diffStatsSummary{additions deletions fileCount}
   userPermissions{canMerge} commits(first:1){nodes{committedDate}} mergeTrainIndex}`;
@@ -1033,6 +1033,7 @@ const itemOf = (host: string, m: any, me: string): QueueItem => {
     mergeState: mergeStatus(m.detailedMergeStatus),
     ci: CI[m.headPipeline?.status] ?? null,
     lastCommitAt: m.commits?.nodes[0]?.committedDate ?? '',
+    headSha: m.diffHeadSha,
     additions: m.diffStatsSummary?.additions ?? 0,
     deletions: m.diffStatsSummary?.deletions ?? 0,
     files: m.diffStatsSummary?.fileCount ?? 0,

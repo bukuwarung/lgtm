@@ -35,6 +35,7 @@ import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modules
 import { rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, askClaudeCli, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
+import { reviewNow } from './agentreview.ts';
 import { toPerson } from './person.tsx';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
@@ -1485,7 +1486,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 </a>
               ),
             )}
-            <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" />
+            <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Claude" full={pr} />
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
@@ -4115,7 +4116,7 @@ function ReviewThreads({ review, threads, reveal }: { review: ConversationItem; 
 // starts a session with the PR or comment in the prompt (in the repo's folder, if set in Settings) and links it once
 // the Claude app records it. ⌥-click starts a new one anyway. The bar's (`label`) opens a menu: that, a new session,
 // and a question about the whole PR (Ask, answered by the claude CLI without a session).
-function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: string; prUrl: string; label?: string }) {
+function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo: string; prUrl: string; label?: string; full?: PR }) {
   const [note, setNote] = useState('');
   const [menu, setMenu] = useState(false);
   useEffect(() => {
@@ -4197,6 +4198,15 @@ function ClaudeMenu({ prompt, repo, prUrl, label }: { prompt: string; repo: stri
           <button role="menuitem" onClick={() => (setMenu(false), dispatchEvent(new Event('lgtm:ask-pr')))}>
             <Octicon name="comment-discussion" /> Ask a question about this {pageTerm().PR} <small>no session</small>
           </button>
+          {full && (
+            <button
+              role="menuitem"
+              title={`An adversarial review of this ${pageTerm().PR} by Claude Code: its findings go on it under your name, each starting with 🤖 (Settings → Reviewing: as your pending review or as comments)`}
+              onClick={() => (setMenu(false), flash(reviewNow({ id: full.node_id, repo, number: full.number, headSha: full.head.sha }) ? "Claude Code is reviewing it: you'll hear when it's done" : 'Claude Code is already on it'))}
+            >
+              🤖 Review with Claude Code <small>adversarial</small>
+            </button>
+          )}
         </div>
       )}
       {note && <span class="claude-note">{note}</span>}
