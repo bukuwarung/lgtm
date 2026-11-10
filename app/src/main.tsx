@@ -338,8 +338,8 @@ function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
     </section>
   );
 }
-// Back and forward. Back holds the recently viewed PRs, as a browser's holds its history: its ▾, holding it or
-// right-clicking it opens the list.
+// Back, forward, and the recently viewed PRs (the clock; holding or right-clicking back opens them too, as a
+// browser's back holds its history).
 function HistoryNav({ backTo }: { backTo: string }) {
   const [open, setOpen] = useState(false);
   const hold = useRef(0);
@@ -372,17 +372,15 @@ function HistoryNav({ backTo }: { backTo: string }) {
   const more = `; hold for recently viewed ${T.PRs}`;
   return (
     <span class="recent-menu">
-      <span class="split">
-      <button class={'nav-hist' + (open ? ' on' : '')} title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)${more}`} aria-label="Back" {...holds(() => history.back())}>
+      <button class="nav-hist" title={`Back${backTo ? ` to ${backTo}` : ''} (⌘[)${more}`} aria-label="Back" {...holds(() => history.back())}>
         <Octicon name="arrow-left" />
         {backTo && <span class="back-hint">{backTo}</span>}
       </button>
-      <button class={'nav-hist nav-recent' + (open ? ' on' : '')} title={`Recently viewed ${T.PRs} (⌘Y)`} aria-label={`Recently viewed ${T.PRs}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        ▾
-      </button>
-      </span>
       <button class="nav-hist" title="Forward (⌘])" aria-label="Forward" onClick={() => history.forward()}>
         <Octicon name="arrow-right" />
+      </button>
+      <button class={'nav-hist' + (open ? ' on' : '')} title={`Recently viewed ${T.PRs} (⌘Y)`} aria-label={`Recently viewed ${T.PRs}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Octicon name="history" />
       </button>
       {open && (
         <div class="account-menu recent-pop" role="menu">
@@ -691,20 +689,20 @@ function App() {
         </a>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
         <div class="top-actions">
-          <BellMenu />
-        </div>
-        <span class="spacer" />
-        {/* Back, forward and refresh beside the search box, as a browser has them by its address bar. */}
-        <span class="nav-go">
-          <HistoryNav backTo={backTo} />
           <button
-            class={`nav-hist nav-refresh${refreshing ? ' refreshing' : ''}`}
+            class={`nav-refresh${refreshing ? ' refreshing' : ''}`}
             title={`Refresh the ${T.PR} list and the open ${T.PR} (⌘R; the list also every 3 minutes)`}
             aria-label="Refresh"
             onClick={refresh}
           >
             <span><Octicon name="sync" /></span>
           </button>
+          <BellMenu />
+        </div>
+        <span class="spacer" />
+        {/* Back and forward beside the search box, as a browser has them by its address bar. */}
+        <span class="nav-go">
+          <HistoryNav backTo={backTo} />
           <CommandBar queue={() => queue.current} parse={parseRoute} />
         </span>
         <span class="spacer" />

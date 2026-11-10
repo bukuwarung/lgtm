@@ -102,12 +102,6 @@ code, pre { font-family: var(--mono); }
 .recent-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .recent-open { color: var(--addfg); } .recent-merged { color: var(--c-merged); } .recent-closed { color: var(--delfg); } .recent-draft { color: var(--muted); }
 .recent-menu { position: relative; display: flex; align-items: center; gap: 6px; }
-/* Back and its ▾ as one split button: a single pill, a hairline between the two (over the top bar's button sizes). */
-.top .recent-menu .split { display: inline-flex; }
-.top .recent-menu .split > button.nav-hist.nav-hist { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right-width: 0; padding-right: 6px; }
-.top .recent-menu .split > button.nav-recent.nav-recent { min-width: 0; width: 20px; padding: 0 4px 0 2px; font-size: 10px; border-radius: 0 999px 999px 0; border-left: 1px solid var(--border); color: var(--muted, inherit); }
-html:not(.glass) .top .recent-menu .split > button.nav-recent.nav-recent { border-radius: 0 6px 6px 0; }
-.top .recent-menu .split > button.nav-recent.nav-recent:is(:hover, .on) { color: inherit; }
 .recent-pop { left: 0; right: auto; width: min(460px, 80vw); max-height: 70vh; overflow: auto; }
 .stale { display: grid; justify-items: center; gap: 6px; font-size: calc(13px * var(--ts)); }
 .stale ul { margin: 0; padding: 0; list-style: none; max-height: 200px; overflow: auto; text-align: left; }
