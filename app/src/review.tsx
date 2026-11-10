@@ -698,16 +698,20 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   }, [reloads]);
 
   // Did they address my comments? (threadcheck.ts): back with new commits since my review, an agent reads my open
-  // threads against them, once a push (Settings → Reviewing).
+  // threads against them, once a push (Settings → Reviewing). On my own PR, the same for the threads of whoever asked
+  // for changes before I pushed, before I ask them to look again.
   const [checkOn] = useStoredFlag('agentThreads', true);
   const [check, setCheck] = useState<ThreadCheck | null>(null);
   const [checkTry, setCheckTry] = useState(0);
   const checking = useRef('');
   const head = data?.pr.head.sha ?? '';
-  const myOpen = me ? threads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)) : [];
+  const ownPR = !!me && data?.pr.user.login === me;
+  const theirs = ownPR && data ? askAgainOf(conversation.filter((c) => !c.author.endsWith('[bot]')), data.pr) : null;
+  const checkSince = ownPR ? theirs?.since ?? null : lastReviewed;
+  const myOpen = !me ? [] : threads.filter((t) => !t.isResolved && (ownPR ? !!theirs?.who.includes(t.comments.nodes[0]?.author?.login ?? '') : t.comments.nodes.some((c) => c.author?.login === me)));
   const myOpenIds = myOpen.map((t) => t.id).join();
   useEffect(() => {
-    if (!data || !checkOn || !lastReviewed || !myOpen.length) return setCheck(null);
+    if (!data || !checkOn || !checkSince || !myOpen.length) return setCheck(null);
     const saved = savedCheck(repo, n, head);
     if (saved) return setCheck(saved);
     const run = `${head}:${checkTry}`;
@@ -717,9 +721,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       const agent = autoAgent();
       if (!agent) return;
       setCheck({ sha: head, by: agent, state: 'running', verdicts: {} });
-      checkThreads({ repo, n, headRepo: data.headRepo, head, since: lastReviewed, threads: myOpen, agent }).then((c) => checking.current === run && setCheck(c));
+      checkThreads({ repo, n, headRepo: data.headRepo, head, since: checkSince, threads: myOpen, agent }).then((c) => checking.current === run && setCheck(c));
     });
-  }, [head, lastReviewed, myOpenIds, checkOn, checkTry]);
+  }, [head, checkSince, myOpenIds, checkOn, checkTry]);
 
   // Slack, with the PR and on each reload; while it isn't reachable (lgtm just launched, or the Mac just woke: slackcli
   // can fail for a moment), again every 15 seconds for 2 minutes, and whenever the window is back in focus or online.
@@ -1084,6 +1088,19 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     ...(deps.some((d) => d.unpinned) ? [{ text: `${plural(deps.filter((d) => d.unpinned).length, 'dependency', 'dependencies')} not pinned`, go: () => jumpToLine(deps.find((d) => d.unpinned)!.path, deps.find((d) => d.unpinned)!.line) }] : []),
     ...(majors.length ? [{ text: `${plural(majors.length, 'major dependency jump')} (${majors.map((d) => d.name.split(':').pop()).join(', ')})`, go: () => jumpToLine(majors[0].path, majors[0].line) }] : []),
   ];
+  // The threads the agent found addressed, resolved together once I say so; one undo puts them all back.
+  const resolveAddressed = async () => {
+    const list = threads.filter((t) => !t.isResolved && t.viewerCanResolve && check?.state === 'done' && check.verdicts[t.id]?.addressed);
+    if (!list.length || !(await ask(`Resolve the ${list.length} thread${list.length > 1 ? 's' : ''} ${AGENTS[check!.by].short} found addressed?`, 'Resolve'))) return;
+    const done: Thread[] = [];
+    try {
+      for (const t of list) await resolveThread(t.id, true), done.push(t);
+    } catch (e: any) {
+      dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Resolved ${done.length} of ${list.length}: ${e.message}` } }));
+    }
+    setThreads(await getThreads(repo, n));
+    if (done.length) offerUndo(`${done.length} thread${done.length > 1 ? 's' : ''} resolved`, () => Promise.all(done.map((t) => resolveThread(t.id, false))).then(async () => setThreads(await getThreads(repo, n))));
+  };
   const ctx: Ctx = {
     codeIx,
     specRefs: refs,
@@ -1777,7 +1794,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <button class="primary" onClick={() => (setPushed(null), dispatchEvent(new Event('lgtm:refresh')))}>Reload</button>
             </p>
           )}
-          {!!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} />}
+          {!!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} check={check} onRecheck={() => setCheckTry((k) => k + 1)} />}
           {(lastReviewed || fromSha) && (
             <div class={since ? 'since on' : 'since'}>
               {lastReviewed && !fromSha && <SinceSummary
@@ -1789,6 +1806,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 onCommits={() => setSince(true)}
                 check={check}
                 onRecheck={() => setCheckTry((k) => k + 1)}
+                onResolveAll={resolveAddressed}
               />}
               {since ? (
                 <>
@@ -3976,18 +3994,24 @@ function ThenNow({ s }: { s?: SinceComment }) {
 
 // On my own PR, after I've pushed since someone asked for changes (their latest verdict was of an older commit, and
 // they aren't asked again yet): one click asks them all to look again, on GitHub and Slack.
-function LookAgain({ conv, pr, again }: { conv: ConversationItem[]; pr: PR; again: (login: string) => Promise<boolean> }) {
-  const [hidden, setHidden] = useState('');
-  const [busy, setBusy] = useState(false);
+// Who asked for changes on an older commit and isn't asked again yet, and the oldest of those commits.
+function askAgainOf(conv: ConversationItem[], pr: PR) {
   const latest = new Map<string, ConversationItem>();
   for (const c of conv) if (!c.bot && (c.state === 'APPROVED' || c.state === 'CHANGES_REQUESTED')) latest.set(c.author, c);
   const asked = new Set((pr.requested_reviewers ?? []).map((r) => r.login));
-  const who = [...latest.values()].filter((c) => c.state === 'CHANGES_REQUESTED' && c.commit && c.commit !== pr.head.sha && !asked.has(c.author)).map((c) => c.author);
+  const them = [...latest.values()].filter((c) => c.state === 'CHANGES_REQUESTED' && c.commit && c.commit !== pr.head.sha && !asked.has(c.author));
+  return { who: them.map((c) => c.author), since: them[0]?.commit ?? null };
+}
+function LookAgain({ conv, pr, again, check, onRecheck }: { conv: ConversationItem[]; pr: PR; again: (login: string) => Promise<boolean>; check: ThreadCheck | null; onRecheck: () => void }) {
+  const [hidden, setHidden] = useState('');
+  const [busy, setBusy] = useState(false);
+  const { who } = askAgainOf(conv, pr);
   if (!who.length || hidden === pr.head.sha) return null;
   const names = who.map((l) => '@' + l).join(', ').replace(/, ([^,]*)$/, ' and $1');
   return (
     <p class="look-again">
       You've pushed since {names} asked for changes.
+      {agentCheck(check, onRecheck, 'their')}
       <button class="primary" disabled={busy} onClick={() => (setBusy(true), Promise.all(who.map(again)).finally(() => setBusy(false)))}>
         {busy ? 'Asking…' : 'Ask them to look again'}
       </button>
@@ -4000,11 +4024,11 @@ function LookAgain({ conv, pr, again }: { conv: ConversationItem[]; pr: PR; agai
 // resolved. Each count jumps to the first one (or shows just the new commits).
 // The agent's thread check, in the since-review line: under way, how many it found addressed (the first one not yet,
 // a click away), or why it couldn't.
-function agentCheck(c: ThreadCheck | null, again: () => void) {
+function agentCheck(c: ThreadCheck | null, again: () => void, whose = 'your', resolve?: { n: number; run: () => void }) {
   if (!c) return null;
   const who = AGENTS[c.by].short;
-  if (c.state === 'running') return <span class="check-state"><AgentMark id={c.by} /> {who} is checking your open threads…</span>;
-  if (c.state === 'failed') return <span class="check-state" title={c.error}><AgentMark id={c.by} /> {who} couldn't check your threads <button class="link" onClick={again}>Try again</button></span>;
+  if (c.state === 'running') return <span class="check-state"><AgentMark id={c.by} /> {who} is checking {whose} open threads…</span>;
+  if (c.state === 'failed') return <span class="check-state" title={c.error}><AgentMark id={c.by} /> {who} couldn't check {whose} threads <button class="link" onClick={again}>Try again</button></span>;
   const all = Object.entries(c.verdicts), done = all.filter(([, v]) => v.addressed).length;
   const open = all.find(([, v]) => !v.addressed)?.[0];
   if (!all.length) return null;
@@ -4012,11 +4036,12 @@ function agentCheck(c: ThreadCheck | null, again: () => void) {
     <span class="check-state">
       <AgentMark id={c.by} /> {who}: {done} of {all.length} open thread{all.length > 1 ? 's' : ''} addressed
       {open && <> · <button class="link" onClick={() => jumpTo('t-' + open)}>{all.length - done} not yet</button></>}
+      {!!resolve?.n && <> · <button class="link" onClick={resolve.run}>Resolve the {resolve.n} addressed</button></>}
     </span>
   );
 }
 
-function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; newCommits: number | null; sinceComment: Map<string, SinceComment>; onCommits: () => void; check: ThreadCheck | null; onRecheck: () => void }) {
+function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; newCommits: number | null; sinceComment: Map<string, SinceComment>; onCommits: () => void; check: ThreadCheck | null; onRecheck: () => void; onResolveAll: () => void }) {
   const mine = p.me ? p.threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === p.me)) : [];
   const replied = mine.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login !== p.me && c.createdAt > p.lastReviewAt));
   const changed = mine.filter((t) => p.sinceComment.get(t.id)?.kind === 'changed');
@@ -4028,7 +4053,10 @@ function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; 
     replied.length ? <button class="link" onClick={() => go(replied[0])}>{n(replied.length, 'thread')} with new replies</button> : null,
     changed.length ? <button class="link" onClick={() => go(changed[0])}>code changed under {n(changed.length, 'thread')} of yours</button> : null,
     resolved.length ? <span>{resolved.length} of your {n(mine.length, 'thread')} resolved</span> : null,
-    agentCheck(p.check, p.onRecheck),
+    agentCheck(p.check, p.onRecheck, 'your', {
+      n: p.threads.filter((t) => !t.isResolved && t.viewerCanResolve && p.check?.state === 'done' && p.check.verdicts[t.id]?.addressed).length,
+      run: p.onResolveAll,
+    }),
   ].filter(Boolean);
   if (!parts.length) return <span class="since-sum">New commits since your last review.</span>;
   return (

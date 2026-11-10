@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
-import { CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
+import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
+import { AGENTS, runAgent, useAgents, type AgentId } from './agents.ts';
+import { ciPrompt } from './claude.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { awaitsMe, earlierVerdicts, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { awaitsMe, earlierVerdicts, jobLog, renderGfm, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -237,7 +239,21 @@ export const OnBase = ({ c, branch: full }: { c: Check; branch: string }) => {
   ) : null;
 };
 
-function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRefresh: () => void; base: string }) {
+function CheckEntry({ c, repo, onRefresh, base, pr, files }: { c: Check; repo: string; onRefresh: () => void; base: string; pr: PR; files: PRFile[] }) {
+  const { on: agents } = useAgents();
+  // Why did it fail? An agent reads the log's end and the diff (claude.ts ciPrompt); its answer shows below.
+  const [why, setWhy] = useState<{ by: AgentId; html?: string; error?: string } | null>(null);
+  const explain = async (by: AgentId) => {
+    setWhy({ by });
+    try {
+      const text = log ?? (await jobLog(repo, c.jobId!));
+      if (log === null) setLog(text);
+      const answer = await runAgent(ciPrompt(pr, c.name, c.onBase ?? null, text, files), by);
+      setWhy({ by, html: await renderGfm(answer, repo) }); // GitHub sanitizes the HTML
+    } catch (e: any) {
+      setWhy({ by, error: e.message });
+    }
+  };
   const [log, setLog] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [rerun, setRerun] = useState<'' | 'asking' | 'queued' | string>('');
@@ -299,9 +315,20 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
             <button class={open ? 'ix-icon-btn on' : 'ix-icon-btn'} title={open ? 'Hide the job log' : 'Show the end of the job log'} aria-label="Job log" aria-pressed={open} onClick={toggle}>
               <Icon name="list-unordered" />
             </button>
+            {agents.map((a) => (
+              <button key={a} class={`ix-icon-btn${why?.by === a && !why.html && !why.error ? ' busy' : ''}`} title={`Why did it fail? ${AGENTS[a].name} reads the log and the diff`} aria-label={`Ask ${AGENTS[a].name} why it failed`} disabled={!!why && !why.html && !why.error} onClick={() => explain(a)}>
+                <AgentMark id={a} />
+              </button>
+            ))}
           </>
         )}
       </div>
+      {why && (
+        <div class="ix-why">
+          {why.error ? <p class="error">{AGENTS[why.by].name} couldn't tell: {why.error}</p> : why.html ? <div class="md" dangerouslySetInnerHTML={{ __html: why.html }} /> : <p class="note"><AgentMark id={why.by} /> {AGENTS[why.by].short} is reading the log…</p>}
+          {(why.html || why.error) && <button class="link" onClick={() => setWhy(null)}>Close</button>}
+        </div>
+      )}
       {open && (logErr ? <p class="note ix-pad">Couldn't load the log: {logErr} <Retry onClick={loadLog} /></p> : log == null ? <Lines n={4} /> : <pre class="ix-log">{log}</pre>)}
     </>
   );
@@ -529,13 +556,13 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
           <p class="note ix-pad">No checks.</p>
         ) : (
           <>
-            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
+            {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} pr={pr} files={files} />)}
             {([['success', 'passed'], ['neutral', 'skipped or cancelled']] as const).map(([state, label]) => {
               const group = checks.filter((c) => c.state === state);
               return group.length > 0 && (
                 <Fold k={`ix-checks:${state}`} initial={false} class="ix-ckgroup">
                   <summary><CheckMark state={state} /> {group.length} {label}</summary>
-                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
+                  {group.map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} pr={pr} files={files} />)}
                 </Fold>
               );
             })}

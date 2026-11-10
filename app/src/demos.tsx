@@ -1273,7 +1273,7 @@ Object.assign(DEMOS, {
     ),
     on: (
       <div class="demo-panel">
-        <span class="since-sum">Since your last review: <a>2 new commits</a> · <span class="check-state"><AgentMark id="claude" /> Claude: 1 of 2 open threads addressed · <a>1 not yet</a></span></span>
+        <span class="since-sum">Since your last review: <a>2 new commits</a> · <span class="check-state"><AgentMark id="claude" /> Claude: 1 of 2 open threads addressed · <a>1 not yet</a> · <a>Resolve the 1 addressed</a></span></span>
         <details class="thread"><summary><span class="t-preview"><b>you</b> Retry only on network errors</span><span class="badge v-done"> · addressed</span></summary></details>
         <details class="thread" open>
           <summary />

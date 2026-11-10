@@ -1,6 +1,7 @@
 // "Did they address my comments?": when a PR I reviewed comes back with new commits, a coding agent (the automatic
 // review's, Settings → Reviewing) reads each of my open threads against the code now and the changes since my review,
-// and says whether the author dealt with it. Kept per PR and head commit (per account), so it runs once a push.
+// and says whether the author dealt with it. On my own PR, the same for the reviewers who asked for changes, before I
+// ask them to look again. Kept per PR and head commit (per account), so it runs once a push.
 import { getCompare, getRaw, type PRFile, type Thread } from './github.ts';
 import { own } from './platform.ts';
 import { AGENTS, runAgent, type AgentId } from './agents.ts';
@@ -26,10 +27,10 @@ const keep = (repo: string, n: number, c: ThreadCheck) => {
 // The prompt for the threads: each one's conversation, the code around its line now, and the file's changes since.
 export function threadCheckPrompt(threads: { id: string; path: string; line: number | null; comments: string; code: string | null }[], diffs: Record<string, string>): string {
   return [
-    "You're helping someone re-review a pull request. They left the comment threads below on an earlier version; the author has pushed commits since. For each thread, decide whether the author addressed it: the code now does what the comment asked, or a reply settles it. Judge from the code and the replies, not from promises.",
+    "These comment threads were left on an earlier version of a pull request; its author has pushed commits since. For each thread, decide whether the author addressed it: the code now does what the comment asked, or a reply settles it. Judge from the code and the replies, not from promises.",
     'Answer with JSON only, no prose around it: {"threads": [{"id": "the thread id", "addressed": true, "why": "one short sentence: what changed, or what is still missing"}]}',
     ...threads.map((t) => [`=== Thread ${t.id} on ${t.path}${t.line ? `:${t.line}` : ''}`, t.comments, t.code ? `The code there now:\n${t.code}` : "(its line isn't in the file any more, or the thread is on the whole file)"].join('\n\n')),
-    ...Object.entries(diffs).map(([path, patch]) => `--- Changes to ${path} since their review:\n${patch}`),
+    ...Object.entries(diffs).map(([path, patch]) => `--- Changes to ${path} since the review:\n${patch}`),
   ].join('\n\n');
 }
 
