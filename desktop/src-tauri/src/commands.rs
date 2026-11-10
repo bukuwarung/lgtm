@@ -927,9 +927,9 @@ pub async fn clipboard_pr() -> Option<String> {
 }
 
 /// Ask Claude: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
-/// claudeText()).
+/// agentText()).
 #[tauri::command]
-pub async fn claude_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>) -> Result<String, String> {
+pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>) -> Result<String, String> {
     if input.is_empty() || input.len() > 800_000 {
         return Err("Bad request for Claude".into());
     }
@@ -1057,12 +1057,12 @@ pub async fn self_update(app: tauri::AppHandle) -> Result<(), String> {
     app.restart()
 }
 
-/// Messages for a Claude Code session, read by its skill ("check lgtm"); as the server's leaveForClaude().
+/// Messages for a Claude Code session, read by its skill ("check lgtm"); as the server's leaveForSession().
 fn session_id_ok(id: &str) -> bool {
     re(r"^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$").is_match(id)
 }
 #[tauri::command]
-pub async fn claude_outbox(id: String, text: String) -> Result<Value, String> {
+pub async fn agent_outbox(id: String, text: String) -> Result<Value, String> {
     if !session_id_ok(&id) || text.trim().is_empty() || text.len() > 50_000 {
         return Err("Bad message for Claude".into());
     }
@@ -1132,10 +1132,10 @@ pub async fn claude_session(id: String) -> Result<Value, String> {
 static SESSION_FILES: std::sync::Mutex<Vec<(String, std::path::PathBuf)>> = std::sync::Mutex::new(Vec::new());
 
 /// Is the lgtm-links mod (mods/lgtm-links in the repo) installed in Claude Code? Its record of installed plugins
-/// (~/.claude, or CLAUDE_CONFIG_DIR) names it as lgtm-links@<marketplace>; as the server's claudeMod().
+/// (~/.claude, or CLAUDE_CONFIG_DIR) names it as lgtm-links@<marketplace>; as the server's agentMod().
 /// Codex's (agent "codex"): its config.toml names lgtm-links@<marketplace> among its plugins, switched on.
 #[tauri::command]
-pub async fn claude_mod(agent: Option<String>) -> Value {
+pub async fn agent_mod(agent: Option<String>) -> Value {
     if agent.as_deref() == Some("codex") {
         let dir = std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| home().join(".codex"));
         let config = std::fs::read_to_string(dir.join("config.toml")).unwrap_or_default();
@@ -1166,12 +1166,12 @@ fn codex_plugin_on(config: &str) -> bool {
 }
 
 /// The Claude Code skill that sends PRs ready for review to lgtm (app/claude-skill.md, built in by build.rs),
-/// installed for the user in ~/.claude/skills; as the server's claudeSkill().
+/// installed for the user in ~/.claude/skills; as the server's agentSkill().
 const SKILL: &str = include_str!(concat!(env!("OUT_DIR"), "/claude-skill.md"));
 const CODEX_SKILL: &str = include_str!(concat!(env!("OUT_DIR"), "/codex-skill.md"));
 /// Codex's (agent "codex") goes in $CODEX_HOME/skills.
 #[tauri::command]
-pub async fn claude_skill(install: bool, agent: Option<String>) -> Result<Value, String> {
+pub async fn agent_skill(install: bool, agent: Option<String>) -> Result<Value, String> {
     let codex = agent.as_deref() == Some("codex");
     let (root, text) = if codex {
         (std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| home().join(".codex")), CODEX_SKILL)

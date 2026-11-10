@@ -12,7 +12,7 @@ import { postAgentFindings, getCompare, getRaw, loadPR, type Draft, type PRFile,
 import { notifyAgentDone, own, term } from './platform.ts';
 import { AGENTS, agentIdOf, autoAgent, detectAgents, runAgent, type AgentId } from './agents.ts';
 import { parsePatch } from './diff.ts';
-import { fillPrompt, prFields, promptTemplate, reindent } from './claude.ts';
+import { fillPrompt, prFields, promptTemplate, reindent } from './prompts.ts';
 
 export type AgentRun = {
   version: string; // the PR's head commit when it ran: a new push runs it again

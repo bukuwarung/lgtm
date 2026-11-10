@@ -708,18 +708,18 @@ export async function availableUpdate(): Promise<string | null> {
 // Claude app's id (local_…) or the CLI's (a UUID), kept per PR.
 const SESSION_ID = /^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 // agent: 'codex' for a Codex conversation (its skill's ?codex=<id>), else a Claude Code session.
-export function linkClaude(repo: string, n: number, id: string, agent?: 'codex') {
+export function linkSession(repo: string, n: number, id: string, agent?: 'codex') {
   if (!SESSION_ID.test(id)) return;
   try {
     localStorage.setItem(own(`claudeFrom:${repo}#${n}`), JSON.stringify({ id, at: Date.now(), ...(agent ? { agent } : {}) }));
   } catch {}
-  dispatchEvent(new Event('lgtm:claude-link')); // ✳ Claude buttons show it
+  dispatchEvent(new Event('lgtm:session-link')); // ✳ Claude buttons show it
 }
-export function unlinkClaude(repo: string, n: number) {
+export function unlinkSession(repo: string, n: number) {
   try {
     localStorage.removeItem(own(`claudeFrom:${repo}#${n}`));
   } catch {}
-  dispatchEvent(new Event('lgtm:claude-link'));
+  dispatchEvent(new Event('lgtm:session-link'));
 }
 // A session ✳ Claude just started for this PR: once the Claude app records it (its first message names the PR), link
 // it. Checks every 3 seconds for 10 minutes (the new session may wait for the user to send it).
@@ -732,14 +732,14 @@ export function linkNewClaude(repo: string, n: number, prUrl: string) {
   let tries = 0;
   const look = async () => {
     const s = (await getClaudeSessions().catch(() => [])).find((s) => s.prs.includes(prUrl) && s.lastActivityAt >= since);
-    if (s) linkClaude(repo, n, s.id);
-    if (s || ++tries >= 200 || linkedClaude(repo, n)) return void watching.delete(key);
+    if (s) linkSession(repo, n, s.id);
+    if (s || ++tries >= 200 || linkedSession(repo, n)) return void watching.delete(key);
     setTimeout(look, 3000);
   };
   setTimeout(look, 3000);
 }
 export type SessionLink = { id: string; at: number; seen?: number; agent?: 'codex' };
-export function linkedClaude(repo: string, n: number): SessionLink | null {
+export function linkedSession(repo: string, n: number): SessionLink | null {
   try {
     const v = JSON.parse(localStorage.getItem(own(`claudeFrom:${repo}#${n}`)) ?? 'null');
     return v && SESSION_ID.test(v.id) ? v : null;
@@ -749,7 +749,7 @@ export function linkedClaude(repo: string, n: number): SessionLink | null {
 }
 // The time the PR was last opened here, kept with its link: "✳ updated" in the list means commits since.
 export function seenClaudePR(repo: string, n: number) {
-  const l = linkedClaude(repo, n);
+  const l = linkedSession(repo, n);
   if (!l) return;
   try {
     localStorage.setItem(own(`claudeFrom:${repo}#${n}`), JSON.stringify({ ...l, seen: Date.now() }));
@@ -757,9 +757,9 @@ export function seenClaudePR(repo: string, n: number) {
 }
 
 // A message for a session, left where its lgtm-review skill reads it when the user says "check lgtm" there.
-export async function leaveForClaude(id: string, text: string): Promise<void> {
-  if (isDesktop) return void (await command('claude_outbox', { id, text }));
-  const res = await fetch('/claude-outbox', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, text }) });
+export async function leaveForSession(id: string, text: string): Promise<void> {
+  if (isDesktop) return void (await command('agent_outbox', { id, text }));
+  const res = await fetch('/agent-outbox', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, text }) });
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Could not leave the message');
 }
 
@@ -777,21 +777,21 @@ export async function claudeSessionState(id: string): Promise<SessionState> {
 // copied to paste if that fails), then the Claude app's session opens, or a Terminal session's `claude --resume` is
 // copied. Says what it did.
 // A Codex conversation (agent 'codex') opens in the ChatGPT app the same way.
-export async function backToClaude(id: string, message = '', agent?: 'codex'): Promise<string> {
+export async function backToSession(id: string, message = '', agent?: 'codex'): Promise<string> {
   let note = '';
   const what = agent === 'codex' ? 'conversation' : 'session';
   if (message)
-    note = await leaveForClaude(id, message).then(
+    note = await leaveForSession(id, message).then(
       () => `Left for the ${what}: say “check lgtm” there`,
       async () => (await copyText(message).catch(() => {}), `Copied: paste it in the ${what} (⌘V)`),
     );
   if (agent === 'codex') {
-    await openClaude(`codex://threads/${encodeURIComponent(id)}`);
+    await openAppLink(`codex://threads/${encodeURIComponent(id)}`);
     return note;
   }
   const local = id.startsWith('local_') ? id : (await claudeSessionState(id).catch(() => null))?.id;
   if (local) {
-    await openClaude(`claude://code/continue?session=${encodeURIComponent(local)}`);
+    await openAppLink(`claude://code/continue?session=${encodeURIComponent(local)}`);
     return note;
   }
   await copyText(`claude --resume ${id}${message ? " 'check lgtm'" : ''}`).catch(() => {});
@@ -801,17 +801,17 @@ export async function backToClaude(id: string, message = '', agent?: 'codex'): P
 // The installed skill, kept the same as this lgtm's (after an update), without asking: only if it's installed.
 export async function keepSkillCurrent() {
   for (const agent of ['claude', 'codex'] as const) {
-    const s = await claudeSkill(false, agent).catch(() => null);
-    if (s?.installed && !s.current) await claudeSkill(true, agent).catch(() => {});
+    const s = await agentSkill(false, agent).catch(() => null);
+    if (s?.installed && !s.current) await agentSkill(true, agent).catch(() => {});
   }
 }
 
 // The lgtm-review skill, Claude Code's (app/claude-skill.md, in ~/.claude/skills) or Codex's (app/codex-skill.md, in
 // ~/.codex/skills): whether it's there and current; install writes it.
 export type SkillStatus = { installed: boolean; current: boolean; path: string };
-export async function claudeSkill(install = false, agent: 'claude' | 'codex' = 'claude'): Promise<SkillStatus> {
-  if (isDesktop) return command<SkillStatus>('claude_skill', { install, agent });
-  const res = await fetch(`/claude-skill?agent=${agent}`, { method: install ? 'POST' : 'GET' });
+export async function agentSkill(install = false, agent: 'claude' | 'codex' = 'claude'): Promise<SkillStatus> {
+  if (isDesktop) return command<SkillStatus>('agent_skill', { install, agent });
+  const res = await fetch(`/agent-skill?agent=${agent}`, { method: install ? 'POST' : 'GET' });
   const d = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(d.error ?? 'Could not reach the skill');
   return d;
@@ -822,9 +822,9 @@ export async function claudeSkill(install = false, agent: 'claude' | 'codex' = '
 export const MOD_INSTALL = 'claude plugin install lgtm-links --marketplace bukuwarung/lgtm';
 // Codex's lgtm-links plugin (mods/lgtm-links-codex, listed in the repo's .agents/plugins/marketplace.json).
 export const CODEX_MOD_INSTALL = 'codex plugin marketplace add bukuwarung/lgtm && codex plugin add lgtm-links@lgtm';
-export async function claudeMod(agent: 'claude' | 'codex' = 'claude'): Promise<{ installed: boolean }> {
-  if (isDesktop) return command<{ installed: boolean }>('claude_mod', { agent });
-  const res = await fetch(`/claude-mod?agent=${agent}`);
+export async function agentMod(agent: 'claude' | 'codex' = 'claude'): Promise<{ installed: boolean }> {
+  if (isDesktop) return command<{ installed: boolean }>('agent_mod', { agent });
+  const res = await fetch(`/agent-mod?agent=${agent}`);
   const d = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(d.error ?? 'Could not check for the mod');
   return d;
@@ -941,7 +941,7 @@ export async function openExternal(url: string) {
 }
 
 // Opens a claude:// link in the Claude desktop app (the app: through the opener plugin; the browser asks first).
-export async function openClaude(url: string) {
+export async function openAppLink(url: string) {
   if (isDesktop) return (await import('@tauri-apps/plugin-opener')).openUrl(url);
   location.href = url;
 }

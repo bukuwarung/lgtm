@@ -24,7 +24,7 @@ export type PromptKind = 'pr' | 'ask' | 'agent';
 const COMMON: Record<string, string> = {
   kind: 'pull request, or merge request', ref: '#12, or !12', url: "the PR's address", title: 'its title', repo: 'owner/repo', site: 'GitHub or GitLab',
 };
-export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string; fields: Record<string, string>; after?: string }> = {
+export const PROMPTS: Record<PromptKind, { label: string; initial: string; fields: Record<string, string>; after?: string }> = {
   pr: {
     label: 'Start a session',
     initial: "Let's look at this {kind}: {url}\n{ref} {title} ({branch} → {base})\nRead it with {read}.",
@@ -46,9 +46,9 @@ export const CLAUDE_PROMPTS: Record<PromptKind, { label: string; initial: string
 };
 export const promptTemplate = (k: PromptKind) => {
   try {
-    return localStorage.getItem('claudePrompt.' + k) || CLAUDE_PROMPTS[k].initial;
+    return localStorage.getItem('claudePrompt.' + k) || PROMPTS[k].initial;
   } catch {
-    return CLAUDE_PROMPTS[k].initial;
+    return PROMPTS[k].initial;
   }
 };
 export const fillPrompt = (template: string, values: Record<string, string>) =>

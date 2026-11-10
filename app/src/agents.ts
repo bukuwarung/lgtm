@@ -117,8 +117,8 @@ export async function runAgent(input: string, id: AgentId): Promise<string> {
   await detectAgents();
   const model = agentModel(id) || undefined, agent = id;
   const effort = effortsOf(id, model ?? '').includes(agentEffort(id)) ? agentEffort(id) : undefined; // one the model takes
-  if (isDesktop) return command<string>('claude_text', { input, model, effort, agent });
-  const res = await fetch('/claude-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent }) });
+  if (isDesktop) return command<string>('agent_text', { input, model, effort, agent });
+  const res = await fetch('/agent-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent }) });
   const d = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(d.error ?? `${AGENTS[id].name} failed`);
   return d.text;

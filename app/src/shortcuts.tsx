@@ -4,7 +4,7 @@ import { isAway, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
 import { AGENTS, runAgent, useAgents, type AgentId } from './agents.ts';
-import { ciPrompt } from './claude.ts';
+import { ciPrompt } from './prompts.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
 import { awaitsMe, earlierVerdicts, jobLog, renderGfm, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
@@ -241,7 +241,7 @@ export const OnBase = ({ c, branch: full }: { c: Check; branch: string }) => {
 
 function CheckEntry({ c, repo, onRefresh, base, pr, files }: { c: Check; repo: string; onRefresh: () => void; base: string; pr: PR; files: PRFile[] }) {
   const { on: agents } = useAgents();
-  // Why did it fail? An agent reads the log's end and the diff (claude.ts ciPrompt); its answer shows below.
+  // Why did it fail? An agent reads the log's end and the diff (prompts.ts ciPrompt); its answer shows below.
   const [why, setWhy] = useState<{ by: AgentId; html?: string; error?: string } | null>(null);
   const explain = async (by: AgentId) => {
     setWhy({ by });

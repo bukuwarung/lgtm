@@ -445,7 +445,7 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
         <details class="thread" open>
           <summary />
           <div class="comment">
-            <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time> <button class="copy-link">🔗</button> <span class="claude-menu"><button class="copy-link"><AgentMark id="claude" /></button></span>
+            <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time> <button class="copy-link">🔗</button> <span class="agents-menu"><button class="copy-link"><AgentMark id="claude" /></button></span>
             <div class="md" dangerouslySetInnerHTML={{ __html: html }} />
           </div>
           <div class="editor">
@@ -476,12 +476,12 @@ const Bar = ({ linked, menu }: { linked?: boolean; menu?: boolean }) => (
     </h1>
     <div class="bar-group">
       <a class="bar-slack">💬</a>
-      <span class="claude-menu">
-        <button class={linked ? 'claude-btn linked' : 'claude-btn'}>
-          <Octicon name="dependabot" /> Agents{linked && <span class="claude-dot" />}
+      <span class="agents-menu">
+        <button class={linked ? 'agents-btn linked' : 'agents-btn'}>
+          <Octicon name="dependabot" /> Agents{linked && <span class="session-dot" />}
         </button>
         {menu && (
-          <div class="account-menu claude-pop" role="menu">
+          <div class="account-menu agents-pop" role="menu">
             <button role="menuitem"><AgentMark id="claude" /> Review with Claude Code <small>adversarial</small></button>
             <button role="menuitem"><AgentMark id="codex" /> Review with Codex <small>adversarial</small></button>
             <button role="menuitem"><Octicon name="comment-discussion" /> Ask a question about this {T.PR} <small>no session</small></button>
@@ -1288,8 +1288,8 @@ Object.assign(DEMOS, {
     off: <div class="demo-list">{agentGroup('needs', 'Needs your review', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-time', <Tg i="⏱" n="~10 min" />]]), listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-time', <Tg i="⏱" n="~5 min" />]])])}</div>,
     on: (
       <div class="demo-list">
-        {agentGroup('agents', 'Agents reviewing', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-claude', <Tg i="claude" t="reviewing…" />]])])}
-        {agentGroup('needs', 'Needs your review', [listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-claude', <Tg i="claude" n={3} t="findings" />], ['p-time', <Tg i="⏱" n="~5 min" />]])])}
+        {agentGroup('agents', 'Agents reviewing', [listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-agent', <Tg i="claude" t="reviewing…" />]])])}
+        {agentGroup('needs', 'Needs your review', [listItem('Cart: keep the promo code', 'budi', 'acme/shop#409', [['p-agent', <Tg i="claude" n={3} t="findings" />], ['p-time', <Tg i="⏱" n="~5 min" />]])])}
       </div>
     ),
   },

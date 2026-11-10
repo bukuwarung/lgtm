@@ -518,7 +518,7 @@ function jobLog(repo, job, user) {
 // Claude Code's own.
 const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'], CODEX_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 // `agent`: Claude Code (claude), or Codex (codex).
-function claudeText(input, model, effort, agent) {
+function agentText(input, model, effort, agent) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
   if (agent === 'codex') return codexText(input, model, effort);
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !EFFORTS.includes(effort))) return Promise.reject(new Error('Bad request for Claude'));
@@ -704,7 +704,7 @@ const SKILLS = {
 // the user says "check lgtm" there: ~/.config/lgtm/outbox/<session>.md, appended to, deleted by the skill once read.
 const SESSION_ID = /^(local_[A-Za-z0-9-]{1,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const OUTBOX = join(dirname(CONFIG), 'outbox');
-async function leaveForClaude({ id, text }) {
+async function leaveForSession({ id, text }) {
   if (!SESSION_ID.test(id ?? '') || typeof text !== 'string' || !text.trim() || text.length > 50_000) throw new Error('Bad message for Claude');
   await mkdir(OUTBOX, { recursive: true });
   const file = join(OUTBOX, `${id}.md`);
@@ -748,7 +748,7 @@ async function claudeSession(id) {
 // Is the lgtm-links mod (mods/lgtm-links in this repo) installed in Claude Code? Its record of installed plugins
 // (~/.claude, or CLAUDE_CONFIG_DIR) names it as lgtm-links@<marketplace>.
 // Codex's (agent "codex"): its config.toml has a [plugins."lgtm-links@…"] table that isn't switched off.
-async function claudeMod(agent) {
+async function agentMod(agent) {
   if (agent === 'codex') {
     const config = await readFile(join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'config.toml'), 'utf8').catch(() => '');
     const table = config.match(/^\[plugins\."lgtm-links@[^\]]*\]([^[]*)/m);
@@ -759,7 +759,7 @@ async function claudeMod(agent) {
   return { installed: Object.keys(d?.plugins ?? {}).some((k) => k.startsWith('lgtm-links@')) };
 }
 
-async function claudeSkill(install, agent = 'claude') {
+async function agentSkill(install, agent = 'claude') {
   const s = SKILLS[agent] ?? SKILLS.claude;
   const want = await readFile(new URL(s.text, import.meta.url), 'utf8');
   if (install) await mkdir(dirname(s.file), { recursive: true }).then(() => writeFile(s.file, want));
@@ -796,10 +796,10 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/claude-text', '/claude-skill', '/claude-mod', '/claude-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
-  if (path === '/claude-text' && req.method === 'POST') {
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (path === '/agent-text' && req.method === 'POST') {
     return readJson(req)
-      .then((b) => claudeText(b?.input, b?.model, b?.effort, b?.agent))
+      .then((b) => agentText(b?.input, b?.model, b?.effort, b?.agent))
       .then((text) => json(res, 200, { text }), (e) => json(res, 500, { error: e.message }));
   }
   if (path === '/job-log') {
@@ -821,10 +821,10 @@ const server = createServer(async (req, res) => {
       return json(res, 500, { error: e.message });
     }
   }
-  if (path === '/claude-outbox' && req.method === 'POST') return readJson(req).then(leaveForClaude).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
+  if (path === '/agent-outbox' && req.method === 'POST') return readJson(req).then(leaveForSession).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-session') return claudeSession(new URL(req.url ?? '/', ORIGIN).searchParams.get('id')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
-  if (path === '/claude-mod') return claudeMod(new URL(req.url ?? '/', ORIGIN).searchParams.get('agent')).then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
-  if (path === '/claude-skill') return claudeSkill(req.method === 'POST', new URL(req.url ?? '/', ORIGIN).searchParams.get('agent') ?? 'claude').then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
+  if (path === '/agent-mod') return agentMod(new URL(req.url ?? '/', ORIGIN).searchParams.get('agent')).then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
+  if (path === '/agent-skill') return agentSkill(req.method === 'POST', new URL(req.url ?? '/', ORIGIN).searchParams.get('agent') ?? 'claude').then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-sessions') return claudeSessions().then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));
   if (path === '/integrations') {
     const plain = (s = '') => s.replace(/\x1b\[[0-9;]*m/g, ''); // the CLIs colour their output

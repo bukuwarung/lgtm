@@ -1,10 +1,10 @@
-import { CLAUDE_PROMPTS, fillPrompt, type PromptKind } from './claude.ts';
+import { PROMPTS, fillPrompt, type PromptKind } from './prompts.ts';
 import { labMe } from './gitlab.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
 import { AGENTS, AGENT_IDS, EFFORT_NAME, effortsOf, modelsOf, agentEffort, agentModel, agentOn, detectAgents, setAgentEffort, setAgentModel, setAgentOn, useAgents, type AgentId } from './agents.ts';
-import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, claudeSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, claudeMod, MOD_INSTALL, CODEX_MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel } from './platform.ts';
+import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, agentSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, agentMod, MOD_INSTALL, CODEX_MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -1649,8 +1649,8 @@ function BackupSection() {
 function AgentSkill({ agent }: { agent: AgentId }) {
   const [s, setS] = useState<SkillStatus | null>(null);
   const [err, setErr] = useState('');
-  useEffect(() => void claudeSkill(false, agent).then(setS, (e) => setErr(e.message)), []);
-  const install = () => claudeSkill(true, agent).then((x) => (setS(x), setErr('')), (e) => setErr(e.message));
+  useEffect(() => void agentSkill(false, agent).then(setS, (e) => setErr(e.message)), []);
+  const install = () => agentSkill(true, agent).then((x) => (setS(x), setErr('')), (e) => setErr(e.message));
   const where = agent === 'codex' ? 'conversation' : 'session';
   return (
     <div class="set-row">
@@ -1671,7 +1671,7 @@ function AgentSkill({ agent }: { agent: AgentId }) {
 function AgentMod({ agent }: { agent: AgentId }) {
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
-  useEffect(() => void claudeMod(agent).then((m) => setInstalled(m.installed), () => setInstalled(null)), []);
+  useEffect(() => void agentMod(agent).then((m) => setInstalled(m.installed), () => setInstalled(null)), []);
   const line = agent === 'codex' ? CODEX_MOD_INSTALL : MOD_INSTALL;
   return (
     <div class="set-row">
@@ -1752,7 +1752,7 @@ function CodingAgents() {
         {detected && <button class="link" onClick={() => detectAgents(true).then(() => dispatchEvent(new Event('lgtm:agents-set')))}>Look again</button>}
       </p>
       {AGENT_IDS.map((id) => <AgentRow key={id} id={id} />)}
-      <ClaudePrompts />
+      <AgentPrompts />
     </div>
   );
 }
@@ -1804,24 +1804,24 @@ function ClaudeFolders() {
   );
 }
 
-// What lgtm says to Claude, each yours to word (claude.ts); the diff, files and answer format it also needs follow.
+// What lgtm says to Claude, each yours to word (prompts.ts); the diff, files and answer format it also needs follow.
 const PROMPT_SAMPLE: Record<string, string> = {
   kind: 'pull request', site: 'GitHub', ref: '#1234', url: 'https://github.com/acme/app/pull/1234', title: 'Retry payments on network errors', repo: 'acme/app',
   branch: 'retry-payments', base: 'main', read: '`gh pr view 1234 --repo acme/app --comments` and `gh pr diff 1234 --repo acme/app`',
   author: 'ana', place: ' on `RetryPolicy.kt:41`', comment: '> Should a declined card be retried too?', commentUrl: 'https://github.com/acme/app/pull/1234#discussion_r1',
   path: 'RetryPolicy.kt', verdict: 'requested changes', summary: 'My summary:\n> Two things before this goes in.', comments: 'My comments (1):\n- `RetryPolicy.kt:41`: Declines shouldn\'t be retried.', ask: 'Please address them, then tell me what changed.',
 };
-function ClaudePrompts() {
+function AgentPrompts() {
   return (
     <>
       <h5>Prompts</h5>
       <p class="note">What lgtm says to the agent. Open one to change it; what the agent also needs follows your text.</p>
-      <div class="templates">{(Object.keys(CLAUDE_PROMPTS) as PromptKind[]).map((k) => <ClaudePrompt k={k} />)}</div>
+      <div class="templates">{(Object.keys(PROMPTS) as PromptKind[]).map((k) => <AgentPrompt k={k} />)}</div>
     </>
   );
 }
-function ClaudePrompt({ k }: { k: PromptKind }) {
-  const p = CLAUDE_PROMPTS[k];
+function AgentPrompt({ k }: { k: PromptKind }) {
+  const p = PROMPTS[k];
   const [text, setText] = useStoredValue('claudePrompt.' + k, p.initial);
   return (
     <Template

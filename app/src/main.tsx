@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, claudeSkill, fetchIntegrations, keepSkillCurrent, linkClaude, linkedClaude, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
+import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -76,7 +76,7 @@ addEventListener('mouseover', (e) => {
 
 // Menus from the keyboard: Enter or Space on a menu's button opens it (they're buttons); ↓ / ↑ (Home, End) go into it and
 // through its items; Esc closes it (each menu's own handler) and puts the focus back on its button.
-const MENU_WRAP = '.bell, .recent-menu, .account, .claude-menu, .pill-menu, .pill-drop';
+const MENU_WRAP = '.bell, .recent-menu, .account, .agents-menu, .pill-menu, .pill-drop';
 const MENU_POP = '.account-menu, .pill-pop, .quick-menu';
 addEventListener(
   'keydown',
@@ -796,7 +796,7 @@ function SetupCheck() {
     glabAccounts(true).then(setLabs);
     fetchIntegrations().then(setInts, () => setInts({ slack: { ok: false, error: "couldn't check" }, jira: { ok: false, error: "couldn't check" } }));
     detectAgents(true).then((d) => setFound(d.filter((a) => a.version).map((a) => a.id)));
-    for (const a of AGENT_IDS) claudeSkill(false, a).then((x) => setSkills((s) => ({ ...s, [a]: x })), () => {});
+    for (const a of AGENT_IDS) agentSkill(false, a).then((x) => setSkills((s) => ({ ...s, [a]: x })), () => {});
   };
   useEffect(() => void (open && check()), []);
   const done = () => {
@@ -841,7 +841,7 @@ function SetupCheck() {
         {found?.filter((a) => skills[a] && !skills[a]!.current).map((a) => (
           <div class="setup-fix setup-skill">
             <AgentMark id={a} /> {AGENTS[a].short} can send {T.PRs} ready for review here, linked to its {a === 'codex' ? 'conversation' : 'session'}.{' '}
-            <button onClick={() => claudeSkill(true, a).then((x) => setSkills((s) => ({ ...s, [a]: x })), () => {})}>{skills[a]!.installed ? 'Update its skill' : 'Install its skill'}</button>
+            <button onClick={() => agentSkill(true, a).then((x) => setSkills((s) => ({ ...s, [a]: x })), () => {})}>{skills[a]!.installed ? 'Update its skill' : 'Install its skill'}</button>
           </div>
         ))}
       </div>
@@ -1223,7 +1223,7 @@ async function rerunFailed(i: QueueItem) {
 const DAY = 24 * 3600 * 1000;
 // A PR linked to a Claude Code session with commits since it was last opened here (or linked).
 const clauded = (i: QueueItem) => {
-  const l = linkedClaude(i.repo, i.number);
+  const l = linkedSession(i.repo, i.number);
   return !!l && !!i.lastCommitAt && Date.parse(i.lastCommitAt) > (l.seen ?? l.at);
 };
 const idleDays = (i: QueueItem) => (Date.now() - Date.parse(i.updatedAt)) / DAY;
@@ -1310,7 +1310,7 @@ function AgentPill({ i }: { i: QueueItem }) {
   if (!r) return null;
   const mark = agentIdOf(r.by) ?? '🤖';
   if (r.state === 'queued' || r.state === 'running')
-    return <span class="pill p-claude" title={r.state === 'queued' ? 'Waiting for its turn: two at a time' : `${r.by ?? 'The agent'} is reviewing it; you'll find its findings on it`}><Tg i={mark} t={r.state === 'queued' ? 'queued' : 'reviewing…'} /></span>;
+    return <span class="pill p-agent" title={r.state === 'queued' ? 'Waiting for its turn: two at a time' : `${r.by ?? 'The agent'} is reviewing it; you'll find its findings on it`}><Tg i={mark} t={r.state === 'queued' ? 'queued' : 'reviewing…'} /></span>;
   if (r.state === 'limited')
     return <span class="pill p-warn" title={`Today's ${agentLimit()} agent reviews are used up: this one waits for tomorrow (Settings → Reviewing), or ask for it from the ${T.PR}'s Agents menu`}><Tg i={mark} t="limit reached" /></span>;
   if (r.state === 'failed')
@@ -1321,7 +1321,7 @@ function AgentPill({ i }: { i: QueueItem }) {
     );
   const where = r.posted === 'pending' ? 'in your pending review (Finish review sends them)' : 'as comments';
   return (
-    <span class={r.findings ? 'pill p-claude' : 'pill p-ok'} title={r.findings ? `${r.by ?? 'The agent'}'s adversarial review: ${r.findings} finding${r.findings > 1 ? 's' : ''}, ${where}` : `${r.by ?? 'The agent'} found nothing to point out`}>
+    <span class={r.findings ? 'pill p-agent' : 'pill p-ok'} title={r.findings ? `${r.by ?? 'The agent'}'s adversarial review: ${r.findings} finding${r.findings > 1 ? 's' : ''}, ${where}` : `${r.by ?? 'The agent'} found nothing to point out`}>
       {r.findings ? <Tg i={mark} n={r.findings} t={`finding${r.findings > 1 ? 's' : ''}`} /> : <Tg i={mark} t="nothing found" />}
     </span>
   );
@@ -1477,7 +1477,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
   // The Claude Code sessions linked to listed PRs, and what each is doing, every 15 seconds.
   const [claude, setClaude] = useState<Map<string, 'working' | 'waiting' | 'idle'>>(new Map());
-  const linkedIds = [...new Set((items ?? []).map((i) => linkedClaude(i.repo, i.number)).filter((l) => l && l.agent !== 'codex').map((l) => l!.id))].sort().join(' ');
+  const linkedIds = [...new Set((items ?? []).map((i) => linkedSession(i.repo, i.number)).filter((l) => l && l.agent !== 'codex').map((l) => l!.id))].sort().join(' ');
   useEffect(() => {
     if (!linkedIds) return setClaude(new Map());
     let stop = false;
@@ -1489,7 +1489,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     const t = setInterval(look, 15_000);
     return () => ((stop = true), clearInterval(t));
   }, [linkedIds]);
-  const claudeWaiting = (i: QueueItem) => claude.get(linkedClaude(i.repo, i.number)?.id ?? '') === 'waiting';
+  const claudeWaiting = (i: QueueItem) => claude.get(linkedSession(i.repo, i.number)?.id ?? '') === 'waiting';
   useEffect(() => void (items && onItems(items)), [items]);
   // The bell's entries for a PR that's been merged or closed go: nothing's left to act on. Only the PRs that left the
   // list are asked about, each at most every 30 minutes.
@@ -1657,10 +1657,10 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           ))
         )}
         {kind === REVIEWING && <AgentPill i={i} />}
-        {claudeWaiting(i) && <span class="pill p-claude-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
-        {clauded(i) && (linkedClaude(i.repo, i.number)?.agent === 'codex'
-          ? <span class="pill p-claude" title="Its Codex conversation pushed commits since you last opened it here"><Tg i="codex" t="updated" /></span>
-          : <span class="pill p-claude" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>)}
+        {claudeWaiting(i) && <span class="pill p-session-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
+        {clauded(i) && (linkedSession(i.repo, i.number)?.agent === 'codex'
+          ? <span class="pill p-agent" title="Its Codex conversation pushed commits since you last opened it here"><Tg i="codex" t="updated" /></span>
+          : <span class="pill p-agent" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>)}
         {(kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} presence={presence} /> : null}
         {i.estimate && <span
           class="pill p-time"
@@ -1790,7 +1790,7 @@ function takeClaudeLink() {
   const from = location.hash.match(/[?&](claude|codex)=([\w-]{1,80})/);
   const r = from && parseRoute(location.hash);
   if (!r) return;
-  linkClaude(r.repo, r.n, from![2], from![1] === 'codex' ? 'codex' : undefined);
+  linkSession(r.repo, r.n, from![2], from![1] === 'codex' ? 'codex' : undefined);
   history.replaceState(null, '', `#/${r.repo}/pull/${r.n}`);
 }
 takeClaudeLink();

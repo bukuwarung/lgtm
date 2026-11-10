@@ -25,14 +25,14 @@ import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
 import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { claudeContinueLink, claudeNewLink, askPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './claude.ts';
+import { claudeContinueLink, claudeNewLink, askPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { notifyAgentDone, rememberPR, claudeMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToClaude, claudeSessionState, linkNewClaude, seenClaudePR, unlinkClaude, type SessionState, linkedClaude, prCache, claudeFolder, claudeSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openClaude, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
+import { notifyAgentDone, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -1012,12 +1012,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     setPending(null);
     // A Claude Code session or Codex conversation sent this PR here: offer to send it the outcome (a message stays up
     // past moving on).
-    const from = linkedClaude(repo, n);
+    const from = linkedSession(repo, n);
     if (from) {
       const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
       dispatchEvent(
         new CustomEvent('lgtm:toast', {
-          detail: { text: `This ${pageTerm().PR} has a ${from.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'}.`, action: ['Send it your review', () => void backToClaude(from.id, text, from.agent).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
+          detail: { text: `This ${pageTerm().PR} has a ${from.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'}.`, action: ['Send it your review', () => void backToSession(from.id, text, from.agent).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
         }),
       );
     }
@@ -1403,7 +1403,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       docCode: () => dispatchEvent(new Event('lgtm:doc-code')), // DocCodeJump
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
-      agents: () => dispatchEvent(new Event('lgtm:agents-menu')), // the PR bar's Agents (ClaudeMenu)
+      agents: () => dispatchEvent(new Event('lgtm:agents-menu')), // the PR bar's Agents (AgentsMenu)
       // The file in view on github.dev, at the first line showing below the bars.
       githubDev: () => {
         const sec = sections[Math.max(cur, 0)];
@@ -1541,7 +1541,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 </a>
               ),
             )}
-            <ClaudeMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Agents" full={pr} />
+            <AgentsMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Agents" full={pr} />
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
@@ -1860,7 +1860,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           )}
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />
-          <AskClaude pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
+          <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} />
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} />
           {inOrder.map(section)}
           {generated.length > 0 &&
@@ -3879,7 +3879,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId}>
           <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
-          <ClaudeMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
+          <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
           {c.state === 'PENDING' && c.id ? (
             <PendingComment c={c} ctx={ctx} path={t.path} />
           ) : (
@@ -4223,14 +4223,14 @@ function ReviewThreads({ review, threads, reveal }: { review: ConversationItem; 
 // the PR here, or one this button started), it opens it, with a comment left for it; without one, it starts a session
 // with the PR or comment in the prompt (in the repo's folder, if set in Settings) and links it once the Claude app
 // records it. ⌥-click starts a new one anyway.
-function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo: string; prUrl: string; label?: string; full?: PR }) {
+function AgentsMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo: string; prUrl: string; label?: string; full?: PR }) {
   const [note, setNote] = useState('');
   const [menu, setMenu] = useState(false);
   const { on: agents } = useAgents();
   const claudeOn = agents.includes('claude'), codexOn = agents.includes('codex');
   useEffect(() => {
     if (!menu) return;
-    const away = (e: Event) => !(e.target as Element).closest?.('.claude-menu') && setMenu(false);
+    const away = (e: Event) => !(e.target as Element).closest?.('.agents-menu') && setMenu(false);
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(false);
     addEventListener('pointerdown', away);
     addEventListener('keydown', esc);
@@ -4244,16 +4244,16 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   const title = session?.title ?? '';
   const [, setTick] = useState(0);
   const pr = parsePrUrl(prUrl) ?? { repo: '', n: 0 };
-  const from = linkedClaude(pr.repo, pr.n);
+  const from = linkedSession(pr.repo, pr.n);
   const linkAgent: AgentId = from?.agent === 'codex' ? 'codex' : 'claude'; // whose session (conversation) it is
   // A comment's button: the linked session's agent, else Claude Code's new session, else Codex's.
   const sessAgent: AgentId | null = from && agents.includes(linkAgent) ? linkAgent : claudeOn ? 'claude' : codexOn ? 'codex' : null;
   useEffect(() => {
     const t = () => setTick((x) => x + 1);
-    addEventListener('lgtm:claude-link', t);
+    addEventListener('lgtm:session-link', t);
     const toggle = () => label && setMenu((m) => !m); // its shortcut (a), on the PR bar's
     addEventListener('lgtm:agents-menu', toggle);
-    return () => (removeEventListener('lgtm:claude-link', t), removeEventListener('lgtm:agents-menu', toggle));
+    return () => (removeEventListener('lgtm:session-link', t), removeEventListener('lgtm:agents-menu', toggle));
   }, []);
   // The linked session's title and state (working, waiting for you), every 10 seconds; an app session that's gone
   // (archived, deleted) is let go.
@@ -4264,7 +4264,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
       claudeSessionState(from.id).then((s) => {
         if (stop) return;
         setSession(s);
-        if (!s && from.id.startsWith('local_')) unlinkClaude(pr.repo, pr.n);
+        if (!s && from.id.startsWith('local_')) unlinkSession(pr.repo, pr.n);
       }, () => {});
     look();
     const t = setInterval(look, 10_000);
@@ -4279,37 +4279,37 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
   // skill sends the PR back here.
   const go = async (e: { altKey: boolean }, a: AgentId) => {
     setMenu(false);
-    if (from && !e.altKey && linkAgent === a) return flash(await backToClaude(from.id, label ? '' : prompt, from.agent));
+    if (from && !e.altKey && linkAgent === a) return flash(await backToSession(from.id, label ? '' : prompt, from.agent));
     if (a === 'codex') {
-      await openClaude(`codex://threads/new?prompt=${encodeURIComponent(prompt)}`);
-      if (offerSkill && !(await claudeSkill(false, 'codex').catch(() => null))?.installed) setOffer('codex');
+      await openAppLink(`codex://threads/new?prompt=${encodeURIComponent(prompt)}`);
+      if (offerSkill && !(await agentSkill(false, 'codex').catch(() => null))?.installed) setOffer('codex');
       return;
     }
-    await openClaude(claudeNewLink(prompt, claudeFolder(repo)));
+    await openAppLink(claudeNewLink(prompt, claudeFolder(repo)));
     linkNewClaude(pr.repo, pr.n, prUrl);
-    if (offerSkill && !(await claudeSkill().catch(() => null))?.installed) return setOffer('claude');
-    if (suggestMod && (await claudeMod().catch(() => null))?.installed === false) setOfferMod(true);
+    if (offerSkill && !(await agentSkill().catch(() => null))?.installed) return setOffer('claude');
+    if (suggestMod && (await agentMod().catch(() => null))?.installed === false) setOfferMod(true);
   };
-  const install = (a: AgentId) => claudeSkill(true, a).then(() => (setOffer(null), flash(`Skill installed: ${AGENTS[a].short} can now send ${pageTerm().PRs} here`)), (e) => flash(`Couldn't install it: ${e.message}`));
+  const install = (a: AgentId) => agentSkill(true, a).then(() => (setOffer(null), flash(`Skill installed: ${AGENTS[a].short} can now send ${pageTerm().PRs} here`)), (e) => flash(`Couldn't install it: ${e.message}`));
   const what = label ? `this ${pageTerm().PR}` : 'this comment';
   const place = (a: AgentId) => (a === 'codex' ? 'Codex conversation' : 'Claude Code session');
   if (!label && !sessAgent) return null;
   return (
-    <span class="claude-menu">
+    <span class="agents-menu">
       <button
-        class={`${label ? 'claude-btn' : 'copy-link'}${from ? ' linked' : ''}`}
+        class={`${label ? 'agents-btn' : 'copy-link'}${from ? ' linked' : ''}`}
         title={label ? `Coding agents: a review or a question about this ${pageTerm().PR}, or its session${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').agents)}` : from && sessAgent === linkAgent ? `Open its ${place(sessAgent!)}${title ? `, “${title}”` : ''}, with this comment left for it (⌥-click for a new one)` : `Start a ${place(sessAgent!)} on ${what}`}
         aria-haspopup={label ? 'menu' : undefined}
         aria-expanded={label ? menu : undefined}
         onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e, sessAgent ?? 'claude'))}
       >
         {!label ? <AgentMark id={sessAgent!} /> : agents.length === 1 ? <><AgentMark id={agents[0]} /> {AGENTS[agents[0]].short}</> : <><Octicon name="dependabot" /> {label}</>}
-        {from && <span class={`claude-dot${session?.state === 'waiting' ? ' waiting' : ''}`} aria-label="linked to a session" />}
-        {label && session?.state === 'working' && <span class="claude-state"> working…</span>}
-        {label && session?.state === 'waiting' && <span class="claude-state waiting"> waiting for you</span>}
+        {from && <span class={`session-dot${session?.state === 'waiting' ? ' waiting' : ''}`} aria-label="linked to a session" />}
+        {label && session?.state === 'working' && <span class="session-state"> working…</span>}
+        {label && session?.state === 'waiting' && <span class="session-state waiting"> waiting for you</span>}
       </button>
       {menu && (
-        <div class="account-menu claude-pop" role="menu">
+        <div class="account-menu agents-pop" role="menu">
           {full && agents.map((a) => (
             <button
               key={a}
@@ -4344,16 +4344,16 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
           {!agents.length && <p class="note">No coding agent is on. Install Claude Code or Codex, or switch one on in Settings → Coding agents.</p>}
         </div>
       )}
-      {note && <span class="claude-note">{note}</span>}
+      {note && <span class="agents-note">{note}</span>}
       {offerMod && !offer && !note && (
-        <span class="claude-note">
+        <span class="agents-note">
           Add the lgtm-links mod to Claude Code: an Open in lgtm button under PR links, and your reviews reach the session by themselves.{' '}
           <button class="link" onClick={() => (setOfferMod(false), copyText(MOD_INSTALL).then(() => flash(`Copied: paste it in a terminal (${MOD_INSTALL})`), () => flash(MOD_INSTALL)))}>Copy the install command</button> ·{' '}
           <button class="link" onClick={() => (setOfferMod(false), noModOffer())}>Don't ask again</button>
         </span>
       )}
       {offer && !note && (
-        <span class="claude-note">
+        <span class="agents-note">
           Add the lgtm skill so {AGENTS[offer].short} sends {pageTerm().PRs} ready for review here, linked to its {offer === 'codex' ? 'conversation' : 'session'}.{' '}
           <button class="link" onClick={() => install(offer)}>Add it</button> · <button class="link" onClick={() => (setOffer(null), noOffer())}>Don't ask again</button>
         </span>
@@ -4364,7 +4364,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
 
 // Select code in a file, then "Ask": a question about it, answered by a coding agent's CLI (picked in the panel, the last one
 // remembered) with the file, its diff in this PR and the selection.
-function AskClaude({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
+function AskAgent({ pr, repo, headRepo, files }: { pr: PR; repo: string; headRepo: string; files: File[] }) {
   const [sel, setSel] = useState<{ path: string; text: string; x: number; y: number } | null>(null);
   const [panel, setPanel] = useState<{ path: string; text: string } | null>(null);
   const [q, setQ] = useState('');
@@ -4650,7 +4650,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
           <>
             <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
-            {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}
+            {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}
           </>
         );
         const body = (
@@ -4691,7 +4691,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
               <summary>
                 <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{c.author}</b>{' '}
                 <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
-                {c.html && <ClaudeMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}{' '}
+                {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}{' '}
                 <span class="bot-excerpt">{botExcerpt(c.html)}</span>
               </summary>
               {c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />}

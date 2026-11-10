@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-text"
+description = "Enables the agent_text command without any pre-configured scope."
+commands.allow = ["agent_text"]
+
+[[permission]]
+identifier = "deny-agent-text"
+description = "Denies the agent_text command without any pre-configured scope."
+commands.deny = ["agent_text"]

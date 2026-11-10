@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-outbox"
+description = "Enables the agent_outbox command without any pre-configured scope."
+commands.allow = ["agent_outbox"]
+
+[[permission]]
+identifier = "deny-agent-outbox"
+description = "Denies the agent_outbox command without any pre-configured scope."
+commands.deny = ["agent_outbox"]

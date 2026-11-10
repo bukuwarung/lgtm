@@ -298,7 +298,7 @@ test('docBlocks finds whole doc comments of one kind; parseDoc renders KDoc and 
 });
 
 test('claude links: a new session carries the prompt (capped) and the folder', async () => {
-  const { claudeNewLink, commentPrompt, prPrompt } = await import('../src/claude.ts');
+  const { claudeNewLink, commentPrompt, prPrompt } = await import('../src/prompts.ts');
   const u = new URL(claudeNewLink('Fix this & that', '/Users/me/app'));
   assert.equal(u.protocol + '//' + u.host + u.pathname, 'claude://code/new');
   assert.equal(u.searchParams.get('q'), 'Fix this & that');
@@ -434,7 +434,7 @@ test('lineCommentBlocks: # runs too (Python, YAML, ProGuard), not shebangs or co
 });
 
 test('reviewDonePrompt: the review, as a message back to the Claude session', async () => {
-  const { reviewDonePrompt } = await import('../src/claude.ts');
+  const { reviewDonePrompt } = await import('../src/prompts.ts');
   const p = reviewDonePrompt({ html_url: 'https://github.com/o/r/pull/7', number: 7, title: 'Retry payments' }, 'REQUEST_CHANGES', 'Close.', [{ path: 'Pay.kt', line: 12, body: 'Stop retrying\non declines.' }]);
   assert.match(p, /^I reviewed https:\/\/github\.com\/o\/r\/pull\/7 \(#7 Retry payments\) in lgtm and requested changes\./);
   assert.match(p, /- `Pay\.kt:12`: Stop retrying on declines\./);
@@ -1217,7 +1217,7 @@ test("GitLab CODEOWNERS sections: a section's default owners for patterns that n
 });
 
 test('Claude prompts: the defaults read as before (a comment adds itself to the PR opener); your wording replaces them', async () => {
-  const { prPrompt, commentPrompt, reviewDonePrompt } = await import('../src/claude.ts');
+  const { prPrompt, commentPrompt, reviewDonePrompt } = await import('../src/prompts.ts');
   const pr = { html_url: 'https://github.com/o/r/pull/12', number: 12, title: 'Fix it', base: { ref: 'main' }, head: { ref: 'fix' } };
   assert.equal(prPrompt(pr, 'o/r'), "Let's look at this pull request: https://github.com/o/r/pull/12\n#12 Fix it (fix → main)\nRead it with `gh pr view 12 --repo o/r --comments` and `gh pr diff 12 --repo o/r`.");
   assert.equal(commentPrompt({ author: 'ana', text: 'Why?', url: 'u' }, pr, 'o/r', { path: 'a.kt', line: 3 }), `${prPrompt(pr, 'o/r')}\n\nA review comment from @ana on \`a.kt:3\`:\n\n> Why?\n\nComment: u\nHelp me address it.`);
@@ -1232,7 +1232,7 @@ test('Claude prompts: the defaults read as before (a comment adds itself to the 
 });
 
 test("an agent's fix is shifted back to the indentation of the lines it replaces", async () => {
-  const { reindent } = await import('../src/claude.ts');
+  const { reindent } = await import('../src/prompts.ts');
   assert.equal(reindent('for (;;) x++;', '  for (;;) x--;'), '  for (;;) x++;');
   assert.equal(reindent('if (a) {\n  b();\n}', '    if (a) {\n      c();\n    }'), '    if (a) {\n      b();\n    }');
   assert.equal(reindent('    kept();', '    old();'), '    kept();'); // already indented
