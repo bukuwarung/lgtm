@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { notifyAgentDone, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
+import { notifyAgentDone, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -1547,7 +1547,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} thread={`${repo}#${n}`} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -1905,7 +1905,7 @@ type SubmitProps = {
   count: number;
   myOpenThreads: number; // unresolved review threads I'm in
   slackTo: string[] | null;
-  thread: string;
+  threaded: string[];
   slackNote: string;
   onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean) => Promise<boolean>;
   repo: string;
@@ -1938,7 +1938,7 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 const slackWhy = (r: { login: string; error?: string }) =>
   /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
 
-function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, thread, onSubmit, saveAs, repo, mentions, authored, stillOpen = [] }: SubmitProps) {
+function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [] }: SubmitProps) {
   const [open, setOpen] = useState(false);
   useDismiss(open, () => setOpen(false), '.review-submit');
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
@@ -1948,22 +1948,19 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const labels: Record<ReviewEvent, string> = { COMMENT: 'Comment', APPROVE: 'Approve', REQUEST_CHANGES: 'Request changes' };
-  // Before you submit: can Slack reach each of them? A dry run (nothing sent), once per panel and set of people, so a
-  // missing mapping, a GitHub scope or a Slack sign-in shows here, not after the review is in.
+  // Before you submit: can Slack reach each of them? Someone is reached through your mapping, a thread with them on this
+  // PR, or their email, which a browser Slack sign-in can't look up (asked once a run). No Slack call per person.
   const [slackWarn, setSlackWarn] = useState('');
-  const checked = useRef('');
   const who = slackTo?.join(',') ?? '';
   useEffect(() => {
-    if (!open || !notify || !slackTo?.length || checked.current === who) return;
-    checked.current = who;
-    setSlackWarn('');
-    slackRecipients(repo, slackTo)
-      .then((r) => notifySlack(r, 'check', thread, true))
-      .then(
-        (rs) => setSlackWarn(rs.filter((r) => !r.ok).map((r) => `Slack won't reach @${r.login}: ${slackWhy(r)}`).join(' ')),
-        (e) => setSlackWarn(`Slack will fail: ${e.message}`),
-      );
-  }, [open, notify, who]);
+    if (!open || !notify || !slackTo?.length) return;
+    let live = true;
+    Promise.all([getSlackPeople(), slackFindsByEmail()]).then(([{ mine }, email]) => {
+      const lost = slackTo.filter((l) => !mine[personKey(repo, l)] && !threaded.includes(l) && !threaded.includes(personKey(repo, l)));
+      if (live) setSlackWarn(lost.length && !email ? `Slack won't reach ${lost.map((l) => '@' + l).join(', ')}: not mapped, and your Slack sign-in can't find people by email. Map them in Settings → Slack → People.` : '');
+    }, () => {});
+    return () => void (live = false);
+  }, [open, notify, who, threaded.join(',')]);
   useEffect(() => {
     // detail.append: text for the summary, after what's there (an agent's answer, from Ask).
     const show = (e: Event) => {

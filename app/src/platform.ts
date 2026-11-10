@@ -408,6 +408,14 @@ async function call<T>(method: string, body?: any): Promise<T> {
   return d;
 }
 export const getSlackPeople = () => call<SlackPeople>('GET');
+// Can your Slack sign-in find people by email (a browser sign-in can't)? Asked once a run, by a dry run to a made-up
+// address: nothing is sent, and Slack refuses the kind of sign-in before it looks the address up.
+let byEmail: Promise<boolean> | undefined;
+export const slackFindsByEmail = () =>
+  (byEmail ??= notifySlack([{ login: 'lgtm-check', emails: ['lgtm-check@example.com'] }], 'check', 'lgtm/check#1', true).then(
+    ([r]) => !/not_allowed_token_type/.test(r?.error ?? ''),
+    () => true,
+  ));
 // People's Slack statuses (by GitHub login, the ones mapped to Slack), for picking a reviewer (slackmsg.ts isAway).
 export type SlackPresence = { text: string; emoji: string; until: number };
 // The same, for any part of lgtm: kept 10 minutes per person, asked once for everyone missing; every user of it
