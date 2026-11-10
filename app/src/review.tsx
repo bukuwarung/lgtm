@@ -4112,7 +4112,7 @@ function ReviewThreads({ review, threads, reveal }: { review: ConversationItem; 
   );
 }
 
-// "Agents" (the PR bar, `label`): a menu of what the coding agents on (Settings → Coding agents) can do here: a review
+// "Agents" (the PR bar, `label`; with one agent on, that agent's mark and name): a menu of what the coding agents on (Settings → Coding agents) can do here: a review
 // by each one, a question about the whole PR (the Ask panel, its agent picked there) and, with Claude Code on, this PR's
 // Claude Code session. A comment's Claude mark is that session alone. With one linked (a dot: the session that sent
 // the PR here, or one this button started), it opens it, with a comment left for it; without one, it starts a session
@@ -4184,8 +4184,7 @@ function ClaudeMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
         aria-expanded={label ? menu : undefined}
         onClick={(e) => (label && !e.altKey ? setMenu(!menu) : go(e))}
       >
-        {label ? <Octicon name="dependabot" /> : <AgentMark id="claude" />}
-        {label ? ` ${label}` : ''}
+        {!label ? <AgentMark id="claude" /> : agents.length === 1 ? <><AgentMark id={agents[0]} /> {AGENTS[agents[0]].short}</> : <><Octicon name="dependabot" /> {label}</>}
         {from && <span class={`claude-dot${session?.state === 'waiting' ? ' waiting' : ''}`} aria-label="linked to a session" />}
         {label && session?.state === 'working' && <span class="claude-state"> working…</span>}
         {label && session?.state === 'waiting' && <span class="claude-state waiting"> waiting for you</span>}
