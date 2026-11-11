@@ -4728,14 +4728,16 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
   const peek = useRefPeek(ix);
   const earlier = useMemo(() => earlierVerdicts(items), [items]);
   const replaced = new Set([...earlier.values()].flat());
+  // A bot's PR leads with the human it's assigned to, not the bot.
+  const lead = (pr.user.type === 'Bot' && pr.assignees[0]) || pr.user;
   return (
     <details class="conversation" id="conversation" open={!folded}>
       <summary>
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="comment" id="pr-description">
-        <Avatar login={pr.user.login} src={pr.user.avatar_url} /> <b class="person-link" onClick={toPerson(pr.user.login, repo)}>{pr.user.login}</b>
-        {pr.assignees.filter((a) => a.login !== pr.user.login).map((a, k) => (
+        <Avatar login={lead.login} src={lead === pr.user ? pr.user.avatar_url : undefined} /> <b class="person-link" title={lead === pr.user ? undefined : `Assigned; opened by ${pr.user.login}`} onClick={toPerson(lead.login, repo)}>{lead.login}</b>
+        {pr.assignees.filter((a) => a.login !== pr.user.login && a !== lead).map((a, k) => (
           <span key={a.login} class="assigned-to">
             {k ? ', ' : ' · assigned to '}
             <span class="person-link" onClick={toPerson(a.login, repo)}>{a.login}</span>
