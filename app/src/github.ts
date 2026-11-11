@@ -629,6 +629,11 @@ export async function whoWrote(repo: string, base: string, files: { filename: st
     .map((f) => ({ path: f.filename, lines: touchedLines(f.patch!) }))
     .filter((f) => f.lines.length);
   if (!pick.length) return [];
+  // The base commit's code never changes, so neither does who wrote the lines this PR touches (a new push may touch others).
+  const touched = [...JSON.stringify(pick)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0).toString(36);
+  return kept(`blame:${repo}@${base}:${touched}`, () => blameShares(repo, owner, name, base, pick), 30 * DAY);
+}
+async function blameShares(repo: string, owner: string, name: string, base: string, pick: { path: string; lines: number[] }[]): Promise<Knows[]> {
   if (isLab(repo)) {
     const ranges = await lab.labBlame(repo, base, pick);
     return whoKnows(pick.map((f, k) => ({ path: f.path, lines: f.lines.length, by: tally(ranges[k], f.lines) })));
@@ -869,9 +874,12 @@ export const listDir = (repo: string, path: string, ref?: string): Promise<{ nam
   isLab(repo) ? lab.listLabDir(repo, path, ref) : json(`/repos/${repo}/contents/${path}${ref ? `?ref=${ref}` : ''}`);
 
 // A file's size at a commit. A file in Git LFS is, in Git, a small pointer naming its real size: that size, lfs set.
+// A file at a commit (a full SHA) never changes: the browser's saved copy is used without asking again, kept across
+// launches. ponytail: the browser's own cache, evicted as it sees fit; IndexedDB if that proves too forgetful.
+export const atCommit = (ref: string): RequestInit => (/^[0-9a-f]{40}$/i.test(ref) ? { cache: 'force-cache' } : {});
 export async function getBlobInfo(repo: string, path: string, ref: string): Promise<{ size: number; lfs: boolean } | null> {
   if (isLab(repo)) return lab.getLabBlobInfo(repo, path, ref);
-  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`);
+  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, atCommit(ref));
   if (res.status === 404) return null;
   const j = (await (await ok(res)).json()) as { size: number; encoding?: string; content?: string };
   const text = j.size < 400 && j.encoding === 'base64' ? atob((j.content ?? '').replace(/\n/g, '')) : '';
@@ -881,7 +889,8 @@ export async function getBlobInfo(repo: string, path: string, ref: string): Prom
 
 export async function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
   if (isLab(repo)) return lab.getLabRaw(repo, path, ref);
-  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`, {}, 'application/vnd.github.raw');
+  // &raw: its own address, so a saved copy is never the JSON form of the same file (getBlobInfo); GitHub ignores it.
+  const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}&raw`, atCommit(ref), 'application/vnd.github.raw');
   if (res.status === 404) return null;
   return (await ok(res)).text();
 }

@@ -511,7 +511,7 @@ export function setLabViewed(prId: string, paths: string[], viewed: boolean) {
 
 const filePath = (repo: string, path: string) => `/projects/${pid(repo)}/repository/files/${encodeURIComponent(path)}`;
 export async function getLabRaw(repo: string, path: string, ref: string): Promise<string | null> {
-  const r = await lab(split(repo).host, `${filePath(repo, path)}/raw?ref=${encodeURIComponent(ref)}`);
+  const r = await lab(split(repo).host, `${filePath(repo, path)}/raw?ref=${encodeURIComponent(ref)}`, /^[0-9a-f]{40}$/i.test(ref) ? { cache: 'force-cache' } : {}); // a commit's file never changes (github.ts atCommit)
   return r.status === 404 ? null : r.text();
 }
 // A file in Git LFS is, in Git, a small pointer naming its real size: that size, lfs set.
