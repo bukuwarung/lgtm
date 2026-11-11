@@ -108,6 +108,12 @@ export function kept<T>(key: string, load: () => Promise<T>, ttl = DAY): Promise
   return keptNow.get(k) as Promise<T>;
 }
 
+// Settings → About: everything kept dropped (every account's), and lgtm reloaded to ask afresh.
+export const forgetKept = () => {
+  for (const x of Object.keys(localStorage)) if (/(^|\/)kept:/.test(x)) localStorage.removeItem(x);
+  location.reload();
+};
+
 export const storage = {
   get: async <T>(key: string): Promise<T | undefined> => {
     const v = localStorage.getItem(own(key));
