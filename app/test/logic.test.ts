@@ -1252,3 +1252,23 @@ test("an agent finding's fix becomes a suggestion only for lines in the diff, re
   assert.equal(noteBody({ body, line: 3, startLine: 2 }), 'Fix it\n\n```suggestion:-1+0\n  return z\n}\n```');
   assert.equal(noteBody({ body, line: 3 }), body);
 });
+
+test('kept: a fetch is kept until it expires, asked once at a time, and the stale copy stands in when asking fails', async () => {
+  const { kept } = await import('../src/platform.ts');
+  const ls: any = { getItem: (k: string) => (k in ls.d ? ls.d[k] : null), setItem: (k: string, v: string) => void (ls.d[k] = v), removeItem: (k: string) => void delete ls.d[k], d: { 'kept:old': JSON.stringify({ until: 1, v: 0 }) } };
+  const proxy = new Proxy(ls, { ownKeys: () => Object.keys(ls.d), getOwnPropertyDescriptor: (_t, k) => ({ enumerable: true, configurable: true, value: ls.d[k as string] }) });
+  (globalThis as any).localStorage = proxy;
+  try {
+    let calls = 0;
+    const load = async () => ++calls;
+    assert.deepEqual(await Promise.all([kept('n', load), kept('n', load)]), [1, 1]);
+    assert.equal(await kept('n', load), 1);
+    assert.equal(calls, 1);
+    assert.equal(ls.d['kept:old'], undefined); // expired entries swept
+    ls.d['kept:n'] = JSON.stringify({ until: 1, v: 7 });
+    assert.equal(await kept('n', () => Promise.reject(new Error('offline'))), 7);
+    await assert.rejects(kept('none', () => Promise.reject(new Error('offline'))));
+  } finally {
+    delete (globalThis as any).localStorage;
+  }
+});

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 // its cached copy, the bell, PRs opened lately, files marked viewed on GitLab, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|threadCheck:|askConvos$)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|threadCheck:|askConvos$|kept:)/;
 let account = '';
 // The account of last time, per site (GitHub's, or a GitLab host's): the next launch starts as it.
 const lastKey = () => (viewAs() ? `lastLogin:${viewAs()}` : 'lastLogin');
@@ -74,6 +74,38 @@ export function useRecentPRs() {
     return () => removeEventListener('lgtm:recent', h);
   }, []);
   return list;
+}
+
+// What takes a fetch and rarely changes (teams, people's names and emails, required checks, emoji…), kept across
+// launches per account until `ttl` passes: asked once at a time, and the stale copy used if asking fails. Expired
+// entries are swept once a launch.
+const keptNow = new Map<string, Promise<unknown>>();
+let swept = false;
+export const DAY = 86_400_000;
+export function kept<T>(key: string, load: () => Promise<T>, ttl = DAY): Promise<T> {
+  const k = own(`kept:${key}`);
+  if (!swept) {
+    swept = true;
+    for (const x of Object.keys(localStorage))
+      if (/^(myTeams|codeowners:)/.test(x)) localStorage.removeItem(x); // the day cache before this one
+      else if (/(^|\/)kept:/.test(x)) try { if (JSON.parse(localStorage.getItem(x)!).until < Date.now()) localStorage.removeItem(x); } catch { localStorage.removeItem(x); }
+  }
+  let c: { until: number; v: T } | null = null;
+  try {
+    c = JSON.parse(localStorage.getItem(k) ?? 'null');
+  } catch {}
+  if (c && c.until > Date.now()) return Promise.resolve(c.v);
+  if (!keptNow.has(k))
+    keptNow.set(k, load().then(
+      (v) => {
+        try {
+          localStorage.setItem(k, JSON.stringify({ until: Date.now() + ttl, v }));
+        } catch {}
+        return v;
+      },
+      (e) => (c ? c.v : Promise.reject(e)),
+    ).finally(() => keptNow.delete(k)));
+  return keptNow.get(k) as Promise<T>;
 }
 
 export const storage = {
@@ -408,14 +440,12 @@ async function call<T>(method: string, body?: any): Promise<T> {
   return d;
 }
 export const getSlackPeople = () => call<SlackPeople>('GET');
-// Can your Slack sign-in find people by email (a browser sign-in can't)? Asked once a run, by a dry run to a made-up
+// Can your Slack sign-in find people by email (a browser sign-in can't)? Asked once a day, by a dry run to a made-up
 // address: nothing is sent, and Slack refuses the kind of sign-in before it looks the address up.
-let byEmail: Promise<boolean> | undefined;
 export const slackFindsByEmail = () =>
-  (byEmail ??= notifySlack([{ login: 'lgtm-check', emails: ['lgtm-check@example.com'] }], 'check', 'lgtm/check#1', true).then(
+  kept('slackByEmail', () => notifySlack([{ login: 'lgtm-check', emails: ['lgtm-check@example.com'] }], 'check', 'lgtm/check#1', true).then(
     ([r]) => !/not_allowed_token_type/.test(r?.error ?? ''),
-    () => true,
-  ));
+  )).catch(() => true);
 // People's Slack statuses (by GitHub login, the ones mapped to Slack), for picking a reviewer (slackmsg.ts isAway).
 export type SlackPresence = { text: string; emoji: string; until: number };
 // The same, for any part of lgtm: kept 10 minutes per person, asked once for everyone missing; every user of it

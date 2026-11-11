@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, fetchJobLog, fetchToken, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
+import { agentsAsBots, DAY, kept, fetchJobLog, fetchToken, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 import * as lab from './gitlab.ts';
@@ -420,19 +420,23 @@ const toItem = (p: any): QueueItem => ({
 // While a GitLab account is on show, its groups.
 export async function getTeams(): Promise<string[]> {
   if (viewAs()) return lab.getLabTeams(viewAs());
-  const d = await graphql(`{viewer{organizations(first:20){nodes{login teams(first:100){nodes{slug}}}}}}`, {});
-  return d.viewer.organizations.nodes.flatMap((o: any) => o.teams.nodes.map((t: any) => `${o.login}/${t.slug}`));
+  return kept('teams', async () => {
+    const d = await graphql(`{viewer{organizations(first:20){nodes{login teams(first:100){nodes{slug}}}}}}`, {});
+    return d.viewer.organizations.nodes.flatMap((o: any) => o.teams.nodes.map((t: any) => `${o.login}/${t.slug}`)) as string[];
+  });
 }
 
 // A team's members and their open PRs in the team's organization. Search ORs repeated author: filters; members go
 // in chunks so each query stays under GitHub's search length limit.
 export async function getTeamMembers(team: string): Promise<string[]> {
   if (isLab(team)) return lab.getLabTeamMembers(team);
+  return kept(`team:${team}`, async () => {
   const [org, slug] = team.split('/');
   const t = (await graphql(`query($org:String!,$slug:String!){organization(login:$org){team(slug:$slug){members(first:100){nodes{login}}}}}`, { org, slug }))
     .organization?.team;
   if (!t) throw new Error(`No team ${team}, or you can't see it.`);
-  return t.members.nodes.map((m: any) => m.login).sort((a: string, b: string) => a.localeCompare(b));
+  return t.members.nodes.map((m: any) => m.login).sort((a: string, b: string) => a.localeCompare(b)) as string[];
+  });
 }
 
 // Plus each member's review load: open PRs that ask them, by name, for a review.
@@ -459,24 +463,13 @@ export async function getTeamPRs(team: string): Promise<{ members: string[]; ite
 }
 // Drafts in these repos changing files I own (CODEOWNERS, by name or through a team), for the review list while drafts
 // show: GitHub asks code owners only once a PR is ready. Each repo's CODEOWNERS and my teams are kept a day.
-const dayCache = async <T>(key: string, load: () => Promise<T>): Promise<T> => {
-  try {
-    const c = JSON.parse(localStorage.getItem(key) ?? 'null');
-    if (c && Date.now() - c.at < 86_400_000) return c.v;
-  } catch {}
-  const v = await load();
-  try {
-    localStorage.setItem(key, JSON.stringify({ at: Date.now(), v }));
-  } catch {}
-  return v;
-};
 export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
   const labRepos = repos.filter((r) => isLab(r));
   repos = repos.filter((r) => !isLab(r));
   if (labRepos.length) return [...(await lab.getLabOwnedDrafts(labRepos, skip, codeOwners)), ...(repos.length ? await getOwnedDrafts(repos, skip) : [])];
   if (!repos.length) return [];
   const me = await getGitHubViewer();
-  const teams = await dayCache('myTeams', async () =>
+  const teams = await kept('myTeams', async () =>
     ((await graphql(`query($me:[String!]){viewer{organizations(first:20){nodes{login teams(first:100,userLogins:$me){nodes{slug}}}}}}`, { me: [me] })).viewer.organizations.nodes as any[]).flatMap(
       (o) => o.teams.nodes.map((t: any) => `@${o.login}/${t.slug}`.toLowerCase()),
     ),
@@ -484,7 +477,7 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
   const mine = new Set([`@${me}`.toLowerCase(), ...teams]);
   const owners = new Map<string, string>();
   for (const repo of repos) {
-    const text = await dayCache(`codeowners:${repo}`, async () => {
+    const text = await kept(`codeowners:${repo}`, async () => {
       for (const at of ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS']) {
         const r = await gh(`/repos/${repo}/contents/${at}`, {}, 'application/vnd.github.raw+json');
         if (r.ok) return r.text();
@@ -660,16 +653,19 @@ export async function whoWrote(repo: string, base: string, files: { filename: st
 
 export async function suggestReviewers(repo: string, skip: Set<string>, team: string, knows: Knows[] = []): Promise<ReviewerPick[]> {
   const [owner, name] = repo.split('/');
-  const count = isLab(repo) ? await lab.labRecentReviewers(repo) : new Map<string, number>();
-  if (!isLab(repo)) {
+  // Who reviewed the last 40 PRs here, kept a day.
+  const count = new Map(await kept(`reviewers:${repo}`, async () => {
+    if (isLab(repo)) return [...(await lab.labRecentReviewers(repo))];
+    const c = new Map<string, number>();
     const d = await graphql(
       `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(last:40,states:[OPEN,MERGED]){nodes{reviews(first:30){nodes{author{__typename login}}}}}}}`,
       { owner, name },
     );
     for (const p of d.repository.pullRequests.nodes)
       for (const login of new Set<string>(p.reviews.nodes.filter((r: any) => r.author?.__typename === 'User').map((r: any) => r.author.login)))
-        count.set(login, (count.get(login) ?? 0) + 1);
-  }
+        c.set(login, (c.get(login) ?? 0) + 1);
+    return [...c];
+  }));
   const fit = (p: { login: string }) => !skip.has(p.login) && !p.login.endsWith('[bot]');
   let people: { login: string; why: string; knows?: number }[] = [...count].sort((a, b) => b[1] - a[1]).map(([login, k]) => ({ login, why: `reviewed ${k} of the last 40 PRs here` })).filter(fit);
   if (!people.length && team && isLab(team) === isLab(repo)) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${isLab(team) ? team.slice(team.lastIndexOf('/') + 1) : team.split('/')[1]}` })).filter(fit);
@@ -721,10 +717,12 @@ export async function slackRecipients(repo: string, logins: string[]): Promise<{
 let noEmailScope = false;
 // GitHub name and emails per login (verified company emails first), to find people on Slack. A GitLab person's key
 // (login@host) is asked of that GitLab: their name and public email.
-export async function getPeople(org: string, logins: string[]): Promise<Record<string, { name: string | null; emails: string[] }>> {
+// Kept a week, per set of people.
+export const getPeople = (org: string, logins: string[]) => kept(`people:${org}:${[...logins].sort().join(',')}`, () => fetchPeople(org, logins), 7 * DAY);
+async function fetchPeople(org: string, logins: string[]): Promise<Record<string, { name: string | null; emails: string[] }>> {
   const labKeys = logins.filter((l) => l.includes('@'));
   if (labKeys.length) {
-    const [hub, labs] = await Promise.all([getPeople(org, logins.filter((l) => !l.includes('@'))), lab.labPeople(labKeys)]);
+    const [hub, labs] = await Promise.all([fetchPeople(org, logins.filter((l) => !l.includes('@'))), lab.labPeople(labKeys)]);
     return { ...hub, ...labs };
   }
   if (!logins.length) return {};
@@ -798,7 +796,7 @@ export function getBuildRoots(repo: string, sha: string): Promise<BuildRoot[] | 
   if (!rootsSeen.has(key))
     rootsSeen.set(
       key,
-      (isLab(repo) ? lab.labTree(repo, sha).then((tree) => ({ truncated: !tree, tree: tree ?? [] })) : json(`/repos/${repo}/git/trees/${sha}?recursive=1`)).then((d: any) => {
+      kept(`roots:${key}`, () => (isLab(repo) ? lab.labTree(repo, sha).then((tree) => ({ truncated: !tree, tree: tree ?? [] })) : json(`/repos/${repo}/git/trees/${sha}?recursive=1`)).then((d: any) => {
         if (d.truncated) return null;
         const roots = new Map<string, boolean>();
         for (const e of d.tree as { path: string; type: string }[]) {
@@ -807,7 +805,7 @@ export function getBuildRoots(repo: string, sha: string): Promise<BuildRoot[] | 
           roots.set(dir, (roots.get(dir) ?? false) || /build\.gradle/.test(e.path));
         }
         return [...roots].map(([dir, gradle]) => ({ dir, gradle }));
-      }),
+      }), 7 * DAY), // a commit's tree never changes
     );
   return rootsSeen.get(key)!;
 }
@@ -1263,13 +1261,13 @@ export async function getCompare(repo: string, base: string, head: string): Prom
   return { status: d.status, files: d.files ?? [], commits: d.ahead_by ?? 0 };
 }
 
-// GitHub's emoji shortcodes (name → image URL), cached for the session; without gh's sign-in, asked anonymously (the
+// GitHub's emoji shortcodes (name → image URL), kept a month; without gh's sign-in, asked anonymously (the
 // list is public). For a GitLab repo (or the GitLab account on show), only the standard (Unicode) ones: GitLab draws
 // those from the same names, but not GitHub's own images (:octocat:, :shipit:…), which would stay text there.
 let emojis: Promise<Record<string, string>> | undefined;
 const allEmojis = () =>
-  (emojis ??= json('/emojis')
-    .catch(() => fetch('https://api.github.com/emojis').then((r) => (r.ok ? r.json() : Promise.reject(new Error(`GitHub ${r.status}`)))))
+  (emojis ??= kept('emojis', () => json('/emojis')
+    .catch(() => fetch('https://api.github.com/emojis').then((r) => (r.ok ? r.json() : Promise.reject(new Error(`GitHub ${r.status}`))))), 30 * DAY)
     .then((m: Record<string, string>) => {
       setEmojiMap(m);
       return m;
@@ -1387,10 +1385,10 @@ export function requiredChecks(repo: string, branch: string): Promise<string[]> 
   const key = `${repo}@${branch}`;
   const b = encodeURIComponent(branch);
   if (!requiredSeen.has(key))
-    requiredSeen.set(key, Promise.all([
+    requiredSeen.set(key, kept(`required:${key}`, () => Promise.all([
       json(`/repos/${repo}/branches/${b}`).then((x) => (x.protection?.required_status_checks?.contexts ?? []) as string[], () => []),
       json(`/repos/${repo}/rules/branches/${b}`).then((rules: any[]) => rules.filter((r) => r.type === 'required_status_checks').flatMap((r) => (r.parameters?.required_status_checks ?? []).map((c: { context: string }) => c.context)) as string[], () => []),
-    ]).then(([a, c]) => [...new Set([...a, ...c])]));
+    ]).then(([a, c]) => [...new Set([...a, ...c])])));
   return requiredSeen.get(key)!;
 }
 // Required checks with no run at all on the head commit, once nothing is still running (a path filter skipped its

@@ -6,7 +6,7 @@
 // first part says GitLab. An MR is that repo and its iid. GitLab's global IDs travel as "gl:host|gid://…", an MR's as
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
 import { collapseReviews, setOffline } from './github.ts';
-import { fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
+import { kept, fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
 import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
 
 export const isLab = (repo: string) => repo.slice(0, repo.indexOf('/')).includes('.');
@@ -782,14 +782,13 @@ export async function labReviewLoad(repo: string, logins: string[]): Promise<Map
 // --- teams: GitLab groups ---
 
 // A team is a group of mine, as "host/group/…/subgroup".
-export async function getLabTeams(host: string): Promise<string[]> {
-  return (await pages<any>(host, '/groups?min_access_level=10&per_page=100')).map((g) => `${host}/${g.full_path}`).sort();
-}
-export async function getLabTeamMembers(team: string): Promise<string[]> {
+export const getLabTeams = (host: string): Promise<string[]> =>
+  kept(`labTeams:${host}`, async () => (await pages<any>(host, '/groups?min_access_level=10&per_page=100')).map((g) => `${host}/${g.full_path}`).sort());
+export const getLabTeamMembers = (team: string): Promise<string[]> => kept(`team:${team}`, async () => {
   const { host, path } = split(team);
   const all = await pages<any>(host, `/groups/${encodeURIComponent(path)}/members/all?per_page=100`);
   return [...new Set(all.filter((m) => m.state === 'active' && !m.bot && !/^(project|group)_\d+_bot/.test(m.username)).map((m) => m.username as string))].sort((a, b) => a.localeCompare(b));
-}
+});
 // The group's open MRs by its members, and how many open MRs in the group ask each member for a review.
 export async function getLabTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
   const { host, path } = split(team);
