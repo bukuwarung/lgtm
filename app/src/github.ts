@@ -887,7 +887,21 @@ export async function getBlobInfo(repo: string, path: string, ref: string): Prom
   return { size: lfs ? Number(text.match(/\nsize (\d+)/)?.[1] ?? j.size) : j.size, lfs };
 }
 
-export async function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
+// One ask per file at a commit while lgtm runs: the PR page, its checks and panels all read the same files at once.
+// ponytail: the last 300 kept in memory; the browser cache holds the rest.
+const rawAt = new Map<string, Promise<string | null>>();
+export function getRaw(repo: string, path: string, ref: string): Promise<string | null> {
+  if (!/^[0-9a-f]{40}$/i.test(ref)) return fetchRaw(repo, path, ref);
+  const k = `${repo}@${ref}:${path}`;
+  let p = rawAt.get(k);
+  if (!p) {
+    rawAt.set(k, (p = fetchRaw(repo, path, ref)));
+    p.catch(() => rawAt.delete(k));
+    if (rawAt.size > 300) rawAt.delete(rawAt.keys().next().value!);
+  }
+  return p;
+}
+async function fetchRaw(repo: string, path: string, ref: string): Promise<string | null> {
   if (isLab(repo)) return lab.getLabRaw(repo, path, ref);
   // &raw: its own address, so a saved copy is never the JSON form of the same file (getBlobInfo); GitHub ignores it.
   const res = await gh(`/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}&raw`, atCommit(ref), 'application/vnd.github.raw');
@@ -962,11 +976,21 @@ export async function getDownloadUrl(repo: string, path: string, ref: string): P
 // each is swapped for the API's signed link to that file. Once per image a session.
 const signedImages = new Map<string, Promise<string | null>>();
 const REPO_IMAGE = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:blob|raw)\/([^?#]+)/;
-// A branch may have slashes (vorflux/artifacts), so the address can't tell ref from path: shortest ref first, the
-// next split when GitHub has no such file.
+// A branch may have slashes (vorflux/artifacts), so the address can't tell ref from path: the repo's branches starting
+// with the first part are asked once a day (one ask for every image) and the longest that fits is the ref; failing
+// that (a tag, a branch made since), shortest ref first, the next split when GitHub has no such file.
+const branchesFrom = (repo: string, first: string) =>
+  kept(`branches:${repo}:${first}`, async () =>
+    ((await (await ok(await gh(`/repos/${repo}/git/matching-refs/heads/${encodeURIComponent(first)}`))).json()) as { ref: string }[]).map((r) => r.ref.slice(11)));
 async function repoImageUrl(repo: string, rest: string): Promise<string | null> {
   const parts = rest.split('/').map(decodeURIComponent);
+  const path = parts.join('/');
+  const branch = /^[0-9a-f]{40}$/i.test(parts[0]) ? parts[0]
+    : (await branchesFrom(repo, parts[0]).catch(() => [] as string[])).filter((b) => path.startsWith(b + '/')).sort((a, b) => b.length - a.length)[0];
+  const known = branch ? await getDownloadUrl(repo, path.slice(branch.length + 1), branch).catch(() => null) : null;
+  if (known) return known;
   for (let k = 1; k < Math.min(parts.length, 5); k++) {
+    if (parts.slice(0, k).join('/') === branch) continue;
     const url = await getDownloadUrl(repo, parts.slice(k).join('/'), parts.slice(0, k).join('/')).catch(() => null);
     if (url) return url;
   }
