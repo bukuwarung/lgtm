@@ -66,10 +66,9 @@ function graphql(body) {
   // The bell's PRs that left the list (closedPRs): #3 closed, any other open.
   if (/p0:repository/.test(query)) return { data: Object.fromEntries(Object.keys(variables).filter((k) => k[0] === 'n').map((k) => ['p' + k.slice(1), { pullRequest: { state: variables[k] === 3 ? 'CLOSED' : 'OPEN' } }])) };
   if (query.includes('is:merged')) return { data: { a: { nodes: [] }, r: { nodes: [] } } };
-  if (query.includes('reviewThreads(first:100') && variables.n === 2) return { data: { repository: { pullRequest: { reviewThreads: { ...empty, nodes: threads2 } } } } };
   if (query.includes('nodes(ids:') && query.includes('comments(last:30)')) return { data: { nodes: [{ id: 'PR_2', comments: { nodes: [mention, automated] }, reviews: { nodes: [] } }] } };
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
-  const pullRequest = { reviewThreads: empty, reviews: { nodes: [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty };
+  const pullRequest = { reviewThreads: variables.n === 2 ? { ...empty, nodes: threads2 } : empty, reviews: { nodes: [] }, pending: { nodes: [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty };
   if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest } } };
   return { data: null, errors: [{ message: 'smoke: no fixture' }] };
 }

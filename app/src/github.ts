@@ -284,12 +284,57 @@ async function paginate<T>(path: string, accept?: string): Promise<T[]> {
 }
 
 // partial: return what resolved even if some fields errored (they come back null).
-async function graphql<T = any>(query: string, variables: Record<string, unknown>, partial = false): Promise<T> {
+type GqlError = { message: string; type?: string; path?: (string | number)[] };
+async function graphqlFull(query: string, variables: Record<string, unknown>): Promise<{ data?: any; errors?: GqlError[] }> {
   const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query, variables }) });
-  if (r.errors?.some((e: { type?: string }) => e.type === 'RATE_LIMITED') && (limited.get('graphql')?.until ?? 0) > Date.now()) throw limitError('graphql');
+  if (r.errors?.some((e: GqlError) => e.type === 'RATE_LIMITED') && (limited.get('graphql')?.until ?? 0) > Date.now()) throw limitError('graphql');
   if (r.errors?.length) recordError(`GitHub GraphQL: ${r.errors[0].message}`);
+  return r;
+}
+async function graphql<T = any>(query: string, variables: Record<string, unknown>, partial = false): Promise<T> {
+  const r = await graphqlFull(query, variables);
   if (r.errors?.length && !(partial && r.data)) throw new Error(r.errors[0].message);
   return r.data;
+}
+
+// Parts of a PR asked for at about the same time go to GitHub as one query: opening a PR asks for its review status,
+// checks, viewed files, threads and my unsent review at once, one ask rather than five. Each part's fields, and the
+// field an error about it names.
+type PRPart = 'status' | 'checks' | 'viewed' | 'threads' | 'pending';
+const PR_PARTS: Record<PRPart, [() => string, string[]]> = { // fields as functions: their parts are declared further down
+  status: [() => 'reviewDecision mergeStateStatus', ['reviewDecision', 'mergeStateStatus']],
+  checks: [() => `commits(last:1){${CHECK_FIELDS}}`, ['commits']],
+  viewed: [() => `files(first:100){${VIEWED_FIELDS}}`, ['files']],
+  threads: [() => `reviewThreads(first:100){${THREAD_FIELDS}}`, ['reviewThreads']],
+  pending: [() => `pending:reviews(states:PENDING,first:1){nodes{id comments{totalCount}}}`, ['pending']],
+};
+type Waiting = Map<PRPart, { ok: (pr: any) => void; no: (e: unknown) => void }[]>;
+const askingPR = new Map<string, Waiting>();
+// ponytail: a 20 ms window catches what one page asks while it opens; a part asked later goes in a query of its own.
+function prPart(repo: string, n: number, part: PRPart): Promise<any> {
+  const k = `${repo}#${n}`;
+  let w = askingPR.get(k);
+  if (!w) {
+    askingPR.set(k, (w = new Map()));
+    setTimeout(() => (askingPR.delete(k), void askPRParts(repo, n, w!)), 20);
+  }
+  return new Promise((ok, no) => (w!.get(part) ?? w!.set(part, []).get(part)!).push({ ok, no }));
+}
+async function askPRParts(repo: string, n: number, w: Waiting) {
+  const [owner, name] = repo.split('/');
+  try {
+    const r = await graphqlFull(
+      `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){${[...w.keys()].map((p) => PR_PARTS[p][0]()).join(' ')}}}}`,
+      { owner, name, n },
+    );
+    const pr = r.data?.repository?.pullRequest;
+    for (const [part, ws] of w) {
+      const err = pr ? r.errors?.find((e) => PR_PARTS[part][1].includes(String(e.path?.[2]))) : r.errors?.[0] ?? { message: 'Not found' };
+      for (const x of ws) err ? x.no(new Error(err.message)) : x.ok(pr);
+    }
+  } catch (e) {
+    for (const ws of w.values()) for (const x of ws) x.no(e);
+  }
 }
 
 // Which of these PRs ("owner/repo#n") GitHub says are merged or closed, in one query. One it can't find (gone, or no
@@ -763,9 +808,8 @@ async function fetchPeople(org: string, logins: string[]): Promise<Record<string
 // The PR-wide review verdict and merge state, which only GraphQL has.
 export async function getStatus(repo: string, n: number): Promise<{ reviewDecision: QueueItem['reviewDecision']; mergeStateStatus: QueueItem['mergeState'] }> {
   if (isLab(repo)) return lab.getLabStatus(repo, n);
-  const [owner, name] = repo.split('/');
-  return (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviewDecision mergeStateStatus}}}`, { owner, name, n }))
-    .repository.pullRequest;
+  const { reviewDecision, mergeStateStatus } = await prPart(repo, n, 'status');
+  return { reviewDecision, mergeStateStatus };
 }
 
 // Points in a PR's history to show changes after: each of its commits, and each force-push (from what was there
@@ -853,12 +897,7 @@ export async function loadPR(repo: string, n: number, onPR?: (pr: PR) => void): 
 export type PendingReview = { id: string; count: number };
 export async function getPendingReview(repo: string, n: number): Promise<PendingReview | null> {
   if (isLab(repo)) return lab.getLabPending(repo, n);
-  const [owner, name] = repo.split('/');
-  const d = await graphql(
-    `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviews(states:PENDING,first:1){nodes{id comments{totalCount}}}}}}`,
-    { owner, name, n },
-  );
-  const r = d.repository.pullRequest.reviews.nodes[0];
+  const r = (await prPart(repo, n, 'pending')).pending.nodes[0];
   return r ? { id: r.id, count: r.comments.totalCount } : null;
 }
 // A comment in my pending review, changed or taken out (GitHub allows both until the review is sent).
@@ -1034,10 +1073,11 @@ export function signRelativeImages(root: ParentNode | null, repo: string, ref: s
 }
 
 
-const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
-  reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
+const THREAD_FIELDS = `pageInfo{hasNextPage endCursor}
     nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated viewerCanResolve viewerCanUnresolve hunk:comments(first:1){nodes{diffHunk}}
-      comments(first:100){nodes{id databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid} pullRequestReview{databaseId}}}}}}}}`;
+      comments(first:100){nodes{id databaseId url body bodyHTML bodyText createdAt state author{__typename login avatarUrl(size:40) ...on User{databaseId}} originalCommit{oid} pullRequestReview{databaseId}}}}`;
+const THREADS = `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
+  reviewThreads(first:100,after:$after){${THREAD_FIELDS}}}}}`;
 
 // A comment on the PR's conversation (not on a line), as my own: answers someone there.
 export const commentOnPR = (repo: string, n: number, body: string) => isLab(repo) ? lab.commentOnLab(repo, n, body) : json(`/repos/${repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
@@ -1077,7 +1117,7 @@ export async function getThreads(repo: string, n: number): Promise<Thread[]> {
   const [owner, name] = repo.split('/');
   const out: Thread[] = [];
   for (let after: string | null = null; ; ) {
-    const d: any = await graphql(THREADS, { owner, name, n, after });
+    const d: any = after ? await graphql(THREADS, { owner, name, n, after }) : { repository: { pullRequest: await prPart(repo, n, 'threads') } };
     const page = d.repository.pullRequest.reviewThreads;
     out.push(...page.nodes);
     if (!page.pageInfo.hasNextPage) return out;
@@ -1088,10 +1128,9 @@ export async function getThreads(repo: string, n: number): Promise<Thread[]> {
 // jobId: the GitHub Actions job, whose log the local server can fetch.
 export type Check = { name: string; state: 'failure' | 'pending' | 'success' | 'neutral'; url: string | null; summary: string; jobId?: number; run?: string; manual?: boolean; onBase?: Check['state'] | null }; // run: a GitLab job's pipeline; manual: a GitLab job waiting to be started, that I may start // onBase: the same check on the base branch's latest commit (a failing one only)
 
-const CHECKS = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){
-  commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename
+const CHECK_FIELDS = `nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename
     ... on CheckRun{databaseId name status conclusion startedAt detailsUrl title checkSuite{app{slug} workflowRun{workflow{name}}}}
-    ... on StatusContext{context state targetUrl description}}}}}}}}}}`;
+    ... on StatusContext{context state targetUrl description}}}}}}`;
 
 const RUN_STATE: Record<string, Check['state']> = {
   SUCCESS: 'success', FAILURE: 'failure', TIMED_OUT: 'failure', ACTION_REQUIRED: 'failure', STARTUP_FAILURE: 'failure',
@@ -1103,9 +1142,7 @@ const CHECK_ORDER = ['failure', 'pending', 'success', 'neutral'];
 // CI checks (GitHub Actions runs and commit statuses) on the PR's head commit, failures first.
 export async function getChecks(repo: string, n: number): Promise<Check[]> {
   if (isLab(repo)) return lab.getLabChecks(repo, n);
-  const [owner, name] = repo.split('/');
-  const d: any = await graphql(CHECKS, { owner, name, n });
-  const nodes = d.repository.pullRequest.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? [];
+  const nodes = (await prPart(repo, n, 'checks')).commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? [];
   // A workflow can run several times on one commit (each PR edit or label change re-triggers it): latest run first, so
   // each check keeps only its newest result below.
   nodes.sort((a: any, b: any) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
@@ -1164,16 +1201,15 @@ export const jobLog = (repo: string, job: number) => (isLab(repo) ? lab.labJobLo
 export const runOf = (c: Check) => c.run ?? c.url?.match(/\/actions\/runs\/(\d+)/)?.[1];
 
 // Files I've marked "Viewed" on GitHub (GitHub's own per-user state, so it carries over to github.com).
+const VIEWED_FIELDS = 'pageInfo{hasNextPage endCursor} nodes{path viewerViewedState}';
 export async function getViewed(repo: string, n: number): Promise<Set<string>> {
   if (isLab(repo)) return lab.getLabViewed(repo, n);
   const [owner, name] = repo.split('/');
   const viewed = new Set<string>();
   for (let after: string | null = null; ; ) {
-    const d: any = await graphql(
-      `query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
-        files(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{path viewerViewedState}}}}}`,
-      { owner, name, n, after },
-    );
+    const d: any = after
+      ? await graphql(`query($owner:String!,$name:String!,$n:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$n){files(first:100,after:$after){${VIEWED_FIELDS}}}}}`, { owner, name, n, after })
+      : { repository: { pullRequest: await prPart(repo, n, 'viewed') } };
     const page = d.repository.pullRequest.files;
     for (const f of page.nodes) if (f.viewerViewedState === 'VIEWED') viewed.add(f.path);
     if (!page.pageInfo.hasNextPage) return viewed;
