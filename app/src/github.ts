@@ -309,31 +309,39 @@ const PR_PARTS: Record<PRPart, [() => string, string[]]> = { // fields as functi
   pending: [() => `pending:reviews(states:PENDING,first:1){nodes{id comments{totalCount}}}`, ['pending']],
 };
 type Waiting = Map<PRPart, { ok: (pr: any) => void; no: (e: unknown) => void }[]>;
+// Across PRs too (the inbox reads every waiting PR's threads at once): up to 10 PRs a query, as 100 threads of 100
+// comments each is a big answer. ponytail: a 20 ms window catches what one page asks at once; later asks go apart.
 const askingPR = new Map<string, Waiting>();
-// ponytail: a 20 ms window catches what one page asks while it opens; a part asked later goes in a query of its own.
 function prPart(repo: string, n: number, part: PRPart): Promise<any> {
+  if (!askingPR.size)
+    setTimeout(() => {
+      const all = [...askingPR];
+      askingPR.clear();
+      for (let k = 0; k < all.length; k += 10) void askPRParts(all.slice(k, k + 10));
+    }, 20);
   const k = `${repo}#${n}`;
-  let w = askingPR.get(k);
-  if (!w) {
-    askingPR.set(k, (w = new Map()));
-    setTimeout(() => (askingPR.delete(k), void askPRParts(repo, n, w!)), 20);
-  }
-  return new Promise((ok, no) => (w!.get(part) ?? w!.set(part, []).get(part)!).push({ ok, no }));
+  const w = askingPR.get(k) ?? askingPR.set(k, new Map()).get(k)!;
+  return new Promise((ok, no) => (w.get(part) ?? w.set(part, []).get(part)!).push({ ok, no }));
 }
-async function askPRParts(repo: string, n: number, w: Waiting) {
-  const [owner, name] = repo.split('/');
+async function askPRParts(prs: [string, Waiting][]) {
+  const vars: Record<string, unknown> = {};
+  const fields = prs.map(([k, w], i) => {
+    const [, owner, name, n] = k.match(/^([^/]+)\/(.+)#(\d+)$/)!;
+    Object.assign(vars, { [`o${i}`]: owner, [`r${i}`]: name, [`n${i}`]: Number(n) });
+    return `p${i}:repository(owner:$o${i},name:$r${i}){pullRequest(number:$n${i}){${[...w.keys()].map((p) => PR_PARTS[p][0]()).join(' ')}}}`;
+  });
   try {
-    const r = await graphqlFull(
-      `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){${[...w.keys()].map((p) => PR_PARTS[p][0]()).join(' ')}}}}`,
-      { owner, name, n },
-    );
-    const pr = r.data?.repository?.pullRequest;
-    for (const [part, ws] of w) {
-      const err = pr ? r.errors?.find((e) => PR_PARTS[part][1].includes(String(e.path?.[2]))) : r.errors?.[0] ?? { message: 'Not found' };
-      for (const x of ws) err ? x.no(new Error(err.message)) : x.ok(pr);
-    }
+    const r = await graphqlFull(`query(${prs.map((_, i) => `$o${i}:String!,$r${i}:String!,$n${i}:Int!`).join(',')}){${fields.join(' ')}}`, vars);
+    prs.forEach(([, w], i) => {
+      const pr = r.data?.[`p${i}`]?.pullRequest;
+      const mine = r.errors?.filter((e) => e.path?.[0] === `p${i}`) ?? [];
+      for (const [part, ws] of w) {
+        const err = pr ? mine.find((e) => PR_PARTS[part][1].includes(String(e.path?.[2]))) : mine[0] ?? r.errors?.[0] ?? { message: 'Not found' };
+        for (const x of ws) err ? x.no(new Error(err.message)) : x.ok(pr);
+      }
+    });
   } catch (e) {
-    for (const ws of w.values()) for (const x of ws) x.no(e);
+    for (const [, w] of prs) for (const ws of w.values()) for (const x of ws) x.no(e);
   }
 }
 

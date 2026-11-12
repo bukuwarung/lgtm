@@ -63,13 +63,13 @@ function graphql(body) {
   }
   if (query.includes('review-requested:@me')) return { data: { viewer: { login: 'tester' }, requested: { nodes: later ? [node, laterNode] : [node] }, reviewed: { nodes: [] }, authored: { nodes: [mineNode] }, assigned: { nodes: [] }, mentioned: { nodes: [] } } };
   if (/p0:node/.test(query)) return { data: Object.fromEntries(Object.entries(variables).map(([k, id]) => [k.replace('i', 'p'), { reviewThreads: { nodes: id === 'PR_2' ? threads2.map((t) => ({ ...t, starter: { nodes: t.comments.nodes } })) : [] } }])) };
-  // The bell's PRs that left the list (closedPRs): #3 closed, any other open.
-  if (/p0:repository/.test(query)) return { data: Object.fromEntries(Object.keys(variables).filter((k) => k[0] === 'n').map((k) => ['p' + k.slice(1), { pullRequest: { state: variables[k] === 3 ? 'CLOSED' : 'OPEN' } }])) };
+  const prOf = (n) => ({ reviewThreads: n === 2 ? { ...empty, nodes: threads2 } : empty, reviews: { nodes: [] }, pending: { nodes: [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty });
+  // PRs asked together (a PR's parts, the inbox's threads; the bell's PRs that left the list: #3 closed, any other open).
+  if (/p0:repository/.test(query)) return { data: Object.fromEntries(Object.keys(variables).filter((k) => k[0] === 'n').map((k) => ['p' + k.slice(1), { pullRequest: { ...prOf(variables[k]), state: variables[k] === 3 ? 'CLOSED' : 'OPEN' } }])) };
   if (query.includes('is:merged')) return { data: { a: { nodes: [] }, r: { nodes: [] } } };
   if (query.includes('nodes(ids:') && query.includes('comments(last:30)')) return { data: { nodes: [{ id: 'PR_2', comments: { nodes: [mention, automated] }, reviews: { nodes: [] } }] } };
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
-  const pullRequest = { reviewThreads: variables.n === 2 ? { ...empty, nodes: threads2 } : empty, reviews: { nodes: [] }, pending: { nodes: [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty };
-  if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest } } };
+  if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest: prOf(variables.n) } } };
   return { data: null, errors: [{ message: 'smoke: no fixture' }] };
 }
 function rest(path) {

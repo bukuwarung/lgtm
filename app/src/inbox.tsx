@@ -15,6 +15,7 @@ const T = term();
 // suggestion committed. Also a PR conversation comment that @-mentions me, if I haven't written there since (in my
 // PRs and those the list has as mentioning me). Keys: j/k move, r reply, e done, x resolve, c commit the suggestion,
 // o open the PR.
+const threadsAt = new Map<string, Promise<Thread[]>>(); // the inbox's PRs' threads, by PR and when it last changed
 type Item = Pick<QueueItem, 'id' | 'repo' | 'number' | 'title' | 'authored' | 'updatedAt'> & { mergedAt?: string; myState?: QueueItem['myState'] };
 type Waiting = { item: Item; threads: Thread[]; mention?: Comment };
 
@@ -42,7 +43,17 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
     // Bots marked as the list marks them, so the count here is the list's.
     getViewer().then(async (login) => {
       const [merged, mentions] = await Promise.all([getMergedAwaiting(login).catch((): Item[] => []), getMentions(named.map((i) => i.id), login, readBots()).catch(() => new Map<string, Comment>())]);
-      const look = (item: Item) => getThreads(item.repo, item.number).then((ts) => ({ item, threads: markBots(ts, readBots()).filter((t) => awaitsMe(t, login, item.authored)) }));
+      // A PR's threads are read again only once it has changed: one PR's update doesn't re-read every waiting PR's.
+      const was = new Map(threadsAt);
+      threadsAt.clear();
+      const threadsOf = (item: Item) => {
+        const k = `${item.id}@${item.updatedAt}`;
+        const t = was.get(k) ?? getThreads(item.repo, item.number);
+        threadsAt.set(k, t);
+        t.catch(() => threadsAt.delete(k));
+        return t;
+      };
+      const look = (item: Item) => threadsOf(item).then((ts) => ({ item, threads: markBots(ts, readBots()).filter((t) => awaitsMe(t, login, item.authored)) }));
       const threaded = [...asked, ...merged.filter((m) => !asked.some((a) => a.id === m.id) && !(muteApproved && m.myState === 'APPROVED'))];
       Promise.all(threaded.map(look)).then(
         (l) => {

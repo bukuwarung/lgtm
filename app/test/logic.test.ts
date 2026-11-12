@@ -1272,3 +1272,27 @@ test('kept: a fetch is kept until it expires, asked once at a time, and the stal
     delete (globalThis as any).localStorage;
   }
 });
+
+test('PR parts asked at once go to GitHub as one query, across PRs, each PR getting its own answer and its own errors', async () => {
+  const { getThreads, getChecks } = await import('../src/github.ts');
+  const bodies: string[] = [];
+  const was = globalThis.fetch;
+  globalThis.fetch = (async (_u: string, init: RequestInit) => {
+    bodies.push(String(init.body));
+    const t = { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ id: 'T1' }] };
+    return new Response(JSON.stringify({
+      data: { p0: { pullRequest: { reviewThreads: t, commits: { nodes: [] } } }, p1: { pullRequest: { reviewThreads: null } } },
+      errors: [{ message: 'no threads for you', path: ['p1', 'pullRequest', 'reviewThreads'] }],
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const [a, b, c] = await Promise.allSettled([getThreads('acme/shop', 1), getThreads('acme/web', 2), getChecks('acme/shop', 1)]);
+    assert.equal(bodies.length, 1);
+    assert.match(bodies[0], /p0:repository.*p1:repository/);
+    assert.deepEqual(a.status === 'fulfilled' && a.value.map((t) => t.id), ['T1']);
+    assert.equal(b.status === 'rejected' && (b.reason as Error).message, 'no threads for you');
+    assert.deepEqual(c.status === 'fulfilled' && c.value, []);
+  } finally {
+    globalThis.fetch = was;
+  }
+});
