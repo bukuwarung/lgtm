@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, DAY, kept, fetchJobLog, fetchToken, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
+import { agentsAsBots, DAY, kept, reportUsage, fetchJobLog, fetchToken, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 import * as lab from './gitlab.ts';
@@ -154,13 +154,13 @@ export const isLimited = (bucket: string) => (limited.get(bucket)?.until ?? 0) >
 // spent it this hour, roughly: requests by what they were for. A word, once per hour, when one is down to 10%.
 export type Budget = { remaining: number; limit: number; reset: number };
 export const budgets = new Map<string, Budget>();
-const spent = new Map<string, Map<string, number>>(); // bucket → what for → requests, this hour (GitHub's own "used" count
-// jumps about between answers, so a GraphQL query's points can't be told from it)
+const spent = new Map<string, Map<string, number>>(); // bucket → what for → requests this hour; GraphQL's in points, as
+// each query reports its own cost (GitHub's "used" count jumps about between answers, so it can't be told from that)
 const warned = new Set<string>();
 function areaOf(path: string, body?: string): string {
   if (path === '/graphql') {
     const q = body ?? '';
-    if (/review-requested:@me|reviewed-by:@me -author|\$i0:ID!|nodes\(ids:/.test(q)) return 'the PR list';
+    if (/review-requested:@me|reviewed-by:@me -author|\$i0:ID!|nodes\(ids:|files\(first:100\)\{nodes\{path\}\}/.test(q)) return 'the PR list'; // the last: drafts touching code I own
     if (/reviewThreads|states:PENDING|pullRequest\(number/.test(q)) return 'opening PRs';
     if (/reviewed-by:|contributionsCollection|involves:/.test(q)) return 'people and history';
     if (/team|members/.test(q)) return 'the Team tab';
@@ -177,14 +177,24 @@ function noteBudget(res: Response, bucket: string, path: string, body?: string) 
   const prev = budgets.get(bucket);
   if (!prev || Math.abs(prev.reset - reset) > 60_000) spent.set(bucket, new Map()); // a new hour
   budgets.set(bucket, { remaining, limit, reset });
-  const by = spent.get(bucket)!;
-  by.set(areaOf(path, body), (by.get(areaOf(path, body)) ?? 0) + 1);
+  if (bucket !== 'graphql' || /^\s*mutation/.test(JSON.parse(body ?? '{}').query ?? '')) spend(bucket, areaOf(path, body), 1); // a query counts its points (graphqlFull)
   if (limit >= 1000 && remaining <= limit / 10 && !warned.has(bucket + reset)) {
     warned.add(bucket + reset);
     const at = new Date(reset).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`}: ${remaining} of ${limit} left until ${at}. lgtm keeps going; Settings → Accounts shows what used it.` } }));
   }
 }
+function spend(bucket: string, area: string, n: number) {
+  const by = spent.get(bucket) ?? spent.set(bucket, new Map()).get(bucket)!;
+  by.set(area, (by.get(area) ?? 0) + n);
+}
+reportUsage(() =>
+  (['graphql', 'core'] as const).flatMap((b) => {
+    const by = spentThisHour(b);
+    const x = budgets.get(b);
+    return by.length ? [`GitHub ${b === 'graphql' ? 'GraphQL points' : 'REST requests'} since lgtm opened, this hour: ${by.map(([what, n]) => `${what} ${n.toLocaleString()}`).join(', ')}${x ? ` (${x.remaining.toLocaleString()} of ${x.limit.toLocaleString()} left)` : ''}`] : [];
+  }),
+);
 export const spentThisHour = (bucket: string) => [...(spent.get(bucket) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1]);
 export async function getBudgets(): Promise<void> {
   const r = await (await ok(await fetch('https://api.github.com/rate_limit', { cache: 'no-cache', headers: { Authorization: `Bearer ${token}` } }))).json();
@@ -286,7 +296,13 @@ async function paginate<T>(path: string, accept?: string): Promise<T[]> {
 // partial: return what resolved even if some fields errored (they come back null).
 type GqlError = { message: string; type?: string; path?: (string | number)[] };
 async function graphqlFull(query: string, variables: Record<string, unknown>): Promise<{ data?: any; errors?: GqlError[] }> {
-  const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query, variables }) });
+  // A query asks its own cost too (free), for Settings → Accounts' "what used it".
+  const asked = /^\s*mutation/.test(query) ? query : query.replace('{', '{rateLimit{cost} ');
+  const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query: asked, variables }) });
+  if (asked !== query) {
+    spend('graphql', areaOf('/graphql', JSON.stringify({ query })), r.data?.rateLimit?.cost ?? 1);
+    delete r.data?.rateLimit;
+  }
   if (r.errors?.some((e: GqlError) => e.type === 'RATE_LIMITED') && (limited.get('graphql')?.until ?? 0) > Date.now()) throw limitError('graphql');
   if (r.errors?.length) recordError(`GitHub GraphQL: ${r.errors[0].message}`);
   return r;

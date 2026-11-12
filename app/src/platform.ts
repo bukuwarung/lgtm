@@ -937,6 +937,9 @@ export async function copyDiagnostics(): Promise<void> {
   await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
 }
 
+// What used GitHub's limits this hour (github.ts sets it; it imports this file, not the other way).
+let usage: () => string[] = () => [];
+export const reportUsage = (f: () => string[]) => void (usage = f);
 export async function diagnostics(): Promise<string> {
   const i = await fetchIntegrations().catch((e) => e.message as string);
   const line = (name: string, s: { ok: boolean; error?: string }) => `${name}: ${s.ok ? 'ok' : `not working (${s.error ?? 'unknown'})`}`;
@@ -944,6 +947,7 @@ export async function diagnostics(): Promise<string> {
     `lgtm ${__APP_VERSION__}${__DEV_BUILD__ ? ` dev ${__COMMIT__}` : ''} (${isDesktop ? 'macOS app' : 'browser version'})`,
     navigator.userAgent,
     ...(typeof i === 'string' ? [`Integrations: ${i}`] : [line('Slack', i.slack), line('Jira', i.jira)]),
+    ...usage(),
     `Recent errors:${errors.length ? '' : ' none'}`,
     ...errors.map((e) => `  ${e}`),
   ].join('\n');

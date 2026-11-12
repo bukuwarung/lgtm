@@ -240,7 +240,7 @@ function ApiBudget() {
       {rows.map(([b, x]) => {
         const left = x!.remaining / x!.limit;
         const by = spentThisHour(b).filter(([what]) => what !== 'other').slice(0, 3);
-        const tip = `${x!.remaining.toLocaleString()} of ${x!.limit.toLocaleString()} left this hour, until ${at(x!.reset)}${by.length ? `. Most used since lgtm opened: ${by.map(([what, n]) => `${what} (${n} request${n === 1 ? '' : 's'})`).join(', ')}` : ''}`;
+        const tip = `${x!.remaining.toLocaleString()} of ${x!.limit.toLocaleString()} left this hour, until ${at(x!.reset)}${by.length ? `. Most used since lgtm opened: ${by.map(([what, n]) => `${what} (${n.toLocaleString()} ${b === 'graphql' ? 'point' : 'request'}${n === 1 ? '' : 's'})`).join(', ')}` : ''}`;
         return (
           <div class="api-row" title={tip}>
             <span class="api-name">{NAME[b]} requests</span>
