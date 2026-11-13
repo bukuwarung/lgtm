@@ -648,21 +648,28 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         knowJiraKeys([d.pr.title, d.pr.head.ref]);
         rememberPR({ repo, n, title: d.pr.title, author: d.pr.user.login, state: d.pr.merged ? 'merged' : d.pr.state === 'closed' ? 'closed' : d.pr.draft ? 'draft' : undefined });
       };
+      // A copy saved in the last 30 seconds (the list loads a PR the pointer rests on) is as good as fresh: no second load.
+      const RECENT = 30_000;
+      const cached = first ? prCache.get<Loaded>(`${repo}#${n}`) : Promise.resolve(undefined);
       if (first)
-        prCache.get<Loaded>(`${repo}#${n}`).then(async (c) => {
+        cached.then(async (c) => {
           if (c) await loadLanguages(repo, c.v.files.map((f) => f.filename));
-          if (!c || fresh) return;
+          if (!c || fresh || Date.now() - c.at < RECENT) return;
           setStale(c.at);
           show(c.v);
         });
       else setStale(Date.now()); // the page as it is stays, marked as updating
       let pr: PR;
       let loaded: Loaded;
+      const recent = await cached;
+      const reuse = !!recent && Date.now() - recent.at < RECENT && !recent.v.paused;
       try {
-        loaded = await loadPR(repo, n, (p) => {
-          if (!shownHead) setEarly(p); // nothing shown yet: its title and description, while the files load
-          extras(p);
-        });
+        if (reuse) extras((loaded = recent!.v).pr);
+        else
+          loaded = await loadPR(repo, n, (p) => {
+            if (!shownHead) setEarly(p); // nothing shown yet: its title and description, while the files load
+            extras(p);
+          });
         pr = loaded.pr;
       } catch (e: any) {
         if (first && !shownHead) throw e;
@@ -674,7 +681,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       setStale(null);
       show(loaded);
       setPaused(loaded.paused ?? '');
-      if (!loaded.paused) void prCache.set(`${repo}#${n}`, loaded); // not a copy missing its threads
+      if (!loaded.paused && !reuse) void prCache.set(`${repo}#${n}`, loaded); // not a copy missing its threads
     })().catch((e) => setError(e.message));
     // What needs only the PR (not its files), started as soon as it's here: who I am to it, its stack, my last review.
     let started = false;
@@ -2627,8 +2634,8 @@ function ManifestSummary({ file, ctx }: { file: File; ctx: Ctx }) {
   useEffect(() => {
     const get = (repo: string, path: string, sha: string) => getRaw(repo, path, sha).then((t) => t ?? '', () => null);
     Promise.all([
-      file.status === 'added' ? '' : get(ctx.repo, file.previous_filename ?? file.filename, ctx.pr.base.sha),
-      file.status === 'removed' ? '' : get(ctx.headRepo, file.filename, ctx.pr.head.sha),
+      file.status === 'added' ? '' : wholeFromPatch(file) ?? get(ctx.repo, file.previous_filename ?? file.filename, ctx.pr.base.sha), // an added or removed file's diff is the file
+      file.status === 'removed' ? '' : wholeFromPatch(file) ?? get(ctx.headRepo, file.filename, ctx.pr.head.sha),
     ]).then(([a, b]) => a != null && b != null && setC(manifestChanges(a, b)));
   }, [file.sha]);
   if (!c || !(c.added.length + c.removed.length + c.newComps.length + c.goneComps.length + c.nowExported.length)) return null;
