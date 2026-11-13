@@ -486,3 +486,11 @@ export function moveRuns(hunks: Hunk[], m: Moved | undefined): MoveRun[] {
   });
   return out;
 }
+
+// An added (or removed) file's whole text, from its diff, which already holds every line: no need to ask for the file.
+// Null for any other file, or one whose diff GitHub left out (too big).
+export function wholeFromPatch(f: { status: string; patch?: string | null }): string | null {
+  const side = f.status === 'added' ? '+' : f.status === 'removed' ? '-' : null;
+  if (!side || !f.patch) return null;
+  return f.patch.split('\n').filter((l) => l[0] === side).map((l) => l.slice(1)).join('\n');
+}

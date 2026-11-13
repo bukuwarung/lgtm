@@ -1329,3 +1329,11 @@ test('repeatedFindings: a 🤖 finding posted again folds under the first, unles
   assert.deepEqual([...r].map(([k]) => k), ['b', 'f']);
   assert.deepEqual(r.get('b'), { id: 'a', path: 'A.kt', line: 3 });
 });
+
+test("wholeFromPatch: an added or removed file's text from its diff; null otherwise", async () => {
+  const { wholeFromPatch } = await import('../src/diff.ts');
+  assert.equal(wholeFromPatch({ status: 'added', patch: '@@ -0,0 +1,2 @@\n+@Entity\n+class A' }), '@Entity\nclass A');
+  assert.equal(wholeFromPatch({ status: 'removed', patch: '@@ -1,2 +0,0 @@\n-a\n-b' }), 'a\nb');
+  assert.equal(wholeFromPatch({ status: 'modified', patch: '@@ -1 +1 @@\n-a\n+b' }), null);
+  assert.equal(wholeFromPatch({ status: 'added' }), null);
+});

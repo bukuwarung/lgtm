@@ -9,7 +9,7 @@ import { protectionsOff, switchedOff } from './switchedoff.ts';
 import { entityWithoutMigration, isMigration, migrationIssues, privateTransactional, type MigrationIssue } from './spring.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
-import { addedLines, hiddenChanges, moveRuns, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
+import { addedLines, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -954,7 +954,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       chkMigrations
         ? Promise.all(folders.map((d) => listDir(repo, d, data.pr.base.sha).then((l) => [d, l.map((x) => x.path)] as const, () => [d, [] as string[]] as const))).then((ls) => migrationIssues(data.files, new Map(ls)))
         : [],
-      chkJpa ? entityWithoutMigration(data.files, (f) => getRaw(data.headRepo, f.filename, data.pr.head.sha)) : [],
+      chkJpa ? entityWithoutMigration(data.files, (f) => (wholeFromPatch(f) != null ? Promise.resolve(wholeFromPatch(f)) : getRaw(data.headRepo, f.filename, data.pr.head.sha))) : [], // an added file's diff is the file
     ]).then(([mig, ent]) => !stop && setBackend({ mig, ent }), () => {});
     return () => void (stop = true);
   }, [data?.files, chkMigrations, chkJpa]);
@@ -965,8 +965,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     setRoom([]);
     if (!data || !chkRoom) return;
     let stop = false;
-    const read = (f: { filename: string; status: string }) =>
-      f.status === 'removed' ? getRaw(repo, f.filename, data.pr.base.sha) : getRaw(data.headRepo, f.filename, data.pr.head.sha);
+    const read = (f: { filename: string; status: string; patch?: string }) =>
+      wholeFromPatch(f) != null ? Promise.resolve(wholeFromPatch(f)) : f.status === 'removed' ? getRaw(repo, f.filename, data.pr.base.sha) : getRaw(data.headRepo, f.filename, data.pr.head.sha); // an added or removed file's diff is the file
     roomCheck(data.files, read).then((r) => !stop && setRoom(r), () => {});
     return () => void (stop = true);
   }, [data?.files, chkRoom]);
