@@ -1314,3 +1314,18 @@ test('moveRuns: each side of moved code as one block, the other side between sta
   assert.deepEqual(moveRuns(b, moved.get('B.kt')), [{ hunk: 0, start: 1, end: 3, kind: '+', to: 'A.kt:2', count: 3 }]);
   assert.deepEqual(moveRuns(a, undefined), []);
 });
+
+test('repeatedFindings: a 🤖 finding posted again folds under the first, unless it has replies or is still to send', async () => {
+  const { repeatedFindings } = await import('../src/github.ts');
+  const t = (id: string, at: string, body: string, more = 0, state?: string, isResolved = false) => ({ id, path: 'A.kt', line: 3, isResolved, comments: { nodes: [{ body, createdAt: at, state }, ...Array(more).fill({ body: 'ok', createdAt: at })] } });
+  const r = repeatedFindings([
+    t('b', '2026-01-02', '🤖 **Low**: Backmerge detection is case-sensitive\n\nmore'),
+    t('a', '2026-01-01', '🤖 Low: Backmerge detection is  case-sensitive'),
+    t('c', '2026-01-03', '🤖 Low: Backmerge detection is case-sensitive', 1),
+    t('d', '2026-01-04', '🤖 Low: Backmerge detection is case-sensitive', 0, 'PENDING'),
+    t('e', '2026-01-05', 'Low: Backmerge detection is case-sensitive'),
+    t('f', '2026-01-06', '🤖 **Low: Backmerge detection is case-sensitive**', 1, undefined, true),
+  ]);
+  assert.deepEqual([...r].map(([k]) => k), ['b', 'f']);
+  assert.deepEqual(r.get('b'), { id: 'a', path: 'A.kt', line: 3 });
+});

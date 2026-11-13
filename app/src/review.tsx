@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -75,6 +75,7 @@ type Ctx = {
   langFor: (path?: string) => string | undefined; // the language an unmarked code block in a comment on `path` is read as
   mainLang?: string; // the PR's main code language
   moved: Map<string, Moved>; // code moved without changes, per file
+  repeats: Map<string, Repeat>; // 🤖 findings posted again: thread → the first (github.ts repeatedFindings)
   untested: Set<string>; // code files whose tests the PR doesn't touch (Settings switch)
   modules?: Map<string, string>; // each file's Gradle module, when shown (Settings → Reviewing)
   sinceComment: Map<string, SinceComment>; // my open threads, against the code now
@@ -1171,6 +1172,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     langFor: (path) => (path && !isMarkdown(path) && languageFor(path)) || mainLang,
     ignoreWs,
     moved,
+    repeats: repeatedFindings(allThreads),
     repo,
     mentions: [
       ...new Set(
@@ -3946,6 +3948,8 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   // Bot-only threads (AI reviewers, linters) start collapsed to their one-line preview.
   const foldBots = useFoldBots(!!ctx.me && ctx.pr.user.login === ctx.me);
   const bot = foldBots && foldedAsBot(t, waiting);
+  const again = ctx.repeats.get(t.id);
+  const [showAgain, setShowAgain] = useState(false);
   // On someone else's PR, other people's threads start folded too: mine (and ones waiting on me) stay open.
   const others = !!ctx.me && ctx.pr.user.login !== ctx.me && !t.comments.nodes.some((c) => c.author?.login === ctx.me);
   const verdict = ctx.checked[t.id];
@@ -3965,6 +3969,17 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
     setBody('');
   });
 
+  // A 🤖 finding posted again: one line pointing at the first, until shown.
+  if (again && !showAgain)
+    return (
+      <div class="thread-again" id={'t-' + t.id}>
+        🤖 Posted again, the same as{' '}
+        <a href={'#t-' + again.id} onClick={(e) => (e.preventDefault(), jumpTo('t-' + again.id, 'f-' + again.path))}>
+          {again.path === t.path ? (again.line ? `the one on line ${again.line}` : 'an earlier one on this file') : `the one on ${fileLabel(again.path)}${again.line ? ':' + again.line : ''}`}
+        </a>{' '}
+        · <button class="link" onClick={() => setShowAgain(true)}>Show</button>
+      </div>
+    );
   return (
     <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot && !others}>
       <summary>

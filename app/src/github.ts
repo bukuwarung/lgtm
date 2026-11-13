@@ -1582,6 +1582,25 @@ export const markReady = (id: string) =>
 // A comment that opens with 🤖 (after any hidden <!-- markers -->): an agent's, by its own say, posted from a person's
 // account. A bot's when Settings says so (agentsAsBots).
 export const agentSays = (body?: string | null) => /^\s*(<!--[\s\S]*?-->\s*)*\u{1F916}/u.test(body ?? '');
+// 🤖 findings posted again (an agent's later run repeating one): thread id → the first thread with the same first line
+// (severity and wording, markdown aside). A resolved one counts, or an open one nobody answered; one still being
+// talked over, or in my review still to send, stays its own.
+export type Repeat = { id: string; path: string; line: number | null };
+export function repeatedFindings(threads: (Pick<Thread, 'id' | 'path' | 'line' | 'isResolved'> & { comments: { nodes: Pick<Comment, 'body' | 'createdAt' | 'state'>[] } })[]): Map<string, Repeat> {
+  const head = (b?: string) => (b ?? '').replace(/^\s*(<!--[\s\S]*?-->\s*)*\u{1F916}/u, '').trim().split('\n')[0].replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const first = new Map<string, Repeat>();
+  const out = new Map<string, Repeat>();
+  const agents = threads.filter((t) => agentSays(t.comments.nodes[0]?.body)).sort((a, b) => a.comments.nodes[0].createdAt.localeCompare(b.comments.nodes[0].createdAt));
+  for (const t of agents) {
+    const c = t.comments.nodes[0];
+    const k = head(c.body);
+    if (!k) continue;
+    const was = first.get(k);
+    if (!was) first.set(k, { id: t.id, path: t.path, line: t.line });
+    else if ((t.isResolved || t.comments.nodes.length === 1) && c.state !== 'PENDING') out.set(t.id, was);
+  }
+  return out;
+}
 export function markBots<T extends { comments: { nodes: (Pick<Comment, 'author'> & { body?: string })[] } }>(threads: T[], bots: Set<string>): T[] {
   const agents = agentsAsBots();
   if (!bots.size && !agents) return threads;

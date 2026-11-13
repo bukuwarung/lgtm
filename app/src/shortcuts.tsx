@@ -6,7 +6,7 @@ import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './ta
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { agentSays, awaitsMe, earlierVerdicts, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -390,7 +390,8 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
-  const sortedThreads = threadOrder(threads, [], files).map((x) => x.t!);
+  const repeats = repeatedFindings(threads); // 🤖 findings posted again: listed once, by their first
+  const sortedThreads = threadOrder(threads.filter((t) => !repeats.has(t.id)), [], files).map((x) => x.t!);
   const viewedCount = files.filter((f) => viewed.has(f.filename)).length;
   const failing = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const rerunnable = checks?.filter((c) => c.state === 'failure' && c.jobId && runOf(c)) ?? [];
@@ -503,7 +504,7 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
         {addMe && !reviewers.has(me) && <AddMe add={addMe} />}
       </Section>
 
-      <Section title="Conversation" count={conversation.length - replaced.size + 1 + threads.length + drafts.length}>
+      <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
         {myConv + drafts.length + tiers.mine.length > 0 && (
           <Fold k="ix-yours" class="ix-ckgroup">
