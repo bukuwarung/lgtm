@@ -573,6 +573,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => void (data && getBuildRoots(data.headRepo, data.pr.head.sha).then(setRoots, () => setRoots(null))), [rootsAt]);
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
+  const botsFolded = useFoldBots(!!me && data?.pr.user.login === me); // as the conversation folds them
   // As the list has it ("Needs your review"); opened before the list is in, whether my review is requested.
   useEffect(() => {
     if (toReview !== null) return;
@@ -1292,6 +1293,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   ].filter(([on]) => on).map(([, label, show]) => ({ label: label as string, show: show as () => void }));
   // How much of the PR's change lgtm keeps out of sight: the files behind a row, and in the files on show their
   // whitespace-only changes, folded imports and deleted files' contents.
+  const replacedVerdicts = new Set([...earlierVerdicts(conv).values()].flat());
   const changedIn = (fs: File[]) => fs.reduce((n, f) => n + f.additions + f.deletions, 0);
   const inShown = inOrder.filter((f) => !(collapseDeleted && f.status === 'removed')).map((f) => hiddenIn(f, ignoreWs, foldImports)); // a collapsed deleted file counts whole, below
   const trimmed = ([
@@ -1302,8 +1304,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     [inShown.reduce((n, h) => n + h.ws, 0), 'whitespace changes in other files', toggleWs],
     [inShown.reduce((n, h) => n + h.imports, 0), 'folded imports', undefined],
     [collapseDeleted ? inOrder.filter((f) => f.status === 'removed').reduce((n, f) => n + f.deletions, 0) : 0, 'deleted files, collapsed', undefined],
+    // Comments, by their lines of text: resolved and outdated threads, bots' comments, verdicts a later one replaced.
+    [hiddenThreads ? linesIn(allThreads.filter(settled).flatMap((t) => t.comments.nodes.map((c) => c.bodyText ?? c.body ?? ''))) : 0, `lines in ${hiddenThreads} resolved or outdated thread${hiddenThreads === 1 ? '' : 's'}`, () => setShowSettled()],
+    [botsFolded ? linesIn(conv.filter((c) => c.bot && !replacedVerdicts.has(c.id)).map((c) => htmlText(c.html))) : 0, `lines in bots' comments`, undefined],
+    [linesIn(conv.filter((c) => replacedVerdicts.has(c.id)).map((c) => htmlText(c.html))), `lines in reviews a later one replaced`, undefined],
   ] as [number, string, (() => void) | undefined][]).filter(([n]) => n > 0);
-  const trimmedLines = trimmed.reduce((n, [k]) => n + k, 0), changedLines = changedIn(files);
+  const toRead = changedIn(files) + linesIn(allThreads.flatMap((t) => t.comments.nodes.map((c) => c.bodyText ?? c.body ?? ''))) + linesIn(conv.map((c) => htmlText(c.html)));
+  const trimmedLines = trimmed.reduce((n, [k]) => n + k, 0), changedLines = toRead;
   // Centred, a changed line too wide for it: the PR fills the window instead (Settings → Diff); tabs count as 4.
   const tooWide = centered && (split || (fit && visible.some((f) => f.patch?.split('\n').some((l) => l[0] !== '@' && l.length > Number(cols) + 1 && l.replace(/\t/g, '    ').length > Number(cols) + 1))));
   // Modules as the files on show have them (not the ones waiting behind a row).
@@ -1779,7 +1786,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </span>
             )}
             {trimmedLines > 0 && changedLines > 0 && (
-              <PillMenu cls="p-size" label={<><b>{trimmedLines * 100 < changedLines ? '<1' : Math.round((trimmedLines * 100) / changedLines)}%</b> less to read</>} head={`lgtm keeps ${num(trimmedLines)} of the ${num(changedLines)} changed lines out of sight:`}>
+              <PillMenu cls="p-size" label={<><b>{trimmedLines * 100 < changedLines ? '<1' : Math.round((trimmedLines * 100) / changedLines)}%</b> less to read</>} head={`lgtm keeps ${num(trimmedLines)} of the ${num(changedLines)} lines to read (changes and comments) out of sight:`}>
                 {trimmed.map(([k, what, show]) => (
                   <div class="pill-row">
                     {show ? (
@@ -2156,6 +2163,9 @@ function wsSections(f: File) {
   }
   return wsSeen.get(f)!;
 }
+// Lines of text, for "less to read": a comment's, or its HTML's with paragraphs, items and breaks as line ends.
+const linesIn = (texts: string[]) => texts.reduce((n, t) => n + t.split('\n').filter((l) => l.trim()).length, 0);
+const htmlText = (html: string) => html.replace(/<\/(p|li|h\d|pre|tr|div|blockquote)>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
 // A shown file's changed lines kept out of sight (diff.ts hiddenChanges), once per loaded file and setting.
 const hiddenSeen = new WeakMap<File, Map<string, { ws: number; imports: number }>>();
 function hiddenIn(f: File, ws: boolean, imports: boolean) {
