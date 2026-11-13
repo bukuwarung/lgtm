@@ -1304,3 +1304,13 @@ test('hiddenChanges: changed lines whitespace-ignoring and import folding keep o
   assert.deepEqual(hiddenChanges('src/X.kt', patch, false, false), { ws: 0, imports: 0 });
   assert.deepEqual(hiddenChanges('notes.md', patch, false, true), { ws: 0, imports: 0 });
 });
+
+test('moveRuns: each side of moved code as one block, the other side between staying out of it', async () => {
+  const { movedLines, moveRuns, parsePatch } = await import('../src/diff.ts');
+  const a = parsePatch(['@@ -1,5 +1,1 @@', ' class A {', '-  fun one() = compute(1)', '-  fun two() = compute(2)', '+  // kept', '-  fun three() = compute(3)', ' }'].join('\n'));
+  const b = parsePatch(['@@ -1,1 +1,4 @@', ' class B {', '+  fun one() = compute(1)', '+  fun two() = compute(2)', '+  fun three() = compute(3)', ' }'].join('\n'));
+  const moved = movedLines([{ filename: 'A.kt', hunks: a }, { filename: 'B.kt', hunks: b }]);
+  assert.deepEqual(moveRuns(a, moved.get('A.kt')), [{ hunk: 0, start: 1, end: 4, kind: '-', to: 'B.kt:2', count: 3 }]);
+  assert.deepEqual(moveRuns(b, moved.get('B.kt')), [{ hunk: 0, start: 1, end: 3, kind: '+', to: 'A.kt:2', count: 3 }]);
+  assert.deepEqual(moveRuns(a, undefined), []);
+});

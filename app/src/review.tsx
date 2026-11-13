@@ -9,7 +9,7 @@ import { protectionsOff, switchedOff } from './switchedoff.ts';
 import { entityWithoutMigration, isMigration, migrationIssues, privateTransactional, type MigrationIssue } from './spring.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
-import { addedLines, hiddenChanges, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
+import { addedLines, hiddenChanges, moveRuns, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -1304,6 +1304,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     [inShown.reduce((n, h) => n + h.ws, 0), 'whitespace changes in other files', toggleWs],
     [inShown.reduce((n, h) => n + h.imports, 0), 'folded imports', undefined],
     [collapseDeleted ? inOrder.filter((f) => f.status === 'removed').reduce((n, f) => n + f.deletions, 0) : 0, 'deleted files, collapsed', undefined],
+    [split ? 0 : inOrder.filter((f) => !(collapseDeleted && f.status === 'removed')).reduce((n, f) => n + movedIn(f, moved.get(f.filename)), 0), 'moved without changes, folded', undefined],
     // Comments, by their lines of text: resolved and outdated threads, bots' comments, verdicts a later one replaced.
     [hiddenThreads ? linesIn(allThreads.filter(settled).flatMap((t) => t.comments.nodes.map((c) => c.bodyText ?? c.body ?? ''))) : 0, `lines in ${hiddenThreads} resolved or outdated thread${hiddenThreads === 1 ? '' : 's'}`, () => setShowSettled()],
     [botsFolded ? linesIn(conv.filter((c) => c.bot && !replacedVerdicts.has(c.id)).map((c) => htmlText(c.html))) : 0, `lines in bots' comments`, undefined],
@@ -2166,6 +2167,13 @@ function wsSections(f: File) {
 // Lines of text, for "less to read": a comment's, or its HTML's with paragraphs, items and breaks as line ends.
 const linesIn = (texts: string[]) => texts.reduce((n, t) => n + t.split('\n').filter((l) => l.trim()).length, 0);
 const htmlText = (html: string) => html.replace(/<\/(p|li|h\d|pre|tr|div|blockquote)>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+// A file's moved lines folded (diff.ts moveRuns), once per file's moves.
+const movedSeen = new WeakMap<Moved, number>();
+function movedIn(f: File, m: Moved | undefined) {
+  if (!m || !f.patch) return 0;
+  if (!movedSeen.has(m)) movedSeen.set(m, moveRuns(parsePatch(f.patch), m).reduce((n, r) => n + r.count, 0));
+  return movedSeen.get(m)!;
+}
 // A shown file's changed lines kept out of sight (diff.ts hiddenChanges), once per loaded file and setting.
 const hiddenSeen = new WeakMap<File, Map<string, { ws: number; imports: number }>>();
 function hiddenIn(f: File, ws: boolean, imports: boolean) {
@@ -2968,6 +2976,14 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
     if (!f || lineNoted(hunks[hi].lines[li])) return undefined;
     return { ...f, head: li === f.start || lineNoted(hunks[hi].lines[li - 1]) };
   };
+  // Code moved without changes (diff.ts moveRuns): each copy one row until opened, or commented on (unified view only:
+  // side by side pairs its rows across the sides).
+  const moves = useMemo(() => moveRuns(hunks, mv), [hunks, mv]);
+  const [openMoves, setOpenMoves] = useState<Set<string>>(new Set());
+  const moveAt = (hi: number, li: number): MoveRun | undefined => {
+    const l = hunks[hi].lines[li];
+    return moves.find((r) => r.hunk === hi && r.kind === l.kind && li >= r.start && li <= r.end && !openMoves.has(`${hi}-${r.start}`) && !hunks[hi].lines.slice(r.start, r.end + 1).some((x) => x.kind === r.kind && lineNoted(x)));
+  };
   // Hunks that are nothing but a folded import block (one, or several in a row: a long import list changed in two
   // places): one row for them all until it's opened, taking in the unchanged imports between them and, at the file's
   // top, the lines above; the unchanged lines after them get their button in that same row.
@@ -3095,6 +3111,21 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                     </td>
                     <td class="code">
                       <DocView doc={indent ? { ...doc, indent: Math.max(0, doc.indent - indent) } : doc} syntax={docSyntax(path) ?? 'kdoc'} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
+                    </td>
+                  </tr>
+                );
+              }
+              const moveRun = !splitPlan && moveAt(hi, li);
+              if (moveRun) {
+                if (li !== moveRun.start) return null;
+                const [file, at] = moveRun.to.split(':');
+                return (
+                  <tr class="import-fold moved-fold">
+                    <td colSpan={3}>
+                      <button title="Show the moved lines" onClick={() => setOpenMoves((s) => new Set(s).add(`${hi}-${moveRun.start}`))}>
+                        ⋯ {moveRun.count} line{moveRun.count === 1 ? '' : 's'} moved {moveRun.to ? (moveRun.kind === '-' ? 'to' : 'here from') : ''}
+                      </button>
+                      {moveRun.to && <>{' '}<a href={'#f-' + file} title={moveRun.to} onClick={(e) => { e.preventDefault(); jumpTo('f-' + file); }}>{file === path ? `line ${at}` : `${fileLabel(file)}:${at}`}</a></>} without changes
                     </td>
                   </tr>
                 );

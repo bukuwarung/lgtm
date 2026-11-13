@@ -465,3 +465,24 @@ export function hiddenChanges(path: string, patch: string, ws: boolean, imports:
   const folded = syntax ? importFolds(hunks, syntax).reduce((n, f) => n + hunks[f.hunk].lines.slice(f.start, f.end + 1).filter((l) => l.kind !== ' ').length, 0) : 0;
   return { ws: changed(all) - changed(hunks), imports: folded };
 }
+
+// A file's moved runs (movedLines) as blocks to fold: per hunk, a side's moved lines from the one naming where they
+// went to the last before a line that isn't moved (the other side's lines in between stay out of it). `to` is ''
+// for a piece split off its run (whitespace ignored can turn a line in it unchanged).
+export type MoveRun = { hunk: number; start: number; end: number; kind: '-' | '+'; to: string; count: number };
+export function moveRuns(hunks: Hunk[], m: Moved | undefined): MoveRun[] {
+  if (!m) return [];
+  const out: MoveRun[] = [];
+  hunks.forEach((h, hi) => {
+    const open: Partial<Record<'-' | '+', MoveRun>> = {};
+    h.lines.forEach((l, li) => {
+      if (l.kind === ' ') return void (open['-'] = open['+'] = undefined);
+      const to = l.kind === '-' ? m.old.get(l.old!) : m.new.get(l.new!);
+      const run = open[l.kind];
+      if (to === undefined) open[l.kind] = undefined;
+      else if (to || !run) out.push((open[l.kind] = { hunk: hi, start: li, end: li, kind: l.kind, to, count: 1 }));
+      else (run.end = li), run.count++;
+    });
+  });
+  return out;
+}

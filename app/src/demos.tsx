@@ -225,22 +225,23 @@ export const DEMOS: Record<string, Demo> = {
     ),
   },
   dimMoved: {
-    title: 'Dim code moved without changes',
+    title: 'Fold code moved without changes',
     off: (
-      <File path="OrderMapper.kt" st="added" add={3} del={0}>
+      <File path="OrderMapper.kt" st="added" add={4} del={0}>
         <Rows rows={[['+', '', 12, 'fun Order.toUi() = OrderUi('], ['+', '', 13, '    id = id,'], ['+', '', 14, '    total = total.format(),'], ['+', '', 15, ')']]} />
       </File>
     ),
     on: (
-      <File path="OrderMapper.kt" st="added" add={3} del={0}>
+      <File path="OrderMapper.kt" st="added" add={4} del={0}>
         <table class="diff">
           <tbody>
-            <tr class="moved-h">
-              <td colSpan={3}>↰ Moved here from <a>OrderViewModel.kt:88</a> without changes</td>
+            <tr class="import-fold moved-fold">
+              <td colSpan={3}>
+                <button>⋯ 4 lines moved here from</button> <a>OrderViewModel.kt:88</a> without changes
+              </td>
             </tr>
           </tbody>
         </table>
-        <Rows rows={[['+', '', 12, 'fun Order.toUi() = OrderUi(', 'moved'], ['+', '', 13, '    id = id,', 'moved'], ['+', '', 14, '    total = total.format(),', 'moved'], ['+', '', 15, ')', 'moved']]} />
       </File>
     ),
   },

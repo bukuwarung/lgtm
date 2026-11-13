@@ -599,6 +599,9 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .diff :is(tr.gap, tr.import-fold) button { opacity: 0; transition: opacity .12s; }
 .diff :is(tr.gap, tr.import-fold):is(:hover, :focus-within) button { opacity: 1; }
 .demo-page .diff :is(tr.gap, tr.import-fold) button { opacity: 1; } /* the README pictures show what they say */
+/* Moved code folded: where it went shows, not only on hover. */
+.diff tr.moved-fold td { color: var(--muted); }
+.diff tr.moved-fold button { opacity: .8; }
 .new-pkgs { font-family: var(--mono); }
 .bar-group { flex: none; display: flex; align-items: center; gap: 6px; }
 .bar-index { padding: 3px 8px; }

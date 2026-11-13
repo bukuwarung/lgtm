@@ -532,7 +532,7 @@ export function Settings() {
         <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated or linguist-binary in .gitattributes." demo />
         <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
-        <Flag k="dimMoved" initial={true} label="Dim code moved without changes" demo />
+        <Flag k="dimMoved" initial={true} label="Fold code moved without changes" hint="Each copy, where it went and where it came from, is one row naming the other; open it to see the lines (dimmed). Side by side, the lines show dimmed." demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)."  demo />
         <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text."  demo />
         <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Old on the left, new on the right; rendered doc comments show as source. The button beside the ${T.PRs_} title switches it too.`}  demo />
