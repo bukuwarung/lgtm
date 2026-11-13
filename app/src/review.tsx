@@ -778,7 +778,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   }, [data, conversation]);
 
   const sinceBase = fromSha ?? lastReviewed;
-  useEffect(() => void getPushPoints(repo, n).then(setPoints, () => setPoints([])), [repo, n, data?.pr.head.sha]);
+  useEffect(() => void (data && getPushPoints(repo, n).then(setPoints, () => setPoints([]))), [repo, n, data?.pr.head.sha]); // once the PR (its head) is here, not before too
   useEffect(() => {
     if (!since || !sinceBase || !data || sinceData) return;
     getCompare(repo, sinceBase, data.pr.head.sha).then(

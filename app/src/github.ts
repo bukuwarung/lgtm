@@ -235,6 +235,7 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
   if (practice && writes(path, init)) throw new Error('Practice run: nothing is sent to GitHub');
   const bucket = bucketOf(path.replace(/^https:\/\/api\.github\.com/, ''));
   if (Date.now() < (limited.get(bucket)?.until ?? 0)) throw limitError(bucket);
+  if (writes(path, init)) reviewsAsked.clear(); // a review sent, a comment posted: the next look asks again
   const res = await fetch(path.startsWith('https://') ? path : `https://api.github.com${path}`, {
     // GitHub lets the browser keep a response for 60 seconds: always check it's current (an unchanged one is a cheap
     // 304), or a refresh, or the page after asking a reviewer, shows the copy from before.
@@ -670,12 +671,25 @@ export function earlierVerdicts(items: Pick<ConversationItem, 'id' | 'author' | 
   return out;
 }
 
+// A PR's reviews, one ask for the conversation and "my last review" opening together (kept 5 seconds after, unless
+// lgtm sends GitHub something meanwhile).
+const reviewsAsked = new Map<string, Promise<any[]>>();
+function prReviews(repo: string, n: number): Promise<any[]> {
+  const k = `${repo}#${n}`;
+  let p = reviewsAsked.get(k);
+  if (!p) {
+    reviewsAsked.set(k, (p = paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`, FULL)));
+    const drop = () => setTimeout(() => reviewsAsked.get(k) === p && reviewsAsked.delete(k), 5000);
+    p.then(drop, drop);
+  }
+  return p;
+}
 // Top-level PR comments plus submitted reviews that carry a verdict or a summary.
 export async function getConversation(repo: string, n: number): Promise<ConversationItem[]> {
   if (isLab(repo)) return lab.getLabConversation(repo, n);
   const [comments, reviews] = await Promise.all([
     paginate<any>(`/repos/${repo}/issues/${n}/comments?per_page=100`, FULL),
-    paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`, FULL),
+    prReviews(repo, n),
   ]);
   return [
     ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', avatar: c.user?.avatar_url, html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' || (agentsAsBots() && agentSays(c.body)) })),
@@ -1341,7 +1355,7 @@ export async function getStack(repo: string, pr: PR): Promise<StackLayer[]> {
 // My latest submitted review: the commit it was on, and when.
 export async function getMyLastReview(repo: string, n: number): Promise<{ sha: string; at: string } | null> {
   if (isLab(repo)) return lab.getLabMyLastReview(repo, n);
-  const [me, reviews] = await Promise.all([getGitHubViewer(), paginate<any>(`/repos/${repo}/pulls/${n}/reviews?per_page=100`)]);
+  const [me, reviews] = await Promise.all([getGitHubViewer(), prReviews(repo, n)]);
   const r = reviews.filter((r) => r.user?.login === me && r.state !== 'PENDING').at(-1);
   return r ? { sha: r.commit_id, at: r.submitted_at } : null;
 }
