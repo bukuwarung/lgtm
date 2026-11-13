@@ -454,3 +454,14 @@ export function relocate(old: string[], now: string[], hunks: Hunk[], start: num
   const got = anchor(hunks, start + d, end + d);
   return got && got.line === want.line && got.startLine === want.startLine ? want : null;
 }
+
+// Of a file's changed lines, how many lgtm doesn't show while the file is: whitespace-only changes (with whitespace
+// ignored) and changes inside folded import blocks.
+export function hiddenChanges(path: string, patch: string, ws: boolean, imports: boolean): { ws: number; imports: number } {
+  const changed = (hs: Hunk[]) => hs.reduce((n, h) => n + h.lines.filter((l) => l.kind !== ' ').length, 0);
+  const all = parsePatch(patch);
+  const hunks = ws ? ignoreWhitespace(all) : all;
+  const syntax = imports ? importSyntax(path) : null;
+  const folded = syntax ? importFolds(hunks, syntax).reduce((n, f) => n + hunks[f.hunk].lines.slice(f.start, f.end + 1).filter((l) => l.kind !== ' ').length, 0) : 0;
+  return { ws: changed(all) - changed(hunks), imports: folded };
+}

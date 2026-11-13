@@ -9,7 +9,7 @@ import { protectionsOff, switchedOff } from './switchedoff.ts';
 import { entityWithoutMigration, isMigration, migrationIssues, privateTransactional, type MigrationIssue } from './spring.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
-import { addedLines, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
+import { addedLines, hiddenChanges, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -511,6 +511,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [foldGenerated] = useStoredFlag('hideGenerated', true);
   const [foldNoDiff] = useStoredFlag('hideNoDiff', true);
   const [foldArchived] = useStoredFlag('hideArchivedSpecs', true);
+  const [collapseDeleted] = useStoredFlag('collapseDeleted', true);
   const [startSince] = useStoredFlag('sinceFirst', false);
   const [resumeOn] = useStoredFlag('resumePosition', false);
   const [dimMoved] = useStoredFlag('dimMoved', true);
@@ -1289,6 +1290,20 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     [importOnly.length && !showImportsOnly, `${importOnly.length} imports-only`, () => setShowImportsOnly(true)],
     [archived.length && !showArchived, `${archived.length} archived spec${archived.length > 1 ? 's' : ''}`, () => setShowArchived(true)],
   ].filter(([on]) => on).map(([, label, show]) => ({ label: label as string, show: show as () => void }));
+  // How much of the PR's change lgtm keeps out of sight: the files behind a row, and in the files on show their
+  // whitespace-only changes, folded imports and deleted files' contents.
+  const changedIn = (fs: File[]) => fs.reduce((n, f) => n + f.additions + f.deletions, 0);
+  const inShown = inOrder.filter((f) => !(collapseDeleted && f.status === 'removed')).map((f) => hiddenIn(f, ignoreWs, foldImports)); // a collapsed deleted file counts whole, below
+  const trimmed = ([
+    [genOpen ? 0 : changedIn(generated), 'generated files', () => setShowGenerated(true)],
+    [showArchived ? 0 : changedIn(archived), 'archived specs', () => setShowArchived(true)],
+    [showWsOnly ? 0 : changedIn(wsOnly), 'files with only whitespace changes', () => setShowWsOnly(true)],
+    [showImportsOnly ? 0 : changedIn(importOnly), 'files with only import changes', () => setShowImportsOnly(true)],
+    [inShown.reduce((n, h) => n + h.ws, 0), 'whitespace changes in other files', toggleWs],
+    [inShown.reduce((n, h) => n + h.imports, 0), 'folded imports', undefined],
+    [collapseDeleted ? inOrder.filter((f) => f.status === 'removed').reduce((n, f) => n + f.deletions, 0) : 0, 'deleted files, collapsed', undefined],
+  ] as [number, string, (() => void) | undefined][]).filter(([n]) => n > 0);
+  const trimmedLines = trimmed.reduce((n, [k]) => n + k, 0), changedLines = changedIn(files);
   // Centred, a changed line too wide for it: the PR fills the window instead (Settings → Diff); tabs count as 4.
   const tooWide = centered && (split || (fit && visible.some((f) => f.patch?.split('\n').some((l) => l[0] !== '@' && l.length > Number(cols) + 1 && l.replace(/\t/g, '    ').length > Number(cols) + 1))));
   // Modules as the files on show have them (not the ones waiting behind a row).
@@ -1763,6 +1778,23 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 <b class="a">+{num(pr.additions)}</b> <b class="d">−{num(pr.deletions ?? 0)}</b> · {num(pr.changed_files ?? 0)} file{pr.changed_files === 1 ? '' : 's'}
               </span>
             )}
+            {trimmedLines > 0 && changedLines > 0 && (
+              <PillMenu cls="p-size" label={<><b>{trimmedLines * 100 < changedLines ? '<1' : Math.round((trimmedLines * 100) / changedLines)}%</b> less to read</>} head={`lgtm keeps ${num(trimmedLines)} of the ${num(changedLines)} changed lines out of sight:`}>
+                {trimmed.map(([k, what, show]) => (
+                  <div class="pill-row">
+                    {show ? (
+                      <button onClick={show} title="Show them">
+                        <b>{num(k)}</b> <span>{what}</span> <small>Show</small>
+                      </button>
+                    ) : (
+                      <span>
+                        <b>{num(k)}</b> {what}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </PillMenu>
+            )}
             {/* View */}
             {ignoreWs && (
               <button
@@ -2123,6 +2155,16 @@ function wsSections(f: File) {
     wsSeen.set(f, { folded: hs.filter((h) => h.lines.every((l) => l.kind === ' ')).length, total: hs.length });
   }
   return wsSeen.get(f)!;
+}
+// A shown file's changed lines kept out of sight (diff.ts hiddenChanges), once per loaded file and setting.
+const hiddenSeen = new WeakMap<File, Map<string, { ws: number; imports: number }>>();
+function hiddenIn(f: File, ws: boolean, imports: boolean) {
+  if (!f.patch || (!ws && !imports)) return { ws: 0, imports: 0 };
+  const seen = hiddenSeen.get(f) ?? new Map();
+  hiddenSeen.set(f, seen);
+  const k = `${ws}${imports}`;
+  if (!seen.has(k)) seen.set(k, hiddenChanges(f.filename, f.patch, ws, imports));
+  return seen.get(k)!;
 }
 // A file whose every change is an import (diff.ts importsOnly), worked out once per loaded file and whitespace setting.
 const importsSeen = new WeakMap<File, Map<boolean, boolean>>();

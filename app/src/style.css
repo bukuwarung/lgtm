@@ -1298,6 +1298,7 @@ dialog.ask form { display: flex; justify-content: flex-end; gap: 8px; }
 .pill-pop .pill-row { display: flex; align-items: center; }
 .pill-pop .pill-row > button { flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill-pop .pill-row > button:hover, .pill-pop .pill-row > a:hover { background: var(--soft); }
+.pill-pop .pill-row > span { flex: 1; padding: 5px 8px; font-size: calc(13px * var(--ts)); white-space: nowrap; }
 .pill-pop .pill-row > a { padding: 5px 8px; border-radius: 6px; color: var(--muted); }
 .dep-major { color: var(--c-attn); font-weight: 600; }
 .diff tr.ln.hardcoded td.code { box-shadow: inset 3px 0 0 var(--c-mark); }

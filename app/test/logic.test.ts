@@ -1296,3 +1296,11 @@ test('PR parts asked at once go to GitHub as one query, across PRs, each PR gett
     globalThis.fetch = was;
   }
 });
+
+test('hiddenChanges: changed lines whitespace-ignoring and import folding keep out of sight', async () => {
+  const { hiddenChanges } = await import('../src/diff.ts');
+  const patch = ['@@ -1,6 +1,7 @@', ' package com.acme', ' ', '-import a.B', '+import a.C', '+import a.D', ' ', '-fun x() {  }', '+fun x() { }', '+val y = 1'].join('\n');
+  assert.deepEqual(hiddenChanges('src/X.kt', patch, true, true), { ws: 2, imports: 3 });
+  assert.deepEqual(hiddenChanges('src/X.kt', patch, false, false), { ws: 0, imports: 0 });
+  assert.deepEqual(hiddenChanges('notes.md', patch, false, true), { ws: 0, imports: 0 });
+});
