@@ -410,9 +410,11 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
   );
   const tiers = threadTiers(sortedThreads, me);
   const waitsOnMe = (t: Thread) => !!me && awaitsMe(t, me, pr.user.login === me); // listed first in its group
-  // Under "yours", threads an agent opened from my account (its comment starts with 🤖) fold together, unless one waits on me.
-  const byAgent = (t: Thread) => !waitsOnMe(t) && t.comments.nodes[0]?.author?.login === me && agentSays(t.comments.nodes[0]?.body);
-  const agentMine = tiers.mine.filter(byAgent);
+  // Threads an agent opened from a person's account (its comment starts with 🤖) fold together in their group, under
+  // "yours" (from my account) and "from others", unless one waits on me.
+  const byAgent = (t: Thread) => !waitsOnMe(t) && agentSays(t.comments.nodes[0]?.body);
+  const agentMine = tiers.mine.filter((t) => byAgent(t) && t.comments.nodes[0]?.author?.login === me);
+  const agentOthers = tiers.human.filter(byAgent);
   // In the bots' and the resolved group, their author and "resolved" go without saying.
   const threadEntry = (t: Thread, inGroup?: 'bot' | 'resolved') => {
     const first = t.comments.nodes[0];
@@ -518,7 +520,7 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
                 onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
               />
             ))}
-            {tiers.mine.filter((t) => !waitsOnMe(t) && !byAgent(t)).map((t) => threadEntry(t))}
+            {tiers.mine.filter((t) => !waitsOnMe(t) && !agentMine.includes(t)).map((t) => threadEntry(t))}
             {agentMine.length > 0 && (
               <Fold k="ix-yours-agent" initial={false} class="ix-ckgroup">
                 <summary>🤖 {agentMine.length} by your agent</summary>
@@ -532,7 +534,13 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
             <summary><Octicon name="comment-discussion" /> {othersConv + tiers.human.length} from others</summary>
             {tiers.human.filter(waitsOnMe).map((t) => threadEntry(t))}
             {conversation.map((c, i) => !c.bot && c.author !== me && !replaced.has(c.id) && convEntry(c, i))}
-            {tiers.human.filter((t) => !waitsOnMe(t)).map((t) => threadEntry(t))}
+            {tiers.human.filter((t) => !waitsOnMe(t) && !agentOthers.includes(t)).map((t) => threadEntry(t))}
+            {agentOthers.length > 0 && (
+              <Fold k="ix-others-agent" initial={false} class="ix-ckgroup">
+                <summary>🤖 {agentOthers.length} by their agents</summary>
+                {agentOthers.map((t) => threadEntry(t))}
+              </Fold>
+            )}
           </Fold>
         )}
         {bots.length + tiers.bot.length > 0 && (
