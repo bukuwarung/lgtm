@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -1308,6 +1308,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     // Comments, by their lines of text: resolved and outdated threads, bots' comments, verdicts a later one replaced.
     [hiddenThreads ? linesIn(allThreads.filter(settled).flatMap((t) => t.comments.nodes.map((c) => c.bodyText ?? c.body ?? ''))) : 0, `lines in ${hiddenThreads} resolved or outdated thread${hiddenThreads === 1 ? '' : 's'}`, () => setShowSettled()],
     [botsFolded ? linesIn(conv.filter((c) => c.bot && !replacedVerdicts.has(c.id)).map((c) => htmlText(c.html))) : 0, `lines in bots' comments`, undefined],
+    [botsFolded ? linesIn(allThreads.filter((t) => !(hiddenThreads && settled(t)) && !t.isResolved && !t.isOutdated && foldedAsBot(t, !!me && awaitsMe(t, me, pr.user.login === me))).flatMap((t) => t.comments.nodes.map((c) => c.bodyText ?? c.body ?? ''))) : 0, `lines in bots' and agents' threads, folded`, undefined],
     [linesIn(conv.filter((c) => replacedVerdicts.has(c.id)).map((c) => htmlText(c.html))), `lines in reviews a later one replaced`, undefined],
   ] as [number, string, (() => void) | undefined][]).filter(([n]) => n > 0);
   const toRead = changedIn(files) + linesIn(allThreads.flatMap((t) => t.comments.nodes.map((c) => c.bodyText ?? c.body ?? ''))) + linesIn(conv.map((c) => htmlText(c.html)));
@@ -3932,6 +3933,10 @@ function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; dr
   );
 }
 
+// A thread that starts folded to its preview with bots folded: all bots', or one an agent opened from a person's
+// account (its first comment starts with 🤖) that doesn't wait on me and isn't in my review still to send.
+const foldedAsBot = (t: Thread, waiting: boolean) =>
+  t.comments.nodes.every((c) => c.author?.__typename === 'Bot') || (!waiting && t.comments.nodes[0]?.state !== 'PENDING' && agentSays(t.comments.nodes[0]?.body));
 function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -3940,7 +3945,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const waiting = !!ctx.me && awaitsMe(t, ctx.me, ctx.pr.user.login === ctx.me);
   // Bot-only threads (AI reviewers, linters) start collapsed to their one-line preview.
   const foldBots = useFoldBots(!!ctx.me && ctx.pr.user.login === ctx.me);
-  const bot = foldBots && t.comments.nodes.every((c) => c.author?.__typename === 'Bot');
+  const bot = foldBots && foldedAsBot(t, waiting);
   // On someone else's PR, other people's threads start folded too: mine (and ones waiting on me) stay open.
   const others = !!ctx.me && ctx.pr.user.login !== ctx.me && !t.comments.nodes.some((c) => c.author?.login === ctx.me);
   const verdict = ctx.checked[t.id];

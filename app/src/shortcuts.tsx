@@ -412,7 +412,7 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
   const waitsOnMe = (t: Thread) => !!me && awaitsMe(t, me, pr.user.login === me); // listed first in its group
   // Threads an agent opened from a person's account (its comment starts with 🤖) fold together in their group, under
   // "yours" (from my account) and "from others", unless one waits on me.
-  const byAgent = (t: Thread) => !waitsOnMe(t) && agentSays(t.comments.nodes[0]?.body);
+  const byAgent = (t: Thread) => !waitsOnMe(t) && t.comments.nodes[0]?.state !== 'PENDING' && agentSays(t.comments.nodes[0]?.body); // not one in my review still to send
   const agentMine = tiers.mine.filter((t) => byAgent(t) && t.comments.nodes[0]?.author?.login === me);
   const agentOthers = tiers.human.filter(byAgent);
   // In the bots' and the resolved group, their author and "resolved" go without saying.
