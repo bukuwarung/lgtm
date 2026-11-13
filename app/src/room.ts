@@ -14,7 +14,9 @@ const JAVA_FIELD = /^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:private|public|protected
 const COLUMN = /@(?:ColumnInfo|PrimaryKey|Embedded|Relation|Entity\s*\()/;
 
 export const isEntity = (text: string) => /@Entity\b/.test(text);
-export const mayBeEntity = (path: string) => /\.(kt|java)$/.test(path) && !inTests(path) && /(Entity|Table|Model)\.(kt|java)$|\/(entity|entities|db|database|room|model|models|local)\//i.test(path);
+// Never an entity whatever its folder (a ViewModel ends in "Model"; use cases and repositories sit in domain/ and data/).
+export const NOT_ENTITY = /(ViewModel|UiModel|UiState|UseCase|Repository|RepositoryImpl|Mapper|Interactor|Service|Fragment|Activity|Screen)\.(kt|java)$/;
+export const mayBeEntity = (path: string) => /\.(kt|java)$/.test(path) && !inTests(path) && !NOT_ENTITY.test(path) && /(Entity|Table|Model)\.(kt|java)$|\/(entity|entities|db|database|room|model|models|local)\//i.test(path);
 
 // Lines of a patch that change stored fields: the ones a reviewer would point at.
 export function schemaLines(path: string, patch: string): { line: number; side: 'RIGHT' | 'LEFT'; text: string }[] {

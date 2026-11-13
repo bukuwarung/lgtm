@@ -1240,8 +1240,13 @@ export const runOf = (c: Check) => c.run ?? c.url?.match(/\/actions\/runs\/(\d+)
 
 // Files I've marked "Viewed" on GitHub (GitHub's own per-user state, so it carries over to github.com).
 const VIEWED_FIELDS = 'pageInfo{hasNextPage endCursor} nodes{path viewerViewedState}';
-export async function getViewed(repo: string, n: number): Promise<Set<string>> {
-  if (isLab(repo)) return lab.getLabViewed(repo, n);
+// onPage: the marks so far, after each page of 100 files, so a big PR's show before the last page is in.
+export async function getViewed(repo: string, n: number, onPage?: (viewed: Set<string>) => void): Promise<Set<string>> {
+  if (isLab(repo)) {
+    const v = await lab.getLabViewed(repo, n);
+    onPage?.(v);
+    return v;
+  }
   const [owner, name] = repo.split('/');
   const viewed = new Set<string>();
   for (let after: string | null = null; ; ) {
@@ -1250,6 +1255,7 @@ export async function getViewed(repo: string, n: number): Promise<Set<string>> {
       : { repository: { pullRequest: await prPart(repo, n, 'viewed') } };
     const page = d.repository.pullRequest.files;
     for (const f of page.nodes) if (f.viewerViewedState === 'VIEWED') viewed.add(f.path);
+    onPage?.(new Set(viewed));
     if (!page.pageInfo.hasNextPage) return viewed;
     after = page.pageInfo.endCursor;
   }

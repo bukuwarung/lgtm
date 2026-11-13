@@ -1337,3 +1337,31 @@ test("wholeFromPatch: an added or removed file's text from its diff; null otherw
   assert.equal(wholeFromPatch({ status: 'modified', patch: '@@ -1 +1 @@\n-a\n+b' }), null);
   assert.equal(wholeFromPatch({ status: 'added' }), null);
 });
+
+test('mayBeEntity: a model by its name or folder, never a ViewModel, use case or repository', async () => {
+  const { mayBeEntity } = await import('../src/room.ts');
+  assert.equal(mayBeEntity('data/src/main/java/a/model/OrderModel.kt'), true);
+  assert.equal(mayBeEntity('data/src/main/java/a/db/OrderEntity.kt'), true);
+  assert.equal(mayBeEntity('app/src/main/java/a/home/HomePageViewModel.kt'), false);
+  assert.equal(mayBeEntity('domain/src/main/java/a/model/GetOrdersUseCase.kt'), false);
+  assert.equal(mayBeEntity('data/src/main/java/a/local/OrderRepository.kt'), false);
+});
+
+test('getViewed: the marks so far after each page of files, then all of them', async () => {
+  const { getViewed } = await import('../src/github.ts');
+  const was = globalThis.fetch;
+  const page = (paths: string[], next: string | null) => ({ pageInfo: { hasNextPage: !!next, endCursor: next }, nodes: paths.map((path) => ({ path, viewerViewedState: 'VIEWED' })) });
+  globalThis.fetch = (async (_u: string, init: RequestInit) => {
+    const { query } = JSON.parse(String(init.body));
+    const data = query.includes('$after') ? { repository: { pullRequest: { files: page(['b.kt'], null) } } } : { p0: { pullRequest: { files: page(['a.kt'], 'c1') } } };
+    return new Response(JSON.stringify({ data }), { headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const seen: string[][] = [];
+    const all = await getViewed('acme/shop', 7, (v) => seen.push([...v]));
+    assert.deepEqual(seen, [['a.kt'], ['a.kt', 'b.kt']]);
+    assert.deepEqual([...all], ['a.kt', 'b.kt']);
+  } finally {
+    globalThis.fetch = was;
+  }
+});

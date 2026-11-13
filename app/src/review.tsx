@@ -626,7 +626,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     getEmojis().then(() => setEmojiReady(true), () => {});
     loadChecks();
     getStatus(repo, n).then(setStatus, () => {});
-    getViewed(repo, n).then(setViewedPaths, () => {});
+    getViewed(repo, n, setViewedPaths).catch(() => {}); // each page's marks as it comes (100 files a page)
     (async () => {
       const [stored, visit] = await Promise.all([storage.get<Saved>(key), storage.get<Visit>(visitKey).catch(() => undefined)]);
       if (visit && first) resumeAt.current = visit.at;
@@ -2265,9 +2265,11 @@ const keepHeight = (k: string, h: number) => {
   }, 1000);
 };
 
-// Render a file's body only once it scrolls near the viewport.
-function useNear<T extends Element>() {
-  const ref = useRef<T>(null);
+// Render a file's body only once it scrolls near the viewport (2000px either way, so it's drawn before it's seen).
+// A shorter reach, on an element of its own, for work that costs a request (filling small gaps reads the file).
+function useNear<T extends Element>(margin = '2000px', given?: { current: T | null }) {
+  const own = useRef<T>(null);
+  const ref = given ?? own;
   const [near, setNear] = useState(false);
   useEffect(() => {
     const io = new IntersectionObserver(
@@ -2277,7 +2279,7 @@ function useNear<T extends Element>() {
           io.disconnect();
         }
       },
-      { rootMargin: '2000px 0px' },
+      { rootMargin: `${margin} 0px` },
     );
     io.observe(ref.current!);
     return () => io.disconnect();
@@ -2862,11 +2864,6 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
       setGapErr(e.message);
     }
   };
-  // A gap of a few lines takes about the room of its button: its lines show instead.
-  useEffect(() => {
-    const small = gapList.filter((g) => g.to !== null && g.to - g.from + 1 <= 3);
-    if (small.length) void expand(...small);
-  }, [gapList]);
   const gapRows = (g: Gap) => {
     if (!openGaps.has(g.before) || !head) {
       if (g.to === null && head && g.from > head.length) return null; // nothing after the last hunk
@@ -2931,6 +2928,13 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   };
 
   const table = useRef<HTMLTableElement>(null);
+  // A gap of a few lines takes about the room of its button: its lines show instead, once the file is about on screen
+  // (filling it reads the whole file; the 2000px the file draws ahead would read dozens at once on a big PR).
+  const [, onScreen] = useNear('300px', table);
+  useEffect(() => {
+    const small = onScreen ? gapList.filter((g) => g.to !== null && g.to - g.from + 1 <= 3) : [];
+    if (small.length) void expand(...small);
+  }, [gapList, onScreen]);
   const words = useWordMarks(hunks);
   // In a test, a phase comment (// Given …) shows as its label: setup, action and checks each their colour.
   const testFile = inTests(path);

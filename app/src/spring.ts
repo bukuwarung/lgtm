@@ -1,7 +1,7 @@
 // Java backends (Spring, JPA, Flyway): what breaks a deploy or silently doesn't work.
 import { parsePatch } from './diff.ts';
 import { inTests } from './files.ts';
-import { schemaLines } from './room.ts';
+import { NOT_ENTITY, schemaLines } from './room.ts';
 
 type F = { filename: string; status: string; patch?: string; previous_filename?: string };
 
@@ -59,7 +59,7 @@ export async function entityWithoutMigration(files: F[], read: (f: F) => Promise
   const out: { path: string; entity: string; line: number; side: 'RIGHT' | 'LEFT'; text: string }[] = [];
   await Promise.all(
     files
-      .filter((f) => f.patch && f.status !== 'removed' && /\.(java|kt)$/.test(f.filename) && !inTests(f.filename) && (/@Entity|@Column|@Table/.test(f.patch) || /(Entity|Model|Record)\.(java|kt)$|\/(entity|entities|model|domain|persistence)\//i.test(f.filename)))
+      .filter((f) => f.patch && f.status !== 'removed' && /\.(java|kt)$/.test(f.filename) && !inTests(f.filename) && (/@Entity|@Column|@Table/.test(f.patch) || (!NOT_ENTITY.test(f.filename) && /(Entity|Model|Record)\.(java|kt)$|\/(entity|entities|model|domain|persistence)\//i.test(f.filename))))
       .map(async (f) => {
         const lines = schemaLines(f.filename, f.patch!);
         if (!lines.length) return;
