@@ -509,7 +509,7 @@ export async function getTeamMembers(team: string): Promise<string[]> {
   });
 }
 
-// Plus each member's review load: open PRs that ask them, by name, for a review.
+// Plus each member's review load: open PRs, drafts aside, that ask them, by name, for a review.
 // A team's open PRs by its members, and how many open PRs in the org ask each member, by name, for a review.
 export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
   if (isLab(team)) return lab.getLabTeamPRs(team);
@@ -519,7 +519,7 @@ export async function getTeamPRs(team: string): Promise<{ members: string[]; ite
   if (!chunks.length) return { members, items: [], load: {} };
   const vars = {
     ...Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`])),
-    ...Object.fromEntries(members.map((m, k) => [`r${k}`, `is:open is:pr archived:false org:${org} user-review-requested:${m}`])),
+    ...Object.fromEntries(members.map((m, k) => [`r${k}`, `is:open is:pr -is:draft archived:false org:${org} user-review-requested:${m}`])), // a draft isn't up for review yet
   };
   const d = await graphql(
     `query(${Object.keys(vars).map((v) => `$${v}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){nodes{...F}}`).join(' ')}
@@ -651,12 +651,12 @@ export function collapseReviews(reviews: { state: string; submittedAt: string | 
   return out;
 }
 
-// The open PRs in an org asking someone, by name, for a review (up to 50), the longest-waiting first.
+// The open PRs in an org asking someone, by name, for a review (up to 50, drafts aside), the longest-waiting first.
 export async function getAskedPRs(org: string, login: string): Promise<QueueItem[]> {
   if (org.includes('.')) return lab.getLabAskedPRs(org, login); // a GitLab host
   const d = await graphql(
     `query($q:String!){s:search(query:$q,type:ISSUE,first:50){nodes{...F}}} ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
-    { q: `is:open is:pr archived:false org:${org} user-review-requested:${login}` },
+    { q: `is:open is:pr -is:draft archived:false org:${org} user-review-requested:${login}` },
   );
   return (d.s.nodes.map(toItem) as QueueItem[]).sort((a, b) => a.waitingSince.localeCompare(b.waitingSince));
 }

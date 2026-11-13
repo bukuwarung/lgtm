@@ -803,7 +803,7 @@ export async function getLabTeamPRs(team: string): Promise<{ members: string[]; 
     after = d.group.mergeRequests.pageInfo.endCursor;
   }
   const team_ = new Set(members);
-  const load = Object.fromEntries(members.map((u) => [u, all.filter((m) => m.reviewers.nodes.some((r: any) => r.username === u && WAITING.includes(r.mergeRequestInteraction?.reviewState))).length]));
+  const load = Object.fromEntries(members.map((u) => [u, all.filter((m) => !m.draft && m.reviewers.nodes.some((r: any) => r.username === u && WAITING.includes(r.mergeRequestInteraction?.reviewState))).length]));
   return {
     members,
     items: all.filter((m) => team_.has(m.author?.username)).map((m) => itemOf(host, m, me.login)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
@@ -815,7 +815,7 @@ export async function getLabAskedPRs(host: string, login: string): Promise<Queue
   const me = (await labMe(host)).login;
   const d = await gql(host, `query($u:String!){user(username:$u){reviewRequestedMergeRequests(state:opened,first:50){nodes{...F}}}} ${ITEM}`, { u: login });
   return ((d.user?.reviewRequestedMergeRequests?.nodes ?? []) as any[])
-    .filter((m) => WAITING.includes(m.reviewers.nodes.find((r: any) => r.username === login)?.mergeRequestInteraction?.reviewState))
+    .filter((m) => !m.draft && WAITING.includes(m.reviewers.nodes.find((r: any) => r.username === login)?.mergeRequestInteraction?.reviewState)) // a draft isn't up for review yet
     .map((m) => itemOf(host, m, me))
     .sort((a, b) => a.waitingSince.localeCompare(b.waitingSince));
 }
