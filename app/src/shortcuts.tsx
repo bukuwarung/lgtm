@@ -6,7 +6,7 @@ import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './ta
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { awaitsMe, earlierVerdicts, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { agentSays, awaitsMe, earlierVerdicts, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -410,6 +410,9 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
   );
   const tiers = threadTiers(sortedThreads, me);
   const waitsOnMe = (t: Thread) => !!me && awaitsMe(t, me, pr.user.login === me); // listed first in its group
+  // Under "yours", threads an agent opened from my account (its comment starts with 🤖) fold together, unless one waits on me.
+  const byAgent = (t: Thread) => !waitsOnMe(t) && t.comments.nodes[0]?.author?.login === me && agentSays(t.comments.nodes[0]?.body);
+  const agentMine = tiers.mine.filter(byAgent);
   // In the bots' and the resolved group, their author and "resolved" go without saying.
   const threadEntry = (t: Thread, inGroup?: 'bot' | 'resolved') => {
     const first = t.comments.nodes[0];
@@ -515,7 +518,13 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
                 onClick={() => jumpTo('d-' + d.id, 'f-' + d.path)}
               />
             ))}
-            {tiers.mine.filter((t) => !waitsOnMe(t)).map((t) => threadEntry(t))}
+            {tiers.mine.filter((t) => !waitsOnMe(t) && !byAgent(t)).map((t) => threadEntry(t))}
+            {agentMine.length > 0 && (
+              <Fold k="ix-yours-agent" initial={false} class="ix-ckgroup">
+                <summary>🤖 {agentMine.length} by your agent</summary>
+                {agentMine.map((t) => threadEntry(t))}
+              </Fold>
+            )}
           </Fold>
         )}
         {othersConv + tiers.human.length > 0 && (
