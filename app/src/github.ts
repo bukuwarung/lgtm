@@ -616,7 +616,7 @@ export async function getPerson(login: string, orgs: string[], days = 30): Promi
       {
         login,
         mine: `is:open is:pr archived:false author:${login} ${where}`,
-        asked: `is:open is:pr archived:false user-review-requested:${login} ${where}`,
+        asked: `is:open is:pr -is:draft archived:false user-review-requested:${login} ${where}`,
       },
     ),
     reviewsBy(login, `reviewed-by:${login} -author:${login} ${where}`, days),

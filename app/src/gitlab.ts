@@ -1183,7 +1183,7 @@ export async function getLabPerson(key: string, days = 30): Promise<Person> {
     avatar: abs(host, u.avatarUrl) ?? '',
     bio: u.bio || null,
     mine: mine.map((m) => itemOf(host, m, me)),
-    asked: asked.filter(waitingOn).map((m) => itemOf(host, m, me)).sort((a, b) => a.waitingSince.localeCompare(b.waitingSince)),
+    asked: asked.filter((m) => !m.draft && waitingOn(m)).map((m) => itemOf(host, m, me)).sort((a, b) => a.waitingSince.localeCompare(b.waitingSince)),
     reviews: reviews.sort((a, b) => b.at.localeCompare(a.at)),
   };
 }
