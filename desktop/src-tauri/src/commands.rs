@@ -701,7 +701,10 @@ pub async fn slack_presence(logins: Vec<String>) -> Result<Value, String> {
                     let r = slackcli(&["users", "info", id, "--json"], None);
                     let u = if r.ok { parse_json(&r.stdout)? } else { return None };
                     let p = if u["user"].is_object() { u["user"]["profile"].clone() } else { u["profile"].clone() };
-                    Some((l.clone(), json!({ "text": p["status_text"].as_str().unwrap_or(""), "emoji": p["status_emoji"].as_str().unwrap_or(""), "until": p["status_expiration"].as_i64().unwrap_or(0) })))
+                    // Their name and picture too (the picture only when they set one: Slack's default face says nothing).
+                    let name = p["real_name"].as_str().filter(|s| !s.is_empty()).or(p["display_name"].as_str()).unwrap_or("");
+                    let face = if p["is_custom_image"].as_bool().unwrap_or(false) { p["image_72"].as_str().unwrap_or("") } else { "" };
+                    Some((l.clone(), json!({ "text": p["status_text"].as_str().unwrap_or(""), "emoji": p["status_emoji"].as_str().unwrap_or(""), "until": p["status_expiration"].as_i64().unwrap_or(0), "name": name, "face": face })))
                 })
             })
             .collect();

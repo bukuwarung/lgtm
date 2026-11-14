@@ -236,7 +236,8 @@ async function slackPresence(logins) {
       const r = await slackcli(['users', 'info', users[l], '--json']);
       const d = r.ok ? parseJson(r.stdout) : null;
       const p = (d?.user ?? d)?.profile;
-      return p ? [l, { text: p.status_text ?? '', emoji: p.status_emoji ?? '', until: p.status_expiration ?? 0 }] : null;
+      // Their name and picture too (the picture only when they set one: Slack's default face says nothing).
+      return p ? [l, { text: p.status_text ?? '', emoji: p.status_emoji ?? '', until: p.status_expiration ?? 0, name: p.real_name || p.display_name || '', face: p.is_custom_image ? p.image_72 ?? '' : '' }] : null;
     }),
   );
   return Object.fromEntries(pairs.filter(Boolean));

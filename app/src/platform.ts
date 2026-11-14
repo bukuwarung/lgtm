@@ -249,7 +249,7 @@ export const knowFace = (login: string, url: string) => {
   }, 1000) as unknown as number;
 };
 // GitHub's by name from its avatars host (github.com/<login>.png redirects there, and can stall in the app's webview).
-export const faceOf = (login: string, size = 40) => faces.get(login) ?? `https://avatars.githubusercontent.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}?s=${size}`;
+export const faceOf = (login: string, size = 40) => faces.get(login) ?? slackFace(login) ?? `https://avatars.githubusercontent.com/${encodeURIComponent(login.replace(/\[bot\]$/, ''))}?s=${size}`;
 
 // The words of a site, for what lgtm says: GitHub's pull requests (PRs) and teams, GitLab's merge requests (MRs) and
 // groups. For a repo, its site's; without one, the account on show's (the avatar's menu); or true for GitLab's.
@@ -279,37 +279,63 @@ export const shortLogin = (login: string) => {
   const end = localStorage.getItem(own('shortLogins')) === '1' ? loginEnding() : '';
   return end && login.endsWith(end) && login.length > end.length ? login.slice(0, -end.length) : login;
 };
-// Settings → Accounts → Real names (off): people's names from their GitHub profiles where logins show, asked in
-// batches as they come up and kept a day; GitHub logins only (a GitLab one could be someone else on GitHub).
-let names: { at: number; v: Record<string, string> } | null = null;
-const namesWanted = new Set<string>();
-let namesTimer: ReturnType<typeof setTimeout> | undefined;
-export function realName(login: string, repo = ''): string | undefined {
-  if (localStorage.getItem(own('realNames')) !== '1' || viewAs() || login.includes('@') || personKey(repo, login).includes('@')) return undefined;
-  if (!names) {
+// What lgtm knows of a GitHub person beyond their login, for Settings → Accounts → Real names (off) and Slack's
+// pictures (Slack → Pictures from Slack, on): their GitHub name, their Slack name and picture (people matched on Slack),
+// and whether their GitHub picture is GitHub's generated one. Asked in batches as people come up, kept a day; GitHub
+// logins only (a GitLab one could be someone else on GitHub).
+type Person = { name: string; slackName?: string; slackFace?: string; plain?: boolean };
+let people: { at: number; v: Record<string, Person> } | null = null;
+const peopleWanted = new Set<string>();
+let peopleTimer: ReturnType<typeof setTimeout> | undefined;
+const flag = (k: string, initial: boolean) => (localStorage.getItem(own(k)) ?? (initial ? '1' : '0')) === '1';
+// GitHub's generated picture (an identicon) comes at 420px whatever size is asked; a picture someone set comes at the
+// size asked. ponytail: true to GitHub's avatars today; were that to change, people just keep their GitHub picture.
+const plainFace = (login: string) =>
+  new Promise<boolean>((ok) => {
+    const img = new Image();
+    img.onload = () => ok(img.naturalWidth === 420);
+    img.onerror = () => ok(false);
+    img.src = `https://avatars.githubusercontent.com/${encodeURIComponent(login)}?s=40`;
+  });
+function personOf(login: string, repo = ''): Person | undefined {
+  if (viewAs() || login.includes('@') || login.endsWith('[bot]') || personKey(repo, login).includes('@')) return undefined;
+  if (!people) {
     try {
-      names = JSON.parse(localStorage.getItem(own('names')) ?? 'null');
+      people = JSON.parse(localStorage.getItem(own('people')) ?? 'null');
     } catch {}
-    if (!names || names.at < Date.now() - DAY) names = { at: Date.now(), v: {} };
+    if (!people || people.at < Date.now() - DAY) people = { at: Date.now(), v: {} };
   }
-  if (login in names.v) return names.v[login] || undefined;
-  if (!namesWanted.has(login)) {
-    namesWanted.add(login);
-    clearTimeout(namesTimer);
-    namesTimer = setTimeout(() => {
-      const ask = [...namesWanted];
-      import('./github.ts').then((m) => m.userNames(ask)).then((found) => {
-        Object.assign(names!.v, found);
-        for (const l of ask) namesWanted.delete(l);
+  if (login in people.v) return people.v[login];
+  if (!peopleWanted.has(login)) {
+    peopleWanted.add(login);
+    clearTimeout(peopleTimer);
+    peopleTimer = setTimeout(() => {
+      const ask = [...peopleWanted];
+      const slack = Array.from({ length: Math.ceil(ask.length / 20) }, (_, k) => slackPresence(ask.slice(k * 20, k * 20 + 20)).catch(() => ({}) as Record<string, SlackPresence>)); // 20 a call (lgtm's server)
+      Promise.all([import('./github.ts').then((m) => m.userNames(ask)).catch(() => ({}) as Record<string, string>), Promise.all(slack).then((r) => Object.assign({}, ...r) as Record<string, SlackPresence>), Promise.all(ask.map(plainFace))]).then(([gh, sl, plain]) => {
+        ask.forEach((l, k) => (people!.v[l] = { name: gh[l] ?? '', slackName: sl[l]?.name || undefined, slackFace: sl[l]?.face || undefined, plain: plain[k] }));
+        for (const l of ask) peopleWanted.delete(l);
         try {
-          localStorage.setItem(own('names'), JSON.stringify(names));
+          localStorage.setItem(own('people'), JSON.stringify(people));
         } catch {}
         dispatchEvent(new Event('lgtm:names'));
-      }, () => {});
+      });
     }, 300);
   }
   return undefined;
 }
+// Their name: GitHub's, else Slack's (Use Slack names, on) — with Real names on.
+export function realName(login: string, repo = ''): string | undefined {
+  if (!flag('realNames', false)) return undefined;
+  const p = personOf(login, repo);
+  return p?.name || (flag('slackNames', true) ? p?.slackName : undefined) || undefined;
+}
+// Their Slack picture, when their GitHub one is GitHub's generated one (Pictures from Slack, on; Slack set up).
+const slackFace = (login: string) => {
+  if (!flag('slackFaces', true) || faces.has(login)) return undefined;
+  const p = personOf(login);
+  return p?.plain ? p.slackFace : undefined;
+};
 // A login as lgtm shows it: the person's name (Real names), else the login (Shorter logins). With "@" when a login.
 export const shownName = (login: string, repo = '') => realName(login, repo) ?? shortLogin(login);
 export const shownAt = (login: string, repo = '') => realName(login, repo) ?? `@${shortLogin(login)}`;
@@ -520,7 +546,7 @@ export const slackFindsByEmail = () =>
     ([r]) => !/not_allowed_token_type/.test(r?.error ?? ''),
   )).catch(() => true);
 // People's Slack statuses (by GitHub login, the ones mapped to Slack), for picking a reviewer (slackmsg.ts isAway).
-export type SlackPresence = { text: string; emoji: string; until: number; busy?: boolean }; // busy: their GitHub/GitLab status says so (usePresence)
+export type SlackPresence = { text: string; emoji: string; until: number; busy?: boolean; name?: string; face?: string }; // busy: their GitHub/GitLab status says so (usePresence)
 // The same, for any part of lgtm: kept 10 minutes per person, asked once for everyone missing; every user of it
 // redraws when new statuses arrive.
 const presenceSeen = new Map<string, { at: number; v: SlackPresence | null }>();

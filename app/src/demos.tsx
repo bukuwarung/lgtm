@@ -123,6 +123,8 @@ function docHtml(text: string) {
   return `<div class="md">${md.render(body)}</div><dl class="doc-tags">${rows}</dl>`;
 }
 
+// GitHub's generated picture for someone who never set one: a 5×5 pattern, mirrored.
+const IDENTICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6 6"><rect width="6" height="6" fill="#f0f0f0"/><g fill="#c792e6"><rect x="1.5" y=".5" width="1" height="1"/><rect x="3.5" y=".5" width="1" height="1"/><rect x=".5" y="1.5" width="1" height="2"/><rect x="4.5" y="1.5" width="1" height="2"/><rect x="1.5" y="2.5" width="3" height="1"/><rect x="1.5" y="4.5" width="3" height="1"/></g></svg>')}`;
 export type Demo = { title: string; off: ComponentChildren; on: ComponentChildren };
 
 export const DEMOS: Record<string, Demo> = {
@@ -1431,6 +1433,16 @@ Object.assign(DEMOS, {
     title: 'Real names',
     off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi-s</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
     on: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>Budi Santoso</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
+  },
+  slackNames: {
+    title: 'Use Slack names',
+    off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi-s</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
+    on: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>Budi Santoso</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
+  },
+  slackFaces: {
+    title: 'Pictures from Slack',
+    off: <div class="conversation"><div class="comment"><img class="c-avatar" src={IDENTICON} alt="" /> <b>budi-s</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
+    on: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi-s</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
   },
   shortLogins: {
     title: 'Shorter logins',

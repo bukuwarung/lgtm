@@ -429,7 +429,9 @@ export function Settings() {
           {ints && !ints.jira.ok && <pre>brew install atlassian/homebrew-acli/acli{'\n'}acli jira auth login --web</pre>}
         </Status>
         {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
-        <Flag k="realNames" initial={false} label="Real names" hint="People's names from their GitHub profiles instead of their logins, where there's one. The login shows when you point at it." demo />
+        <Flag k="realNames" initial={false} label="Real names" hint="People's names from their GitHub profiles instead of their logins, where there's one. The login shows when you point at it." demo>
+          <Flag k="slackNames" initial={true} label="Use Slack names" hint="For people with no name on GitHub: their name on Slack, once lgtm knows who they are there (Slack, below)." demo />
+        </Flag>
         {loginEnding() && (
           <Flag k="shortLogins" initial={false} label="Shorter logins" hint="When your company's logins all end the same way, like jane_acme and budi_acme, show them as jane and budi. The full login shows when you point at it." demo />
         )}
@@ -437,6 +439,7 @@ export function Settings() {
         <div class="set-group">
           <h4>Slack</h4>
           {ints?.slack.ok && <SlackPeople team={team} />}
+          <Flag k="slackFaces" initial={true} label="Pictures from Slack" hint="For people who haven't set a picture on GitHub (it shows its generated pattern): their Slack picture, once lgtm knows who they are there." demo />
           <Flag k="qaRequest" initial={true} label={`A button to ask QA, on your ${T.PRs}`} hint={`Ask QA posts your QA request to the channel below, filled in from the ${T.PR}: you read and can change it before it goes. Its wording is under Messages.`} demo>
             <QaChannel />
           </Flag>
