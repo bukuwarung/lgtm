@@ -74,12 +74,15 @@ function graphql(body) {
   if (/u0:user\(login/.test(query))
     return { data: Object.fromEntries(Object.entries(variables).map(([k, v]) => [k, k[0] === 'r' ? { issueCount: 0 } : { status: ['bayu', 'dewi'].includes(v) ? { indicatesLimitedAvailability: true, message: 'On leave' } : null }])) };
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
+  // bayu was asked as a code owner of src/ (CODEOWNERS: dewi, busy, and fajar).
+  if (query.includes('asCodeOwner')) return { data: { repository: { pullRequest: { reviewRequests: { nodes: [{ asCodeOwner: true, requestedReviewer: { login: 'bayu' } }] }, files: { nodes: [{ path: 'src/Cart.kt' }] } } } } };
   if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest: prOf(variables.n) } } };
   return { data: null, errors: [{ message: 'smoke: no fixture' }] };
 }
 function rest(path, request) {
   if (path === '/repos/acme/shop/pulls/2/requested_reviewers') return sent.push(`${request.method} ${JSON.parse(request.postData).reviewers}`), [200, {}];
   if (path === '/user') return [200, { login: 'tester' }];
+  if (path === '/repos/acme/shop/contents/.github/CODEOWNERS') return [200, '*  @rina\nsrc/  @bayu @dewi @fajar\n'];
   if (path === '/repos/acme/shop/pulls/2/comments/21/replies') return sent.push('reply'), [201, { id: 99 }];
   if (path === '/repos/acme/shop/pulls/1') return [200, pr];
   if (path.startsWith('/repos/acme/shop/pulls/1/files')) return [200, files];
@@ -250,15 +253,15 @@ try {
     await evaluate(`document.querySelector('.bell-row .bell-x').click()`);
     await until('the count gone', `!document.querySelector('.bell .nav-count')`, 2000);
   });
-  await step("my PR's away reviewer, swapped from its pill for the first free one", async () => {
+  await step("my PR's away code owner, swapped from its pill for the first free owner", async () => {
     await evaluate(`location.hash = '#/'`);
     await until('the Your tab', `((b) => !!b && (b.click(), true))([...document.querySelectorAll('[role=tab]')].find((b) => /^Your/.test(b.textContent.trim())))`, 5000);
     await until('the away pill', `[...document.querySelectorAll('.pill-drop button')].some((b) => b.textContent.includes('@bayu away'))`);
     await evaluate(`[...document.querySelectorAll('.pill-drop button')].find((b) => b.textContent.includes('@bayu away')).click()`);
     await until('its menu', `!!document.querySelector('.quick-menu')`, 2000);
     await evaluate(`document.querySelector('.quick-menu').click()`);
-    for (const end = Date.now() + 5000; !(sent.includes('POST eko') && sent.includes('DELETE bayu')); await sleep(200)) if (Date.now() > end) throw new Error(`Timed out: eko asked, bayu taken off (sent: ${sent.join(', ')})`);
-    await until('the pill says so', `[...document.querySelectorAll('.pill-drop .p-ok')].some((b) => b.textContent.includes('asked someone else') && b.title === 'Asked @eko instead of @bayu')`, 2000);
+    for (const end = Date.now() + 5000; !(sent.includes('POST fajar') && sent.includes('DELETE bayu')); await sleep(200)) if (Date.now() > end) throw new Error(`Timed out: fajar asked, bayu taken off (sent: ${sent.join(', ')})`);
+    await until('the pill says so', `[...document.querySelectorAll('.pill-drop .p-ok')].some((b) => b.textContent.includes('asked someone else') && b.title === 'Asked @fajar instead of @bayu')`, 2000);
   });
 } catch (e) {
   failed = true;

@@ -98,6 +98,7 @@ export type QueueItem = {
   qa?: { replies: string[]; status: 'signed' | 'issue' | null }; // my PR's QA request on Slack (platform.ts qaThreads)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
+  reviewedBy?: string[]; // people who've reviewed it (their latest reviews; GitHub)
   noReviewers: boolean;
   mentioned?: boolean; // someone @-mentions me in it (shown, when that's all, until I open it after its latest activity) // nobody asked (people or teams) and no person has reviewed: bots don't count
   lastCommitAt: string; // the head commit's time
@@ -481,6 +482,7 @@ const toItem = (p: any): QueueItem => ({
       queue: p.mergeQueueEntry ?? null,
       waitingSince: [p.createdAt, p.timelineItems?.nodes[0]?.createdAt].filter(Boolean).sort().at(-1),
       pendingReviewers: (p.reviewRequests?.nodes ?? []).map((r: any) => r.requestedReviewer?.login).filter(Boolean),
+      reviewedBy: (p.latestReviews?.nodes ?? []).filter((r: any) => r.author?.__typename === 'User').map((r: any) => r.author.login),
       changesBy: (p.latestOpinionatedReviews?.nodes ?? [])
         .filter((r: any) => r.state === 'CHANGES_REQUESTED' && r.author && !p.reviewRequests?.nodes.some((q: any) => q.requestedReviewer?.login === r.author.login))
         .map((r: any) => r.author.login),
@@ -569,6 +571,32 @@ export async function siteBusy(keys: string[]): Promise<Busy> {
   ]);
   return Object.assign({}, ...found);
 }
+// A repo's CODEOWNERS ('' without one), kept a day.
+const repoCodeOwners = (repo: string) =>
+  kept(`codeowners:${repo}`, async () => {
+    for (const at of ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS']) {
+      const r = await gh(`/repos/${repo}/contents/${at}`, {}, 'application/vnd.github.raw+json');
+      if (r.ok) return r.text();
+    }
+    return '';
+  });
+// When `away` was asked to review as a code owner (GitHub needs an owner's approval then): the people who own the
+// PR's changed files, teams by their members. Else (or on a GitLab) null.
+// ponytail: the first 100 files only.
+export async function ownersToAsk(repo: string, n: number, away: string): Promise<string[] | null> {
+  if (isLab(repo)) return null;
+  const [owner, name] = repo.split('/');
+  const p = (await graphql(
+    `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){reviewRequests(first:20){nodes{asCodeOwner requestedReviewer{... on User{login}}}} files(first:100){nodes{path}}}}}`,
+    { owner, name, n },
+  )).repository.pullRequest;
+  if (!p.reviewRequests.nodes.some((r: any) => r.asCodeOwner && r.requestedReviewer?.login === away)) return null;
+  const text = await repoCodeOwners(repo);
+  const named = new Set<string>(p.files.nodes.flatMap((f: any) => codeOwners(text, f.path)));
+  const people = await Promise.all([...named].filter((o) => o.startsWith('@')).map((o) => (o.includes('/') ? getTeamMembers(o.slice(1)).catch(() => []) : [o.slice(1)])));
+  return [...new Set(people.flat())];
+}
+
 // Drafts in these repos changing files I own (CODEOWNERS, by name or through a team), for the review list while drafts
 // show: GitHub asks code owners only once a PR is ready. Each repo's CODEOWNERS and my teams are kept a day.
 export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
@@ -585,13 +613,7 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
   const mine = new Set([`@${me}`.toLowerCase(), ...teams]);
   const owners = new Map<string, string>();
   for (const repo of repos) {
-    const text = await kept(`codeowners:${repo}`, async () => {
-      for (const at of ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS']) {
-        const r = await gh(`/repos/${repo}/contents/${at}`, {}, 'application/vnd.github.raw+json');
-        if (r.ok) return r.text();
-      }
-      return '';
-    });
+    const text = await repoCodeOwners(repo);
     if (text.split(/\s+/).some((w) => mine.has(w.toLowerCase()))) owners.set(repo, text);
   }
   if (!owners.size) return [];

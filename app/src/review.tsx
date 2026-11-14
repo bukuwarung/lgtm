@@ -12,7 +12,7 @@ import { baselineChanges, isLintBaseline, type Suppression } from './lintbaselin
 import { addedLines, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
   ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef } from './github.ts';
@@ -464,12 +464,22 @@ function pruneVisits() {
 }
 
 // A reviewer who's away swapped for the first suggested one who isn't (Slack status, or busy on GitHub/GitLab), skipping
-// `skip`: on my PR's page (Ask), and the PR list's away pill. Who was asked.
+// `skip`: on my PR's page (Ask), and the PR list's away pill. Asked as a code owner, only another owner of the changed
+// files will do (GitHub needs an owner's approval), in the suggestions' order. Who was asked.
 export async function swapReviewer(repo: string, n: number, away: string, skip: string[]) {
-  const picks = (await suggestReviewers(repo, new Set([away, ...skip]), localStorage.getItem(own('team')) ?? '')).slice(0, 8); // the team watched (Settings)
+  const [owners, suggested] = await Promise.all([ownersToAsk(repo, n, away), suggestReviewers(repo, new Set([away, ...skip]), localStorage.getItem(own('team')) ?? '')]); // the team watched (Settings)
+  let picks: { login: string; busy?: string }[] = suggested.slice(0, 8);
+  if (owners) {
+    const out = new Set([away, ...skip].map((l) => l.toLowerCase()));
+    const rank = (l: string) => ((k) => (k < 0 ? suggested.length : k))(suggested.findIndex((p) => p.login.toLowerCase() === l.toLowerCase()));
+    const ranked = owners.filter((l) => !out.has(l.toLowerCase()) && !l.endsWith('[bot]')).sort((a, b) => rank(a) - rank(b)).slice(0, 8);
+    const busy = await siteBusy(ranked);
+    picks = ranked.map((login) => ({ login, busy: busy[login] }));
+  }
   const status = await slackPresence(picks.map((p) => p.login)).catch(() => ({}) as Record<string, SlackPresence>);
   const next = picks.find((p) => !p.busy && !isAway(status[p.login]));
-  if (!next) throw new Error('No one free to ask: everyone suggested is away or already asked.');
+  if (!next)
+    throw new Error(owners ? `No free code owner to ask: @${away} was asked as one, and GitHub needs an owner's approval; the other owners of these files are away, busy or already asked.` : 'No one free to ask: everyone suggested is away or already asked.');
   await requestReview(repo, n, next.login);
   await unrequestReview(repo, n, away);
   dispatchEvent(new Event('lgtm:refresh'));

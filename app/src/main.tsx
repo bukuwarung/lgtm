@@ -1662,8 +1662,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             action={`Ask someone free instead of @${r}`}
             busy="asking…"
             done="asked someone else"
-            title={`Waiting on @${r}, ${awayWhere(presence[personKey(i.repo, r)]).toLowerCase()}: ${statusText(presence[personKey(i.repo, r)])}. Ask someone free asks the first suggested reviewer who isn't away, and takes @${r} off`}
-            run={() => swapReviewer(i.repo, i.number, r, [i.author, ...i.assignees, ...i.pendingReviewers, ...i.changesBy, ...readBots()]).then((l) => `Asked @${l} instead of @${r}`)}
+            title={`Waiting on @${r}, ${awayWhere(presence[personKey(i.repo, r)]).toLowerCase()}: ${statusText(presence[personKey(i.repo, r)])}. Ask someone free asks the first suggested reviewer who isn't away and hasn't reviewed it (another code owner, if @${r} was asked as one), and takes @${r} off`}
+            run={() => swapReviewer(i.repo, i.number, r, [i.author, ...i.assignees, ...i.pendingReviewers, ...(i.reviewedBy ?? []), ...i.changesBy, ...readBots()]).then((l) => `Asked @${l} instead of @${r}`)}
           />
         ))}
         {i.codeOwner && <span class="pill" title="It changes files you own (CODEOWNERS). GitHub asks code owners once it's marked ready for review"><Tg i="assigned" t="code owner" /></span>}
