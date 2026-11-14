@@ -1157,7 +1157,7 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
   );
   return {
     name: `${T.Team}`,
-    groups: order.map((m) => [m, m]),
+    groups: order.map((m) => [m, shortLogin(m)]),
     groupOf: (i) => i.author,
     colorOf: MINE.groupOf,
     note: (m) =>

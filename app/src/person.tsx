@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
-import { ago, personKey, usePresence, repoLabel, viewAs, term } from './platform.ts';
+import { ago, personKey, usePresence, repoLabel, viewAs, term, shortLogin } from './platform.ts';
 import { isAway, statusText } from './slackmsg.ts';
 import { Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
@@ -57,7 +57,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
       <header class="person-h">
         <img src={p.avatar} alt="" />
         <div>
-          <h2>{p.name ?? p.login}</h2>
+          <h2>{p.name ?? shortLogin(p.login)}</h2>
           <p class="note">
             {p.login.includes('@') ? (
               <a href={`https://${p.login.slice(p.login.lastIndexOf('@') + 1)}/${encodeURIComponent(p.login.slice(0, p.login.lastIndexOf('@')))}`} target="_blank" rel="noopener">@{p.login.slice(0, p.login.lastIndexOf('@'))}</a>

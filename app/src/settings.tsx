@@ -429,6 +429,9 @@ export function Settings() {
           {ints && !ints.jira.ok && <pre>brew install atlassian/homebrew-acli/acli{'\n'}acli jira auth login --web</pre>}
         </Status>
         {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
+        {loginEnding() && (
+          <Flag k="shortLogins" initial={false} label="Shorter logins" hint={`For companies whose logins all end the same way (GitHub's Enterprise Managed Users add “_company” to each): “${loginEnding()}”, the end of yours, left off every login that has it, so jane${loginEnding()} shows as jane. The full login shows when you point at it.`} demo />
+        )}
       
         <div class="set-group">
           <h4>Slack</h4>
@@ -606,9 +609,6 @@ export function Settings() {
         <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency."  demo />
         <TagStyle />
         <Flag k="themeColors" initial={true} label="Theme colours for lgtm's marks" hint="With a theme on: warnings, findings, away, Given/When/Then and the like take its colours. Solid badges with white text (Merged, the failing-checks bar, counts) keep lgtm's, so they stay readable. Off: lgtm's own colours everywhere." demo />
-        {loginEnding() && (
-          <Flag k="shortLogins" initial={false} label="Shorter logins" hint={`For a company whose logins all end the same, like yours (GitHub's Enterprise Managed Users all end in “_company”): “${loginEnding()}” left off every login that ends in it, so naupal${loginEnding()} shows as naupal. The full login shows when you point at it.`} demo />
-        )}
         <Flag k="relativeTimes" initial={true} label="Relative times" hint="“2 hours ago”, “yesterday”. Off: the date and time. Either way, the other shows when you point at it." demo />
         <div class="set-row">
           <span>
