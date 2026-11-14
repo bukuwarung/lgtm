@@ -430,7 +430,7 @@ export function Settings() {
         </Status>
         {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
         {loginEnding() && (
-          <Flag k="shortLogins" initial={false} label="Shorter logins" hint="For companies whose logins all end the same way (GitHub's Enterprise Managed Users add “_company” to each): the ending yours has is left off every login that has it, so jane_acme shows as jane. The full login shows when you point at it." demo />
+          <Flag k="shortLogins" initial={false} label="Shorter logins" hint="When your company's logins all end the same way, like jane_acme and budi_acme, show them as jane and budi. The full login shows when you point at it." demo />
         )}
       
         <div class="set-group">
