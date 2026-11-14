@@ -59,10 +59,14 @@ export const QA_CHANNEL = 'https://bukuwarung.slack.com/archives/C0B8FLVRSCQ';
 // emoji people set for those. One that has expired doesn't count.
 const AWAY = /\b(out sick|sick|vacation|holiday|out of (the )?office|ooo|on leave|\w+ leave|cuti|day off|pto)\b/i;
 const AWAY_EMOJI = new Set(['palm_tree', 'desert_island', 'beach_with_umbrella', 'airplane', 'face_with_thermometer', 'thermometer', 'sick', 'face_with_head_bandage', 'mask', 'pill', 'hospital', 'baby_bottle']);
-export function isAway(s: { text: string; emoji: string; until: number } | null | undefined, now = Date.now()) {
+export function isAway(s: { text: string; emoji: string; until: number; busy?: boolean } | null | undefined, now = Date.now()) {
+  if (s?.busy) return true; // their GitHub/GitLab status says busy
   if (!s || (s.until && s.until * 1000 < now)) return false;
   return AWAY.test(s.text) || AWAY_EMOJI.has(s.emoji.replace(/:/g, ''));
 }
+
+// Where someone's away status comes from, for a tooltip.
+export const awayWhere = (s: { busy?: boolean } | null | undefined) => (s?.busy ? 'Busy' : 'Away on Slack');
 
 // A status as words: "Vacation · until Thu, 6 Nov" (a time when it ends today).
 export function statusText(s: { text: string; emoji: string; until: number }) {

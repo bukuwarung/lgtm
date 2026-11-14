@@ -6,7 +6,7 @@ import { labMe } from './gitlab.ts';
 import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
 import { NoticeText, Review } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
-import { isAway, statusText } from './slackmsg.ts';
+import { awayWhere, isAway, statusText } from './slackmsg.ts';
 import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
@@ -1412,7 +1412,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const [team, setTeam] = useStoredValue('team', '');
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
-  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number>; busy: Record<string, string> } | null>(null);
+  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
   // A member's "Asked to review" list, fetched each time its tab is picked (the last one shows meanwhile).
   const [asked, setAsked] = useState<Record<string, QueueItem[] | string>>({});
   const [askedTab, setAskedTab] = useState<Record<string, boolean>>({});
@@ -1648,7 +1648,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         )}
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
         {kind === MINE && i.pendingReviewers.filter((r) => isAway(presence[personKey(i.repo, r)])).map((r) => (
-          <span class="pill p-warn" title={`Waiting on @${r}, away on Slack: ${statusText(presence[personKey(i.repo, r)])}`}>🌴 @{r} away</span>
+          <span class="pill p-warn" title={`Waiting on @${r}, ${awayWhere(presence[personKey(i.repo, r)]).toLowerCase()}: ${statusText(presence[personKey(i.repo, r)])}`}>🌴 @{r} away</span>
         ))}
         {i.codeOwner && <span class="pill" title="It changes files you own (CODEOWNERS). GitHub asks code owners once it's marked ready for review"><Tg i="assigned" t="code owner" /></span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&
@@ -1738,8 +1738,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             <ListGroup key={g} k={kind.people ? '' : `${kind.name}:${g}`} initial={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
                 {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
-                {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) ? <span class="g-away" title={`Away on Slack: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}>🌴 away</span>
-                  : kind.people && teamData?.busy[g] && <span class="g-away" title={`Busy on ${isLab(teamData.team) ? 'GitLab' : 'GitHub'}: ${teamData.busy[g]}`}>⛔ busy</span>}
+                {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) ? <span class="g-away" title={`${awayWhere(presence[viewAs() ? `${g}@${viewAs()}` : g])}: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}>🌴 away</span> : null}
                 {kind.note?.(g) && <span class="g-note" title={`Open ${T.PRs} asking this person, by name, for a review; how long their oldest ${T.PR} has waited for one`}>{kind.note(g)}</span>}
               </summary>
               {!!kind.asked?.(g) && (

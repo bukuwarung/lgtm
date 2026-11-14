@@ -1366,7 +1366,7 @@ test('getViewed: the marks so far after each page of files, then all of them', a
   }
 });
 
-test('getTeamPRs: ids first (every page), the PRs read 15 at a time, each member’s load and busy status', async () => {
+test('getTeamPRs: ids first (every page), the PRs read 15 at a time, each member’s load', async () => {
   const { getTeamPRs } = await import('../src/github.ts');
   const was = globalThis.fetch;
   const ids = (from: number, n: number) => Array.from({ length: n }, (_, k) => ({ id: `PR_${from + k}` }));
@@ -1379,7 +1379,7 @@ test('getTeamPRs: ids first (every page), the PRs read 15 at a time, each member
         ? (asked.push(variables.ids), { nodes: variables.ids.map(() => null) })
         : query.includes('$a:String')
           ? { s: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: ids(100, 7) } }
-          : { s0: { pageInfo: { hasNextPage: true, endCursor: 'c1' }, nodes: ids(0, 10) }, r0: { issueCount: 3 }, r1: { issueCount: 0 }, u0: { status: null }, u1: { status: { indicatesLimitedAvailability: true, message: 'On leave' } } };
+          : { s0: { pageInfo: { hasNextPage: true, endCursor: 'c1' }, nodes: ids(0, 10) }, r0: { issueCount: 3 }, r1: { issueCount: 0 } };
     return new Response(JSON.stringify({ data }), { headers: { 'Content-Type': 'application/json' } });
   }) as typeof fetch;
   try {
@@ -1387,7 +1387,21 @@ test('getTeamPRs: ids first (every page), the PRs read 15 at a time, each member
     assert.deepEqual(asked.map((a) => a.length), [15, 2]);
     assert.equal(new Set(asked.flat()).size, 17);
     assert.deepEqual(t.load, { ana: 3, bo: 0 });
-    assert.deepEqual(t.busy, { bo: 'On leave' });
+  } finally {
+    globalThis.fetch = was;
+  }
+});
+
+test('siteBusy: GitHub statuses set to busy, by login; isAway counts them', async () => {
+  const { siteBusy } = await import('../src/github.ts');
+  const { isAway } = await import('../src/slackmsg.ts');
+  const was = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ data: { u0: { status: { indicatesLimitedAvailability: true, message: '' } }, u1: { status: { indicatesLimitedAvailability: false, message: 'Coffee' } }, u2: null } }), { headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  try {
+    assert.deepEqual(await siteBusy(['ana', 'bo', 'gone']), { ana: 'busy' });
+    assert.equal(isAway({ text: 'In a meeting', emoji: '', until: 0, busy: true }), true);
+    assert.equal(isAway({ text: 'In a meeting', emoji: '', until: 0 }), false);
   } finally {
     globalThis.fetch = was;
   }

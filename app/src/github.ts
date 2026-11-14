@@ -380,28 +380,36 @@ export async function closedPRs(prs: string[]): Promise<string[]> {
 
 // Review queue: GitHub drops a PR from review-requested:@me once you review it, so reviewed-by:@me covers the rest.
 // Plus my own PRs and the ones assigned to me.
+// The PR list's PRs, found (ids only; readPRs reads them).
 const QUEUE = `query{viewer{login}
-  requested:search(query:"is:open is:pr archived:false review-requested:@me",type:ISSUE,first:100){nodes{...F}}
-  reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...F}}
-  authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...F}}
-  assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...F}}
-  mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...F}}}
-fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login} assignees(first:5){nodes{login}}
+  requested:search(query:"is:open is:pr archived:false review-requested:@me",type:ISSUE,first:100){nodes{...on PullRequest{id}}}
+  reviewed:search(query:"is:open is:pr archived:false reviewed-by:@me -author:@me",type:ISSUE,first:100){nodes{...on PullRequest{id}}}
+  authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...on PullRequest{id}}}
+  assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...on PullRequest{id}}}
+  mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...on PullRequest{id}}}}`;
+const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login} assignees(first:5){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} recent:commits(last:20){nodes{commit{authoredDate parents{totalCount}}}} repository{nameWithOwner}
   headRefName headRefOid baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
   latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
+// PRs read by id, 15 a query side by side. GitHub charges a query for what it could return (a search of up to 100 PRs
+// with all of this: 32 points for the PR list however few it holds), so finding PRs by id first and reading just
+// those costs a few; and a few hundred PRs read in one query outrun GitHub's 10 seconds (a 502).
+async function readPRs(ids: string[], name: string): Promise<any[]> {
+  const parts = Array.from({ length: Math.ceil(ids.length / 15) }, (_, k) => ids.slice(k * 15, k * 15 + 15));
+  return (await Promise.all(parts.map((p) => graphql(`query ${name}($ids:[ID!]!){nodes(ids:$ids){...F}} ${PR_F}`, { ids: p }).then((e) => e.nodes.filter(Boolean))))).flat();
+}
 
 // Viewing a GitLab account (the avatar's menu): its MRs instead.
 export async function getReviewQueue(): Promise<QueueItem[]> {
   if (viewAs()) return (await lab.getLabQueue(viewAs())).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const d = await graphql(QUEUE, {});
   const me = d.viewer.login;
-  const ids = (k: string) => new Set<string>(d[k].nodes.map((p: any) => p.id));
+  const ids = (k: string) => new Set<string>(d[k].nodes.map((p: any) => p.id).filter(Boolean));
   const [requested, reviewed, authored, assigned, mentioned] = ['requested', 'reviewed', 'authored', 'assigned', 'mentioned'].map(ids);
-  const all = new Map<string, any>(['mentioned', 'authored', 'assigned', 'reviewed', 'requested'].flatMap((k) => d[k].nodes.map((p: any) => [p.id, p])));
-  return [...all.values()]
+  const all = await readPRs([...new Set([...requested, ...reviewed, ...authored, ...assigned, ...mentioned])], 'PRList');
+  return all
     .map((p): QueueItem => ({
       ...toItem(p),
       requested: requested.has(p.id),
@@ -510,25 +518,23 @@ export async function getTeamMembers(team: string): Promise<string[]> {
   });
 }
 
-// A team's open PRs by its members, how many open PRs in the org ask each member, by name, for a review (drafts aside),
-// and who has set their GitHub status to busy (its message). The PRs are found first (ids only), then read 15 at a time
-// side by side: a team with a few hundred open PRs read whole in one query outruns GitHub's 10-second limit (a 502).
+// A team's open PRs by its members (found, then read: readPRs), and how many open PRs in the org ask each member, by
+// name, for a review (drafts aside).
 export type Busy = Record<string, string>;
-export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number>; busy: Busy }> {
+export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
   if (isLab(team)) return lab.getLabTeamPRs(team);
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
   const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
-  if (!chunks.length) return { members, items: [], load: {}, busy: {} };
+  if (!chunks.length) return { members, items: [], load: {} };
   const vars: Record<string, string> = {
     ...Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`])),
     ...Object.fromEntries(members.map((m, k) => [`r${k}`, `is:open is:pr -is:draft archived:false org:${org} user-review-requested:${m}`])), // a draft isn't up for review yet
-    ...Object.fromEntries(members.map((m, k) => [`u${k}`, m])),
   };
   const IDS = 'pageInfo{hasNextPage endCursor} nodes{...on PullRequest{id}}';
   const d = await graphql(
     `query TeamPRs(${Object.keys(vars).map((v) => `$${v}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){${IDS}}`).join(' ')}
-    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount} u${k}:user(login:$u${k}){status{indicatesLimitedAvailability message}}`).join(' ')}}`,
+    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}`,
     vars,
   );
   const ids: string[] = chunks.flatMap((_, k) => d[`s${k}`].nodes.map((n: any) => n.id));
@@ -541,15 +547,28 @@ export async function getTeamPRs(team: string): Promise<{ members: string[]; ite
       }
     }),
   );
-  const parts = Array.from({ length: Math.ceil(ids.length / 15) }, (_, k) => ids.slice(k * 15, k * 15 + 15));
-  const frag = QUEUE.slice(QUEUE.indexOf('fragment F'));
-  const items = (await Promise.all(parts.map((p) => graphql(`query TeamPRs($ids:[ID!]!){nodes(ids:$ids){...F}} ${frag}`, { ids: p }).then((e) => e.nodes.filter(Boolean).map(toItem))))).flat() as QueueItem[];
+  const items = (await readPRs(ids, 'TeamPRs')).map(toItem);
   const load = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].issueCount as number]));
-  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load, busy: busyOf(d, members) };
+  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load };
 }
 // GitHub statuses set to busy (aliased u0, u1… in `d`, in the order of `logins`): their messages.
 const busyOf = (d: any, logins: string[]): Busy =>
   Object.fromEntries(logins.flatMap((login, k) => (d[`u${k}`]?.status?.indicatesLimitedAvailability ? [[login, d[`u${k}`].status.message || 'busy']] : [])));
+// Who of these people (personKey: a GitHub login, or login@host on a GitLab) has set their status there to busy: its
+// message. Joins their Slack statuses (platform.ts usePresence).
+export async function siteBusy(keys: string[]): Promise<Busy> {
+  const hub = keys.filter((k) => !k.includes('@'));
+  const labs = new Map<string, string[]>();
+  for (const k of keys.filter((k) => k.includes('@'))) labs.set(k.slice(k.lastIndexOf('@') + 1), [...(labs.get(k.slice(k.lastIndexOf('@') + 1)) ?? []), k.slice(0, k.lastIndexOf('@'))]);
+  const vars = Object.fromEntries(hub.map((l, k) => [`u${k}`, l]));
+  const found = await Promise.all([
+    hub.length
+      ? graphql(`query(${hub.map((_, k) => `$u${k}:String!`).join(',')}){${hub.map((_, k) => `u${k}:user(login:$u${k}){status{indicatesLimitedAvailability message}}`).join(' ')}}`, vars, true).then((d) => busyOf(d, hub), () => ({}))
+      : {},
+    ...[...labs].map(([host, logins]) => lab.labBusy(host, logins).then((b) => Object.fromEntries(Object.entries(b).map(([l, m]) => [`${l}@${host}`, m])))),
+  ]);
+  return Object.assign({}, ...found);
+}
 // Drafts in these repos changing files I own (CODEOWNERS, by name or through a team), for the review list while drafts
 // show: GitHub asks code owners only once a PR is ready. Each repo's CODEOWNERS and my teams are kept a day.
 export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
@@ -577,7 +596,7 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
   }
   if (!owners.size) return [];
   const d = await graphql(
-    `query($q:String!){s:search(query:$q,type:ISSUE,first:50){nodes{...F ...on PullRequest{files(first:100){nodes{path}}}}}} ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+    `query($q:String!){s:search(query:$q,type:ISSUE,first:50){nodes{...F ...on PullRequest{files(first:100){nodes{path}}}}}} ${PR_F}`,
     { q: `is:open is:pr is:draft archived:false -author:@me ${[...owners.keys()].map((r) => 'repo:' + r).join(' ')}` },
   );
   return (d.s.nodes as any[])
@@ -631,7 +650,7 @@ export async function getPerson(login: string, orgs: string[], days = 30): Promi
       `query($login:String!,$mine:String!,$asked:String!){u:user(login:$login){login name avatarUrl(size:96) bio}
         mine:search(query:$mine,type:ISSUE,first:30){nodes{...F}}
         asked:search(query:$asked,type:ISSUE,first:30){nodes{...F}}}
-      ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+      ${PR_F}`,
       {
         login,
         mine: `is:open is:pr archived:false author:${login} ${where}`,
@@ -674,7 +693,7 @@ export function collapseReviews(reviews: { state: string; submittedAt: string | 
 export async function getAskedPRs(org: string, login: string): Promise<QueueItem[]> {
   if (org.includes('.')) return lab.getLabAskedPRs(org, login); // a GitLab host
   const d = await graphql(
-    `query($q:String!){s:search(query:$q,type:ISSUE,first:50){nodes{...F}}} ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+    `query($q:String!){s:search(query:$q,type:ISSUE,first:50){nodes{...F}}} ${PR_F}`,
     { q: `is:open is:pr -is:draft archived:false org:${org} user-review-requested:${login}` },
   );
   return (d.s.nodes.map(toItem) as QueueItem[]).sort((a, b) => a.waitingSince.localeCompare(b.waitingSince));

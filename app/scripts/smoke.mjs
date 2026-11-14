@@ -68,6 +68,8 @@ function graphql(body) {
   if (/p0:repository/.test(query)) return { data: Object.fromEntries(Object.keys(variables).filter((k) => k[0] === 'n').map((k) => ['p' + k.slice(1), { pullRequest: { ...prOf(variables[k]), state: variables[k] === 3 ? 'CLOSED' : 'OPEN' } }])) };
   if (query.includes('is:merged')) return { data: { a: { nodes: [] }, r: { nodes: [] } } };
   if (query.includes('nodes(ids:') && query.includes('comments(last:30)')) return { data: { nodes: [{ id: 'PR_2', comments: { nodes: [mention, automated] }, reviews: { nodes: [] } }] } };
+  if (query.includes('nodes(ids:') && query.includes('fragment F')) return { data: { nodes: variables.ids.map((id) => [node, laterNode, mineNode].find((n) => n.id === id) ?? null) } };
+  if (/u0:user\(login/.test(query)) return { data: {} };
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
   if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest: prOf(variables.n) } } };
   return { data: null, errors: [{ message: 'smoke: no fixture' }] };

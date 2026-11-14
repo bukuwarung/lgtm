@@ -797,7 +797,7 @@ export const getLabTeamMembers = (team: string): Promise<string[]> => kept(`team
   return [...new Set(all.filter((m) => m.state === 'active' && !m.bot && !/^(project|group)_\d+_bot/.test(m.username)).map((m) => m.username as string))].sort((a, b) => a.localeCompare(b));
 });
 // The group's open MRs by its members, and how many open MRs in the group ask each member for a review.
-export async function getLabTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number>; busy: Record<string, string> }> {
+export async function getLabTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
   const { host, path } = split(team);
   const [members, me] = await Promise.all([getLabTeamMembers(team), labMe(host)]);
   // The group's open MRs (up to 500, a page of 100 a query): the members' are the team's, and each member's load is how
@@ -809,14 +809,12 @@ export async function getLabTeamPRs(team: string): Promise<{ members: string[]; 
     if (!d.group?.mergeRequests?.pageInfo.hasNextPage) break;
     after = d.group.mergeRequests.pageInfo.endCursor;
   }
-  const busy = await labBusy(host, members);
   const team_ = new Set(members);
   const load = Object.fromEntries(members.map((u) => [u, all.filter((m) => !m.draft && m.reviewers.nodes.some((r: any) => r.username === u && WAITING.includes(r.mergeRequestInteraction?.reviewState))).length]));
   return {
     members,
     items: all.filter((m) => team_.has(m.author?.username)).map((m) => itemOf(host, m, me.login)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     load,
-    busy,
   };
 }
 // The open MRs on a GitLab asking someone for a review and still waiting on them, the longest-waiting first.

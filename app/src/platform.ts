@@ -453,7 +453,7 @@ export const slackFindsByEmail = () =>
     ([r]) => !/not_allowed_token_type/.test(r?.error ?? ''),
   )).catch(() => true);
 // People's Slack statuses (by GitHub login, the ones mapped to Slack), for picking a reviewer (slackmsg.ts isAway).
-export type SlackPresence = { text: string; emoji: string; until: number };
+export type SlackPresence = { text: string; emoji: string; until: number; busy?: boolean }; // busy: their GitHub/GitLab status says so (usePresence)
 // The same, for any part of lgtm: kept 10 minutes per person, asked once for everyone missing; every user of it
 // redraws when new statuses arrive.
 const presenceSeen = new Map<string, { at: number; v: SlackPresence | null }>();
@@ -468,10 +468,12 @@ export function usePresence(names: string[], repo = ''): Record<string, SlackPre
     const stale = key ? key.split(',').filter((l) => (presenceSeen.get(l)?.at ?? 0) < Date.now() - 10 * 60_000) : [];
     if (stale.length) {
       for (const l of stale) presenceSeen.set(l, { at: Date.now(), v: presenceSeen.get(l)?.v ?? null }); // asking: no one else asks
-      slackPresence(stale).then((r) => {
-        for (const l of stale) presenceSeen.set(l, { at: Date.now(), v: r[l] ?? null });
+      // Slack's status, and a GitHub/GitLab status set to busy: a Slack status kept (it says until when), marked busy;
+      // without one, the site's message.
+      Promise.all([slackPresence(stale).catch(() => ({}) as Record<string, SlackPresence>), import('./github.ts').then((m) => m.siteBusy(stale)).catch(() => ({}) as Record<string, string>)]).then(([r, busy]) => {
+        for (const l of stale) presenceSeen.set(l, { at: Date.now(), v: r[l] ? (busy[l] ? { ...r[l], busy: true } : r[l]) : busy[l] ? { text: busy[l], emoji: '', until: 0, busy: true } : null });
         dispatchEvent(new Event('lgtm:presence'));
-      }, () => {});
+      });
     }
     return () => removeEventListener('lgtm:presence', redraw);
   }, [key]);
