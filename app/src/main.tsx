@@ -1571,7 +1571,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       const flipped = rulesWas.current !== rules;
       const all = { replies: !flipped, verdicts: true, ci: true, queue: true, ready: true };
       const mine = { replies: notifyReplies && !flipped, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, ready: notifyReady };
-      for (const i of waiting.filter((i) => !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i, true);
+      // A draft I own (CODEOWNERS) isn't a request yet: GitHub asks once it's ready, and that's when it's news.
+      for (const i of waiting.filter((i) => !i.codeOwner && !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i, true);
       for (const i of items) {
         const was = before.current.get(i.id);
         if (was) {
@@ -1583,7 +1584,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           tell(i.qa.status !== was.qa.status && i.qa.status ? (i.qa.status === 'signed' ? 'QA signed off' : 'QA raised an issue') : 'QA replied', i, notifyReplies);
       }
     }
-    seen.current = new Set(waiting.map((i) => i.id));
+    seen.current = new Set(waiting.filter((i) => !i.codeOwner).map((i) => i.id));
     rulesWas.current = rules;
     before.current = new Map(items.map((i) => [i.id, i]));
   }, [items, settled, claude, menuBar, badgeInbox, showDrafts]);
