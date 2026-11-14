@@ -1415,10 +1415,10 @@ test('readTime: lines at 400 an hour', async () => {
   assert.equal(readTime(1550), '4 hours');
 });
 
-test('teamLabel: the org left out when every team listed shares it', async () => {
+test('teamLabel: the org left out unless another team listed has the same name', async () => {
   const { teamLabel } = await import('../src/platform.ts');
-  assert.equal(teamLabel('acme/android', ['acme/android', 'acme/ios']), 'android');
-  assert.equal(teamLabel('acme/android', ['acme/android', 'other/ios']), 'acme/android');
+  assert.equal(teamLabel('acme/android', ['acme/android', 'other/ios']), 'android');
+  assert.equal(teamLabel('acme/android', ['acme/android', 'other/android']), 'acme/android');
   assert.equal(teamLabel('acme/android'), 'acme/android');
   assert.equal(teamLabel('gitlab.co/grp/sub', ['gitlab.co/grp/sub', 'gitlab.co/grp/two']), 'sub');
 });

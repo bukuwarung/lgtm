@@ -273,9 +273,9 @@ export const words = (text: string, where?: string | boolean) => {
 // A team as lgtm shows it: GitHub's "org/slug"; a GitLab group by its path alone (the account on show names the host).
 export const teamLabel = (team: string, among: string[] = []): string => {
   const label = team.slice(0, team.indexOf('/')).includes('.') ? team.slice(team.indexOf('/') + 1) : team;
-  // In a list of teams all in one org (or GitLab group), just the team's own name.
-  const org = (t: string) => teamLabel(t).split('/')[0];
-  return among.length && label.includes('/') && among.every((t) => teamLabel(t).includes('/') && org(t) === org(team)) ? label.slice(label.indexOf('/') + 1) : label;
+  // In a list of teams, just the team's own name, unless another team (in another org or GitLab group) has it too.
+  const name = (t: string) => ((l) => l.slice(l.indexOf('/') + 1))(teamLabel(t));
+  return among.length && !among.some((t) => t !== team && name(t) === name(team)) ? name(team) : label;
 };
 
 // The words of the PR on show (the page's address names it: a GitLab MR's starts with its host), else the account's.
