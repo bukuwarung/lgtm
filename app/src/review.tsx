@@ -278,14 +278,14 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       {picks?.length === 0 && <p class="note ix-pad">No one to suggest: nobody else has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</p>}
       {picks
         ?.slice(0, 6)
-        .map((p) => ({ p, s: presence[p.login], away: isAway(presence[p.login]) }))
+        .map((p) => ({ p, s: presence[p.login], away: !!p.busy || isAway(presence[p.login]) }))
         .sort((a, b) => +a.away - +b.away)
         .slice(0, 5)
         .map(({ p, s, away }) => (
           <button
             class={`ix-item ix-person ${state[p.login] ?? ''}${away ? ' away' : ''}`}
             disabled={!!state[p.login]}
-            title={`Ask @${p.login} to review: ${p.why}; ${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}`}
+            title={`Ask @${p.login} to review: ${p.why}; ${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review${p.busy ? `. Busy on ${site(repo)}: ${p.busy}` : ''}${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}`}
             onClick={() => (findings.length && !cleared ? setHeld(p.login) : ask(p.login))}
           >
             <span class="ix-label">
@@ -299,6 +299,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
                 {until(s)}
               </span>
             )}
+            {p.busy && !s?.text && <span class="ix-status away">Busy: {p.busy}</span>}
           </button>
         ))}
       {slackOk ? (
@@ -1360,12 +1361,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     .sort((a, b) => +b.awaiting - +a.awaiting);
   const myOpenThreads = me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).length : 0;
   const mySummary = me ? changesSummary(allThreads, me) : '';
-  // On my PR: a reviewer who's away swapped for the first suggested one who isn't (Slack status), on GitHub.
+  // On my PR: a reviewer who's away swapped for the first suggested one who isn't (Slack status, or busy on GitHub/GitLab).
   const replaceReviewer = async (login: string) => {
     const asked = (pr.requested_reviewers ?? []).map((u) => u.login);
     const picks = await suggestReviewers(repo, new Set([me, login, ...bots, ...asked, ...conversation.filter((c) => c.state).map((c) => c.author)]), localStorage.getItem(own('team')) ?? ''); // the team watched (Settings)
     const status = await slackPresence(picks.slice(0, 8).map((p) => p.login));
-    const next = picks.slice(0, 8).find((p) => !isAway(status[p.login]));
+    const next = picks.slice(0, 8).find((p) => !p.busy && !isAway(status[p.login]));
     if (!next) throw new Error('No one free to ask: everyone suggested is away or already asked.');
     await requestReview(repo, n, next.login);
     await unrequestReview(repo, n, login);

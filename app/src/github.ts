@@ -160,6 +160,7 @@ const warned = new Set<string>();
 function areaOf(path: string, body?: string): string {
   if (path === '/graphql') {
     const q = body ?? '';
+    if (/query TeamPRs/.test(q)) return 'the Team tab';
     if (/review-requested:@me|reviewed-by:@me -author|\$i0:ID!|nodes\(ids:|files\(first:100\)\{nodes\{path\}\}/.test(q)) return 'the PR list'; // the last: drafts touching code I own
     if (/reviewThreads|states:PENDING|pullRequest\(number/.test(q)) return 'opening PRs';
     if (/reviewed-by:|contributionsCollection|involves:/.test(q)) return 'people and history';
@@ -509,28 +510,46 @@ export async function getTeamMembers(team: string): Promise<string[]> {
   });
 }
 
-// Plus each member's review load: open PRs, drafts aside, that ask them, by name, for a review.
-// A team's open PRs by its members, and how many open PRs in the org ask each member, by name, for a review.
-export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
+// A team's open PRs by its members, how many open PRs in the org ask each member, by name, for a review (drafts aside),
+// and who has set their GitHub status to busy (its message). The PRs are found first (ids only), then read 15 at a time
+// side by side: a team with a few hundred open PRs read whole in one query outruns GitHub's 10-second limit (a 502).
+export type Busy = Record<string, string>;
+export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number>; busy: Busy }> {
   if (isLab(team)) return lab.getLabTeamPRs(team);
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
   const chunks = Array.from({ length: Math.ceil(members.length / 8) }, (_, k) => members.slice(k * 8, k * 8 + 8));
-  if (!chunks.length) return { members, items: [], load: {} };
-  const vars = {
+  if (!chunks.length) return { members, items: [], load: {}, busy: {} };
+  const vars: Record<string, string> = {
     ...Object.fromEntries(chunks.map((c, k) => [`q${k}`, `is:open is:pr archived:false org:${org} ${c.map((m) => 'author:' + m).join(' ')}`])),
     ...Object.fromEntries(members.map((m, k) => [`r${k}`, `is:open is:pr -is:draft archived:false org:${org} user-review-requested:${m}`])), // a draft isn't up for review yet
+    ...Object.fromEntries(members.map((m, k) => [`u${k}`, m])),
   };
+  const IDS = 'pageInfo{hasNextPage endCursor} nodes{...on PullRequest{id}}';
   const d = await graphql(
-    `query(${Object.keys(vars).map((v) => `$${v}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){nodes{...F}}`).join(' ')}
-    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}
-    ${QUEUE.slice(QUEUE.indexOf('fragment F'))}`,
+    `query TeamPRs(${Object.keys(vars).map((v) => `$${v}:String!`).join(',')}){${chunks.map((_, k) => `s${k}:search(query:$q${k},type:ISSUE,first:100){${IDS}}`).join(' ')}
+    ${members.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount} u${k}:user(login:$u${k}){status{indicatesLimitedAvailability message}}`).join(' ')}}`,
     vars,
   );
-  const items = chunks.flatMap((_, k) => d[`s${k}`].nodes.map(toItem)) as QueueItem[];
+  const ids: string[] = chunks.flatMap((_, k) => d[`s${k}`].nodes.map((n: any) => n.id));
+  await Promise.all(
+    chunks.map(async (_, k) => {
+      for (let p = d[`s${k}`].pageInfo; p.hasNextPage; ) {
+        const e = await graphql(`query TeamPRs($q:String!,$a:String){s:search(query:$q,type:ISSUE,first:100,after:$a){${IDS}}}`, { q: vars[`q${k}`], a: p.endCursor });
+        ids.push(...e.s.nodes.map((n: any) => n.id));
+        p = e.s.pageInfo;
+      }
+    }),
+  );
+  const parts = Array.from({ length: Math.ceil(ids.length / 15) }, (_, k) => ids.slice(k * 15, k * 15 + 15));
+  const frag = QUEUE.slice(QUEUE.indexOf('fragment F'));
+  const items = (await Promise.all(parts.map((p) => graphql(`query TeamPRs($ids:[ID!]!){nodes(ids:$ids){...F}} ${frag}`, { ids: p }).then((e) => e.nodes.filter(Boolean).map(toItem))))).flat() as QueueItem[];
   const load = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].issueCount as number]));
-  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load };
+  return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load, busy: busyOf(d, members) };
 }
+// GitHub statuses set to busy (aliased u0, u1… in `d`, in the order of `logins`): their messages.
+const busyOf = (d: any, logins: string[]): Busy =>
+  Object.fromEntries(logins.flatMap((login, k) => (d[`u${k}`]?.status?.indicatesLimitedAvailability ? [[login, d[`u${k}`].status.message || 'busy']] : [])));
 // Drafts in these repos changing files I own (CODEOWNERS, by name or through a team), for the review list while drafts
 // show: GitHub asks code owners only once a PR is ready. Each repo's CODEOWNERS and my teams are kept a day.
 export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
@@ -701,7 +720,7 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
 
 // People to ask for a review of my PR, least busy first: whoever reviewed this repo's recent PRs (they know the code),
 // else the PR list's team. Busy: open PRs in the org that already ask them, by name, for a review.
-export type ReviewerPick = { login: string; load: number; why: string; knows?: number }; // knows: share of the changed code they wrote
+export type ReviewerPick = { login: string; load: number; why: string; knows?: number; busy?: string }; // knows: share of the changed code they wrote; busy: their status message, set to busy on GitHub/GitLab
 // Who wrote the code a PR changes (expertise.ts): git blame at the base commit for its 5 most-changed files, one query.
 export async function whoWrote(repo: string, base: string, files: { filename: string; status: string; patch?: string; additions: number; deletions: number }[]): Promise<Knows[]> {
   const [owner, name] = repo.split('/');
@@ -766,15 +785,23 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
   }
   people = people.sort((a, b) => (b.knows ?? 0) - (a.knows ?? 0)).slice(0, 30);
   if (!people.length) return [];
-  const labLoad = isLab(repo) ? await lab.labReviewLoad(repo, people.map((p) => p.login)) : null;
-  const vars = Object.fromEntries(people.map((p, k) => [`r${k}`, `is:open is:pr -is:draft archived:false org:${owner} user-review-requested:${p.login}`]));
-  const l = labLoad
-    ? Object.fromEntries(people.map((p, k) => [`r${k}`, { issueCount: labLoad.get(p.login) ?? 0 }]))
-    : await graphql(`query(${people.map((_, k) => `$r${k}:String!`).join(',')}){${people.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}`, vars);
-  // Who knows the code first, then the least busy; someone who wrote little of it counts as not knowing it.
+  const logins = people.map((p) => p.login);
+  let load: (k: number) => number, busy: Busy;
+  if (isLab(repo)) {
+    const [l, b] = await Promise.all([lab.labReviewLoad(repo, logins), lab.labBusy(repo.split('/')[0], logins)]);
+    (load = (k) => l.get(logins[k]) ?? 0), (busy = b);
+  } else {
+    const vars = Object.fromEntries(logins.flatMap((login, k) => [[`r${k}`, `is:open is:pr -is:draft archived:false org:${owner} user-review-requested:${login}`], [`u${k}`, login]]));
+    const l = await graphql(
+      `query(${Object.keys(vars).map((v) => `$${v}:String!`).join(',')}){${logins.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount} u${k}:user(login:$u${k}){status{indicatesLimitedAvailability message}}`).join(' ')}}`,
+      vars,
+    );
+    (load = (k) => l[`r${k}`].issueCount), (busy = busyOf(l, logins));
+  }
+  // Whoever isn't busy first, then who knows the code, then the least asked; someone who wrote little of it counts as not knowing it.
   return people
-    .map((p, k) => ({ ...p, load: l[`r${k}`].issueCount as number }))
-    .sort((a, b) => +((b.knows ?? 0) >= 0.1) - +((a.knows ?? 0) >= 0.1) || a.load - b.load || a.login.localeCompare(b.login));
+    .map((p, k) => ({ ...p, load: load(k), busy: busy[p.login] }))
+    .sort((a, b) => +!!a.busy - +!!b.busy || +((b.knows ?? 0) >= 0.1) - +((a.knows ?? 0) >= 0.1) || a.load - b.load || a.login.localeCompare(b.login));
 }
 
 export const requestReview = (repo: string, n: number, login: string) =>

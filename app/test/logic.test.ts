@@ -1365,3 +1365,30 @@ test('getViewed: the marks so far after each page of files, then all of them', a
     globalThis.fetch = was;
   }
 });
+
+test('getTeamPRs: ids first (every page), the PRs read 15 at a time, each member’s load and busy status', async () => {
+  const { getTeamPRs } = await import('../src/github.ts');
+  const was = globalThis.fetch;
+  const ids = (from: number, n: number) => Array.from({ length: n }, (_, k) => ({ id: `PR_${from + k}` }));
+  const asked: string[][] = [];
+  globalThis.fetch = (async (_u: string, init: RequestInit) => {
+    const { query, variables } = JSON.parse(String(init.body));
+    const data = query.includes('members(first:100)')
+      ? { organization: { team: { members: { nodes: [{ login: 'ana' }, { login: 'bo' }] } } } }
+      : query.includes('nodes(ids:')
+        ? (asked.push(variables.ids), { nodes: variables.ids.map(() => null) })
+        : query.includes('$a:String')
+          ? { s: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: ids(100, 7) } }
+          : { s0: { pageInfo: { hasNextPage: true, endCursor: 'c1' }, nodes: ids(0, 10) }, r0: { issueCount: 3 }, r1: { issueCount: 0 }, u0: { status: null }, u1: { status: { indicatesLimitedAvailability: true, message: 'On leave' } } };
+    return new Response(JSON.stringify({ data }), { headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const t = await getTeamPRs('acme/devs');
+    assert.deepEqual(asked.map((a) => a.length), [15, 2]);
+    assert.equal(new Set(asked.flat()).size, 17);
+    assert.deepEqual(t.load, { ana: 3, bo: 0 });
+    assert.deepEqual(t.busy, { bo: 'On leave' });
+  } finally {
+    globalThis.fetch = was;
+  }
+});

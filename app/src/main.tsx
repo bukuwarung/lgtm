@@ -1412,7 +1412,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const [team, setTeam] = useStoredValue('team', '');
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
-  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
+  const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number>; busy: Record<string, string> } | null>(null);
   // A member's "Asked to review" list, fetched each time its tab is picked (the last one shows meanwhile).
   const [asked, setAsked] = useState<Record<string, QueueItem[] | string>>({});
   const [askedTab, setAskedTab] = useState<Record<string, boolean>>({});
@@ -1738,7 +1738,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             <ListGroup key={g} k={kind.people ? '' : `${kind.name}:${g}`} initial={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
                 {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
-                {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) && <span class="g-away" title={`Away on Slack: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}>🌴 away</span>}
+                {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) ? <span class="g-away" title={`Away on Slack: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}>🌴 away</span>
+                  : kind.people && teamData?.busy[g] && <span class="g-away" title={`Busy on ${isLab(teamData.team) ? 'GitLab' : 'GitHub'}: ${teamData.busy[g]}`}>⛔ busy</span>}
                 {kind.note?.(g) && <span class="g-note" title={`Open ${T.PRs} asking this person, by name, for a review; how long their oldest ${T.PR} has waited for one`}>{kind.note(g)}</span>}
               </summary>
               {!!kind.asked?.(g) && (
