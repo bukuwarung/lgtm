@@ -1427,6 +1427,11 @@ Object.assign(DEMOS, {
     off: <ThemeMarks on={false} />,
     on: <ThemeMarks on />,
   },
+  shortLogins: {
+    title: 'Shorter logins',
+    off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi-acme</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
+    on: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
+  },
   relativeTimes: {
     title: 'Relative times',
     off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi</b> <time>5 Nov 2026, 14:31</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,

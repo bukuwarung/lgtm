@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
+import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shortLogin } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -1641,7 +1641,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
       <span class="pr-title">{i.title}</span>
       <span class="meta">
-        {i.face !== who && <><span class="person-link" onClick={toPerson(i.face, i.repo)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {i.face}</span>{assignedTo(i, who)} ·{' '}</>}
+        {i.face !== who && <><span class="person-link" onClick={toPerson(i.face, i.repo)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {shortLogin(i.face)}</span>{assignedTo(i, who)} ·{' '}</>}
         {layer && <b class="layer">{layer} </b>}
         {repoLabel(i.repo)}{numRef(i.repo, i.number)} ·{' '}
         <span class={idleDays(i) >= 7 ? 'idle old' : 'idle'} title={`Last activity (commits, comments, reviews): ${new Date(i.updatedAt).toLocaleString()}`}>
@@ -1659,7 +1659,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           <QuickPill
             icon="🌴"
             tone="p-warn"
-            idle={`@${r} away`}
+            idle={`@${shortLogin(r)} away`}
             action={`Ask someone free instead of @${r}`}
             busy="asking…"
             done="asked someone else"

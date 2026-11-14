@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
 import { AGENTS, AGENT_IDS, EFFORT_NAME, effortsOf, modelsOf, agentEffort, agentModel, agentOn, detectAgents, setAgentEffort, setAgentModel, setAgentOn, useAgents, type AgentId } from './agents.ts';
-import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, agentSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, forgetKept, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, agentMod, MOD_INSTALL, CODEX_MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel } from './platform.ts';
+import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, agentSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, forgetKept, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, agentMod, MOD_INSTALL, CODEX_MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel, loginEnding } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
@@ -606,6 +606,9 @@ export function Settings() {
         <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency."  demo />
         <TagStyle />
         <Flag k="themeColors" initial={true} label="Theme colours for lgtm's marks" hint="With a theme on: warnings, findings, away, Given/When/Then and the like take its colours. Solid badges with white text (Merged, the failing-checks bar, counts) keep lgtm's, so they stay readable. Off: lgtm's own colours everywhere." demo />
+        {loginEnding() && (
+          <Flag k="shortLogins" initial={false} label="Shorter logins" hint={`For a company whose logins all end the same, like yours (GitHub's Enterprise Managed Users all end in “_company”): “${loginEnding()}” left off every login that ends in it, so naupal${loginEnding()} shows as naupal. The full login shows when you point at it.`} demo />
+        )}
         <Flag k="relativeTimes" initial={true} label="Relative times" hint="“2 hours ago”, “yesterday”. Off: the date and time. Either way, the other shows when you point at it." demo />
         <div class="set-row">
           <span>

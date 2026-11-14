@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate 
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm } from './platform.ts';
+import { notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shortLogin } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -289,7 +289,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
             onClick={() => (findings.length && !cleared ? setHeld(p.login) : ask(p.login))}
           >
             <span class="ix-label">
-              <img src={faceOf(p.login)} alt="" />@{p.login}{' '}
+              <img src={faceOf(p.login)} alt="" />@{shortLogin(p.login)}{' '}
               <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? <><Octicon name="check" /> asked</> : away ? 'away' : p.load ? `${p.load} waiting` : 'free'}</span>
             </span>
             {(s?.text || s?.emoji) && (
@@ -4022,7 +4022,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}
         {first?.state === 'PENDING' && <span class="badge">Pending, started on {site(ctx.repo)} · </span>}
-        <span class="t-preview"><Avatar login={first?.author?.login ?? 'ghost'} src={first?.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(first?.author?.login ?? 'ghost', ctx.repo)}>{first?.author?.login ?? 'ghost'}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
+        <span class="t-preview"><Avatar login={first?.author?.login ?? 'ghost'} src={first?.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(first?.author?.login ?? 'ghost', ctx.repo)}>{shortLogin(first?.author?.login ?? 'ghost')}</b> {first?.bodyText.split('\n')[0].slice(0, 80)}</span>
         {t.isResolved && <span class="badge"> · resolved</span>}
         {t.isOutdated && <span class="badge"> · outdated</span>}
         {ctx.sinceComment.get(t.id)?.kind === 'changed' && <span class="badge"> · code changed since</span>}
@@ -4038,7 +4038,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId}>
-          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)}>{c.author?.login ?? 'ghost'}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
+          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)}>{shortLogin(c.author?.login ?? 'ghost')}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
           {c.state === 'PENDING' && c.id ? (
@@ -4879,7 +4879,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         {pr.assignees.filter((a) => a.login !== pr.user.login && a !== lead).map((a, k) => (
           <span key={a.login} class="assigned-to">
             {k ? ', ' : ' · assigned to '}
-            <span class="person-link" onClick={toPerson(a.login, repo)}>{a.login}</span>
+            <span class="person-link" onClick={toPerson(a.login, repo)}>{shortLogin(a.login)}</span>
           </span>
         ))}{' '}
         <CopyLink url={pr.html_url} />
@@ -4910,7 +4910,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         if (replaced.has(c.id)) return null; // folded under the same person's later verdict
         const head = (
           <>
-            <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{c.author}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
+            <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{shortLogin(c.author)}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
             {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}
           </>
@@ -4951,7 +4951,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
           {items.filter((c) => c.bot).map((c) => (
             <details class="comment bot" key={c.id} id={'cv-' + c.id}>
               <summary>
-                <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{c.author}</b>{' '}
+                <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{shortLogin(c.author)}</b>{' '}
                 <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
                 {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}{' '}
                 <span class="bot-excerpt">{botExcerpt(c.html)}</span>

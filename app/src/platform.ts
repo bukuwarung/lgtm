@@ -271,6 +271,14 @@ export const words = (text: string, where?: string | boolean) => {
 };
 
 // A team as lgtm shows it: GitHub's "org/slug"; a GitLab group by its path alone (the account on show names the host).
+// Settings → Appearance → Shorter logins (off): the ending my login shares with my company's logins (andika-buku's
+// "-buku"; GitHub's Enterprise Managed Users all end in "_company") left off everyone's that has it, where logins show.
+// The full login on hover, and in anything sent.
+export const loginEnding = () => account.split('@')[0].match(/[-_][^-_]+$/)?.[0] ?? '';
+export const shortLogin = (login: string) => {
+  const end = localStorage.getItem(own('shortLogins')) === '1' ? loginEnding() : '';
+  return end && login.endsWith(end) && login.length > end.length ? login.slice(0, -end.length) : login;
+};
 export const teamLabel = (team: string, among: string[] = []): string => {
   const label = team.slice(0, team.indexOf('/')).includes('.') ? team.slice(team.indexOf('/') + 1) : team;
   // In a list of teams, just the team's own name, unless another team (in another org or GitLab group) has it too.

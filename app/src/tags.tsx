@@ -2,7 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { AGENTS, type AgentId } from './agents.ts';
 
 import { OCTICONS } from './octicons.ts';
-import { ago, copyText, useStoredFlag, faceOf } from './platform.ts';
+import { ago, copyText, useStoredFlag, faceOf, shortLogin } from './platform.ts';
 import { useState } from 'preact/hooks';
 
 // An Octicon, in the text's colour; `slash` strikes it through (no person, no test change).
@@ -100,9 +100,9 @@ export const DECISION: Record<string, [string, string]> = {
 
 // A GitHub login with its avatar, wherever a person is named in a line of text.
 export const Who = ({ login, src }: { login: string; src?: string }) => (
-  <span class="who">
+  <span class="who" title={shortLogin(login) !== login ? `@${login}` : undefined}>
     <img class="who-av" src={src ?? faceOf(login)} alt="" loading="lazy" />
-    {login}
+    {shortLogin(login)}
   </span>
 );
 
