@@ -556,6 +556,18 @@ export async function getTeamPRs(team: string): Promise<{ members: string[]; ite
 // GitHub statuses set to busy (aliased u0, u1… in `d`, in the order of `logins`): their messages.
 const busyOf = (d: any, logins: string[]): Busy =>
   Object.fromEntries(logins.flatMap((login, k) => (d[`u${k}`]?.status?.indicatesLimitedAvailability ? [[login, d[`u${k}`].status.message || 'busy']] : [])));
+// GitHub profile names of these logins ('' for none, or no such user: a bot), 50 a query.
+export async function userNames(logins: string[]): Promise<Record<string, string>> {
+  const parts = Array.from({ length: Math.ceil(logins.length / 50) }, (_, k) => logins.slice(k * 50, k * 50 + 50));
+  const found = await Promise.all(
+    parts.map((p) =>
+      graphql(`query UserNames(${p.map((_, k) => `$u${k}:String!`).join(',')}){${p.map((_, k) => `u${k}:user(login:$u${k}){name}`).join(' ')}}`, Object.fromEntries(p.map((l, k) => [`u${k}`, l])), true).then(
+        (d) => Object.fromEntries(p.map((l, k) => [l, d[`u${k}`]?.name ?? ''])),
+      ),
+    ),
+  );
+  return Object.assign({}, ...found);
+}
 // Who of these people (personKey: a GitHub login, or login@host on a GitLab) has set their status there to busy: its
 // message. Joins their Slack statuses (platform.ts usePresence).
 export async function siteBusy(keys: string[]): Promise<Busy> {

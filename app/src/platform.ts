@@ -279,6 +279,40 @@ export const shortLogin = (login: string) => {
   const end = localStorage.getItem(own('shortLogins')) === '1' ? loginEnding() : '';
   return end && login.endsWith(end) && login.length > end.length ? login.slice(0, -end.length) : login;
 };
+// Settings → Accounts → Real names (off): people's names from their GitHub profiles where logins show, asked in
+// batches as they come up and kept a day; GitHub logins only (a GitLab one could be someone else on GitHub).
+let names: { at: number; v: Record<string, string> } | null = null;
+const namesWanted = new Set<string>();
+let namesTimer: ReturnType<typeof setTimeout> | undefined;
+export function realName(login: string, repo = ''): string | undefined {
+  if (localStorage.getItem(own('realNames')) !== '1' || viewAs() || login.includes('@') || personKey(repo, login).includes('@')) return undefined;
+  if (!names) {
+    try {
+      names = JSON.parse(localStorage.getItem(own('names')) ?? 'null');
+    } catch {}
+    if (!names || names.at < Date.now() - DAY) names = { at: Date.now(), v: {} };
+  }
+  if (login in names.v) return names.v[login] || undefined;
+  if (!namesWanted.has(login)) {
+    namesWanted.add(login);
+    clearTimeout(namesTimer);
+    namesTimer = setTimeout(() => {
+      const ask = [...namesWanted];
+      import('./github.ts').then((m) => m.userNames(ask)).then((found) => {
+        Object.assign(names!.v, found);
+        for (const l of ask) namesWanted.delete(l);
+        try {
+          localStorage.setItem(own('names'), JSON.stringify(names));
+        } catch {}
+        dispatchEvent(new Event('lgtm:names'));
+      }, () => {});
+    }, 300);
+  }
+  return undefined;
+}
+// A login as lgtm shows it: the person's name (Real names), else the login (Shorter logins). With "@" when a login.
+export const shownName = (login: string, repo = '') => realName(login, repo) ?? shortLogin(login);
+export const shownAt = (login: string, repo = '') => realName(login, repo) ?? `@${shortLogin(login)}`;
 export const teamLabel = (team: string, among: string[] = []): string => {
   const label = team.slice(0, team.indexOf('/')).includes('.') ? team.slice(team.indexOf('/') + 1) : team;
   // In a list of teams, just the team's own name, unless another team (in another org or GitLab group) has it too.

@@ -429,6 +429,7 @@ export function Settings() {
           {ints && !ints.jira.ok && <pre>brew install atlassian/homebrew-acli/acli{'\n'}acli jira auth login --web</pre>}
         </Status>
         {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
+        <Flag k="realNames" initial={false} label="Real names" hint="People's names from their GitHub profiles instead of their logins, where there's one. The login shows when you point at it." demo />
         {loginEnding() && (
           <Flag k="shortLogins" initial={false} label="Shorter logins" hint="When your company's logins all end the same way, like jane_acme and budi_acme, show them as jane and budi. The full login shows when you point at it." demo />
         )}
