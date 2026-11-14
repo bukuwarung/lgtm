@@ -1827,7 +1827,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
               <div class="team-head">
                 <select class="team-pick" value={team} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="GitHub team">
                   <option value="">Pick a {T.site} {T.team}…</option>
-                  {[...new Set([...(team ? [team] : []), ...(teams ?? [])])].map((t) => <option value={t}>{teamLabel(t)}</option>)}
+                  {((all) => all.map((t) => <option value={t}>{teamLabel(t, all)}</option>))([...new Set([...(team ? [team] : []), ...(teams ?? [])])])}
                 </select>
                 <select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
                   <option value="waiting">Waiting longest</option>

@@ -481,7 +481,7 @@ export function Settings() {
           </span>
           <select value={team} onChange={(e) => setTeam(e.currentTarget.value)}>
             <option value="">None</option>
-            {[...new Set([...(team ? [team] : []), ...(teams ?? [])])].map((t) => <option value={t}>{teamLabel(t)}</option>)}
+            {((all) => all.map((t) => <option value={t}>{teamLabel(t, all)}</option>))([...new Set([...(team ? [team] : []), ...(teams ?? [])])])}
           </select>
         </label>
         <TimeToReview />
