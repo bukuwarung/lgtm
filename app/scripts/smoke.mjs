@@ -41,7 +41,7 @@ const files = [
 ];
 const empty = { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] };
 // acme/shop#2, mine, with two threads waiting on my reply; #4, a review request that arrives at the second refresh.
-const mineNode = { ...node, id: 'PR_2', number: 2, title: 'Faster checkout', author: { __typename: 'User', login: 'tester' }, reviewRequests: { nodes: [] } };
+const mineNode = { ...node, id: 'PR_2', number: 2, title: 'Faster checkout', author: { __typename: 'User', login: 'tester' }, reviewRequests: { nodes: [{ requestedReviewer: { login: 'bayu' } }] } }; // bayu: busy on GitHub
 const laterNode = { ...node, id: 'PR_4', number: 4, title: 'Log declined cards' };
 let later = false;
 const comment = (databaseId, login, body) => ({ id: `C${databaseId}`, databaseId, url: '', body, bodyHTML: `<p>${body}</p>`, bodyText: body, createdAt: now, state: 'SUBMITTED', author: { __typename: 'User', login, avatarUrl: '', databaseId: 7 }, originalCommit: { oid: HEAD } });
@@ -69,12 +69,16 @@ function graphql(body) {
   if (query.includes('is:merged')) return { data: { a: { nodes: [] }, r: { nodes: [] } } };
   if (query.includes('nodes(ids:') && query.includes('comments(last:30)')) return { data: { nodes: [{ id: 'PR_2', comments: { nodes: [mention, automated] }, reviews: { nodes: [] } }] } };
   if (query.includes('nodes(ids:') && query.includes('fragment F')) return { data: { nodes: variables.ids.map((id) => [node, laterNode, mineNode].find((n) => n.id === id) ?? null) } };
-  if (/u0:user\(login/.test(query)) return { data: {} };
+  // Who reviews here, how many reviews each is asked for, and who's busy on GitHub (bayu, dewi).
+  if (query.includes('pullRequests(last:40')) return { data: { repository: { pullRequests: { nodes: [{ reviews: { nodes: ['bayu', 'dewi', 'eko'].map((login) => ({ author: { __typename: 'User', login } })) } }] } } } };
+  if (/u0:user\(login/.test(query))
+    return { data: Object.fromEntries(Object.entries(variables).map(([k, v]) => [k, k[0] === 'r' ? { issueCount: 0 } : { status: ['bayu', 'dewi'].includes(v) ? { indicatesLimitedAvailability: true, message: 'On leave' } : null }])) };
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
   if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest: prOf(variables.n) } } };
   return { data: null, errors: [{ message: 'smoke: no fixture' }] };
 }
-function rest(path) {
+function rest(path, request) {
+  if (path === '/repos/acme/shop/pulls/2/requested_reviewers') return sent.push(`${request.method} ${JSON.parse(request.postData).reviewers}`), [200, {}];
   if (path === '/user') return [200, { login: 'tester' }];
   if (path === '/repos/acme/shop/pulls/2/comments/21/replies') return sent.push('reply'), [201, { id: 99 }];
   if (path === '/repos/acme/shop/pulls/1') return [200, pr];
@@ -123,7 +127,7 @@ try {
       // CORS preflight for GitHub's API: allowed, with the headers the page sends.
       if (request.method === 'OPTIONS' && u.hostname === 'api.github.com')
         return send('Fetch.fulfillRequest', { requestId, responseCode: 204, responseHeaders: [{ name: 'Access-Control-Allow-Origin', value: '*' }, { name: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, PATCH, DELETE' }, { name: 'Access-Control-Allow-Headers', value: 'Authorization, Content-Type, Accept, X-GitHub-Api-Version, If-None-Match' }] });
-      if (u.hostname === 'api.github.com') answer = u.pathname === '/graphql' ? [200, graphql(request.postData)] : rest(u.pathname);
+      if (u.hostname === 'api.github.com') answer = u.pathname === '/graphql' ? [200, graphql(request.postData)] : rest(u.pathname, request);
       else if (u.hostname.endsWith('github.com') || u.hostname.endsWith('githubusercontent.com')) answer = [404, ''];
       else if (u.origin === ORIGIN && !/\.\w+$/.test(u.pathname) && u.pathname !== '/') answer = local(u.pathname);
       if (!answer) return send('Fetch.continueRequest', { requestId });
@@ -245,6 +249,16 @@ try {
     await until('the entry', `[...document.querySelectorAll('.bell-row')].some((r) => r.textContent.includes('Review requested') && r.textContent.includes('Log declined cards'))`, 2000);
     await evaluate(`document.querySelector('.bell-row .bell-x').click()`);
     await until('the count gone', `!document.querySelector('.bell .nav-count')`, 2000);
+  });
+  await step("my PR's away reviewer, swapped from its pill for the first free one", async () => {
+    await evaluate(`location.hash = '#/'`);
+    await until('the Your tab', `((b) => !!b && (b.click(), true))([...document.querySelectorAll('[role=tab]')].find((b) => /^Your/.test(b.textContent.trim())))`, 5000);
+    await until('the away pill', `[...document.querySelectorAll('.pill-drop button')].some((b) => b.textContent.includes('@bayu away'))`);
+    await evaluate(`[...document.querySelectorAll('.pill-drop button')].find((b) => b.textContent.includes('@bayu away')).click()`);
+    await until('its menu', `!!document.querySelector('.quick-menu')`, 2000);
+    await evaluate(`document.querySelector('.quick-menu').click()`);
+    for (const end = Date.now() + 5000; !(sent.includes('POST eko') && sent.includes('DELETE bayu')); await sleep(200)) if (Date.now() > end) throw new Error(`Timed out: eko asked, bayu taken off (sent: ${sent.join(', ')})`);
+    await until('the pill says so', `[...document.querySelectorAll('.pill-drop .p-ok')].some((b) => b.textContent.includes('asked someone else') && b.title === 'Asked @eko instead of @bayu')`, 2000);
   });
 } catch (e) {
   failed = true;

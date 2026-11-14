@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
 import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
-import { NoticeText, Review } from './review.tsx';
+import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
 import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry } from './tags.tsx';
@@ -1655,7 +1655,16 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         )}
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
         {kind === MINE && i.pendingReviewers.filter((r) => isAway(presence[personKey(i.repo, r)])).map((r) => (
-          <span class="pill p-warn" title={`Waiting on @${r}, ${awayWhere(presence[personKey(i.repo, r)]).toLowerCase()}: ${statusText(presence[personKey(i.repo, r)])}`}>🌴 @{r} away</span>
+          <QuickPill
+            icon="🌴"
+            tone="p-warn"
+            idle={`@${r} away`}
+            action={`Ask someone free instead of @${r}`}
+            busy="asking…"
+            done="asked someone else"
+            title={`Waiting on @${r}, ${awayWhere(presence[personKey(i.repo, r)]).toLowerCase()}: ${statusText(presence[personKey(i.repo, r)])}. Ask someone free asks the first suggested reviewer who isn't away, and takes @${r} off`}
+            run={() => swapReviewer(i.repo, i.number, r, [i.author, ...i.assignees, ...i.pendingReviewers, ...i.changesBy, ...readBots()]).then((l) => `Asked @${l} instead of @${r}`)}
+          />
         ))}
         {i.codeOwner && <span class="pill" title="It changes files you own (CODEOWNERS). GitHub asks code owners once it's marked ready for review"><Tg i="assigned" t="code owner" /></span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&

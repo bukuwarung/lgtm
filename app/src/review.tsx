@@ -463,6 +463,19 @@ function pruneVisits() {
   for (const [k] of keys.map((k) => [k, when(k)] as const).sort((a, b) => a[1] - b[1]).slice(0, keys.length - 100)) localStorage.removeItem(k);
 }
 
+// A reviewer who's away swapped for the first suggested one who isn't (Slack status, or busy on GitHub/GitLab), skipping
+// `skip`: on my PR's page (Ask), and the PR list's away pill. Who was asked.
+export async function swapReviewer(repo: string, n: number, away: string, skip: string[]) {
+  const picks = (await suggestReviewers(repo, new Set([away, ...skip]), localStorage.getItem(own('team')) ?? '')).slice(0, 8); // the team watched (Settings)
+  const status = await slackPresence(picks.map((p) => p.login)).catch(() => ({}) as Record<string, SlackPresence>);
+  const next = picks.find((p) => !p.busy && !isAway(status[p.login]));
+  if (!next) throw new Error('No one free to ask: everyone suggested is away or already asked.');
+  await requestReview(repo, n, next.login);
+  await unrequestReview(repo, n, away);
+  dispatchEvent(new Event('lgtm:refresh'));
+  return next.login;
+}
+
 // focus: review mode (main.tsx), where the index starts hidden and a review always moves on.
 // practice: review mode's practice run, where finishing a review only moves on (github.ts refuses every write).
 // toReview: the list has it as waiting for my review (undefined until the list is in).
@@ -1363,18 +1376,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     .sort((a, b) => +b.awaiting - +a.awaiting);
   const myOpenThreads = me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).length : 0;
   const mySummary = me ? changesSummary(allThreads, me) : '';
-  // On my PR: a reviewer who's away swapped for the first suggested one who isn't (Slack status, or busy on GitHub/GitLab).
-  const replaceReviewer = async (login: string) => {
-    const asked = (pr.requested_reviewers ?? []).map((u) => u.login);
-    const picks = await suggestReviewers(repo, new Set([me, login, ...bots, ...asked, ...conversation.filter((c) => c.state).map((c) => c.author)]), localStorage.getItem(own('team')) ?? ''); // the team watched (Settings)
-    const status = await slackPresence(picks.slice(0, 8).map((p) => p.login));
-    const next = picks.slice(0, 8).find((p) => !p.busy && !isAway(status[p.login]));
-    if (!next) throw new Error('No one free to ask: everyone suggested is away or already asked.');
-    await requestReview(repo, n, next.login);
-    await unrequestReview(repo, n, login);
-    dispatchEvent(new Event('lgtm:refresh'));
-    return next.login;
-  };
+  // On my PR: a reviewer who's away swapped (swapReviewer), past the ones asked and who've reviewed.
+  const replaceReviewer = (login: string) =>
+    swapReviewer(repo, n, login, [me, ...bots, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => c.state).map((c) => c.author)]);
   const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
 
   // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.
