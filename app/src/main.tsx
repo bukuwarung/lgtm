@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { readSaved, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
+import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -302,8 +302,8 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
   return (
     <div class="page start">
       {savedLines > 0 && (
-        <p class="start-saved" title={`Changes and comments lgtm folded or hid ("less to read") in the ${T.PRs} you reviewed here, as each stood at your latest review`}>
-          lgtm has kept <b>{savedLines.toLocaleString()} lines</b> out of your way in the {saved.length} {saved.length === 1 ? T.PR : T.PRs} you've reviewed
+        <p class="start-saved" title={`Changes and comments lgtm folded or hid ("less to read") in the ${T.PRs} you reviewed here, as each stood at your latest review. The time: at a careful review's 400 lines an hour`}>
+          lgtm has kept <b>{savedLines.toLocaleString()} lines</b> (about {readTime(savedLines)} of reading) out of your way in the {saved.length} {saved.length === 1 ? T.PR : T.PRs} you've reviewed
         </p>
       )}
       <div class="start-grid">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getMyReviews, type MyReview } from './github.ts';
-import { copyText, repoLabel } from './platform.ts';
+import { copyText, readSaved, readTime, repoLabel } from './platform.ts';
 import { Tg, Who } from './tags.tsx';
 
 // While a page of PRs loads (this one, a person's): its shape, shimmering (style.css .sk). `face`: a picture by the title.
@@ -46,13 +46,24 @@ export function History() {
   const count = (s: string) => list.filter((r) => r.state === s).length;
   const waits = list.flatMap((r) => (r.waited != null ? [r.waited] : [])).sort((a, b) => a - b);
   const median = waits.length ? waits[Math.floor(waits.length / 2)] : null;
-  const summary = [
+  let summary = [
     `${list.length} review${list.length === 1 ? '' : 's'}`,
     count('APPROVED') && `${count('APPROVED')} approved`,
     count('CHANGES_REQUESTED') && `${count('CHANGES_REQUESTED')} with changes requested`,
     count('COMMENTED') && `${count('COMMENTED')} commented`,
     median != null && `typically ${hours(median)} after being asked`,
   ].filter(Boolean).join(' · ');
+  // Lines lgtm kept out of sight in each PR (readSaved: as it stood at your latest review), on that review's row.
+  const saved = readSaved();
+  const keptOn = new Map<MyReview, number>();
+  const seen = new Set<string>();
+  for (const r of list) {
+    const k = `${r.repo}#${r.number}`;
+    if (saved[k] && !seen.has(k)) keptOn.set(r, saved[k]);
+    seen.add(k);
+  }
+  const kept = [...keptOn.values()].reduce((a, b) => a + b, 0);
+  if (kept) summary += ` · lgtm kept ${kept.toLocaleString()} lines (about ${readTime(kept)} of reading) out of your way`;
   const days = [...new Set(list.map((r) => day(r.at)))];
   const copy = () =>
     copyText([`Reviews in the last 30 days: ${summary}`, ...list.map((r) => `- ${VERDICT[r.state][1]}: ${r.title} (${r.repo}#${r.number}) ${r.url}`)].join('\n'))
@@ -71,7 +82,7 @@ export function History() {
             <a class="history-row" href={`#/${r.repo}/pull/${r.number}`}>
               <span class={`ix-meta v-${r.state}`}><Tg i={VERDICT[r.state][0]} t={VERDICT[r.state][1]} /></span>
               <b>{r.title}</b>
-              <small>{repoLabel(r.repo)}#{r.number} · <Who login={r.author} />{r.waited != null ? ` · ${hours(r.waited)} after you were asked` : ''} · {new Date(r.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small>
+              <small>{repoLabel(r.repo)}#{r.number} · <Who login={r.author} />{r.waited != null ? ` · ${hours(r.waited)} after you were asked` : ''}{keptOn.has(r) ? ` · ${keptOn.get(r)!.toLocaleString()} lines kept out of your way` : ''} · {new Date(r.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small>
             </a>
           ))}
         </section>

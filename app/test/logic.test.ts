@@ -1406,3 +1406,11 @@ test('siteBusy: GitHub statuses set to busy, by login; isAway counts them', asyn
     globalThis.fetch = was;
   }
 });
+
+test('readTime: lines at 400 an hour', async () => {
+  const { readTime } = await import('../src/platform.ts');
+  assert.equal(readTime(1), '1 min');
+  assert.equal(readTime(100), '15 min');
+  assert.equal(readTime(400), '1 hour');
+  assert.equal(readTime(1550), '4 hours');
+});

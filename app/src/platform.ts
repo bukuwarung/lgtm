@@ -26,6 +26,12 @@ export const readSaved = (): Record<string, number> => {
     return {};
   }
 };
+// Lines as reading time, at a careful review's pace: about 400 lines an hour (code-review studies put it at 200-500).
+// ponytail: one pace for code and comments alike.
+export const readTime = (lines: number) => {
+  const min = Math.round((lines / 400) * 60);
+  return min < 60 ? `${Math.max(1, min)} min` : `${Math.round(min / 60)} hour${Math.round(min / 60) === 1 ? '' : 's'}`;
+};
 export const noteReadSaved = (pr: string, lines: number) => {
   try {
     localStorage.setItem(own('readSaved'), JSON.stringify({ ...readSaved(), [pr]: lines }));
