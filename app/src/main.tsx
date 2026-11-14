@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
+import { readSaved, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -297,8 +297,15 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
     ['mine', mine.filter(readyToMerge).length, 'of yours ready to merge', `Open Your ${T.PRs}`],
     ['mine', mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, 'of yours with changes requested', `Open Your ${T.PRs}`],
   ];
+  const saved = Object.values(readSaved());
+  const savedLines = saved.reduce((a, b) => a + b, 0);
   return (
     <div class="page start">
+      {savedLines > 0 && (
+        <p class="start-saved" title={`Changes and comments lgtm folded or hid ("less to read") in the ${T.PRs} you reviewed here, as each stood at your latest review`}>
+          lgtm has kept <b>{savedLines.toLocaleString()} lines</b> out of your way in the {saved.length} {saved.length === 1 ? T.PR : T.PRs} you've reviewed
+        </p>
+      )}
       <div class="start-grid">
         {cards.map(([tab, n, label, title]) => (
           <button class="start-card" title={title} onClick={() => (tab === 'inbox' ? (location.hash = '/inbox') : onTab(tab))}>

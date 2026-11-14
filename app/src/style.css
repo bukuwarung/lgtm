@@ -90,6 +90,8 @@ code, pre { font-family: var(--mono); }
 /* The start page: the queue at a glance. */
 .start { display: grid; justify-items: center; align-content: start; gap: 18px; padding-top: 12vh; }
 .start-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; width: min(820px, 92%); }
+.start-saved { margin: 0; color: var(--muted); text-align: center; }
+.start-saved b { color: var(--fg); }
 .start-card { display: grid; gap: 4px; justify-items: start; padding: 16px; text-align: left; border-radius: 10px; box-shadow: 0 1px 2px var(--shadow); }
 .start-card b { font-size: calc(28px * var(--ts)); font-weight: 600; line-height: 1.1; }
 .start-card span { font-size: calc(12px * var(--ts)); color: var(--muted); }

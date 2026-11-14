@@ -202,6 +202,7 @@ try {
     for (const m of ['addPullRequestReview', 'addPullRequestReviewThread', 'submitPullRequestReview']) if (!sent.includes(m)) throw new Error(`${m} wasn't sent (sent: ${sent.join(', ') || 'nothing'})`);
     const bar = await evaluate(`document.querySelector('.fail-bar')?.innerText ?? ''`);
     if (bar) throw new Error(`error bar: ${bar}`);
+    await until('its lines kept out of sight noted, for the start page', `'acme/shop#1' in JSON.parse(localStorage.getItem('@tester/readSaved') ?? '{}')`);
   });
   const key = (k, opts = {}) => evaluate(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true, ...${JSON.stringify(opts)} }))`);
   await step('the inbox lists a mention and the threads waiting on me, with their code, and j moves', async () => {

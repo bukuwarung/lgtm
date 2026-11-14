@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 // its cached copy, the bell, PRs opened lately, files marked viewed on GitLab, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|threadCheck:|askConvos$|kept:)/;
+const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|threadCheck:|askConvos$|kept:|readSaved$)/;
 let account = '';
 // The account of last time, per site (GitHub's, or a GitLab host's): the next launch starts as it.
 const lastKey = () => (viewAs() ? `lastLogin:${viewAs()}` : 'lastLogin');
@@ -17,6 +17,20 @@ export const lastLogin = () => {
   }
 };
 export const own = (key: string) => (account && OWN.test(key) ? `@${account}/${key}` : key);
+// The lines lgtm kept out of sight ("less to read") in each PR I submitted a review on, by "owner/repo#n": the latest
+// review's count, so reviewing a PR again doesn't count it twice. For the start page.
+export const readSaved = (): Record<string, number> => {
+  try {
+    return JSON.parse(localStorage.getItem(own('readSaved')) ?? '{}');
+  } catch {
+    return {};
+  }
+};
+export const noteReadSaved = (pr: string, lines: number) => {
+  try {
+    localStorage.setItem(own('readSaved'), JSON.stringify({ ...readSaved(), [pr]: lines }));
+  } catch {}
+};
 export function setAccount(login: string) {
   account = login;
   if (!login) return;
