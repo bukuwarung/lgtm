@@ -465,8 +465,9 @@ function pruneVisits() {
 
 // A reviewer who's away swapped for the first suggested one who isn't (Slack status, or busy on GitHub/GitLab), skipping
 // `skip`: on my PR's page (Ask), and the PR list's away pill. Asked as a code owner, only another owner of the changed
-// files will do (GitHub needs an owner's approval), in the suggestions' order. Who was asked.
-export async function swapReviewer(repo: string, n: number, away: string, skip: string[]) {
+// files will do (GitHub needs an owner's approval), in the suggestions' order. With Slack set up, they get your "ask"
+// message there too, as asking from the Reviewers list does. Who was asked, and a sentence saying how.
+export async function swapReviewer(repo: string, n: number, away: string, skip: string[], pr: { title: string; url: string; author: string }) {
   const [owners, suggested] = await Promise.all([ownersToAsk(repo, n, away), suggestReviewers(repo, new Set([away, ...skip]), localStorage.getItem(own('team')) ?? '')]); // the team watched (Settings)
   let picks: { login: string; busy?: string }[] = suggested.slice(0, 8);
   if (owners) {
@@ -483,7 +484,14 @@ export async function swapReviewer(repo: string, n: number, away: string, skip: 
   await requestReview(repo, n, next.login);
   await unrequestReview(repo, n, away);
   dispatchEvent(new Event('lgtm:refresh'));
-  return next.login;
+  const login = next.login;
+  if (!(await fetchIntegrations().then((i) => i.slack?.ok, () => false))) return { login, said: `Asked @${login} instead of @${away}.` };
+  try {
+    const [r] = await notifySlack(await slackRecipients(repo, [login]), fillSlack(slackTemplate('ask'), prValues({ repo, number: n, ...pr })), `${repo}#${n}`);
+    return { login, said: r?.ok ? `Asked @${login} instead of @${away}, on ${site(repo)} and Slack.` : `Asked @${login} instead of @${away} on ${site(repo)}; Slack didn't reach them (${r?.error ?? 'no reply'}).` };
+  } catch (e: any) {
+    return { login, said: `Asked @${login} instead of @${away} on ${site(repo)}; Slack failed (${e.message}).` };
+  }
 }
 
 // focus: review mode (main.tsx), where the index starts hidden and a review always moves on.
@@ -1388,7 +1396,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const mySummary = me ? changesSummary(allThreads, me) : '';
   // On my PR: a reviewer who's away swapped (swapReviewer), past the ones asked and who've reviewed.
   const replaceReviewer = (login: string) =>
-    swapReviewer(repo, n, login, [me, ...bots, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => c.state).map((c) => c.author)]);
+    swapReviewer(repo, n, login, [me, ...bots, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => c.state).map((c) => c.author)], { title: pr.title, url: pr.html_url, author: pr.user.login });
   const stackAt = (d: number) => (layer < 0 ? undefined : stack[layer + d]);
 
   // Space: comment on the line (or rendered markdown block) under the mouse, else the first one at the top of the view.

@@ -170,14 +170,15 @@ function AddMe({ add }: { add: () => Promise<unknown> }) {
 // Ask a reviewer who's reviewed to look again (after you've pushed fixes): a re-request on GitHub, and on Slack your
 // "look again" message in your thread with them. ✓ once asked.
 // A reviewer waited on who's away: ask the next free person instead (they're taken off the PR).
-function Replace({ login, replace }: { login: string; replace: (login: string) => Promise<string> }) {
+function Replace({ login, replace }: { login: string; replace: (login: string) => Promise<{ login: string; said: string }> }) {
   const [state, setState] = useState('');
+  const [said, setSaid] = useState('');
   return (
     <button
       class="link ix-pad ix-replace"
       disabled={!!state && state !== 'failed'}
-      title={`@${login} is away: take them off and ask the next free reviewer on GitHub`}
-      onClick={() => (setState('asking'), replace(login).then((who) => setState(`asked @${who}`), (e) => (setState('failed'), reportError(e.message))))}
+      title={said || `@${login} is away: take them off and ask the next free reviewer (on Slack too, when it's set up)`}
+      onClick={() => (setState('asking'), replace(login).then((r) => (setState(`asked @${r.login}`), setSaid(r.said)), (e) => (setState('failed'), reportError(e.message))))}
     >
       {state === 'asking' ? 'Asking…' : state && state !== 'failed' ? state : 'Ask someone else instead'}
     </button>
@@ -380,7 +381,7 @@ type IndexProps = {
   slackWith?: Set<string>; // reviewers I already have a Slack thread with about this PR
   reRequest?: (login: string) => Promise<boolean>; // on my own PR: ask a reviewer who's reviewed to look again
   addMe?: () => Promise<unknown>; // on someone else's PR: ask myself for a review (it joins my queue)
-  replace?: (login: string) => Promise<string>; // on my own PR: ask someone free instead of a reviewer who's away; says who
+  replace?: (login: string) => Promise<{ login: string; said: string }>; // on my own PR: ask someone free instead of a reviewer who's away; says who
   onViewed: OnViewed;
 };
 

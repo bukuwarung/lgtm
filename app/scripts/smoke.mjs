@@ -261,7 +261,7 @@ try {
     await until('its menu', `!!document.querySelector('.quick-menu')`, 2000);
     await evaluate(`document.querySelector('.quick-menu').click()`);
     for (const end = Date.now() + 5000; !(sent.includes('POST fajar') && sent.includes('DELETE bayu')); await sleep(200)) if (Date.now() > end) throw new Error(`Timed out: fajar asked, bayu taken off (sent: ${sent.join(', ')})`);
-    await until('the pill says so', `[...document.querySelectorAll('.pill-drop .p-ok')].some((b) => b.textContent.includes('asked someone else') && b.title === 'Asked @fajar instead of @bayu')`, 2000);
+    await until('the pill says so', `[...document.querySelectorAll('.pill-drop .p-ok')].some((b) => b.textContent.includes('asked someone else') && b.title === 'Asked @fajar instead of @bayu.')`, 2000);
   });
 } catch (e) {
   failed = true;
