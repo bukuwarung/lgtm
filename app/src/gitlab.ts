@@ -775,7 +775,7 @@ export async function labRecentReviewers(repo: string): Promise<Map<string, numb
 export async function labReviewLoad(repo: string, logins: string[]): Promise<Map<string, number>> {
   const { host, path } = split(repo);
   const group = encodeURIComponent(path.split('/')[0]);
-  const n = await Promise.all(logins.map((l) => lab(host, `/groups/${group}/merge_requests?state=opened&per_page=1&reviewer_username=${encodeURIComponent(l)}`).then((r) => Number(r.headers.get('x-total') ?? 0), () => 0)));
+  const n = await Promise.all(logins.map((l) => lab(host, `/groups/${group}/merge_requests?state=opened&wip=no&per_page=1&reviewer_username=${encodeURIComponent(l)}`).then((r) => Number(r.headers.get('x-total') ?? 0), () => 0)));
   return new Map(logins.map((l, k) => [l, n[k]]));
 }
 

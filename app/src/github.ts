@@ -767,7 +767,7 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
   people = people.sort((a, b) => (b.knows ?? 0) - (a.knows ?? 0)).slice(0, 30);
   if (!people.length) return [];
   const labLoad = isLab(repo) ? await lab.labReviewLoad(repo, people.map((p) => p.login)) : null;
-  const vars = Object.fromEntries(people.map((p, k) => [`r${k}`, `is:open is:pr archived:false org:${owner} user-review-requested:${p.login}`]));
+  const vars = Object.fromEntries(people.map((p, k) => [`r${k}`, `is:open is:pr -is:draft archived:false org:${owner} user-review-requested:${p.login}`]));
   const l = labLoad
     ? Object.fromEntries(people.map((p, k) => [`r${k}`, { issueCount: labLoad.get(p.login) ?? 0 }]))
     : await graphql(`query(${people.map((_, k) => `$r${k}:String!`).join(',')}){${people.map((_, k) => `r${k}:search(query:$r${k},type:ISSUE,first:0){issueCount}`).join(' ')}}`, vars);
