@@ -725,6 +725,8 @@ pub struct Person {
     #[serde(default)]
     emails: Vec<String>,
     query: Option<String>, // a search typed in Settings, to find them by
+    #[serde(default, rename = "emailOnly")]
+    email_only: bool, // lgtm matching people by itself, which saves only what's certain: no searches
 }
 
 /// Best guesses for people without a mapping: an exact email match first, then their GitHub name, then their login's
@@ -784,7 +786,7 @@ pub async fn slack_people_find(people: Vec<Person>) -> Result<Vec<Value>, String
         }
         let typed = if linked.is_some() { String::new() } else { typed };
         for (query, via) in [(typed, "search"), (p.name.clone().unwrap_or_default(), "name"), (stem, "username")] {
-            if found.is_some() || query.trim().chars().count() < 2 || query.starts_with('-') {
+            if found.is_some() || p.email_only || query.trim().chars().count() < 2 || query.starts_with('-') {
                 continue;
             }
             let q: String = query.chars().take(100).collect();

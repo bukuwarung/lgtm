@@ -308,8 +308,9 @@ async function findSlack(people) {
       if (u?.id && !u.deleted) candidates.push(one(u, 'search'));
       p = { ...p, query: undefined };
     }
+    // emailOnly: lgtm matching people by itself, which saves only what's certain.
     for (const [query, via] of [[p.query, 'search'], [p.name, 'name'], [p.login.split('@')[0].split(/[-_.]/)[0], 'username']]) {
-      if (found || typeof query !== 'string' || query.trim().length < 2 || query.startsWith('-')) continue;
+      if (found || p.emailOnly === true || typeof query !== 'string' || query.trim().length < 2 || query.startsWith('-')) continue;
       const r = await slackcli(['search', 'people', query.slice(0, 100), '--json', '--limit', '5']);
       const live = r.ok ? (parseJson(r.stdout)?.people ?? []).filter((u) => !u.deleted && !u.is_bot) : [];
       if (live.length === 1 && via !== 'search') found = one(live[0], via);

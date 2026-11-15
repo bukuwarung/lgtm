@@ -286,6 +286,26 @@ export const shortLogin = (login: string) => {
 type Person = { name: string; slackName?: string; slackFace?: string; plain?: boolean };
 let people: { at: number; v: Record<string, Person> } | null = null;
 const peopleWanted = new Set<string>();
+// The org whose verified emails find someone on Slack: their repo's, else the last one met.
+// ponytail: one org for a login met without a repo; one per person if people span orgs.
+const peopleOrg = new Map<string, string>();
+let lastOrg = '';
+// People with no Slack match yet, matched by an exact email (their GitHub email or the org's verified one) and saved
+// to Settings → Slack → People, as Settings' own Find would; anything less certain still waits for you there.
+async function matchOnSlack(logins: string[]): Promise<Record<string, SlackPresence>> {
+  const byOrg = Map.groupBy(logins, (l) => peopleOrg.get(l) || lastOrg);
+  const { getPeople } = await import('./github.ts');
+  const found: SlackMatch[] = [];
+  for (const [org, ls] of byOrg) {
+    if (!org) continue;
+    const info = await getPeople(org, ls);
+    for (let k = 0; k < ls.length; k += 50) found.push(...(await findSlackPeople(ls.slice(k, k + 50).map((login) => ({ login, name: null, emails: info[login]?.emails ?? [], emailOnly: true }))))); // 50 a request
+  }
+  const sure = found.filter((m) => m.id && m.via === 'email');
+  if (!sure.length) return {};
+  await saveSlackPeople(Object.fromEntries(sure.map((m) => [m.login, m.id!])));
+  return slackPresence(sure.map((m) => m.login));
+}
 let peopleTimer: ReturnType<typeof setTimeout> | undefined;
 const flag = (k: string, initial: boolean) => (localStorage.getItem(own(k)) ?? (initial ? '1' : '0')) === '1';
 // GitHub's generated picture (an identicon) comes at 420px whatever size is asked; a picture someone set comes at the
@@ -306,13 +326,17 @@ function personOf(login: string, repo = ''): Person | undefined {
     if (!people || people.at < Date.now() - DAY) people = { at: Date.now(), v: {} };
   }
   if (login in people.v) return people.v[login];
+  if (repo) peopleOrg.set(login, (lastOrg = repo.split('/')[0]));
   if (!peopleWanted.has(login)) {
     peopleWanted.add(login);
     clearTimeout(peopleTimer);
     peopleTimer = setTimeout(() => {
       const ask = [...peopleWanted];
       const slack = Array.from({ length: Math.ceil(ask.length / 20) }, (_, k) => slackPresence(ask.slice(k * 20, k * 20 + 20)).catch(() => ({}) as Record<string, SlackPresence>)); // 20 a call (lgtm's server)
-      Promise.all([import('./github.ts').then((m) => m.userNames(ask)).catch(() => ({}) as Record<string, string>), Promise.all(slack).then((r) => Object.assign({}, ...r) as Record<string, SlackPresence>), Promise.all(ask.map(plainFace))]).then(([gh, sl, plain]) => {
+      const onSlack = Promise.all(slack)
+        .then((r) => Object.assign({}, ...r) as Record<string, SlackPresence>)
+        .then(async (sl) => ({ ...sl, ...(await matchOnSlack(ask.filter((l) => !sl[l])).catch(() => ({}))) }));
+      Promise.all([import('./github.ts').then((m) => m.userNames(ask)).catch(() => ({}) as Record<string, string>), onSlack, Promise.all(ask.map(plainFace))]).then(([gh, sl, plain]) => {
         ask.forEach((l, k) => (people!.v[l] = { name: gh[l] ?? '', slackName: sl[l]?.name || undefined, slackFace: sl[l]?.face || undefined, plain: plain[k] }));
         for (const l of ask) peopleWanted.delete(l);
         try {
@@ -324,11 +348,12 @@ function personOf(login: string, repo = ''): Person | undefined {
   }
   return undefined;
 }
-// Their name: GitHub's, else Slack's (Use Slack names, on) — with Real names on.
+// Their name: GitHub's, else Slack's (Use Slack names, on) without a note at its end ("Aditya Mishra (OOO Dec 8-10)":
+// their away status says it) — with Real names on.
 export function realName(login: string, repo = ''): string | undefined {
   if (!flag('realNames', false)) return undefined;
   const p = personOf(login, repo);
-  return p?.name || (flag('slackNames', true) ? p?.slackName : undefined) || undefined;
+  return p?.name || (flag('slackNames', true) ? p?.slackName?.replace(/\s*[([][^()[\]]*[)\]]$/, '') : undefined) || undefined;
 }
 // Their Slack picture, when their GitHub one is GitHub's generated one (Pictures from Slack, on; Slack set up).
 const slackFace = (login: string) => {
@@ -579,7 +604,7 @@ export async function slackPresence(logins: string[]): Promise<Record<string, Sl
   const res = await fetch(`/slack-presence?logins=${encodeURIComponent(logins.join(','))}`);
   return res.ok ? res.json() : {};
 }
-export const findSlackPeople = (people: { login: string; name: string | null; emails: string[]; query?: string }[]) => call<SlackMatch[]>('POST', { people });
+export const findSlackPeople = (people: { login: string; name: string | null; emails: string[]; query?: string; emailOnly?: boolean }[]) => call<SlackMatch[]>('POST', { people });
 export const saveSlackPeople = (map: Record<string, string>) => call<SlackPeople>('PUT', map);
 
 // GitHub is the gh login (in the page); this asks the server about the CLIs it drives: slackcli and acli.

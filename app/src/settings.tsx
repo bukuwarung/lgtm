@@ -1511,8 +1511,8 @@ function SlackPeople({ team }: { team: string }) {
     <>
       <h5>People</h5>
       <p class="note">
-        Who gets the Slack message for each GitHub account, saved in your <code>~/.config/lgtm/config.json</code>. Unmapped people are
-        still tried by their GitHub email when you send.
+        Who gets the Slack message for each GitHub account, saved in your <code>~/.config/lgtm/config.json</code>. People are matched by
+        themselves when their GitHub email is someone's on Slack; for the rest, Find suggests who they could be.
       </p>
       <div class="row">
         <button disabled={!!busy || !unmapped.length || !org} onClick={find}>
