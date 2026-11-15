@@ -700,11 +700,12 @@ pub async fn slack_presence(logins: Vec<String>) -> Result<Value, String> {
                 s.spawn(move || {
                     let r = slackcli(&["users", "info", id, "--json"], None);
                     let u = if r.ok { parse_json(&r.stdout)? } else { return None };
-                    let p = if u["user"].is_object() { u["user"]["profile"].clone() } else { u["profile"].clone() };
-                    // Their name and picture too (the picture only when they set one: Slack's default face says nothing).
+                    let u = if u["user"].is_object() { u["user"].clone() } else { u };
+                    let p = u["profile"].clone();
+                    // Their name, picture (only one they set: Slack's default face says nothing) and time zone too.
                     let name = p["real_name"].as_str().filter(|s| !s.is_empty()).or(p["display_name"].as_str()).unwrap_or("");
                     let face = if p["is_custom_image"].as_bool().unwrap_or(false) { p["image_72"].as_str().unwrap_or("") } else { "" };
-                    Some((l.clone(), json!({ "text": p["status_text"].as_str().unwrap_or(""), "emoji": p["status_emoji"].as_str().unwrap_or(""), "until": p["status_expiration"].as_i64().unwrap_or(0), "name": name, "face": face })))
+                    Some((l.clone(), json!({ "text": p["status_text"].as_str().unwrap_or(""), "emoji": p["status_emoji"].as_str().unwrap_or(""), "until": p["status_expiration"].as_i64().unwrap_or(0), "name": name, "face": face, "tz": u["tz"].as_str().unwrap_or("") })))
                 })
             })
             .collect();
@@ -763,7 +764,14 @@ pub async fn slack_people_find(people: Vec<Person>) -> Result<Vec<Value>, String
         let mut found: Option<Value> = None;
         for email in p.emails.iter().take(5).filter(|e| email_re.is_match(e)) {
             let r = slackcli(&["users", "info", email, "--json"], None);
-            if let Some(u) = r.ok.then(|| parse_json(&r.stdout)).flatten() {
+            let mut u = r.ok.then(|| parse_json(&r.stdout)).flatten().filter(|u| u["id"].is_string());
+            // Slack looks people up by email for app tokens only: with a person's sign-in, a people search for it, and
+            // the one whose email it is.
+            if u.is_none() {
+                let s = slackcli(&["search", "people", email, "--json", "--limit", "5"], None);
+                u = s.ok.then(|| parse_json(&s.stdout)).flatten().and_then(|v| v["people"].as_array().cloned()).unwrap_or_default().into_iter().find(|x| x["profile"]["email"].as_str().is_some_and(|e| e.eq_ignore_ascii_case(email)));
+            }
+            if let Some(u) = u {
                 if u["id"].is_string() && u["deleted"] != json!(true) {
                     found = Some(one(&u, "email"));
                     break;

@@ -28,7 +28,7 @@ import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action 
 import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
-import { fillSlack, firstParagraph, isAway, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
+import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
@@ -278,14 +278,14 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       {picks?.length === 0 && <p class="note ix-pad">No one to suggest: nobody else has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</p>}
       {picks
         ?.slice(0, 6)
-        .map((p) => ({ p, s: presence[p.login], away: !!p.busy || isAway(presence[p.login]) }))
-        .sort((a, b) => +a.away - +b.away)
+        .map((p) => ({ p, s: presence[p.login], away: !!p.busy || isAway(presence[p.login]), late: lateFor(presence[p.login]) }))
+        .sort((a, b) => +a.away - +b.away || +!!a.late - +!!b.late)
         .slice(0, 5)
-        .map(({ p, s, away }) => (
+        .map(({ p, s, away, late }) => (
           <button
             class={`ix-item ix-person ${state[p.login] ?? ''}${away ? ' away' : ''}`}
             disabled={!!state[p.login]}
-            title={`Ask @${p.login} to review: ${p.why}; ${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review${p.busy ? `. Busy on ${site(repo)}: ${p.busy}` : ''}${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}`}
+            title={`Ask @${p.login} to review: ${p.why}; ${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review${p.busy ? `. Busy on ${site(repo)}: ${p.busy}` : ''}${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}${late ? `. It's ${late}` : ''}`}
             onClick={() => (findings.length && !cleared ? setHeld(p.login) : ask(p.login))}
           >
             <span class="ix-label">
@@ -300,6 +300,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
               </span>
             )}
             {p.busy && !s?.text && <span class="ix-status away">Busy: {p.busy}</span>}
+            {late && !away && <span class="ix-status">🌙 {late}</span>}
           </button>
         ))}
       {slackOk ? (
@@ -478,7 +479,9 @@ export async function swapReviewer(repo: string, n: number, away: string, skip: 
     picks = ranked.map((login) => ({ login, busy: busy[login] }));
   }
   const status = await slackPresence(picks.map((p) => p.login)).catch(() => ({}) as Record<string, SlackPresence>);
-  const next = picks.find((p) => !p.busy && !isAway(status[p.login]));
+  // Someone it's working hours for, else anyone free.
+  const free = picks.filter((p) => !p.busy && !isAway(status[p.login]));
+  const next = free.find((p) => !lateFor(status[p.login])) ?? free[0];
   if (!next)
     throw new Error(owners ? `No free code owner to ask: @${away} was asked as one, and GitHub needs an owner's approval; the other owners of these files are away, busy or already asked.` : 'No one free to ask: everyone suggested is away or already asked.');
   await requestReview(repo, n, next.login);

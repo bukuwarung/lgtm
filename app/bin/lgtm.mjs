@@ -236,8 +236,8 @@ async function slackPresence(logins) {
       const r = await slackcli(['users', 'info', users[l], '--json']);
       const d = r.ok ? parseJson(r.stdout) : null;
       const p = (d?.user ?? d)?.profile;
-      // Their name and picture too (the picture only when they set one: Slack's default face says nothing).
-      return p ? [l, { text: p.status_text ?? '', emoji: p.status_emoji ?? '', until: p.status_expiration ?? 0, name: p.real_name || p.display_name || '', face: p.is_custom_image ? p.image_72 ?? '' : '' }] : null;
+      // Their name, picture (only one they set: Slack's default face says nothing) and time zone too.
+      return p ? [l, { text: p.status_text ?? '', emoji: p.status_emoji ?? '', until: p.status_expiration ?? 0, name: p.real_name || p.display_name || '', face: p.is_custom_image ? p.image_72 ?? '' : '', tz: (d?.user ?? d)?.tz ?? '' }] : null;
     }),
   );
   return Object.fromEntries(pairs.filter(Boolean));
@@ -292,7 +292,13 @@ async function findSlack(people) {
     for (const email of (Array.isArray(p.emails) ? p.emails : []).slice(0, 5)) {
       if (typeof email !== 'string' || !/^[^\s@-][^\s@]*@[^\s@]+$/.test(email)) continue;
       const r = await slackcli(['users', 'info', email, '--json']);
-      const u = r.ok && parseJson(r.stdout);
+      let u = r.ok && parseJson(r.stdout);
+      // Slack looks people up by email for app tokens only: with a person's sign-in, a people search for it, and the
+      // one whose email it is.
+      if (!u?.id) {
+        const s = await slackcli(['search', 'people', email, '--json', '--limit', '5']);
+        u = (s.ok ? parseJson(s.stdout)?.people ?? [] : []).find((x) => x.profile?.email?.toLowerCase() === email.toLowerCase());
+      }
       if (u?.id && !u.deleted) {
         found = one(u, 'email');
         break;

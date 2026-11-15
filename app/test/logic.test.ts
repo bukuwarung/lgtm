@@ -796,6 +796,17 @@ test('collapseReviews: comments posted one by one are one review, its strongest 
   assert.equal(out[0].waited, 60 * 60_000);
 });
 
+test('lateFor: their local time, only outside working hours there and not the same as yours', async () => {
+  const { lateFor } = await import('../src/slackmsg.ts');
+  const at = new Date('2026-11-15T17:00:00Z'); // 10:30 pm in Kolkata, midnight in Jakarta, 6 pm in Paris
+  const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  assert.match(lateFor({ tz: 'Asia/Kolkata' }, at), /^10:30\s?(PM|pm) for them$/);
+  assert.equal(lateFor({ tz: 'Europe/Paris' }, at), '');
+  assert.equal(lateFor({ tz: mine }, at), '');
+  assert.equal(lateFor({ tz: 'Not/AZone' }, at), '');
+  assert.equal(lateFor({}, at), '');
+});
+
 test('isAway: Slack statuses that mean someone is out today', async () => {
   const { isAway } = await import('../src/slackmsg.ts');
   const s = (text: string, emoji = '', until = 0) => ({ text, emoji, until });

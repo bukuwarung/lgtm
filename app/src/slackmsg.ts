@@ -65,6 +65,20 @@ export function isAway(s: { text: string; emoji: string; until: number; busy?: b
   return AWAY.test(s.text) || AWAY_EMOJI.has(s.emoji.replace(/:/g, ''));
 }
 
+// Their local time, from their Slack time zone, when it's outside working hours there (before 8 am, from 7 pm) and
+// your clock says otherwise: "11:40 pm for them". '' when it isn't, or lgtm doesn't know.
+export function lateFor(s: { tz?: string } | null | undefined, now = new Date()) {
+  if (!s?.tz) return '';
+  try {
+    const at = (timeZone?: string) => now.toLocaleTimeString('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    const theirs = at(s.tz);
+    if (theirs === at() || (+theirs.slice(0, 2) >= 8 && +theirs.slice(0, 2) < 19)) return '';
+    return `${now.toLocaleTimeString([], { timeZone: s.tz, hour: 'numeric', minute: '2-digit' })} for them`;
+  } catch {
+    return ''; // a time zone this browser doesn't know
+  }
+}
+
 // Where someone's away status comes from, for a tooltip.
 export const awayWhere = (s: { busy?: boolean } | null | undefined) => (s?.busy ? 'Busy' : 'Away on Slack');
 

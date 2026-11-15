@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
-import { isAway, statusText } from './slackmsg.ts';
+import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
@@ -483,6 +483,7 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
                 {who} <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
               </span>
               {presence[who] && <span class={isAway(presence[who]) ? 'ix-status away' : 'ix-status'}>{isAway(presence[who]) && '🌴 '}{statusText(presence[who])}</span>}
+              {r.tone === 'WAITING' && !isAway(presence[who]) && lateFor(presence[who]) && <span class="ix-status">🌙 {lateFor(presence[who])}</span>}
             </button>
             {replace && r.tone === 'WAITING' && isAway(presence[who]) && <Replace login={who} replace={replace} />}
             {reRequest && r.id && r.tone !== 'WAITING' && <ReRequest login={who} again={reRequest} />}

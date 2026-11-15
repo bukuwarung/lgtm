@@ -290,16 +290,19 @@ const peopleWanted = new Set<string>();
 // ponytail: one org for a login met without a repo; one per person if people span orgs.
 const peopleOrg = new Map<string, string>();
 let lastOrg = '';
-// People with no Slack match yet, matched by an exact email (their GitHub email or the org's verified one) and saved
+// People with no Slack match yet, matched by an exact email (their GitHub email, the org's verified one, or the one
+// their commits in the org carry) and saved
 // to Settings → Slack → People, as Settings' own Find would; anything less certain still waits for you there.
 async function matchOnSlack(logins: string[]): Promise<Record<string, SlackPresence>> {
   const byOrg = Map.groupBy(logins, (l) => peopleOrg.get(l) || lastOrg);
-  const { getPeople } = await import('./github.ts');
+  const { getPeople, commitEmails } = await import('./github.ts');
   const found: SlackMatch[] = [];
   for (const [org, ls] of byOrg) {
     if (!org) continue;
-    const info = await getPeople(org, ls);
-    for (let k = 0; k < ls.length; k += 50) found.push(...(await findSlackPeople(ls.slice(k, k + 50).map((login) => ({ login, name: null, emails: info[login]?.emails ?? [], emailOnly: true }))))); // 50 a request
+    // ponytail: 20 a batch (GitHub's search allows 30 a minute); the rest when they next come up, a day on.
+    const asked = ls.slice(0, 20);
+    const [info, commits] = await Promise.all([getPeople(org, asked), Promise.all(asked.map((l) => commitEmails(org, l).catch(() => [] as string[])))]);
+    found.push(...(await findSlackPeople(asked.map((login, k) => ({ login, name: null, emails: [...(info[login]?.emails ?? []), ...commits[k]], emailOnly: true })))));
   }
   const sure = found.filter((m) => m.id && m.via === 'email');
   if (!sure.length) return {};
@@ -571,7 +574,7 @@ export const slackFindsByEmail = () =>
     ([r]) => !/not_allowed_token_type/.test(r?.error ?? ''),
   )).catch(() => true);
 // People's Slack statuses (by GitHub login, the ones mapped to Slack), for picking a reviewer (slackmsg.ts isAway).
-export type SlackPresence = { text: string; emoji: string; until: number; busy?: boolean; name?: string; face?: string }; // busy: their GitHub/GitLab status says so (usePresence)
+export type SlackPresence = { text: string; emoji: string; until: number; busy?: boolean; name?: string; face?: string; tz?: string }; // busy: their GitHub/GitLab status says so (usePresence)
 // The same, for any part of lgtm: kept 10 minutes per person, asked once for everyone missing; every user of it
 // redraws when new statuses arrive.
 const presenceSeen = new Map<string, { at: number; v: SlackPresence | null }>();

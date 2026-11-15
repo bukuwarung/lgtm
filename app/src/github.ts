@@ -556,6 +556,13 @@ export async function getTeamPRs(team: string): Promise<{ members: string[]; ite
 // GitHub statuses set to busy (aliased u0, u1… in `d`, in the order of `logins`): their messages.
 const busyOf = (d: any, logins: string[]): Busy =>
   Object.fromEntries(logins.flatMap((login, k) => (d[`u${k}`]?.status?.indicatesLimitedAvailability ? [[login, d[`u${k}`].status.message || 'busy']] : [])));
+// The addresses someone's latest commits in an org carry (GitHub ties a commit to them by an email verified on their
+// account), its private noreply ones left out.
+export async function commitEmails(org: string, login: string): Promise<string[]> {
+  const res = await gh(`/search/commits?q=${encodeURIComponent(`author:${login} org:${org}`)}&per_page=5`);
+  const items: { commit: { author?: { email?: string } } }[] = (await (await ok(res)).json()).items ?? [];
+  return [...new Set(items.map((c) => c.commit.author?.email ?? ''))].filter((e) => e && !e.endsWith('noreply.github.com'));
+}
 // GitHub profile names of these logins ('' for none, or no such user), 50 a query.
 export async function userNames(logins: string[]): Promise<Record<string, string>> {
   const parts = Array.from({ length: Math.ceil(logins.length / 50) }, (_, k) => logins.slice(k * 50, k * 50 + 50));
