@@ -3,7 +3,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine } from './github.ts';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
@@ -1352,6 +1352,7 @@ function ListSkeleton({ rows = 5, tabs = false }: { rows?: number; tabs?: boolea
 }
 
 const closedAsked = new Map<string, number>(); // the bell's PRs asked about, when ("owner/repo#n")
+let revertsAsked = 0; // when reverts of my PRs were last asked about (github.ts revertsOfMine)
 
 // A coding agent's review of a PR waiting for mine (Settings → Reviewing, agentreview.ts), with its mark: under way,
 // what it found and where it put it, or why it couldn't (a click tries again).
@@ -1595,6 +1596,25 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     rulesWas.current = rules;
     before.current = new Map(items.map((i) => [i.id, i]));
   }, [items, settled, claude, menuBar, badgeInbox, showDrafts]);
+  // Someone opening a revert of a PR of mine (github.ts revertsOfMine): on the bell, and a desktop notification. Asked
+  // at most every 10 minutes; each told once.
+  useEffect(() => {
+    if (!items || !settled || Date.now() - revertsAsked < 10 * 60_000) return;
+    revertsAsked = Date.now();
+    const me = lastLogin();
+    if (me) revertsOfMine(me).then((list) => {
+      let told: string[] = [];
+      try {
+        told = JSON.parse(localStorage.getItem('revertsTold') ?? '[]');
+      } catch {}
+      const fresh = list.filter((r) => !told.includes(`${r.repo}#${r.number}`));
+      for (const r of fresh) {
+        addNotice(`${shownAt(r.author)} is reverting your #${r.of}`, r.title, `${r.repo}#${r.number}`);
+        if (notify) void notifyNative(`Reverting your #${r.of}: ${r.title}`, `${repoLabel(r.repo)}#${r.number} by ${r.author}`, `/${r.repo}/pull/${r.number}`);
+      }
+      if (fresh.length) localStorage.setItem('revertsTold', JSON.stringify([...told, ...fresh.map((r) => `${r.repo}#${r.number}`)].slice(-100)));
+    }, () => {});
+  }, [items, settled]);
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;

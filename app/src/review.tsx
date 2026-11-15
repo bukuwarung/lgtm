@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -592,6 +592,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [renderAll, setRenderAll] = useState(false);
   const [help, setHelp] = useState(false);
   const [reverting, setReverting] = useState(false);
+  // A revert (its "Reverts …#n" line): how it compares with undoing that PR exactly (github.ts revertGaps).
+  const undoes = data ? revertOf(data.pr.body, repo) : null;
+  const [gaps, setGaps] = useState<ReturnType<typeof revertGaps> | null>(null);
+  useEffect(() => {
+    setGaps(null);
+    if (undoes && data) getFiles(repo, undoes).then((orig) => setGaps(revertGaps(data.files, orig)), () => {});
+  }, [undoes, data?.pr.head.sha]);
   // Revert, on a merged PR: once you say so, the PR that undoes it, opened here.
   async function revert(id: string, base: string) {
     if (!(await ask(`Open a ${pageTerm().PR} that reverts this one on ${base}? It's reviewed and merged like any other.`, 'Revert'))) return;
@@ -1621,7 +1628,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
-            {mine && <MergeBox repo={repo} n={n} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
+            {mine && <MergeBox repo={repo} n={n} revert={!!undoes} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
           </div>
         </div>
@@ -1649,8 +1656,16 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           <div class="pills pr-status">
             {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}><Tg i="again" t="updating…" /></span>}
             {status && !pr.draft && (
-              <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] }>
+              <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] || '' }>
                 <Tg i={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
+              </span>
+            )}
+            {undoes && gaps && (
+              <span
+                class={`pill ${gaps.differ.length ? 'p-warn' : 'p-ok'}`}
+                title={gaps.differ.length ? `Not what undoing #${undoes} exactly would change:\n${gaps.differ.join('\n')}` : gaps.unknown.length ? `Every file lgtm could compare undoes #${undoes} exactly. No diff to compare for:\n${gaps.unknown.join('\n')}` : `Every line it changes undoes #${undoes}, and nothing else`}
+              >
+                <Tg i="history" t={gaps.differ.length ? `differs from a clean revert of #${undoes} in ${gaps.differ.length} file${gaps.differ.length > 1 ? 's' : ''}` : `exactly undoes #${undoes}${gaps.unknown.length ? ` (${gaps.unknown.length} not compared)` : ''}`} />
               </span>
             )}
             {/* What needs you, or blocks the merge */}

@@ -1659,6 +1659,49 @@ export async function mergeLayer(repo: string, n: number, next?: number) {
 export const revertPR = (repo: string, n: number, id: string): Promise<number> =>
   isLab(repo) ? lab.revertLab(repo, n) : graphql(`mutation($id:ID!){revertPullRequest(input:{pullRequestId:$id}){revertPullRequest{number}}}`, { id }).then((d) => d.revertPullRequest.revertPullRequest.number);
 
+// The PR a revert undoes, from the line GitHub's Revert (and lgtm's on GitLab) writes: "Reverts owner/repo#123",
+// "Reverts !12". null: not a revert.
+export function revertOf(body: string | null | undefined, repo: string) {
+  const m = (body ?? '').match(/^Reverts (?:([\w.-]+\/[\w.-]+)#|!)(\d+)\b/m);
+  return m && (!m[1] || repo.toLowerCase().endsWith(m[1].toLowerCase())) ? Number(m[2]) : null;
+}
+
+// How a revert differs from undoing the PR exactly: per file, its added lines are the PR's removed ones and the other
+// way round (as sets of lines with their counts: line numbers may have moved). A rename comes back as the reverse
+// rename. differ: files that don't match, or that only one of them changes; unknown: ones with no diff to compare
+// (binary, or too large for GitHub to show).
+export function revertGaps(revert: Pick<PRFile, 'filename' | 'patch'>[], original: Pick<PRFile, 'filename' | 'previous_filename' | 'patch'>[]) {
+  const lines = (patch: string, c: string) => patch.split('\n').filter((l) => l[0] === c).map((l) => l.slice(1)).sort().join('\n');
+  const orig = new Map(original.map((f) => [f.previous_filename ?? f.filename, f]));
+  const differ: string[] = [];
+  const unknown: string[] = [];
+  for (const f of revert) {
+    const o = orig.get(f.filename);
+    orig.delete(f.filename);
+    if (!o) differ.push(f.filename);
+    else if (f.patch == null || o.patch == null) unknown.push(f.filename);
+    else if (lines(f.patch, '+') !== lines(o.patch, '-') || lines(f.patch, '-') !== lines(o.patch, '+')) differ.push(f.filename);
+  }
+  return { differ: [...differ, ...[...orig.values()].map((f) => f.previous_filename ?? f.filename)], unknown };
+}
+
+// Open PRs reverting one of mine merged in the last 14 days (their "Reverts owner/repo#n" line; GitHub links them to
+// mine), opened by someone else. ponytail: GitHub only; GitLab's link is a system note on the MR, not asked for.
+export async function revertsOfMine(me: string): Promise<{ repo: string; number: number; title: string; author: string; of: number }[]> {
+  if (viewAs()) return [];
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+  const d = await graphql(
+    `query($q:String!){s:search(query:$q,type:ISSUE,first:30){nodes{...on PullRequest{number repository{nameWithOwner} timelineItems(itemTypes:[CROSS_REFERENCED_EVENT],last:10){nodes{...on CrossReferencedEvent{source{...on PullRequest{number title body state author{login} repository{nameWithOwner}}}}}}}}}}`,
+    { q: `is:pr is:merged author:@me merged:>=${since}` },
+  );
+  return (d.s.nodes as any[]).flatMap((p) =>
+    (p?.timelineItems?.nodes ?? [])
+      .map((e: any) => e?.source)
+      .filter((r: any) => r?.state === 'OPEN' && r.author?.login !== me && r.repository?.nameWithOwner === p.repository.nameWithOwner && revertOf(r.body, p.repository.nameWithOwner) === p.number)
+      .map((r: any) => ({ repo: p.repository.nameWithOwner, number: r.number, title: r.title, author: r.author?.login ?? '', of: p.number })),
+  );
+}
+
 // A merged PR's branch, unless another open PR builds on it (deleting it would close that one).
 export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' | 'headRefName'>) {
   if (isLab(repo)) return s.headRef ? lab.deleteLabBranch(repo, s.headRefName) : undefined;

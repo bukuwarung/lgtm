@@ -796,6 +796,28 @@ test('collapseReviews: comments posted one by one are one review, its strongest 
   assert.equal(out[0].waited, 60 * 60_000);
 });
 
+test('revertOf and revertGaps: what a revert undoes, and whether it undoes exactly that', async () => {
+  const { revertOf, revertGaps } = await import('../src/github.ts');
+  assert.equal(revertOf('Reverts acme/shop#412', 'acme/shop'), 412);
+  assert.equal(revertOf('Reverts !12', 'gitlab.com/acme/shop'), 12);
+  assert.equal(revertOf('Reverts acme/other#412', 'acme/shop'), null);
+  assert.equal(revertOf('This reverts #412 partly', 'acme/shop'), null);
+  const orig = [
+    { filename: 'a.ts', patch: '@@ -1,2 +1,2 @@\n ctx\n-old\n+new' },
+    { filename: 'b.ts', previous_filename: 'old-b.ts', patch: '@@ -3 +3 @@\n-x\n+y' },
+    { filename: 'big.json' },
+  ];
+  const clean = [
+    { filename: 'a.ts', patch: '@@ -9,2 +9,2 @@\n ctx\n-new\n+old' }, // moved: same lines
+    { filename: 'old-b.ts', patch: '@@ -3 +3 @@\n-y\n+x' },
+    { filename: 'big.json' },
+  ];
+  assert.deepEqual(revertGaps(clean, orig), { differ: [], unknown: ['big.json'] });
+  const extra = [{ ...clean[0], patch: clean[0].patch + '\n+more' }, clean[1], clean[2], { filename: 'c.ts', patch: '+z' }];
+  assert.deepEqual(revertGaps(extra, orig).differ, ['a.ts', 'c.ts']);
+  assert.deepEqual(revertGaps([clean[0], clean[2]], orig).differ, ['old-b.ts']); // a file it leaves changed
+});
+
 test('lateFor: their local time, only outside working hours (or on the weekend) there and not the same as yours', async () => {
   const { lateFor } = await import('../src/slackmsg.ts');
   const at = new Date('2026-11-17T17:00:00Z'); // Tuesday: 10:30 pm in Kolkata, midnight in Jakarta, 6 pm in Paris

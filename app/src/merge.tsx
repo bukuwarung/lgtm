@@ -37,7 +37,7 @@ export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) =>
 // open: the PR's unresolved review threads, the ones waiting on my reply first.
 export type OpenThread = { id: string; path: string; awaiting: boolean; bot: boolean };
 // qa: the PR's QA request (Ask QA) — its link, and its replies once read — when it has one.
-export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThreads = [], qa }: { repo: string; n: number; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[]; qa?: { url: string; thread: QaThread | null } }) {
+export function MergeBox({ repo, n, revert, url, checks, onChange, tickets = [], openThreads = [], qa }: { repo: string; n: number; revert?: boolean; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[]; qa?: { url: string; thread: QaThread | null } }) {
   const [s, setS] = useState<MergeState | null>(null);
   const [err, setErr] = useState('');
   const fail = (text: string) => (setErr(text), reportError(text)); // in the box, and in the bar at the top
@@ -50,13 +50,18 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
   // Its Jira tickets that aren't done, moved as it merges when ticked (Settings → Reviewing ticks it to start with).
   const [moveOnMerge] = useStoredFlag('jiraOnMerge', true);
   const [jiraTo] = useStoredValue('jiraAfterMerge', 'Done');
-  const [to, setTo] = useState(jiraTo); // this merge's, from the usual one
+  // A revert's tickets (the reverted PR's, in its title and branch) go back to in progress, done ones too.
+  const [to, setTo] = useState(revert ? 'In Progress' : jiraTo); // this merge's, from the usual one
   const [moveTickets, setMoveTickets] = useState(moveOnMerge);
   const [openTickets, setOpenTickets] = useState<string[]>([]);
   useEffect(() => {
-    Promise.all(tickets.map((k) => fetchJira(k).then((i) => (i.statusCategory === 'done' ? null : k), () => null))).then((l) => setOpenTickets(l.filter((k): k is string => !!k)));
+    Promise.all(tickets.map((k) => fetchJira(k).then((i) => (i.statusCategory === 'done' && !revert ? null : k), () => null))).then((l) => setOpenTickets(l.filter((k): k is string => !!k)));
   }, [tickets.join()]);
   const statuses = useJiraStatuses(tickets.map(project)); // listed as the PR opens: ready by the time you merge
+  useEffect(() => {
+    const working = statuses?.find((x) => x.category === 'indeterminate');
+    if (revert && working && to === 'In Progress' && !statuses!.some((x) => x.name === to)) setTo(working.name); // the project's own name for it
+  }, [statuses]);
   // Auto-merge merges later: the move waits (saved per PR) for the next time the PR is open here after it merged.
   const pendingKey = `jiraOnMerge:${repo}#${n}`;
   const [moved, setMoved] = useState('');
@@ -273,7 +278,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
           {openTickets.length > 0 && (
             <div class="merge-opt">
               <label title={confirm === 'auto' ? `Auto-merge merges later: the ticket moves the next time you open this ${pageTerm().PR} here after it merged` : 'Settings → Reviewing: whether this starts ticked, and the status'}>
-                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> {confirm === 'auto' ? 'Once merged, move' : 'Move'} {openTickets.join(', ')} to
+                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> {confirm === 'auto' ? 'Once merged, move' : 'Move'} {openTickets.join(', ')} {revert ? 'back to' : 'to'}
               </label>
               <StatusSelect value={to} onChange={setTo} statuses={statuses} />
             </div>
