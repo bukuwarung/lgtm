@@ -1654,10 +1654,30 @@ export async function mergeLayer(repo: string, n: number, next?: number) {
   if (!s.deleteBranchOnMerge && !s.isCrossRepository) await deleteBranch(repo, s);
 }
 
-// A merged PR undone: GitHub's own Revert opens a PR that reverts it (its title and description GitHub's). Back: its
-// number.
-export const revertPR = (repo: string, n: number, id: string): Promise<number> =>
-  isLab(repo) ? lab.revertLab(repo, n) : graphql(`mutation($id:ID!){revertPullRequest(input:{pullRequestId:$id}){revertPullRequest{number}}}`, { id }).then((d) => d.revertPullRequest.revertPullRequest.number);
+// A merged PR undone: GitHub's own Revert opens a PR that reverts it (its title GitHub's; the description its
+// "Reverts owner/repo#n", then why, when you say). Back: its number.
+export const revertPR = (repo: string, n: number, id: string, why = ''): Promise<number> =>
+  isLab(repo) ? lab.revertLab(repo, n, why) : graphql(`mutation($id:ID!,$b:String){revertPullRequest(input:{pullRequestId:$id,body:$b}){revertPullRequest{number}}}`, { id, b: why ? `Reverts ${repo}#${n}\n\n${why}` : null }).then((d) => d.revertPullRequest.revertPullRequest.number);
+
+// The PR that reverts this one, if any is open or merged (its "Reverts …" line, linked to this PR): the merged one first.
+export async function revertedBy(repo: string, n: number): Promise<{ number: number; merged: boolean; at: string } | null> {
+  let found: { number: number; body: string; state: string; at: string }[];
+  if (isLab(repo)) found = await lab.labRevertsOf(repo, n);
+  else {
+    const [o, r] = repo.split('/');
+    const d = await graphql(
+      `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){timelineItems(itemTypes:[CROSS_REFERENCED_EVENT],last:20){nodes{...on CrossReferencedEvent{source{...on PullRequest{number state mergedAt createdAt body repository{nameWithOwner}}}}}}}}}`,
+      { o, r, n },
+    );
+    found = (d.repository?.pullRequest?.timelineItems.nodes ?? [])
+      .map((e: any) => e?.source)
+      .filter((x: any) => x?.repository?.nameWithOwner === repo)
+      .map((x: any) => ({ number: x.number, body: x.body, state: x.state.toLowerCase(), at: x.mergedAt ?? x.createdAt }));
+  }
+  const revs = found.filter((x) => x.state !== 'closed' && revertOf(x.body, repo) === n);
+  const pick = revs.find((x) => x.state === 'merged') ?? revs[0];
+  return pick ? { number: pick.number, merged: pick.state === 'merged', at: pick.at } : null;
+}
 
 // The PR a revert undoes, from the line GitHub's Revert (and lgtm's on GitLab) writes: "Reverts owner/repo#123",
 // "Reverts !12". null: not a revert.

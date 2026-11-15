@@ -752,7 +752,7 @@ export async function deleteLabBranch(repo: string, branch: string) {
 // A merged MR undone, as GitHub's Revert does (GitLab's API has no one call for it): a branch from its target, its merge
 // (or squash) commit reverted there, and an MR from that. Back: its number. ponytail: a fast-forward merge of several
 // commits has no one commit to revert: refused.
-export async function revertLab(repo: string, n: number): Promise<number> {
+export async function revertLab(repo: string, n: number, why = ''): Promise<number> {
   const { host } = split(repo);
   const p = `/projects/${pid(repo)}`;
   const mr = await json(host, `${p}/merge_requests/${n}`);
@@ -763,8 +763,14 @@ export async function revertLab(repo: string, n: number): Promise<number> {
   if (open) return open.iid; // reverted already: that MR
   await send(host, `${p}/repository/branches?branch=${encodeURIComponent(branch)}&ref=${encodeURIComponent(mr.target_branch)}`, 'POST');
   await send(host, `${p}/repository/commits/${sha}/revert`, 'POST', { branch });
-  const made = await send(host, `${p}/merge_requests`, 'POST', { source_branch: branch, target_branch: mr.target_branch, title: `Revert "${mr.title}"`, description: `Reverts !${n}`, remove_source_branch: true });
+  const made = await send(host, `${p}/merge_requests`, 'POST', { source_branch: branch, target_branch: mr.target_branch, title: `Revert "${mr.title}"`, description: `Reverts !${n}${why ? `\n\n${why}` : ''}`, remove_source_branch: true });
   return made.iid;
+}
+
+// MRs whose description mentions reverting this one (github.ts revertedBy reads their "Reverts !n" line).
+export async function labRevertsOf(repo: string, n: number) {
+  const list: any[] = await json(split(repo).host, `/projects/${pid(repo)}/merge_requests?in=description&per_page=20&search=${encodeURIComponent(`Reverts !${n}`)}`);
+  return list.map((m) => ({ number: m.iid as number, body: (m.description ?? '') as string, state: m.state === 'opened' ? 'open' : (m.state as string), at: (m.merged_at ?? m.created_at) as string }));
 }
 
 // --- who to ask ---

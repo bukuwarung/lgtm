@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -599,12 +599,20 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     setGaps(null);
     if (undoes && data) getFiles(repo, undoes).then((orig) => setGaps(revertGaps(data.files, orig)), () => {});
   }, [undoes, data?.pr.head.sha]);
+  const cleanRevert = !!gaps && !gaps.differ.length; // brings back what was there: no test checks
+  // A merged PR that a later one reverts (open or merged): said in its merged banner.
+  const [undoneBy, setUndoneBy] = useState<Awaited<ReturnType<typeof revertedBy>>>(null);
+  useEffect(() => {
+    setUndoneBy(null);
+    if (data?.pr.merged) revertedBy(repo, n).then(setUndoneBy, () => {});
+  }, [repo, n, !!data?.pr.merged]);
   // Revert, on a merged PR: once you say so, the PR that undoes it, opened here.
   async function revert(id: string, base: string) {
-    if (!(await ask(`Open a ${pageTerm().PR} that reverts this one on ${base}? It's reviewed and merged like any other.`, 'Revert'))) return;
+    const why = await askText(`Open a ${pageTerm().PR} that reverts this one on ${base}? It's reviewed and merged like any other. Why goes in its description.`, 'Revert', 'Why (optional): what it breaks');
+    if (why == null) return;
     setReverting(true);
     try {
-      location.hash = `/${repo}/pull/${await revertPR(repo, n, id)}`;
+      location.hash = `/${repo}/pull/${await revertPR(repo, n, id, why)}`;
     } catch (e: any) {
       reportError(`Couldn't revert: ${e.message}`);
     } finally {
@@ -1127,8 +1135,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [flagUntested] = useStoredFlag('flagUntested', true);
   const supp = useMemo(() => (chkSupp ? switchedOff(data.files.filter((f) => !f.generated)) : []), [data.files, chkSupp]);
   const unsafe = useMemo(() => (chkUnsafe ? protectionsOff(data.files.filter((f) => !f.generated)) : []), [data.files, chkUnsafe]);
-  const goneTests = useMemo(() => deletedTests(data.files), [data.files]);
-  const noTests = useMemo(() => new Set(flagUntested ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested]);
+  const goneTests = useMemo(() => (cleanRevert ? [] : deletedTests(data.files)), [data.files, cleanRevert]);
+  const noTests = useMemo(() => new Set(flagUntested && !cleanRevert ? untested(data.files.filter((f) => !f.generated)) : []), [data.files, flagUntested, cleanRevert]);
   // Modules (Settings → Reviewing), from where the repo's build files sit: with 2+ touched the index groups files by
   // them and files are tagged; with one, a pill names it.
   const [byModule] = useStoredFlag('gradleModules', true);
@@ -1639,10 +1647,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <main>
           {pr.merged ? (
             <p class="pr-state merged">
-              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <CopyCode>{pr.base.ref}</CopyCode>{pr.merged_at && <> <Time at={pr.merged_at} /></>}. A review now can only comment.</span>
-              <button class="pr-state-act" disabled={reverting} title={`A new ${pageTerm().PR} that undoes this one on ${pr.base.ref}, to review and merge like any other`} onClick={() => void revert(pr.node_id, pr.base.ref)}>
+              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <CopyCode>{pr.base.ref}</CopyCode>{pr.merged_at && <> <Time at={pr.merged_at} /></>}.
+                {undoneBy && (
+                  <>
+                    {' '}<b>{undoneBy.merged ? 'Reverted' : 'Being reverted'}</b> by <a href={`#/${repo}/pull/${undoneBy.number}`}>{numRef(repo, undoneBy.number)}</a>
+                    {undoneBy.merged ? <>, merged <Time at={undoneBy.at} /></> : ', still open'}.
+                  </>
+                )}{' '}
+                A review now can only comment.</span>
+              {!undoneBy && <button class="pr-state-act" disabled={reverting} title={`A new ${pageTerm().PR} that undoes this one on ${pr.base.ref}, to review and merge like any other`} onClick={() => void revert(pr.node_id, pr.base.ref)}>
                 {reverting ? 'Reverting…' : 'Revert'}
-              </button>
+              </button>}
             </p>
           ) : pr.state === 'closed' ? (
             <p class="pr-state closed">

@@ -1062,6 +1062,22 @@ export function ask(text: string, yes = 'OK'): Promise<boolean> {
   return new Promise((done) => d.addEventListener('close', () => (done(d.returnValue === 'y'), d.remove())));
 }
 
+// ask() with a line to fill in: what was typed ('' when nothing), or null when cancelled.
+export function askText(text: string, yes: string, placeholder: string): Promise<string | null> {
+  const d = document.createElement('dialog');
+  d.className = 'ask';
+  d.innerHTML = '<p></p><form method="dialog"><input maxlength="500"><button value="">Cancel</button><button class="primary" value="y"></button></form>';
+  d.querySelector('p')!.textContent = text;
+  d.querySelector('.primary')!.textContent = yes;
+  const input = d.querySelector('input')!;
+  input.placeholder = placeholder;
+  input.setAttribute('aria-label', placeholder);
+  document.body.append(d);
+  d.showModal();
+  input.focus();
+  return new Promise((done) => d.addEventListener('close', () => (done(d.returnValue === 'y' ? input.value.trim() : null), d.remove())));
+}
+
 export function recordError(text: string) {
   errors.push(`${new Date().toISOString().slice(0, 19)} ${text.slice(0, 300)}`);
   if (errors.length > 20) errors.shift();
