@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-done"
+description = "Enables the slack_done command without any pre-configured scope."
+commands.allow = ["slack_done"]
+
+[[permission]]
+identifier = "deny-slack-done"
+description = "Denies the slack_done command without any pre-configured scope."
+commands.deny = ["slack_done"]

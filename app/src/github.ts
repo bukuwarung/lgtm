@@ -1654,6 +1654,11 @@ export async function mergeLayer(repo: string, n: number, next?: number) {
   if (!s.deleteBranchOnMerge && !s.isCrossRepository) await deleteBranch(repo, s);
 }
 
+// A merged PR undone: GitHub's own Revert opens a PR that reverts it (its title and description GitHub's). Back: its
+// number.
+export const revertPR = (repo: string, n: number, id: string): Promise<number> =>
+  isLab(repo) ? lab.revertLab(repo, n) : graphql(`mutation($id:ID!){revertPullRequest(input:{pullRequestId:$id}){revertPullRequest{number}}}`, { id }).then((d) => d.revertPullRequest.revertPullRequest.number);
+
 // A merged PR's branch, unless another open PR builds on it (deleting it would close that one).
 export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' | 'headRefName'>) {
   if (isLab(repo)) return s.headRef ? lab.deleteLabBranch(repo, s.headRefName) : undefined;

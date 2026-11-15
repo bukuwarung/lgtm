@@ -171,6 +171,9 @@ async function prThreads(pr) {
 // person for it, when Slack people knows who they are on GitHub, so lgtm's messages to them reply there. Searched
 // once a run per PR (slackcli search messages); saved with the threads lgtm starts itself.
 const dmSearch = new Map();
+// A message's own links: its text, and the URLs its previews unfurl (not their text: a stacked PR's preview lists the
+// other layers).
+const ownLinks = (m) => [m.text ?? '', ...(m.attachments ?? []).flatMap((a) => [a.from_url, a.original_url, a.app_unfurl_url, a.title_link])].join(' ');
 function dmThreads(pr) {
   if (!dmSearch.has(pr))
     dmSearch.set(
@@ -185,10 +188,7 @@ function dmThreads(pr) {
         const threads = await readThreads();
         const found = {};
         for (const m of (r.ok && parseJson(r.stdout)?.matches) || []) {
-          // The message's own links: its text, and the URLs its previews unfurl (not their text: a stacked PR's preview
-          // lists the other layers).
-          const own = [m.text ?? '', ...(m.attachments ?? []).flatMap((a) => [a.from_url, a.original_url, a.app_unfurl_url, a.title_link])].join(' ');
-          if (!m.channel?.is_im || !link.test(own)) continue;
+          if (!m.channel?.is_im || !link.test(ownLinks(m))) continue;
           const login = loginOf[m.channel.name]; // a DM's name is the other person's user ID
           const key = `${pr}:${login}`;
           if (!login || threads[key] || found[key]) continue;
@@ -385,6 +385,28 @@ async function channelId(channel) {
 
 // A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
 const SLACK_CHANNEL = /^([CG][A-Z0-9]+|#[\w.-]+|https:\/\/[\w-]+\.slack\.com\/archives\/[CG][A-Z0-9]+\/?)$/;
+// ✅ on the posts outside DMs where the PR's author linked it (their review request), once it's approved or merged
+// (Settings → Slack). author: a GitHub login matched on Slack; none: you. Not your QA request. Searched fresh each time;
+// back: where they were.
+async function markDone({ pr, author }) {
+  if (typeof pr !== 'string' || !PR_REF.test(pr) || (author != null && (typeof author !== 'string' || author.length > 100))) throw new Error('Bad Slack request');
+  slackMe ??= slackcli(['auth', 'whoami', '--json']).then((r) => parseJson(r.stdout)?.user_id);
+  const by = author ? (await readConfig()).slackUsers?.[author] : await slackMe;
+  if (!/^U[A-Z0-9]+$/.test(by ?? '')) return { done: [] };
+  const [repo, n] = pr.split('#');
+  const page = prPage(repo, n);
+  const link = new RegExp(`${page.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`);
+  const qa = (await readThreads())[`${pr}:#qa`]?.ts;
+  const r = await slackcli(['search', 'messages', page, '--json', '--limit', '40']);
+  const posts = ((r.ok && parseJson(r.stdout)?.matches) || []).filter((m) => m.channel && !m.channel.is_im && m.user === by && m.ts !== qa && link.test(ownLinks(m))).slice(0, 3);
+  const done = new Set();
+  for (const m of posts) {
+    const x = await slackcli(['messages', 'react', `--channel-id=${m.channel.id}`, `--timestamp=${m.ts}`, '--emoji', 'white_check_mark', '--json', ...(DRY_RUN ? ['--dry-run'] : [])]);
+    if (x.ok || /already_reacted/.test(x.error)) done.add(m.channel.is_mpim ? 'a group message' : `#${m.channel.name}`);
+  }
+  return { done: [...done] };
+}
+
 async function postToChannel({ channel, text, pr }) {
   if (typeof channel !== 'string' || !SLACK_CHANNEL.test(channel) || typeof text !== 'string' || !text.trim() || text.length > 4000 || typeof pr !== 'string' || !PR_REF.test(pr)) throw new Error('Bad Slack request');
   const to = await channelId(channel);
@@ -807,7 +829,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => agentText(b?.input, b?.model, b?.effort, b?.agent))
@@ -861,6 +883,7 @@ const server = createServer(async (req, res) => {
   if (path === '/slack-threads') return (req.method === 'POST' ? readJson(req).then((b) => backupThreads(b?.threads)) : backupThreads()).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-qa') return qaThreads((new URL(req.url ?? '/', ORIGIN).searchParams.get('prs') ?? '').split(',').filter(Boolean).slice(0, 100)).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-channel') return checkChannel(new URL(req.url ?? '/', ORIGIN).searchParams.get('c') ?? '').then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
+  if (path === '/slack-done' && req.method === 'POST') return readJson(req).then(markDone).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-post' && req.method === 'POST') return readJson(req).then(postToChannel).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack') {
     try {

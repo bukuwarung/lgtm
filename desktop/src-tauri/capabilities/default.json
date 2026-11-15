@@ -23,6 +23,7 @@
     "allow-slack-status",
     "allow-slack-notify",
     "allow-slack-post",
+    "allow-slack-done",
     "allow-slack-channel",
     "allow-slack-qa",
     "allow-slack-threads",

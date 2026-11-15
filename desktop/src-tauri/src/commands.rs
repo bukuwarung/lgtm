@@ -299,6 +299,18 @@ pub async fn job_log(repo: String, job: u64, user: Option<String>) -> Result<Str
 
 // --- Slack: status, threads, messages ---
 
+/// A message's own links: its text, and the URLs its previews unfurl (not their text: a stacked PR's preview lists the
+/// other layers).
+fn own_links(m: &Value) -> String {
+    let mut text = m["text"].as_str().unwrap_or("").to_string();
+    for a in m["attachments"].as_array().into_iter().flatten() {
+        for k in ["from_url", "original_url", "app_unfurl_url", "title_link"] {
+            text += &format!(" {}", a[k].as_str().unwrap_or(""));
+        }
+    }
+    text
+}
+
 /// DMs you've already had about this PR (its link in a direct message, newest first): each becomes your thread with that
 /// person for it, when Slack people knows who they are on GitHub, so lgtm's messages to them reply there. Searched once
 /// a run per PR; saved with the threads lgtm starts itself. The server's dmThreads().
@@ -317,15 +329,7 @@ fn dm_threads(pr: &str) -> Vec<(String, Value)> {
     let mut found: Vec<(String, Value)> = vec![];
     let matches = if r.ok { parse_json(&r.stdout).and_then(|v| v["matches"].as_array().cloned()).unwrap_or_default() } else { vec![] };
     for m in &matches {
-        // The message's own links: its text, and the URLs its previews unfurl (not their text: a stacked PR's preview
-        // lists the other layers).
-        let mut text = m["text"].as_str().unwrap_or("").to_string();
-        for a in m["attachments"].as_array().into_iter().flatten() {
-            for k in ["from_url", "original_url", "app_unfurl_url", "title_link"] {
-                text += &format!(" {}", a[k].as_str().unwrap_or(""));
-            }
-        }
-        if m["channel"]["is_im"] != json!(true) || !link.is_match(&text) {
+        if m["channel"]["is_im"] != json!(true) || !link.is_match(&own_links(m)) {
             continue;
         }
         let Some(other) = m["channel"]["name"].as_str() else { continue }; // a DM's name is the other person's user ID
@@ -496,6 +500,46 @@ fn channel_id(channel: &str) -> Result<(String, Option<String>), String> {
         Some(n) => format!("no channel named {channel} (did you mean #{n}?)"),
         None => format!("no channel named {channel}"),
     })
+}
+
+/// ✅ on the posts outside DMs where the PR's author linked it (their review request), once it's approved or merged
+/// (Settings → Slack). author: a GitHub login matched on Slack; none: you. Not your QA request. Searched fresh each
+/// time; back: where they were. The server's markDone().
+#[tauri::command]
+pub async fn slack_done(pr: String, author: Option<String>) -> Result<Value, String> {
+    if !re(PR_REF).is_match(&pr) || author.as_ref().is_some_and(|a| a.len() > 100) {
+        return Err("Bad Slack request".into());
+    }
+    let by = match &author {
+        Some(a) => config::read("config.json", true).ok().and_then(|c| c["slackUsers"][a.as_str()].as_str().map(String::from)),
+        None => cached(&SLACK_ME, || {
+            let r = slackcli(&["auth", "whoami", "--json"], None);
+            parse_json(&r.stdout).and_then(|v| v["user_id"].as_str().map(String::from))
+        }),
+    };
+    let Some(by) = by.filter(|b| re(r"^U[A-Z0-9]+$").is_match(b)) else { return Ok(json!({ "done": [] })) };
+    let (repo, n) = pr.split_once('#').unwrap_or((&pr, ""));
+    let page = pr_page(repo, n);
+    let link = re(&format!(r"{}(\D|$)", regex::escape(&page)));
+    let qa = config::read("slack-threads.json", false).ok().and_then(|t| t[&format!("{pr}:#qa")]["ts"].as_str().map(String::from));
+    let r = slackcli(&["search", "messages", &page, "--json", "--limit", "40"], None);
+    let matches = if r.ok { parse_json(&r.stdout).and_then(|v| v["matches"].as_array().cloned()).unwrap_or_default() } else { vec![] };
+    let mut done: Vec<String> = vec![];
+    let posts = matches.iter().filter(|m| m["channel"].is_object() && m["channel"]["is_im"] != json!(true) && m["user"].as_str() == Some(&by) && m["ts"].as_str() != qa.as_deref() && link.is_match(&own_links(m)));
+    for m in posts.take(3) {
+        let ch = format!("--channel-id={}", m["channel"]["id"].as_str().unwrap_or(""));
+        let ts = format!("--timestamp={}", m["ts"].as_str().unwrap_or(""));
+        let mut args = vec!["messages", "react", ch.as_str(), ts.as_str(), "--emoji", "white_check_mark", "--json"];
+        if dry_run() {
+            args.push("--dry-run");
+        }
+        let x = slackcli(&args, None);
+        let at = if m["channel"]["is_mpim"] == json!(true) { "a group message".to_string() } else { format!("#{}", m["channel"]["name"].as_str().unwrap_or("")) };
+        if (x.ok || x.error.contains("already_reacted")) && !done.contains(&at) {
+            done.push(at);
+        }
+    }
+    Ok(json!({ "done": done }))
 }
 
 /// A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
@@ -1324,7 +1368,7 @@ mod live {
         assert_eq!(status["configured"], json!(true));
         let people = block_on(slack_people_get()).expect("people");
         println!("slack people mapped: {}", people["mine"].as_object().map(|m| m.len()).unwrap_or(0));
-        let sent = block_on(slack_notify(vec![Recipient { login: "nobody-unmapped".into(), emails: vec![] }], "test".into(), "bukuwarung/lgtm#1".into(), None)).expect("notify");
+        let sent = block_on(slack_notify(vec![Recipient { login: "nobody-unmapped".into(), emails: vec![], at: None }], "test".into(), "bukuwarung/lgtm#1".into(), None)).expect("notify");
         println!("slack_notify (dry run, unmapped): {}", sent[0]["error"]);
         assert_eq!(sent[0]["ok"], json!(false));
         assert!(block_on(job_log("bad repo".into(), 1, None)).is_err());

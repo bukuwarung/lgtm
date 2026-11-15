@@ -440,6 +440,7 @@ export function Settings() {
           <h4>Slack</h4>
           {ints?.slack.ok && <SlackPeople team={team} />}
           <Flag k="slackFaces" initial={true} label="Pictures from Slack" hint="For people who haven't set a picture on GitHub (it shows its generated pattern): their Slack picture, once lgtm knows who they are there." demo />
+          <Flag k="slackDone" initial={false} label="✅ on review requests" hint={`When you approve a ${T.PR}, a ✅ on the posts in Slack channels where its author linked it (once lgtm knows who they are on Slack), so they and the channel see it's done; your own posts get one when you merge. Not DMs: lgtm's message replies there.`} demo />
           <Flag k="qaRequest" initial={true} label={`A button to ask QA, on your ${T.PRs}`} hint={`Ask QA posts your QA request to the channel below, filled in from the ${T.PR}: you read and can change it before it goes. Its wording is under Messages.`} demo>
             <QaChannel />
           </Flag>

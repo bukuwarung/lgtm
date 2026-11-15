@@ -65,25 +65,37 @@ export function isAway(s: { text: string; emoji: string; until: number; busy?: b
   return AWAY.test(s.text) || AWAY_EMOJI.has(s.emoji.replace(/:/g, ''));
 }
 
-// Their local time, from their Slack time zone, when it's outside working hours there (before 8 am, from 7 pm) and
-// your clock says otherwise: "11:40 pm for them". '' when it isn't, or lgtm doesn't know.
+// A Saturday or Sunday where they are. ponytail: Sat–Sun everywhere; a Fri–Sat weekend reads as a workday Friday.
+const weekendIn = (tz: string, at: Date | number) => /^S/.test(new Date(at).toLocaleDateString('en-US', { timeZone: tz, weekday: 'short' }));
+
+// Their local time, from their Slack time zone, when it's outside working hours there (before 8 am, from 7 pm, or the
+// weekend) and your clock says otherwise: "11:40 pm for them", "Sat 10:00 am for them". '' when it isn't, or lgtm
+// doesn't know.
 export function lateFor(s: { tz?: string } | null | undefined, now = new Date()) {
   if (!s?.tz) return '';
   try {
     const at = (timeZone?: string) => now.toLocaleTimeString('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
     const theirs = at(s.tz);
-    if (theirs === at() || (+theirs.slice(0, 2) >= 8 && +theirs.slice(0, 2) < 19)) return '';
-    return `${now.toLocaleTimeString([], { timeZone: s.tz, hour: 'numeric', minute: '2-digit' })} for them`;
+    const weekend = weekendIn(s.tz, now);
+    if (theirs === at() || (!weekend && +theirs.slice(0, 2) >= 8 && +theirs.slice(0, 2) < 19)) return '';
+    const day = weekend ? `${now.toLocaleDateString([], { timeZone: s.tz, weekday: 'short' })} ` : '';
+    return `${day}${now.toLocaleTimeString([], { timeZone: s.tz, hour: 'numeric', minute: '2-digit' })} for them`;
   } catch {
     return ''; // a time zone this browser doesn't know
   }
 }
 
-// The next 9 am in their time zone (ms). ponytail: a night when their clocks change is an hour off.
+// The next 9 am on a workday in their time zone (ms). ponytail: a night when their clocks change is an hour off.
 export function morningFor(tz: string, now = Date.now()) {
   const [h, m] = new Date(now).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).split(':').map(Number);
-  return now - (now % 60_000) + (((9 * 60 - h * 60 - m + 1440) % 1440) || 1440) * 60_000;
+  let t = now - (now % 60_000) + (((9 * 60 - h * 60 - m + 1440) % 1440) || 1440) * 60_000;
+  while (weekendIn(tz, t)) t += 86_400_000;
+  return t;
 }
+
+// When that is, in words: "9 am their time", or "9 am Monday their time" when it isn't the next day's.
+export const morningWords = (tz: string, at: number, now = Date.now()) =>
+  `9 am${at - now > 86_400_000 ? ` ${new Date(at).toLocaleDateString([], { timeZone: tz, weekday: 'long' })}` : ''} their time`;
 
 // Their clock beside yours: "2:48 pm there · Kolkata, 1h 30m behind you" ('' for a time zone this browser doesn't know).
 export function zoneLine(tz: string, now = new Date()) {

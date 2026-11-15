@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
-import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm } from './platform.ts';
+import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -258,6 +258,7 @@ export function MergeBox({ repo, n, url, checks, onChange, tickets = [], openThr
               onClick={() =>
                 run('merge', async () => {
                   await mergePR(s, m, msg.title, msg.body, confirm === 'auto');
+                  if (confirm === 'merge') void markDoneOnSlack(`${repo}#${n}`); // your PR: your posts
                   if (deleting) await deleteBranch(repo, s).catch((e) => fail(`Merged, but ${e.message}`));
                   if (confirm === 'merge' && moveTickets)
                     for (const k of openTickets) await moveJira(k, to).catch((e) => fail(`Merged, but ${k} didn't move to ${to}: ${e.message}`));

@@ -630,6 +630,7 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .pr-state.closed { color: var(--delfg); border-color: color-mix(in srgb, var(--delfg) 45%, transparent); background: var(--del); }
 .pr-state.draft { color: var(--muted); border-color: var(--border); background: var(--soft); }
 .pr-state b { color: inherit; }
+.pr-state-act { margin-left: auto; flex: none; }
 .state-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: calc(12px * var(--ts)); font-weight: 600; color: #fff; }
 .state-chip.merged { background: light-dark(#8250df, #8957e5); }
 .state-chip.closed { background: light-dark(#cf222e, #da3633); }
@@ -1074,6 +1075,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .template-see { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .prompt-preview { margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); white-space: pre-wrap; font: calc(12px * var(--ts))/1.5 var(--sans); }
 /* Settings → Slack → Messages: each one as Slack will show it, with a sample PR. */
+.demo-reaction { display: inline-block; margin-top: 4px; padding: 0 6px; border: 1px solid #1d9bd1; border-radius: 10px; background: color-mix(in srgb, #1d9bd1 12%, transparent); font-size: calc(12px * var(--ts)); }
 .slack-preview { padding: 8px 10px; border-left: 3px solid color-mix(in srgb, var(--fg) 15%, transparent); background: color-mix(in srgb, var(--soft) 60%, transparent); border-radius: 0 6px 6px 0; font-size: calc(13px * var(--ts)); line-height: 1.5; }
 .slack-preview img { width: 1.35em; height: 1.35em; vertical-align: -.3em; object-fit: contain; }
 .slack-preview a { color: #1d9bd1; }

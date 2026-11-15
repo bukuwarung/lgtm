@@ -796,23 +796,30 @@ test('collapseReviews: comments posted one by one are one review, its strongest 
   assert.equal(out[0].waited, 60 * 60_000);
 });
 
-test('lateFor: their local time, only outside working hours there and not the same as yours', async () => {
+test('lateFor: their local time, only outside working hours (or on the weekend) there and not the same as yours', async () => {
   const { lateFor } = await import('../src/slackmsg.ts');
-  const at = new Date('2026-11-15T17:00:00Z'); // 10:30 pm in Kolkata, midnight in Jakarta, 6 pm in Paris
+  const at = new Date('2026-11-17T17:00:00Z'); // Tuesday: 10:30 pm in Kolkata, midnight in Jakarta, 6 pm in Paris
   const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
   assert.match(lateFor({ tz: 'Asia/Kolkata' }, at), /^10:30\s?(PM|pm) for them$/);
   assert.equal(lateFor({ tz: 'Europe/Paris' }, at), '');
   assert.equal(lateFor({ tz: mine }, at), '');
   assert.equal(lateFor({ tz: 'Not/AZone' }, at), '');
   assert.equal(lateFor({}, at), '');
+  const saturday = new Date('2026-11-21T09:00:00Z'); // 10 am in Paris
+  if (mine !== 'Europe/Paris') assert.match(lateFor({ tz: 'Europe/Paris' }, saturday), /^Sat 10:00\s?(AM|am) for them$/);
 });
 
 test('morningFor and zoneLine: their next 9 am, and their clock beside yours', async () => {
-  const { morningFor, zoneLine } = await import('../src/slackmsg.ts');
-  const at = Date.parse('2026-11-15T17:00:00Z'); // 10:30 pm in Kolkata
+  const { morningFor, morningWords, zoneLine } = await import('../src/slackmsg.ts');
+  const at = Date.parse('2026-11-15T17:00:00Z'); // Sunday, 10:30 pm in Kolkata
   assert.equal(new Date(morningFor('Asia/Kolkata', at)).toISOString(), '2026-11-16T03:30:00.000Z');
   assert.equal(new Date(morningFor('Asia/Kolkata', Date.parse('2026-11-15T03:30:00Z'))).toISOString(), '2026-11-16T03:30:00.000Z'); // 9 am already: tomorrow's
-  assert.equal(new Date(morningFor('Asia/Kolkata', Date.parse('2026-11-14T22:00:00Z'))).toISOString(), '2026-11-15T03:30:00.000Z'); // 3:30 am: today's
+  assert.equal(new Date(morningFor('Asia/Kolkata', Date.parse('2026-11-16T22:00:00Z'))).toISOString(), '2026-11-17T03:30:00.000Z'); // Tuesday 3:30 am: today's
+  const friday = Date.parse('2026-11-20T17:00:00Z'); // Friday, 10:30 pm in Kolkata: Monday's
+  assert.equal(new Date(morningFor('Asia/Kolkata', friday)).toISOString(), '2026-11-23T03:30:00.000Z');
+  assert.equal(new Date(morningFor('Asia/Kolkata', Date.parse('2026-11-14T22:00:00Z'))).toISOString(), '2026-11-16T03:30:00.000Z'); // Sunday 3:30 am: Monday's
+  assert.equal(morningWords('Asia/Kolkata', morningFor('Asia/Kolkata', at), at), '9 am their time');
+  assert.match(morningWords('Asia/Kolkata', morningFor('Asia/Kolkata', friday), friday), /^9 am Monday their time$/);
   const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
   assert.match(zoneLine(mine, new Date(at)), /there · .*, the same time as you$/);
   assert.match(zoneLine('Asia/Kolkata', new Date(at)), /^10:30\s?(PM|pm) there · Kolkata/);

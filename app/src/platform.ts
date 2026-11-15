@@ -637,21 +637,33 @@ export type SlackResult = { login: string; ok: boolean; threaded?: boolean; erro
 // nothing sent: can each be reached?
 let canSchedule: Promise<boolean> | undefined;
 export async function notifySlack(recipients: { login: string; emails: string[]; at?: number }[], text: string, thread: string, check = false): Promise<SlackResult[]> {
-  // Someone it's late for (slackmsg.ts lateFor) gets it at 9 am their time, when Slack can schedule it (an app sign-in:
+  // Someone it's late for (slackmsg.ts lateFor) gets it at 9 am their time on a workday, when Slack can schedule it (an app sign-in:
   // Slack posts it, lgtm needn't be running); otherwise now.
   canSchedule ??= fetchIntegrations().then((i) => !!i.slack.canSchedule, () => false);
   if (!check && (await canSchedule)) {
-    const [{ lateFor, morningFor }, status] = await Promise.all([import('./slackmsg.ts'), slackPresence(recipients.map((r) => r.login)).catch(() => ({}) as Record<string, SlackPresence>)]);
+    const [{ lateFor, morningFor, morningWords }, status] = await Promise.all([import('./slackmsg.ts'), slackPresence(recipients.map((r) => r.login)).catch(() => ({}) as Record<string, SlackPresence>)]);
     recipients = recipients.map((r) => (lateFor(status[r.login]) ? { ...r, at: Math.floor(morningFor(status[r.login].tz!) / 1000) } : r));
     const later = recipients.filter((r) => r.at);
     if (later.length)
-      dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${later.map((r) => `${shownAt(r.login)} gets the Slack message at 9 am their time (${lateFor(status[r.login])} now)`).join('; ')}. It's under Scheduled messages in Slack, to send now or change.` } }));
+      dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${later.map((r) => `${shownAt(r.login)} gets the Slack message at ${morningWords(status[r.login].tz!, r.at! * 1000)} (${lateFor(status[r.login])} now)`).join('; ')}. It's under Scheduled messages in Slack, to send now or change.` } }));
   }
   if (isDesktop) return command<SlackResult[]>('slack_notify', { recipients, text, thread, check });
   const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text, thread, check }) });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;
+}
+
+// ✅ on the posts in Slack where the PR's author linked it outside DMs (their review request), once it's approved or
+// merged: Settings → Slack → ✅ on review requests (off). author: their GitHub login; none: you. Says where, in a toast.
+export async function markDoneOnSlack(pr: string, author?: string) {
+  if (!flag('slackDone', false)) return;
+  try {
+    const d: { done?: string[] } = isDesktop ? await command('slack_done', { pr, author }) : await fetch('/slack-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pr, author }) }).then((r) => r.json());
+    if (d.done?.length) dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `✅ on the review request in ${d.done.join(', ')} on Slack.` } }));
+  } catch {
+    // a missing ✅ isn't worth an error
+  }
 }
 
 // A message in a Slack channel (an ID, #name or channel link): the QA request. Its link back, when Slack gives one.

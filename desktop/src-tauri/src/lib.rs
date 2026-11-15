@@ -147,6 +147,7 @@ pub fn run() {
             commands::slack_status,
             commands::slack_notify,
             commands::slack_post,
+            commands::slack_done,
             commands::slack_channel,
             commands::slack_qa,
             commands::slack_threads,

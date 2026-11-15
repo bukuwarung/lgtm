@@ -1439,6 +1439,11 @@ Object.assign(DEMOS, {
     off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi-s</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
     on: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>Budi Santoso</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
   },
+  slackDone: {
+    title: '✅ on review requests',
+    off: <SlackPost done={false} />,
+    on: <SlackPost done />,
+  },
   slackFaces: {
     title: 'Pictures from Slack',
     off: <div class="conversation"><div class="comment"><img class="c-avatar" src={IDENTICON} alt="" /> <b>budi-s</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
@@ -1455,6 +1460,19 @@ Object.assign(DEMOS, {
     on: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
   },
 } satisfies Record<string, Demo>);
+
+// A review request in a Slack channel, with your ✅ once you've approved (on).
+function SlackPost({ done }: { done: boolean }) {
+  return (
+    <div class="conversation">
+      <div class="comment">
+        <img class="c-avatar" src={face('rina')} alt="" /> <b>Rina</b> <time>#shop-reviews · 10:12</time>
+        <div class="md"><p>Could someone review this? <a>github.com/acme/shop/pull/412</a></p></div>
+        {done && <span class="demo-reaction">✅ 1</span>}
+      </div>
+    </div>
+  );
+}
 
 // lgtm's marks under a theme (Gruvbox): its colours (on), or lgtm's own (off).
 function ThemeMarks({ on }: { on: boolean }) {
