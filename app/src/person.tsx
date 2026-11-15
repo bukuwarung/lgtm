@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
-import { ago, personKey, usePresence, repoLabel, viewAs, term, shownName } from './platform.ts';
-import { isAway, statusText } from './slackmsg.ts';
+import { ago, personKey, usePresence, repoLabel, viewAs, term, shownName, getSlackPeople, fetchIntegrations, openExternal, faceOf } from './platform.ts';
+import { isAway, statusText, zoneLine } from './slackmsg.ts';
 import { Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
 
@@ -46,6 +46,15 @@ function Row({ i, waiting }: { i: QueueItem; waiting?: boolean }) {
 export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
   const [p, setP] = useState<Person | string | null>(null);
   const presence = usePresence([login])[login];
+  // Your DM with them in Slack's app, for someone matched there (Settings → Slack → People).
+  const [dm, setDm] = useState('');
+  useEffect(() => {
+    setDm('');
+    Promise.all([getSlackPeople(), fetchIntegrations()]).then(([sp, i]) => {
+      const id = sp.mine[login];
+      if (i.slack.ok && i.slack.team && /^U[A-Z0-9]+$/.test(id ?? '')) setDm(`slack://user?team=${i.slack.team}&id=${id}`);
+    }, () => {});
+  }, [login]);
   useEffect(() => void (setP(null), getPerson(login, orgs).then(setP, (e) => setP(e.message))), [login, orgs.join()]);
   if (p === null) return <PageSkeleton title={`@${login}`} face />;
   if (typeof p === 'string') return <div class="page history person"><h2>@{login}</h2><p class="error">{p}</p></div>;
@@ -55,7 +64,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
   return (
     <div class="page history person">
       <header class="person-h">
-        <img src={p.avatar} alt="" />
+        <img src={p.login.includes("@") ? p.avatar : faceOf(p.login, 96)} alt="" />
         <div>
           <h2>{p.name ?? shownName(p.login)}</h2>
           <p class="note">
@@ -67,6 +76,8 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
             {p.bio && ` · ${p.bio}`}
           </p>
           {presence && <p class={isAway(presence) ? 'ix-status away' : 'ix-status'}>{isAway(presence) && '🌴 '}{statusText(presence)}</p>}
+          {presence?.tz && zoneLine(presence.tz) && <p class="note">🕑 {zoneLine(presence.tz)}</p>}
+          {dm && <button onClick={() => void openExternal(dm)}>Message on Slack</button>}
         </div>
       </header>
       <p class="history-sum">

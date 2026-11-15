@@ -1081,7 +1081,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         );
         slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads)); // a first message starts a thread
         const failed = results.filter((r) => !r.ok);
-        const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : ''));
+        const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : '') + (r.at ? ' (at 9 am their time)' : ''));
         result = {
           ok: !failed.length,
           text: [sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${slackWhy(r)}`)].filter(Boolean).join(' '),

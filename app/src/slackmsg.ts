@@ -79,6 +79,26 @@ export function lateFor(s: { tz?: string } | null | undefined, now = new Date())
   }
 }
 
+// The next 9 am in their time zone (ms). ponytail: a night when their clocks change is an hour off.
+export function morningFor(tz: string, now = Date.now()) {
+  const [h, m] = new Date(now).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).split(':').map(Number);
+  return now - (now % 60_000) + (((9 * 60 - h * 60 - m + 1440) % 1440) || 1440) * 60_000;
+}
+
+// Their clock beside yours: "2:48 pm there · Kolkata, 1h 30m behind you" ('' for a time zone this browser doesn't know).
+export function zoneLine(tz: string, now = new Date()) {
+  try {
+    const wall = (timeZone?: string) => Date.parse(now.toLocaleString('sv-SE', { timeZone }).replace(' ', 'T') + 'Z');
+    const diff = Math.round((wall(tz) - wall()) / 60_000);
+    const time = now.toLocaleTimeString([], { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+    const city = tz.split('/').pop()!.replace(/_/g, ' ');
+    const gap = [Math.floor(Math.abs(diff) / 60) && `${Math.floor(Math.abs(diff) / 60)}h`, Math.abs(diff) % 60 && `${Math.abs(diff) % 60}m`].filter(Boolean).join(' ');
+    return `${time} there · ${city}, ${diff ? `${gap} ${diff < 0 ? 'behind' : 'ahead of'} you` : 'the same time as you'}`;
+  } catch {
+    return '';
+  }
+}
+
 // Where someone's away status comes from, for a tooltip.
 export const awayWhere = (s: { busy?: boolean } | null | undefined) => (s?.busy ? 'Busy' : 'Away on Slack');
 

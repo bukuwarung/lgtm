@@ -611,7 +611,7 @@ export const findSlackPeople = (people: { login: string; name: string | null; em
 export const saveSlackPeople = (map: Record<string, string>) => call<SlackPeople>('PUT', map);
 
 // GitHub is the gh login (in the page); this asks the server about the CLIs it drives: slackcli and acli.
-export type Integrations = { slack: { ok: boolean; error?: string; who?: string }; jira: { ok: boolean; error?: string; site?: string } };
+export type Integrations = { slack: { ok: boolean; error?: string; who?: string; team?: string; canSchedule?: boolean }; jira: { ok: boolean; error?: string; site?: string } };
 export async function fetchIntegrations(): Promise<Integrations> {
   if (isDesktop) return command<Integrations>('integrations');
   const res = await fetch('/integrations').catch(() => {
@@ -632,10 +632,21 @@ export const slackStatus = (pr: string): Promise<{ configured: boolean; error?: 
     .then((r) => r.json())
     .then((d) => ({ configured: !!d.configured, error: d.error, threads: d.threads ?? [] }), (e) => ({ configured: false, error: e.message, threads: [] }));
 
-export type SlackResult = { login: string; ok: boolean; threaded?: boolean; error?: string };
+export type SlackResult = { login: string; ok: boolean; threaded?: boolean; error?: string; at?: number }; // at: scheduled for then (Unix seconds)
 // `thread` ("owner/repo#12") keeps one Slack thread per PR and person; later reviews reply in it. `check`: a dry run,
 // nothing sent: can each be reached?
-export async function notifySlack(recipients: { login: string; emails: string[] }[], text: string, thread: string, check = false): Promise<SlackResult[]> {
+let canSchedule: Promise<boolean> | undefined;
+export async function notifySlack(recipients: { login: string; emails: string[]; at?: number }[], text: string, thread: string, check = false): Promise<SlackResult[]> {
+  // Someone it's late for (slackmsg.ts lateFor) gets it at 9 am their time, when Slack can schedule it (an app sign-in:
+  // Slack posts it, lgtm needn't be running); otherwise now.
+  canSchedule ??= fetchIntegrations().then((i) => !!i.slack.canSchedule, () => false);
+  if (!check && (await canSchedule)) {
+    const [{ lateFor, morningFor }, status] = await Promise.all([import('./slackmsg.ts'), slackPresence(recipients.map((r) => r.login)).catch(() => ({}) as Record<string, SlackPresence>)]);
+    recipients = recipients.map((r) => (lateFor(status[r.login]) ? { ...r, at: Math.floor(morningFor(status[r.login].tz!) / 1000) } : r));
+    const later = recipients.filter((r) => r.at);
+    if (later.length)
+      dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${later.map((r) => `${shownAt(r.login)} gets the Slack message at 9 am their time (${lateFor(status[r.login])} now)`).join('; ')}. It's under Scheduled messages in Slack, to send now or change.` } }));
+  }
   if (isDesktop) return command<SlackResult[]>('slack_notify', { recipients, text, thread, check });
   const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text, thread, check }) });
   const d = await res.json();

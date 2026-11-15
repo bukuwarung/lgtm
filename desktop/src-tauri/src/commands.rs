@@ -127,9 +127,11 @@ static JIRA_SITE: OnceLock<Mutex<Option<String>>> = OnceLock::new(); // https://
 #[tauri::command]
 pub async fn integrations() -> Value {
     let slack = std::thread::spawn(|| {
-        let r = slackcli(&["auth", "whoami"], None);
-        let who = re(r"User:\s*(\S+)").captures(&plain(&r.stdout)).map(|c| c[1].to_string());
-        json!({ "ok": r.ok, "error": if r.ok { Value::Null } else { r.error.into() }, "who": who })
+        let r = slackcli(&["auth", "whoami", "--json"], None);
+        let d = if r.ok { parse_json(&r.stdout).unwrap_or(Value::Null) } else { Value::Null };
+        // canSchedule: Slack schedules messages for app sign-ins, not a browser's.
+        let can = d["auth_type"].as_str().is_some_and(|t| t != "browser");
+        json!({ "ok": r.ok, "error": if r.ok { Value::Null } else { r.error.into() }, "who": d["user"], "team": d["workspace_id"], "canSchedule": can })
     });
     let jira = match acli(&["jira", "auth", "status"]) {
         Ok(out) => json!({ "ok": true, "site": re(r"Site:\s*(\S+)").captures(&plain(&out)).map(|c| c[1].to_string()) }),
@@ -504,7 +506,7 @@ pub async fn slack_post(channel: String, text: String, pr: String) -> Result<Val
     }
     let (id, name) = channel_id(&channel)?;
     let users = config::read("config.json", true)?["slackUsers"].clone();
-    let body = mentions(&text, &Recipient { login: String::new(), emails: vec![] }, &users);
+    let body = mentions(&text, &Recipient { login: String::new(), emails: vec![], at: None }, &users);
     let recipient = format!("--recipient-id={id}");
     let mut args = vec!["messages", "send", recipient.as_str(), "--message-file", "-", "--json"];
     if dry_run() {
@@ -604,6 +606,8 @@ pub async fn slack_channel(channel: String) -> Value {
 pub struct Recipient {
     login: String,
     emails: Vec<String>,
+    #[serde(default)]
+    at: Option<i64>, // Slack posts it then (Unix seconds), lgtm needn't be running; its thread is known once it's posted
 }
 
 /// DM each recipient: the mapping first, then their GitHub emails. Each PR gets one thread per person; later reviews
@@ -618,9 +622,17 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
     let threads = Mutex::new(config::read("slack-threads.json", false).unwrap_or(json!({})));
     let dry = dry_run() || check == Some(true);
     let target = re(SLACK_TARGET);
-    let send = |args: Vec<String>, text: &str| {
-        let mut all: Vec<&str> = vec!["messages", "send"];
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    if recipients.iter().any(|r| r.at.is_some_and(|at| at <= now || at >= now + 120 * 86400)) {
+        return Err("Bad Slack request".into());
+    }
+    let send = |args: Vec<String>, text: &str, at: Option<i64>| {
+        let at = at.map(|a| a.to_string());
+        let mut all: Vec<&str> = vec!["messages", if at.is_some() { "schedule" } else { "send" }];
         all.extend(args.iter().map(String::as_str));
+        if let Some(a) = &at {
+            all.extend(["--at", a]);
+        }
         all.extend(["--message-file", "-", "--json"]);
         if dry {
             all.push("--dry-run");
@@ -640,9 +652,9 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
                     let prev = threads.lock().unwrap()[&key].clone();
                     if let (Some(ch), Some(ts)) = (prev["channel"].as_str(), prev["ts"].as_str()) {
                         if re(r"^[CDG][A-Z0-9]+$").is_match(ch) && re(r"^\d+\.\d+$").is_match(ts) {
-                            let out = send(vec![format!("--recipient-id={ch}"), format!("--thread-ts={ts}")], text);
+                            let out = send(vec![format!("--recipient-id={ch}"), format!("--thread-ts={ts}")], text, r.at);
                             if out.ok {
-                                return json!({ "login": r.login, "ok": true, "threaded": true });
+                                return json!({ "login": r.login, "ok": true, "threaded": true, "at": r.at });
                             }
                         }
                     }
@@ -652,15 +664,15 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
                     }
                     let mut error = String::new();
                     for t in targets {
-                        let out = send(vec![format!("--recipient-id={t}")], text);
+                        let out = send(vec![format!("--recipient-id={t}")], text, r.at);
                         if out.ok {
-                            if !dry {
+                            if !dry && r.at.is_none() {
                                 if let Some(sent) = parse_json(&out.stdout) {
                                     // Who it's with too, for their name and picture on the PR (pr_threads).
                                     threads.lock().unwrap()[&key] = json!({ "channel": sent["channel_id"], "ts": sent["ts"], "user": t });
                                 }
                             }
-                            return json!({ "login": r.login, "ok": true, "threaded": false });
+                            return json!({ "login": r.login, "ok": true, "threaded": false, "at": r.at });
                         }
                         error = out.error;
                     }

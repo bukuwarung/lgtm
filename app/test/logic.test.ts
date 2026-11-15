@@ -807,6 +807,18 @@ test('lateFor: their local time, only outside working hours there and not the sa
   assert.equal(lateFor({}, at), '');
 });
 
+test('morningFor and zoneLine: their next 9 am, and their clock beside yours', async () => {
+  const { morningFor, zoneLine } = await import('../src/slackmsg.ts');
+  const at = Date.parse('2026-11-15T17:00:00Z'); // 10:30 pm in Kolkata
+  assert.equal(new Date(morningFor('Asia/Kolkata', at)).toISOString(), '2026-11-16T03:30:00.000Z');
+  assert.equal(new Date(morningFor('Asia/Kolkata', Date.parse('2026-11-15T03:30:00Z'))).toISOString(), '2026-11-16T03:30:00.000Z'); // 9 am already: tomorrow's
+  assert.equal(new Date(morningFor('Asia/Kolkata', Date.parse('2026-11-14T22:00:00Z'))).toISOString(), '2026-11-15T03:30:00.000Z'); // 3:30 am: today's
+  const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  assert.match(zoneLine(mine, new Date(at)), /there · .*, the same time as you$/);
+  assert.match(zoneLine('Asia/Kolkata', new Date(at)), /^10:30\s?(PM|pm) there · Kolkata/);
+  assert.equal(zoneLine('Not/AZone', new Date(at)), '');
+});
+
 test('isAway: Slack statuses that mean someone is out today', async () => {
   const { isAway } = await import('../src/slackmsg.ts');
   const s = (text: string, emoji = '', until = 0) => ({ text, emoji, until });

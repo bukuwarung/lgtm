@@ -450,19 +450,20 @@ async function notify({ recipients, text, thread, check }) {
   const DRY = DRY_RUN || check === true;
   const valid = Array.isArray(recipients) && recipients.length <= 10 && typeof text === 'string' && text.length <= 4000 &&
     typeof thread === 'string' && PR_REF.test(thread) &&
-    recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string'));
+    recipients.every((r) => typeof r?.login === 'string' && Array.isArray(r.emails) && r.emails.every((e) => typeof e === 'string') && (r.at === undefined || (Number.isInteger(r.at) && r.at > Date.now() / 1000 && r.at < Date.now() / 1000 + 120 * 86400)));
   if (!valid) throw new Error('Bad Slack request');
   const users = (await readConfig()).slackUsers ?? {};
   const threads = await readThreads();
   const results = await Promise.all(
-    recipients.map(async ({ login, emails }) => {
+    recipients.map(async ({ login, emails, at }) => {
       const body = await mentions(text, { login, emails }, users);
-      const send = (args) => slackcli(['messages', 'send', ...args, '--message-file', '-', '--json', ...(DRY ? ['--dry-run'] : [])], body);
+      // at: Slack posts it then (Unix seconds), lgtm needn't be running; its thread is known once it's posted.
+      const send = (args) => slackcli(['messages', at ? 'schedule' : 'send', ...args, ...(at ? ['--at', String(at)] : []), '--message-file', '-', '--json', ...(DRY ? ['--dry-run'] : [])], body);
       const key = `${thread}:${login}`;
       const prev = threads[key];
       if (prev && /^[CDG][A-Z0-9]+$/.test(prev.channel) && /^\d+\.\d+$/.test(prev.ts)) {
         const r = await send([`--recipient-id=${prev.channel}`, `--thread-ts=${prev.ts}`]);
-        if (r.ok) return { login, ok: true, threaded: true, ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
+        if (r.ok) return { login, ok: true, threaded: true, ...(at ? { at } : {}), ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
       }
       const targets = [users[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
       if (!targets.length) return { login, ok: false, error: `no Slack user known: map @${login} in Settings → Slack → People` };
@@ -470,11 +471,11 @@ async function notify({ recipients, text, thread, check }) {
       for (const target of targets) {
         const r = await send([`--recipient-id=${target}`]);
         if (r.ok) {
-          if (!DRY) {
+          if (!DRY && !at) {
             const sent = parseJson(r.stdout);
             if (sent?.channel_id) threads[key] = { channel: sent.channel_id, ts: sent.ts, user: target }; // who it's with, for their name and picture
           }
-          return { login, ok: true, threaded: false, ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
+          return { login, ok: true, threaded: false, ...(at ? { at } : {}), ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
         }
         error = r.error;
       }
@@ -839,7 +840,8 @@ const server = createServer(async (req, res) => {
   if (path === '/integrations') {
     const plain = (s = '') => s.replace(/\x1b\[[0-9;]*m/g, ''); // the CLIs colour their output
     const [slack, jira] = await Promise.all([
-      slackcli(['auth', 'whoami']).then((r) => ({ ok: r.ok, error: r.error, who: plain(r.stdout).match(/User:\s*(\S+)/)?.[1] })),
+      // canSchedule: Slack schedules messages for app sign-ins, not a browser's.
+      slackcli(['auth', 'whoami', '--json']).then((r) => ((d) => ({ ok: r.ok, error: r.error, who: d?.user, team: d?.workspace_id, canSchedule: !!d?.auth_type && d.auth_type !== 'browser' }))(r.ok ? parseJson(r.stdout) : null)),
       acli(['jira', 'auth', 'status']).then(
         (out) => ({ ok: true, site: plain(out).match(/Site:\s*(\S+)/)?.[1] }),
         (e) => ({ ok: false, error: e.message }),
