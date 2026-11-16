@@ -677,6 +677,17 @@ export async function slackRequest(pr: string, author?: string, text?: string, r
   return d;
 }
 
+// GitHub PRs someone asked you about on Slack lately (a link in a DM to you, or beside a tag of you): Settings → Slack,
+// slackAsked (off). Asked again at most every 10 minutes (two Slack searches).
+export type SlackAsk = { pr: string; login: string | null; name: string | null; url: string | null; ts: string };
+let asks: { at: number; list: Promise<SlackAsk[]> } | null = null;
+export function slackAsks(): Promise<SlackAsk[]> {
+  if (!flag('slackAsked', false)) return Promise.resolve([]);
+  if (!asks || Date.now() - asks.at > 10 * 60_000)
+    asks = { at: Date.now(), list: (isDesktop ? command<SlackAsk[]>('slack_asked') : fetch('/slack-asked').then((r) => (r.ok ? r.json() : []))).catch(() => []) };
+  return asks.list;
+}
+
 // Asking again (Settings → Slack, againInThread, off): the "again" message as a reply in your PR's review request's
 // thread, tagging who you asked, instead of a DM. Back: where; null when it's off or there's no request (the DM goes).
 export async function againInThread(pr: string, logins: string[], text: string): Promise<string | null> {

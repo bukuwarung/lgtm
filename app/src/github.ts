@@ -93,6 +93,7 @@ export type QueueItem = {
   assigned: boolean; // assigned to me
   authored: boolean; // I opened it
   codeOwner?: boolean; // a draft changing files I (or a team of mine) own: GitHub asks code owners only once it's ready
+  slackAsk?: { by: string; url: string | null }; // asked of me on Slack, not on GitHub (slackAskedPRs)
   thread?: ThreadStatus; // filled in after the list loads (getThreadStatus)
   mentionWaiting?: boolean; // a conversation comment mentioning me waits on me (getMentionStatus; the inbox lists it)
   qa?: { replies: string[]; status: 'signed' | 'issue' | null }; // my PR's QA request on Slack (platform.ts qaThreads)
@@ -1722,6 +1723,35 @@ export async function revertsOfMine(me: string): Promise<{ repo: string; number:
       .filter((r: any) => r?.state === 'OPEN' && r.author?.login !== me && r.repository?.nameWithOwner === p.repository.nameWithOwner && revertOf(r.body, p.repository.nameWithOwner) === p.number)
       .map((r: any) => ({ repo: p.repository.nameWithOwner, number: r.number, title: r.title, author: r.author?.login ?? '', of: p.number })),
   );
+}
+
+// The PRs asked of me on Slack (platform.ts slackAsks) that GitHub doesn't: open, not drafts, not mine, not asking me
+// already, no review of mine yet. In "Needs your review", with who asked. skip: the list's own (by id).
+export async function slackAskedPRs(asks: { pr: string; login: string | null; name: string | null; url: string | null }[], skip: Set<string>): Promise<QueueItem[]> {
+  const gh = asks.filter((a) => !isLab(a.pr.split('#')[0])).slice(0, 15);
+  if (!gh.length) return [];
+  const me = await getGitHubViewer();
+  const d = await graphql(
+    `query{${gh.map((a, k) => { const [o, r] = a.pr.split('#')[0].split('/'); return `a${k}:repository(owner:${JSON.stringify(o)},name:${JSON.stringify(r)}){pullRequest(number:${Number(a.pr.split('#')[1])}){...F ...on PullRequest{state}}}`; }).join(' ')}} ${PR_F}`,
+    {},
+    true, // a PR lgtm can't see stays out
+  );
+  return gh.flatMap((a, k) => {
+    const p = d[`a${k}`]?.pullRequest;
+    if (!p || skip.has(p.id) || p.state !== 'OPEN' || p.isDraft || p.author?.login === me) return [];
+    if (p.reviewRequests.nodes.some((r: any) => r.requestedReviewer?.login === me) || p.latestReviews.nodes.some((r: any) => r.author?.login === me)) return [];
+    return [{ ...toItem(p), requested: true, reviewing: true, slackAsk: { by: a.login ? `@${a.login}` : a.name ?? 'someone', url: a.url }, myState: null, newSinceApproval: 0, reviewedBefore: false, mine: false, assigned: false, authored: false, mentioned: false }];
+  });
+}
+
+// My PR asks a group but no one in it by name: a GitHub team only (no person asked, no review yet), or a GitLab approval
+// rule still needing approval with none of its approvers a reviewer. Everyone in it is told, so it's no one's: its
+// members, to name one. null: nothing to name.
+export async function unnamedGroup(repo: string, n: number, pr: Pick<PR, 'requested_teams' | 'requested_reviewers'>, reviewed: boolean): Promise<{ label: string; members: string[] } | null> {
+  if (isLab(repo)) return lab.labUnnamedRule(repo, n);
+  const slug = pr.requested_teams?.[0]?.slug;
+  if (!slug || pr.requested_reviewers?.length || reviewed) return null;
+  return { label: `@${slug}`, members: await getTeamMembers(`${repo.split('/')[0]}/${slug}`) };
 }
 
 // A merged PR's branch, unless another open PR builds on it (deleting it would close that one).

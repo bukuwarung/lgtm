@@ -3,7 +3,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs } from './github.ts';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread } from './platform.ts';
+import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -1469,7 +1469,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       setSettled(false);
       // Drafts showing: also the ones changing files I own, before GitHub asks me (it does once they're ready).
       const owned = showDraftsRef.current ? await getOwnedDrafts([...new Set(queue.map((i) => i.repo))], new Set(queue.map((i) => i.id))).catch(() => []) : [];
-      const items = [...queue, ...owned];
+      // Asked of me on Slack, not on GitHub (Settings → Slack): in "Needs your review" too.
+      const asked = viewAs() ? [] : await slackAsks().then((a) => slackAskedPRs(a, new Set([...queue, ...owned].map((i) => i.id)))).catch(() => []);
+      const items = [...queue, ...owned, ...asked];
       knowRepos(items.map((i) => i.repo));
       knowJiraKeys(items.map((i) => i.title));
       setItems(items);
@@ -1583,7 +1585,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       const all = { replies: !flipped, verdicts: true, ci: true, queue: true, ready: true };
       const mine = { replies: notifyReplies && !flipped, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, ready: notifyReady };
       // A draft I own (CODEOWNERS) isn't a request yet: GitHub asks once it's ready, and that's when it's news.
-      for (const i of waiting.filter((i) => !i.codeOwner && !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i, true);
+      for (const i of waiting.filter((i) => !i.codeOwner && !i.slackAsk && !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i, true);
       for (const i of items) {
         const was = before.current.get(i.id);
         if (was) {
@@ -1595,7 +1597,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           tell(i.qa.status !== was.qa.status && i.qa.status ? (i.qa.status === 'signed' ? 'QA signed off' : 'QA raised an issue') : 'QA replied', i, notifyReplies);
       }
     }
-    seen.current = new Set(waiting.filter((i) => !i.codeOwner).map((i) => i.id));
+    seen.current = new Set(waiting.filter((i) => !i.codeOwner && !i.slackAsk).map((i) => i.id));
     rulesWas.current = rules;
     before.current = new Map(items.map((i) => [i.id, i]));
   }, [items, settled, claude, menuBar, badgeInbox, showDrafts]);
@@ -1697,6 +1699,10 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             run={() => swapReviewer(i.repo, i.number, r, [i.author, ...i.assignees, ...i.pendingReviewers, ...(i.reviewedBy ?? []), ...i.changesBy, ...readBots()], { title: i.title, url: prWebUrl(i.repo, i.number), author: i.author }).then((x) => x.said)}
           />
         ))}
+        {i.slackAsk && (
+          <QuickPill icon="comment-discussion" tone="" idle={`asked on Slack by ${i.slackAsk.by}`} action={`Add me as reviewer on ${site(i.repo)}`} busy="adding…" done="you're a reviewer" title={`${i.slackAsk.by} asked you on Slack; ${site(i.repo)} doesn't ask you yet`}
+            run={() => getGitHubViewer().then((me) => requestReview(i.repo, i.number, me))} />
+        )}
         {i.codeOwner && <span class="pill" title="It changes files you own (CODEOWNERS). GitHub asks code owners once it's marked ready for review"><Tg i="assigned" t="code owner" /></span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&
           (kind === MINE ? (

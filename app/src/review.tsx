@@ -12,7 +12,7 @@ import { baselineChanges, isLintBaseline, type Suppression } from './lintbaselin
 import { addedLines, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getTeamMembers, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
   ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy } from './github.ts';
@@ -666,17 +666,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
   const myOpenPR = !!me && data?.pr.user.login === me && data.pr.state === 'open';
-  // My PR asks only a team (no one by name, no reviews yet): GitHub tells all of them, so it's no one's. Its least busy
-  // member, to ask by name.
-  const teamOnly = myOpenPR && !data.pr.draft && !(data.pr.requested_reviewers ?? []).length && !conversation.some((c) => c.state && c.author !== me) ? data.pr.requested_teams?.[0]?.slug : undefined;
-  const [teamPick, setTeamPick] = useState<ReviewerPick | null>(null);
+  // My PR asks a group but no one in it by name (a GitHub team, a GitLab approval rule: github.ts unnamedGroup): everyone
+  // in it is told, so it's no one's. Its least busy member, to ask by name.
+  const reviewedYet = conversation.some((c) => c.state && c.author !== me);
+  const [teamPick, setTeamPick] = useState<(ReviewerPick & { group: string }) | null>(null);
   useEffect(() => {
     setTeamPick(null);
-    if (teamOnly && data)
-      getTeamMembers(`${repo.split('/')[0]}/${teamOnly}`)
-        .then((members) => suggestReviewers(repo, new Set([me, ...bots]), '', [], members))
-        .then((l) => setTeamPick(l.find((p) => !p.busy) ?? null), () => {});
-  }, [repo, n, teamOnly]);
+    if (myOpenPR && data && !data.pr.draft)
+      unnamedGroup(repo, n, data.pr, reviewedYet)
+        .then((g) => g && suggestReviewers(repo, new Set([me, ...bots]), '', [], g.members).then((l) => ((p) => p && setTeamPick({ ...p, group: g.label }))(l.find((p) => !p.busy))))
+        .catch(() => {});
+  }, [repo, n, myOpenPR, data?.pr.requested_reviewers?.length, reviewedYet]);
   useEffect(() => {
     setRequest(null);
     if (myOpenPR && (reviewAsk || reviewReplies)) slackRequest(`${repo}#${n}`, undefined, undefined, true).then(setRequest, () => {});
@@ -1744,8 +1744,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </span>
             )}
             {teamPick && (
-              <span class="pill p-warn" title={`Only @${pr.requested_teams![0].slug} is asked: everyone in it is told, so it's no one's. @${teamPick.login} ${teamPick.why}, with ${teamPick.load} open review request${teamPick.load === 1 ? '' : 's'}.`}>
-                <Tg i="nobody" t="asked a team, no one named" />{' '}
+              <span class="pill p-warn" title={`${teamPick.group} is asked, but no one in it by name: everyone in it is told, so it's no one's. @${teamPick.login} ${teamPick.why}, with ${teamPick.load} open review request${teamPick.load === 1 ? '' : 's'}.`}>
+                <Tg i="nobody" t={isLab(repo) ? `${teamPick.group}: no approver asked` : 'asked a team, no one named'} />{' '}
                 <button
                   class="link"
                   onClick={() =>

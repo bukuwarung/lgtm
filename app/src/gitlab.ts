@@ -790,6 +790,18 @@ export async function labRevertsOfMine(only: string) {
   return out;
 }
 
+// An approval rule still needing approval with none of its eligible approvers a reviewer (github.ts unnamedGroup).
+// ponytail: the first such rule; approval rules are a paid GitLab feature, so on a free plan there are none.
+export async function labUnnamedRule(repo: string, n: number): Promise<{ label: string; members: string[] } | null> {
+  const [state, mr] = await Promise.all([
+    json(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}/approval_state`).catch(() => null),
+    getMR(repo, n, 'reviewers{nodes{username}}'),
+  ]);
+  const asked = new Set<string>(mr.reviewers.nodes.map((r: any) => r.username));
+  const rule = (state?.rules ?? []).find((r: any) => !r.approved && r.approvals_required > 0 && r.eligible_approvers?.length && !r.eligible_approvers.some((u: any) => asked.has(u.username)));
+  return rule ? { label: rule.name, members: rule.eligible_approvers.map((u: any) => u.username) } : null;
+}
+
 // --- who to ask ---
 
 // Who wrote these lines at the base commit (GitLab's blame names the account), per file: as GitHub's blame ranges.

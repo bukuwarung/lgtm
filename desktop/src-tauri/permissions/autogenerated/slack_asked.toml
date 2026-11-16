@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slack-asked"
+description = "Enables the slack_asked command without any pre-configured scope."
+commands.allow = ["slack_asked"]
+
+[[permission]]
+identifier = "deny-slack-asked"
+description = "Denies the slack_asked command without any pre-configured scope."
+commands.deny = ["slack_asked"]

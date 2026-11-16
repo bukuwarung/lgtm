@@ -1454,6 +1454,16 @@ Object.assign(DEMOS, {
     off: <div class="demo-bar"><b>#412 Retry failed payments with backoff</b><button><Octicon name="dependabot" /> Agents</button></div>,
     on: <div class="demo-bar"><b>#412 Retry failed payments with backoff</b><span class="bar-slack bar-qa"><Octicon name="comment-discussion" /><span class="qa-new">2</span></span><button><Octicon name="dependabot" /> Agents</button></div>,
   },
+  slackAsked: {
+    title: 'Asked of you on Slack',
+    off: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="assigned" t="review requested" />]])}</div>,
+    on: (
+      <div class="demo-list">
+        {listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="assigned" t="review requested" />]])}
+        {listItem('Show the refund reason on receipts', 'budi', 'acme/shop#415', [['', <><Octicon name="comment-discussion" /> asked on Slack by @budi</>]])}
+      </div>
+    ),
+  },
   againInThread: {
     title: "Ask again in your review request's thread",
     off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>DM with Budi · 15:40</time><div class="md"><p>Addressed your comments 🙏 Could you take another look at <a>acme/shop#412</a>?</p></div></div></div>,

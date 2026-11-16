@@ -567,6 +567,55 @@ pub async fn slack_request(pr: String, author: Option<String>, text: Option<Stri
     Ok(json!({ "where": posted_in(&m), "url": m["permalink"], "replies": others }))
 }
 
+/// GitHub PRs someone asked you about on Slack in the last 7 days: a PR link in a DM to you, or beside a tag of you, from
+/// someone else. One per PR, newest first. The server's slackAsked().
+#[tauri::command]
+pub async fn slack_asked() -> Value {
+    let Some(me) = cached(&SLACK_ME, || {
+        let r = slackcli(&["auth", "whoami", "--json"], None);
+        parse_json(&r.stdout).and_then(|v| v["user_id"].as_str().map(String::from))
+    })
+    .filter(|m| re(r"^U[A-Z0-9]+$").is_match(m)) else { return json!([]) };
+    let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0) - 7.0 * 86_400.0;
+    let users = config::read("config.json", true).map(|c| c["slackUsers"].clone()).unwrap_or(Value::Null);
+    let login_of = |id: &str| users.as_object().and_then(|o| o.iter().find(|(_, v)| v.as_str() == Some(id)).map(|(l, _)| l.clone()));
+    let link = re(r"https://github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)(\D|$)");
+    let tag = format!("<@{me}>");
+    let mut out: Vec<Value> = vec![];
+    for (q, dm) in [("github.com pull to:me".to_string(), true), (format!("github.com pull {tag}"), false)] {
+        let r = slackcli(&["search", "messages", &q, "--json", "--limit", "50"], None);
+        let matches = if r.ok { parse_json(&r.stdout).and_then(|v| v["matches"].as_array().cloned()).unwrap_or_default() } else { vec![] };
+        for m in &matches {
+            let Some(user) = m["user"].as_str().filter(|u| *u != me) else { continue };
+            if if dm { m["channel"]["is_im"] != json!(true) } else { !m["text"].as_str().unwrap_or("").contains(&tag) } {
+                continue;
+            }
+            let ts = m["ts"].as_str().unwrap_or("").to_string();
+            if ts.parse::<f64>().unwrap_or(0.0) < since {
+                continue;
+            }
+            for c in link.captures_iter(&own_links(m)) {
+                let pr = format!("{}/{}#{}", &c[1], &c[2], &c[3]);
+                match out.iter_mut().find(|a| a["pr"] == json!(pr)) {
+                    Some(a) if a["ts"].as_str().unwrap_or("") >= ts.as_str() => {}
+                    Some(a) => *a = json!({ "pr": pr, "user": user, "url": m["permalink"], "ts": ts }),
+                    None => out.push(json!({ "pr": pr, "user": user, "url": m["permalink"], "ts": ts })),
+                }
+            }
+        }
+    }
+    out.sort_by(|a, b| b["ts"].as_str().cmp(&a["ts"].as_str()));
+    out.truncate(20);
+    for a in out.iter_mut() {
+        let user = a["user"].as_str().unwrap_or("").to_string();
+        let login = login_of(&user);
+        a["name"] = if login.is_some() { Value::Null } else { slack_profile(&user).map(|p| p["name"].clone()).unwrap_or(Value::Null) };
+        a["login"] = json!(login);
+        a.as_object_mut().unwrap().remove("user");
+    }
+    json!(out)
+}
+
 fn request_posts(pr: &str, author: &Option<String>) -> Result<Vec<Value>, String> {
     if !re(PR_REF).is_match(pr) || author.as_ref().is_some_and(|a| a.len() > 100) {
         return Err("Bad Slack request".into());
