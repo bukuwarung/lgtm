@@ -409,20 +409,26 @@ async function markDone(b) {
   }
   return { done: [...done] };
 }
-// The PR's review request (the latest of those markDone finds): where it is, or with text, a reply in its thread (a
-// revert, said where the PR was asked about).
-async function requestReply({ pr, author, text }) {
+// The PR's review request (the latest of those markDone finds): where it is, with replies its link and the times of
+// replies from others, or with text, a reply in its thread (a revert, said where the PR was asked about).
+async function requestReply({ pr, author, text, replies }) {
   if (text != null && (typeof text !== 'string' || !text.trim() || text.length > 4000)) throw new Error('Bad Slack request');
   const [m] = await requestPosts({ pr, author });
   if (!m) return { where: null };
+  // The thread it's in: its own, or, when the request is itself a reply (in a channel's daily review thread, say), that one.
+  const root = m.thread_ts ?? m.permalink?.match(/thread_ts=(\d+\.\d+)/)?.[1] ?? m.ts;
   if (text != null) {
-    const r = await slackcli(['messages', 'send', `--recipient-id=${m.channel.id}`, `--thread-ts=${m.ts}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
+    const r = await slackcli(['messages', 'send', `--recipient-id=${m.channel.id}`, `--thread-ts=${root}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
     if (!r.ok) throw new Error(r.error);
   }
-  return { where: postedIn(m) };
+  if (replies !== true) return { where: postedIn(m) };
+  const r = await slackcli(['conversations', 'read', m.channel.id, '--thread-ts', root, '--json', '--limit', '200']);
+  const said = (r.ok && parseJson(r.stdout)?.messages) || [];
+  return { where: postedIn(m), url: m.permalink ?? null, replies: said.filter((x) => Number(x.ts) > Number(m.ts) && x.user !== m.user).map((x) => x.ts) };
 }
 
-async function postToChannel({ channel, text, pr }) {
+// kind 'review': a review request (Settings → Slack), found again by its link rather than kept.
+async function postToChannel({ channel, text, pr, kind }) {
   if (typeof channel !== 'string' || !SLACK_CHANNEL.test(channel) || typeof text !== 'string' || !text.trim() || text.length > 4000 || typeof pr !== 'string' || !PR_REF.test(pr)) throw new Error('Bad Slack request');
   const to = await channelId(channel);
   if (to.error) throw new Error(to.error);
@@ -432,7 +438,7 @@ async function postToChannel({ channel, text, pr }) {
   if (DRY_RUN) return { url: null, dryRun: r.stdout.trim() };
   const sent = parseJson(r.stdout);
   // Kept with the PR's DM threads (slack-threads.json, as "<pr>:#qa": no GitHub login has a #), shown beside its title.
-  if (sent?.channel_id && sent?.ts) {
+  if (sent?.channel_id && sent?.ts && kind !== 'review') {
     const threads = await readThreads();
     threads[`${pr}:#qa`] = { channel: sent.channel_id, ts: sent.ts, name: to.name ?? channel };
     await saveThreads(threads);

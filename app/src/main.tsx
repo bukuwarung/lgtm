@@ -11,10 +11,10 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt } from './platform.ts';
+import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
-import { knowJiraKeys, linkJiraKeys } from './jira.ts';
+import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { History } from './history.tsx';
@@ -1255,6 +1255,7 @@ async function autoMerge(i: QueueItem) {
 // view's re-request does; none if that message is emptied or Slack isn't set up).
 async function askAgain(i: QueueItem): Promise<string> {
   await Promise.all(i.changesBy.map((l) => requestReview(i.repo, i.number, l)));
+  void ticketsToReview(jiraKeys(i.title, i.head));
   const text = fillSlack(slackTemplate('again'), prValues({ repo: i.repo, number: i.number, title: i.title, url: prWebUrl(i.repo, i.number), author: i.author }));
   if (!text || !(await slackStatus(`${i.repo}#${i.number}`).catch(() => null))?.configured) return `Asked again on ${site(i.repo)}`;
   try {
@@ -1712,7 +1713,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         )}
         {kind !== MINE && i.mergeState === 'DIRTY' && <span class="pill p-bad"><Tg i="conflict" t="conflicts" /></span>}
         {i.isDraft && kind !== MINE && <span class="pill"><Tg i="draft" t="draft" /></span>}
-        {i.isDraft && kind === MINE && <QuickPill icon="draft" tone="" idle="draft" action="Ready for review" busy="marking…" done="ready for review" title="A draft: Ready for review lets its reviewers know" run={() => markReady(i.id)} />}
+        {i.isDraft && kind === MINE && <QuickPill icon="draft" tone="" idle="draft" action="Ready for review" busy="marking…" done="ready for review" title="A draft: Ready for review lets its reviewers know" run={() => markReady(i.id).then(() => void ticketsToReview(jiraKeys(i.title, i.head)))} />}
         {kind.colorOf && !i.isDraft && (
           <span class={'pill ' + { APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad', REVIEW_REQUIRED: '' }[i.reviewDecision ?? 'REVIEW_REQUIRED']}>
             <Tg i={DECISION[i.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[i.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />

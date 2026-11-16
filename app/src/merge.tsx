@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
-import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack } from './platform.ts';
+import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview } from './platform.ts';
 import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -203,7 +203,7 @@ export function MergeBox({ repo, n, revert, url, checks, onChange, tickets = [],
               {r.eligible.slice(0, 6).map((l, k) => (
                 <>
                   {k > 0 && ', '}
-                  <Who login={l} /> <button class="link" disabled={!!busy} title={`Ask @${l} to review`} onClick={() => run('ask', () => requestReview(repo, n, l))}>ask</button>
+                  <Who login={l} /> <button class="link" disabled={!!busy} title={`Ask @${l} to review`} onClick={() => run('ask', () => requestReview(repo, n, l).then(() => void ticketsToReview(tickets)))}>ask</button>
                 </>
               ))}
               {r.eligible.length > 6 && ` and ${r.eligible.length - 6} more`}
@@ -228,7 +228,7 @@ export function MergeBox({ repo, n, revert, url, checks, onChange, tickets = [],
         </div>
       )}
       <div class="merge-row">
-        {s.isDraft && <button disabled={!!busy} onClick={() => run('ready', () => markReady(s.id).then(() => (setShown(false), jumpTo('ix-reviewers'))))}>{busy === 'ready' ? 'Marking…' : 'Ready for review'}</button>}
+        {s.isDraft && <button disabled={!!busy} onClick={() => run('ready', () => markReady(s.id).then(() => (void ticketsToReview(tickets), setShown(false), jumpTo('ix-reviewers'))))}>{busy === 'ready' ? 'Marking…' : 'Ready for review'}</button>}
         {s.mergeStateStatus === 'BEHIND' && s.viewerCanUpdateBranch && (
           <button disabled={!!busy} onClick={() => run('update', () => updateBranch(s))}>{busy === 'update' ? (s.reasons ? 'Rebasing…' : 'Updating…') : s.reasons ? 'Rebase' : 'Update branch'}</button>
         )}

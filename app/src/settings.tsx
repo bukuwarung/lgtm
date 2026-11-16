@@ -441,8 +441,12 @@ export function Settings() {
           {ints?.slack.ok && <SlackPeople team={team} />}
           <Flag k="slackFaces" initial={true} label="Pictures from Slack" hint="For people who haven't set a picture on GitHub (it shows its generated pattern): their Slack picture, once lgtm knows who they are there." demo />
           <Flag k="slackDone" initial={false} label="✅ on review requests" hint={`When you approve a ${T.PR}, a ✅ on the posts in Slack channels where its author linked it (once lgtm knows who they are on Slack), so they and the channel see it's done; your own posts get one when you merge. Not DMs: lgtm's message replies there.`} demo />
+          <Flag k="reviewAsk" initial={false} label={`A button to ask for review in a channel, on your ${T.PRs}`} hint={`Ask in channel posts to the channel below, tagging each reviewer asked on the ${T.PR} by name, so it's theirs and not everyone's; you read it first. It needs reviewers asked, and goes once lgtm finds your request on Slack. Its wording is under Messages.`} demo>
+            <SlackChannel k="reviewChannel" initial="" label="Review channel" />
+          </Flag>
+          <Flag k="reviewReplies" initial={false} label="Replies to your review request" hint={`Beside your ${T.PR}'s title: your post in a Slack channel that links it, with how many replies you haven't opened. It's looked for when you open the ${T.PR}.`} demo />
           <Flag k="qaRequest" initial={true} label={`A button to ask QA, on your ${T.PRs}`} hint={`Ask QA posts your QA request to the channel below, filled in from the ${T.PR}: you read and can change it before it goes. Its wording is under Messages.`} demo>
-            <QaChannel />
+            <SlackChannel k="qaChannel" initial={QA_CHANNEL} label="QA channel" />
           </Flag>
           <SlackMessages />
         </div>
@@ -504,6 +508,9 @@ export function Settings() {
         <Flag k="ticketOpen" initial={false} label="Expand the Jira ticket above the conversation"  demo />
         <Flag k="jiraOnMerge" initial={true} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge."  demo />
         <JiraAfterMerge />
+        <Flag k="jiraOnReview" initial={false} label="Move the Jira ticket when you ask for review" hint={`When you mark your ${T.PR} ready for review or ask a reviewer, its tickets (from its title, else its branch) move to the status below. Not done ones.`} demo>
+          <JiraStatusRow k="jiraInReview" initial="In Review" label="When you ask for review, move the Jira ticket to" />
+        </Flag>
         <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Specs and docs, then build and config, models and contracts, the implementation (each file with its tests right below it), other tests, and last resources and assets. Off: GitHub's order, by path. Drag the steps into the order you read in." demo>
           <ReadingSteps />
         </Flag>
@@ -942,8 +949,9 @@ function CenterCols() {
 }
 
 // The status a merged PR's Jira ticket moves to, as the merge box offers it (you can change it there each time).
-function JiraAfterMerge() {
-  const [status, setStatus] = useStoredValue('jiraAfterMerge', 'Done');
+const JiraAfterMerge = () => <JiraStatusRow k="jiraAfterMerge" initial="Done" label="After merging, move the Jira ticket to" note="As you merge (above), or offered under the merge box once your PR is merged." />;
+function JiraStatusRow({ k, initial, label, note = '' }: { k: string; initial: string; label: string; note?: string }) {
+  const [status, setStatus] = useStoredValue(k, initial);
   // The projects of the tickets seen lately (review.tsx keeps them), for their statuses.
   const projects = (() => {
     try {
@@ -956,8 +964,8 @@ function JiraAfterMerge() {
   return (
     <label class="set-row">
       <span>
-        After merging, move the Jira ticket to
-        <small>As you merge (above), or offered under the merge box once your {T.PR} is merged. {projects.length ? 'The statuses of your recent tickets\' projects.' : `Open a ${T.PR} with a Jira ticket to list its project's statuses.`}</small>
+        {label}
+        <small>{note.replace('PR', T.PR)} {projects.length ? 'The statuses of your recent tickets\' projects.' : `Open a ${T.PR} with a Jira ticket to list its project's statuses.`}</small>
       </span>
       <StatusSelect value={status} onChange={setStatus} statuses={statuses} />
     </label>
@@ -966,8 +974,8 @@ function JiraAfterMerge() {
 
 // Where Ask QA posts: a channel's ID, #name or link (Slack → the channel → Copy link).
 // Checked on Slack as you type (a moment after you stop): its name when it's there, or why it isn't.
-function QaChannel() {
-  const [channel, setChannel] = useStoredValue('qaChannel', QA_CHANNEL);
+function SlackChannel({ k, initial, label }: { k: string; initial: string; label: string }) {
+  const [channel, setChannel] = useStoredValue(k, initial);
   const [check, setCheck] = useState<ChannelCheck | 'checking' | null>(null);
   useEffect(() => {
     if (!SLACK_CHANNEL.test(channel)) return setCheck(null);
@@ -977,7 +985,7 @@ function QaChannel() {
     return () => ((stop = true), clearTimeout(t));
   }, [channel]);
   // What Slack says, under the field (the label's column is narrow).
-  const status = !SLACK_CHANNEL.test(channel) ? <span class="set-warn">Not a channel ID, #name or link.</span>
+  const status = !channel ? null : !SLACK_CHANNEL.test(channel) ? <span class="set-warn">Not a channel ID, #name or link.</span>
     : check === 'checking' ? 'Checking on Slack…'
     : check?.ok ? <span class="ok"><CheckMark state="success" /> {check.name ?? check.id} exists</span>
     : check && ((near) => (
@@ -990,11 +998,11 @@ function QaChannel() {
     <>
       <label class="set-row">
         <span>
-          QA channel
+          {label}
           <small>Its ID, #name or link.</small>
         </span>
-        <input type="text" value={channel} spellcheck={false} onInput={(e) => setChannel(e.currentTarget.value.trim())} />
-        {channel !== QA_CHANNEL && <button class="md-reset" title="Back to #qa-task-requests" onClick={() => setChannel(QA_CHANNEL)}>↺</button>}
+        <input type="text" value={channel} spellcheck={false} placeholder="#channel" onInput={(e) => setChannel(e.currentTarget.value.trim())} />
+        {initial && channel !== initial && <button class="md-reset" title="Back to #qa-task-requests" onClick={() => setChannel(initial)}>↺</button>}
       </label>
       {status && <p class="note set-status">{status}</p>}
     </>
@@ -1023,6 +1031,7 @@ const SLACK_SAMPLE = {
   comments: ' · 3 comments on PaymentService.kt, RetryPolicy.kt',
   note: '>Looks good, two small nits.',
   days: '2 days',
+  reviewers: '<@gh:budi> <@gh:rina>',
   jira: ' (Jira: <https://acme.atlassian.net/browse/APP-77|APP-77>)',
   description: 'Card payments that fail on a network error are retried three times, with backoff. Declines are not retried.',
 };

@@ -3,7 +3,7 @@ import { slackEscape, words } from './platform.ts';
 // The messages lgtm sends on Slack, as templates you can change (Settings → Slack → Messages). {name} fills in a value;
 // {@recipient} (who gets it; {@them}, its first name, too), {@author} and {@any-github-login} tag that person on Slack (the sender turns <@gh:…> into a Slack mention,
 // through the Slack people mapping; someone it can't place stays @login).
-export type SlackKind = 'review' | 'nudge' | 'ask' | 'again' | 'qa';
+export type SlackKind = 'review' | 'nudge' | 'ask' | 'channel' | 'again' | 'qa';
 // Each fill-in and what it becomes; {@login} tags anyone, by their login.
 export const SLACK_FIELDS: Record<string, string> = {
   pr: 'the PR, linked', title: 'its title', url: 'its address', repo: 'owner/repo', number: 'its number', author: "its author's login",
@@ -27,6 +27,12 @@ export const SLACK_MESSAGES: Record<SlackKind, { label: string; note: string; in
     note: 'You can still change it each time you ask.',
     initial: 'Hi! Could you review my PR when you have a moment? Thank you 🙏\n{pr}',
     fields: {},
+  },
+  channel: {
+    label: 'Ask for review in a channel',
+    note: words('In your review channel, naming each reviewer asked on the PR; you can still change it each time.'),
+    initial: '{reviewers} could you review *{title}*{jira}? 🙏\n{pr}',
+    fields: { reviewers: 'tags each reviewer asked', jira: '" (Jira: BUKU-123)", linked, from the title or branch' },
   },
   again: {
     label: 'Ask to look again',

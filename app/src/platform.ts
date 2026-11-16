@@ -667,10 +667,11 @@ export async function markDoneOnSlack(pr: string, author?: string) {
 }
 
 // The PR's review request on Slack (where markDoneOnSlack puts its ✅): where it is ("#channel", "a group message"),
-// or with text, a reply in its thread.
-export async function slackRequest(pr: string, author?: string, text?: string): Promise<{ where: string | null }> {
-  if (isDesktop) return command('slack_request', { pr, author, text });
-  const res = await fetch('/slack-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pr, author, text }) });
+// with replies its link and the times of others' replies, or with text, a reply in its thread.
+export type SlackRequest = { where: string | null; url?: string | null; replies?: string[] };
+export async function slackRequest(pr: string, author?: string, text?: string, replies?: boolean): Promise<SlackRequest> {
+  if (isDesktop) return command('slack_request', { pr, author, text, replies });
+  const res = await fetch('/slack-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pr, author, text, replies }) });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;
@@ -678,9 +679,10 @@ export async function slackRequest(pr: string, author?: string, text?: string): 
 
 // A message in a Slack channel (an ID, #name or channel link): the QA request. Its link back, when Slack gives one.
 // Kept with the PR's Slack threads (pr: "owner/repo#n"), as login "#qa".
-export async function postSlack(channel: string, text: string, pr: string): Promise<{ url: string | null }> {
-  if (isDesktop) return command<{ url: string | null }>('slack_post', { channel, text, pr });
-  const res = await fetch('/slack-post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel, text, pr }) });
+// kind 'review': a review request instead (Settings → Slack), not kept: slackRequest finds it again.
+export async function postSlack(channel: string, text: string, pr: string, kind?: 'review'): Promise<{ url: string | null }> {
+  if (isDesktop) return command<{ url: string | null }>('slack_post', { channel, text, pr, kind });
+  const res = await fetch('/slack-post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel, text, pr, kind }) });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;
@@ -737,6 +739,24 @@ export async function fetchJira(key: string): Promise<JiraIssue> {
   const body = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(body.error || 'Could not load the ticket');
   return body;
+}
+
+// Asking for review on your PR (Ready for review, or a reviewer asked): its Jira tickets move to the status in Settings →
+// Reviewing (jiraOnReview, off; jiraInReview). Not done ones, nor ones there already. Says so in a toast.
+// ponytail: a ticket further on (in QA, say) moves back too: Jira's statuses have no order beyond their category.
+export async function ticketsToReview(keys: string[]) {
+  if (!keys.length || !flag('jiraOnReview', false)) return;
+  const to = localStorage.getItem(own('jiraInReview')) ?? 'In Review';
+  const said = await Promise.all(
+    keys.map((k) =>
+      fetchJira(k).then(
+        (i) => (i.statusCategory === 'done' || i.status === to ? '' : moveJira(k, to).then(() => `Moved ${k} to ${to}.`, (e) => `${k} didn't move to ${to}: ${e.message}`)),
+        () => '',
+      ),
+    ),
+  );
+  const text = said.filter(Boolean).join(' ');
+  if (text) dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text } }));
 }
 
 // A ticket moved to another status (by its name, as Jira shows it), through acli.

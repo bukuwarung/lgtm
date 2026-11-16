@@ -531,14 +531,19 @@ fn posted_in(m: &Value) -> String {
 /// The PR's review request (the latest of those slack_done finds): where it is, or with text, a reply in its thread.
 /// The server's requestReply().
 #[tauri::command]
-pub async fn slack_request(pr: String, author: Option<String>, text: Option<String>) -> Result<Value, String> {
+pub async fn slack_request(pr: String, author: Option<String>, text: Option<String>, replies: Option<bool>) -> Result<Value, String> {
     if text.as_ref().is_some_and(|t| t.trim().is_empty() || t.chars().count() > 4000) {
         return Err("Bad Slack request".into());
     }
     let Some(m) = request_posts(&pr, &author)?.into_iter().next() else { return Ok(json!({ "where": null })) };
+    // The thread it's in: its own, or, when the request is itself a reply, that one.
+    let own_ts = m["ts"].as_str().unwrap_or("").to_string();
+    let root = m["thread_ts"].as_str().map(String::from)
+        .or_else(|| m["permalink"].as_str().and_then(|p| re(r"thread_ts=(\d+\.\d+)").captures(p).map(|c| c[1].to_string())))
+        .unwrap_or_else(|| own_ts.clone());
     if let Some(t) = &text {
         let ch = format!("--recipient-id={}", m["channel"]["id"].as_str().unwrap_or(""));
-        let ts = format!("--thread-ts={}", m["ts"].as_str().unwrap_or(""));
+        let ts = format!("--thread-ts={root}");
         let mut args = vec!["messages", "send", ch.as_str(), ts.as_str(), "--message-file", "-", "--json"];
         if dry_run() {
             args.push("--dry-run");
@@ -548,7 +553,16 @@ pub async fn slack_request(pr: String, author: Option<String>, text: Option<Stri
             return Err(r.error);
         }
     }
-    Ok(json!({ "where": posted_in(&m) }))
+    if replies != Some(true) {
+        return Ok(json!({ "where": posted_in(&m) }));
+    }
+    let ch = m["channel"]["id"].as_str().unwrap_or("");
+    let r = slackcli(&["conversations", "read", ch, "--thread-ts", &root, "--json", "--limit", "200"], None);
+    let said = if r.ok { parse_json(&r.stdout).and_then(|v| v["messages"].as_array().cloned()).unwrap_or_default() } else { vec![] };
+    let at = |v: &Value| v.as_str().and_then(|t| t.parse::<f64>().ok()).unwrap_or(0.0);
+    let mine = at(&m["ts"]);
+    let others: Vec<&Value> = said.iter().filter(|x| at(&x["ts"]) > mine && x["user"] != m["user"]).map(|x| &x["ts"]).collect();
+    Ok(json!({ "where": posted_in(&m), "url": m["permalink"], "replies": others }))
 }
 
 fn request_posts(pr: &str, author: &Option<String>) -> Result<Vec<Value>, String> {
@@ -574,7 +588,7 @@ fn request_posts(pr: &str, author: &Option<String>) -> Result<Vec<Value>, String
 
 /// A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.
 #[tauri::command]
-pub async fn slack_post(channel: String, text: String, pr: String) -> Result<Value, String> {
+pub async fn slack_post(channel: String, text: String, pr: String, kind: Option<String>) -> Result<Value, String> {
     if !re(r"^([CG][A-Z0-9]+|#[\w.-]+|https://[\w-]+\.slack\.com/archives/[CG][A-Z0-9]+/?)$").is_match(&channel) || text.trim().is_empty() || text.chars().count() > 4000 || !re(PR_REF).is_match(&pr) {
         return Err("Bad Slack request".into());
     }
@@ -595,7 +609,7 @@ pub async fn slack_post(channel: String, text: String, pr: String) -> Result<Val
     }
     let sent = parse_json(&r.stdout).unwrap_or(Value::Null);
     // Kept with the PR's DM threads (slack-threads.json, as "<pr>:#qa": no GitHub login has a #), shown beside its title.
-    if let (Some(ch), Some(ts)) = (sent["channel_id"].as_str(), sent["ts"].as_str()) {
+    if let (Some(ch), Some(ts), false) = (sent["channel_id"].as_str(), sent["ts"].as_str(), kind.as_deref() == Some("review")) {
         let mut threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
         threads[&format!("{pr}:#qa")] = json!({ "channel": ch, "ts": ts, "name": name.unwrap_or(channel.clone()) });
         config::write("slack-threads.json", &threads)?;

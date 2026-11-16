@@ -1439,6 +1439,26 @@ Object.assign(DEMOS, {
     off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>budi-s</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
     on: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('budi')} alt="" /> <b>Budi Santoso</b> <time>2 hours ago</time><div class="md"><p>Looks good, one question on the retry.</p></div></div></div>,
   },
+  reviewAsk: {
+    title: `Ask for review in a channel, on your ${T.PR}`,
+    off: <div class="demo-bar"><button>Ask QA</button><button class="primary">Comment</button></div>,
+    on: (
+      <>
+        <div class="demo-bar"><button>Ask in channel</button><button>Ask QA</button><button class="primary">Comment</button></div>
+        <div class="conversation"><div class="comment"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>#shop-reviews · 10:12</time><div class="md"><p><b>@Budi</b> <b>@Rina</b> could you review <b>Retry failed payments with backoff</b>? 🙏 <a>acme/shop#412</a></p></div></div></div>
+      </>
+    ),
+  },
+  reviewReplies: {
+    title: 'Replies to your review request',
+    off: <div class="demo-bar"><b>#412 Retry failed payments with backoff</b><button><Octicon name="dependabot" /> Agents</button></div>,
+    on: <div class="demo-bar"><b>#412 Retry failed payments with backoff</b><span class="bar-slack bar-qa"><Octicon name="comment-discussion" /><span class="qa-new">2</span></span><button><Octicon name="dependabot" /> Agents</button></div>,
+  },
+  jiraOnReview: {
+    title: 'Move the Jira ticket when you ask for review',
+    off: <div class="demo-bar"><button>Ready for review</button><span class="pill">BUKU-4120 · In Progress</span></div>,
+    on: <div class="demo-bar"><button>Ready for review</button><span class="pill p-ok">BUKU-4120 · In Review</span></div>,
+  },
   slackDone: {
     title: '✅ on review requests',
     off: <SlackPost done={false} />,

@@ -28,11 +28,11 @@ import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action 
 import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
-import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slackTemplate } from './slackmsg.ts';
+import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slackTemplate, type SlackKind } from './slackmsg.ts';
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -130,10 +130,14 @@ type Notice = { text: string; ok: boolean };
 
 // On my own PR (Settings → Slack → "A button to ask QA"): the QA request, filled in from the PR and yours to edit, then
 // posted to the QA channel. Once posted it's one of the PR's Slack threads (login "#qa"), beside the title, and the
-// button goes.
+// button goes. kind 'channel': the review request in the review channel instead (Settings → Slack), naming each reviewer
+// asked on the PR (so it's someone's, not the channel's); it needs some.
 let jiraSite: Promise<string | undefined> | undefined;
-function AskQA({ pr, repo, n, onPosted }: { pr: PR; repo: string; n: number; onPosted: () => void }) {
-  const [channel] = useStoredValue('qaChannel', QA_CHANNEL);
+function AskQA({ pr, repo, n, onPosted, kind = 'qa' }: { pr: PR; repo: string; n: number; onPosted: () => void; kind?: Extract<SlackKind, 'qa' | 'channel'> }) {
+  const review = kind === 'channel';
+  const [channel] = useStoredValue(review ? 'reviewChannel' : 'qaChannel', review ? '' : QA_CHANNEL);
+  const reviewers = (pr.requested_reviewers ?? []).map((u) => u.login);
+  const [unmatched, setUnmatched] = useState<string[]>([]); // named, but lgtm can't tag them
   const [text, setText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -149,33 +153,41 @@ function AskQA({ pr, repo, n, onPosted }: { pr: PR; repo: string; n: number; onP
     const jira = keys.length ? ` (Jira: ${keys.map((k) => (site ? `<https://${site}/browse/${k}|${k}>` : k)).join(', ')})` : '';
     setErr('');
     setEditing(false);
-    setText(fillSlack(slackTemplate('qa'), { ...prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }), jira, description: slackEscape(firstParagraph(pr.body)) }));
+    if (review) getSlackPeople().then((p) => setUnmatched(reviewers.filter((l) => !p.mine[l])), () => {});
+    setText(fillSlack(slackTemplate(kind), { ...prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }), jira, description: slackEscape(firstParagraph(pr.body)), reviewers: reviewers.map((l) => `<@gh:${l}>`).join(' ') }));
   };
   const close = () => (box.current?.close(), setText(null));
   const send = () => {
     if (!text?.trim()) return;
     setBusy(true);
-    postSlack(channel, text, `${repo}#${n}`).then(
+    postSlack(channel, text, `${repo}#${n}`, review ? 'review' : undefined).then(
       () => (close(), onPosted()),
       (e) => setErr(e.message),
     ).finally(() => setBusy(false));
   };
   return (
     <>
-      <button title={`Post a QA request for this ${pageTerm().PR} to ${channel} on Slack (you see it first)`} onClick={open}>
-        Ask QA
-      </button>
+      {review ? (
+        <button disabled={!reviewers.length} title={reviewers.length ? `Post a review request for this ${pageTerm().PR} to ${channel || 'your review channel'} on Slack, naming ${reviewers.map((l) => '@' + l).join(', ')} (you see it first)` : 'Ask reviewers first: the post names each of them'} onClick={open}>
+          Ask in channel
+        </button>
+      ) : (
+        <button title={`Post a QA request for this ${pageTerm().PR} to ${channel} on Slack (you see it first)`} onClick={open}>
+          Ask QA
+        </button>
+      )}
       {text != null && (
         <dialog ref={box} class="ask qa-dialog" onClose={() => setText(null)} onClick={(e) => e.target === box.current && box.current?.close()}>
           <p>
-            <b>Ask QA</b> in <code>{channel}</code>
+            <b>{review ? 'Ask for review' : 'Ask QA'}</b> in <code>{channel || 'no channel yet'}</code>
           </p>
           {editing ? (
             <textarea rows={12} value={text} onInput={(e) => setText(e.currentTarget.value)} disabled={busy} />
           ) : (
             <SlackPreview message={text} emoji={emoji} />
           )}
-          {!SLACK_CHANNEL.test(channel) && <p class="warn">The QA channel in Settings isn't a channel ID, #name or link.</p>}
+          {!SLACK_CHANNEL.test(channel) && <p class="warn">The {review ? 'review' : 'QA'} channel in Settings isn't a channel ID, #name or link.</p>}
+          {review && unmatched.length > 0 && <p class="warn">Not matched on Slack, so named but not tagged: {unmatched.map((l) => '@' + l).join(', ')}. Match them in Settings → Slack → People.</p>}
           {err && <p class="warn">{err}</p>}
           <form method="dialog" onSubmit={(e) => e.preventDefault()}>
             <button type="button" class="link qa-edit" onClick={() => setEditing(!editing)} disabled={busy}>
@@ -239,6 +251,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
         dispatchEvent(new Event('lgtm:refresh'));
       }
       await requestReview(repo, n, login);
+      void ticketsToReview(jiraKeys(pr.title, pr.head.ref));
     } catch (e: any) {
       mark(login);
       return setErr(`Couldn't ask @${login} on ${site(repo)}: ${e.message}`);
@@ -586,6 +599,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [qaSeenAt, setQaSeenAt] = useState(() => qaSeen(`${repo}#${n}`));
   const hasQa = slackThreads.some((t) => t.login === '#qa');
   useEffect(() => void (hasQa && qaThreads([`${repo}#${n}`]).then((r) => setQa(r[`${repo}#${n}`] ?? null), () => {})), [hasQa]);
+  // My PR's review request on Slack (slackRequest): its replies beside the title (Settings → Slack, reviewReplies); the
+  // channel button only while there's none (reviewAsk).
+  const [reviewAsk] = useStoredFlag('reviewAsk', false);
+  const [reviewReplies] = useStoredFlag('reviewReplies', false);
+  const [request, setRequest] = useState<SlackRequest | null>(null);
+  const [requestSeenAt, setRequestSeenAt] = useState(() => qaSeen(`${repo}#${n}:review`));
   const [notice, setNotice] = useState<Notice | null>(flash ?? null);
   const [viewed, setViewedPaths] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
@@ -646,6 +665,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => void (data && getBuildRoots(data.headRepo, data.pr.head.sha).then(setRoots, () => setRoots(null))), [rootsAt]);
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
+  const myOpenPR = !!me && data?.pr.user.login === me && data.pr.state === 'open';
+  useEffect(() => {
+    setRequest(null);
+    if (myOpenPR && (reviewAsk || reviewReplies)) slackRequest(`${repo}#${n}`, undefined, undefined, true).then(setRequest, () => {});
+  }, [repo, n, myOpenPR, reviewAsk, reviewReplies]);
   const botsFolded = useFoldBots(!!me && data?.pr.user.login === me); // as the conversation folds them
   // As the list has it ("Needs your review"); opened before the list is in, whether my review is requested.
   useEffect(() => {
@@ -1308,6 +1332,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   async function reRequest(login: string): Promise<boolean> {
     try {
       await requestReview(repo, n, login);
+      if (data) void ticketsToReview(jiraKeys(data.pr.title, data.pr.head.ref));
     } catch (e: any) {
       setNotice({ ok: false, text: `Couldn't ask @${login} again on ${site(repo)}: ${e.message}` });
       return false;
@@ -1640,10 +1665,24 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 </a>
               ),
             )}
+            {reviewReplies && request?.where && request.url && (
+              <a
+                class="bar-slack bar-qa"
+                href={request.url}
+                target="_blank"
+                rel="noopener"
+                title={`Your review request in ${request.where}, on Slack${request.replies?.length ? ` · ${request.replies.length} repl${request.replies.length === 1 ? 'y' : 'ies'}` : ''}`}
+                onClick={() => { const last = request.replies?.at(-1); if (last) seeQa(`${repo}#${n}:review`, last), setRequestSeenAt(last); }}
+              >
+                <Octicon name="comment-discussion" />
+                {(request.replies ?? []).filter((ts) => ts > requestSeenAt).length > 0 && <span class="qa-new">{request.replies!.filter((ts) => ts > requestSeenAt).length}</span>}
+              </a>
+            )}
             <AgentsMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Agents" full={pr} />
           </div>
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
+            {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} revert={!!undoes} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
