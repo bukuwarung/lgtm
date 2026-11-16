@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, DAY, kept, reportUsage, fetchJobLog, fetchToken, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
+import { agentsAsBots, DAY, kept, knowFace, reportUsage, fetchJobLog, fetchToken, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 import * as lab from './gitlab.ts';
@@ -389,7 +389,7 @@ const QUEUE = `query{viewer{login}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...on PullRequest{id}}}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...on PullRequest{id}}}
   mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...on PullRequest{id}}}}`;
-const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login} assignees(first:5){nodes{login}}
+const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login avatarUrl} assignees(first:5){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} recent:commits(last:20){nodes{commit{authoredDate parents{totalCount}}}} repository{nameWithOwner}
   headRefName headRefOid baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
@@ -457,7 +457,8 @@ function ownsPath(pattern: string, path: string) {
   return new RegExp((anchored ? '^' : '(?:^|/)') + (p === '*' ? '[^/]+' : glob) + end).test(path);
 }
 
-const toItem = (p: any): QueueItem => ({
+// A bot's picture is its app's (avatars…/in/<id>), not one by its name, which GitHub answers with a generic one.
+const toItem = (p: any): QueueItem => (p.author?.__typename === 'Bot' && p.author.avatarUrl && knowFace(p.author.login, p.author.avatarUrl), {
       id: p.id,
       number: p.number,
       title: p.title,
