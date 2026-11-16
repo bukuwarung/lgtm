@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -666,6 +666,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
   const myOpenPR = !!me && data?.pr.user.login === me && data.pr.state === 'open';
+  // People I sent my PR to in a Slack DM (Settings → Slack): the ones GitHub or GitLab doesn't ask, and who haven't
+  // reviewed it, to ask there too (so it's in their list, the PR's status and the review load lgtm counts).
+  const [sentTo, setSentTo] = useState<{ login: string; url: string | null }[]>([]);
+  useEffect(() => {
+    setSentTo([]);
+    if (myOpenPR) slackSentTo(`${repo}#${n}`).then(setSentTo, () => {});
+  }, [repo, n, myOpenPR]);
+  const slackOnly = data ? sentTo.map((s) => s.login).filter((l) => l !== me && !bots.has(l) && !(data.pr.requested_reviewers ?? []).some((u) => u.login === l) && !conversation.some((c) => c.state && c.author === l)) : [];
   // My PR asks a group but no one in it by name (a GitHub team, a GitLab approval rule: github.ts unnamedGroup): everyone
   // in it is told, so it's no one's. Its least busy member, to ask by name.
   const reviewedYet = conversation.some((c) => c.state && c.author !== me);
@@ -1746,6 +1754,22 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 title={gaps.differ.length ? `Not what undoing #${undoes} exactly would change:\n${gaps.differ.join('\n')}` : gaps.unknown.length ? `Every file lgtm could compare undoes #${undoes} exactly. No diff to compare for:\n${gaps.unknown.join('\n')}` : `Every line it changes undoes #${undoes}, and nothing else`}
               >
                 <Tg i="history" t={gaps.differ.length ? `differs from a clean revert of #${undoes} in ${gaps.differ.length} file${gaps.differ.length > 1 ? 's' : ''}` : `exactly undoes #${undoes}${gaps.unknown.length ? ` (${gaps.unknown.length} not compared)` : ''}`} />
+              </span>
+            )}
+            {slackOnly.length > 0 && (
+              <span class="pill p-warn" title={`You sent this ${pageTerm().PR} to ${slackOnly.map((l) => '@' + l).join(', ')} in a Slack DM, but ${site(repo)} doesn't ask them to review it: it's not in their list, and ${site(repo)} doesn't wait on them.`}>
+                <Tg i="nobody" t={`asked ${slackOnly.map((l) => '@' + l).join(', ')} on Slack, not on ${site(repo)}`} />{' '}
+                <button
+                  class="link"
+                  onClick={() =>
+                    Promise.all(slackOnly.map((l) => requestReview(repo, n, l))).then(
+                      () => (void ticketsToReview(jiraKeys(pr.title, pr.head.ref)), setNotice({ ok: true, text: `Asked ${slackOnly.map((l) => '@' + l).join(', ')} on ${site(repo)} too.` }), dispatchEvent(new Event('lgtm:refresh'))),
+                      (e) => setNotice({ ok: false, text: `Couldn't ask on ${site(repo)}: ${e.message}` }),
+                    )
+                  }
+                >
+                  ask on {site(repo)}
+                </button>
               </span>
             )}
             {teamPick && (

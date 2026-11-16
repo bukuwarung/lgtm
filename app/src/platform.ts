@@ -695,6 +695,13 @@ export async function askFor(repo: string, n: number): Promise<SlackAsk | null> 
   if (!flag('askThreadReply', false)) return null;
   return (await askedOnSlack(repo.split('/')[0].includes('.'))).find((a) => a.pr === `${repo}#${n}`) ?? null;
 }
+// Who I sent this PR's link to in a Slack DM (Settings → Slack, slackSent, off): their logins. [] when off.
+export async function slackSentTo(pr: string): Promise<{ login: string; url: string | null }[]> {
+  if (!flag('slackSent', false)) return [];
+  if (isDesktop) return command('slack_sent', { pr });
+  const res = await fetch(`/slack-sent?pr=${encodeURIComponent(pr)}`);
+  return res.ok ? res.json() : [];
+}
 export async function slackReply(channel: string, thread: string, text: string): Promise<void> {
   if (isDesktop) return void (await command('slack_reply', { channel, thread, text }));
   const res = await fetch('/slack-reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel, thread, text }) });

@@ -621,6 +621,38 @@ pub async fn slack_asked(lab: Option<bool>) -> Value {
     json!(out)
 }
 
+/// Who I sent this PR's link to in a DM (Settings → Slack, slackSent): their GitHub logins, newest first, with the
+/// message. The server's slackSentTo().
+#[tauri::command]
+pub async fn slack_sent(pr: String) -> Result<Value, String> {
+    if !re(PR_REF).is_match(&pr) {
+        return Err("Bad Slack request".into());
+    }
+    let Some(me) = cached(&SLACK_ME, || {
+        let r = slackcli(&["auth", "whoami", "--json"], None);
+        parse_json(&r.stdout).and_then(|v| v["user_id"].as_str().map(String::from))
+    })
+    .filter(|m| re(r"^U[A-Z0-9]+$").is_match(m)) else { return Ok(json!([])) };
+    let (repo, n) = pr.split_once('#').unwrap_or((&pr, ""));
+    let page = pr_page(repo, n);
+    let link = re(&format!(r"{}(\D|$)", regex::escape(&page)));
+    let users = config::read("config.json", true).map(|c| c["slackUsers"].clone()).unwrap_or(Value::Null);
+    let r = slackcli(&["search", "messages", &page, "--json", "--limit", "40"], None);
+    let matches = if r.ok { parse_json(&r.stdout).and_then(|v| v["matches"].as_array().cloned()).unwrap_or_default() } else { vec![] };
+    let mut out: Vec<Value> = vec![];
+    for m in &matches {
+        if m["channel"]["is_im"] != json!(true) || m["user"].as_str() != Some(me.as_str()) || !link.is_match(&own_links(m)) {
+            continue;
+        }
+        let them = m["channel"]["name"].as_str().unwrap_or(""); // a DM's name is the other person's user ID
+        let login = users.as_object().and_then(|o| o.iter().find(|(_, v)| v.as_str() == Some(them)).map(|(l, _)| l.clone()));
+        if let Some(l) = login.filter(|l| !out.iter().any(|o| o["login"] == json!(l))) {
+            out.push(json!({ "login": l, "url": m["permalink"] }));
+        }
+    }
+    Ok(json!(out))
+}
+
 /// A reply in a thread (where you were asked: Settings → Slack). The server's slackReply().
 #[tauri::command]
 pub async fn slack_reply(channel: String, thread: String, text: String) -> Result<Value, String> {

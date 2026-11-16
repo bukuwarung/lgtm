@@ -1464,6 +1464,11 @@ Object.assign(DEMOS, {
       </div>
     ),
   },
+  slackSent: {
+    title: 'People you asked on Slack, not as reviewers',
+    off: <div class="pills"><span class="pill"><Tg i="waiting" t="awaiting review" /></span></div>,
+    on: <div class="pills"><span class="pill"><Tg i="waiting" t="awaiting review" /></span><span class="pill p-warn"><Tg i="nobody" t="asked @budi on Slack, not on GitHub" /> <button class="link">ask on GitHub</button></span></div>,
+  },
   askThreadReply: {
     title: 'Answer in the thread where you were asked',
     off: (

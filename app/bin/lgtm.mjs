@@ -455,6 +455,26 @@ async function slackAsked(lab) {
   const list = [...out.values()].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 20);
   return Promise.all(list.map(async (a) => ({ ...a, name: a.login ? null : (await slackProfile(a.user))?.name ?? null })));
 }
+// Who I sent this PR's link to in a DM (Settings → Slack, slackSent): their GitHub logins (Slack people), newest first,
+// with the message. The page keeps those GitHub or GitLab doesn't ask.
+async function slackSentTo(pr) {
+  if (typeof pr !== 'string' || !PR_REF.test(pr)) throw new Error('Bad Slack request');
+  slackMe ??= slackcli(['auth', 'whoami', '--json']).then((r) => parseJson(r.stdout)?.user_id);
+  const me = await slackMe;
+  if (!/^U[A-Z0-9]+$/.test(me ?? '')) return [];
+  const [repo, n] = pr.split('#');
+  const page = prPage(repo, n);
+  const link = new RegExp(`${page.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`);
+  const r = await slackcli(['search', 'messages', page, '--json', '--limit', '40']);
+  const loginOf = Object.fromEntries(Object.entries((await readConfig()).slackUsers ?? {}).filter(([, v]) => /^U[A-Z0-9]+$/.test(v)).map(([l, v]) => [v, l]));
+  const out = [];
+  for (const m of (r.ok && parseJson(r.stdout)?.matches) || []) {
+    if (!m.channel?.is_im || m.user !== me || !link.test(ownLinks(m))) continue;
+    const login = loginOf[m.channel.name]; // a DM's name is the other person's user ID
+    if (login && !out.some((o) => o.login === login)) out.push({ login, url: m.permalink ?? null });
+  }
+  return out;
+}
 // A reply in a thread (where you were asked: Settings → Slack). <@gh:login> tags them.
 async function slackReply({ channel, thread, text }) {
   if (typeof channel !== 'string' || !/^[CDG][A-Z0-9]+$/.test(channel) || typeof thread !== 'string' || !/^\d+\.\d+$/.test(thread) || typeof text !== 'string' || !text.trim() || text.length > 4000) throw new Error('Bad Slack request');
@@ -887,7 +907,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-request', '/slack-asked', '/slack-reply', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => agentText(b?.input, b?.model, b?.effort, b?.agent))
@@ -942,6 +962,7 @@ const server = createServer(async (req, res) => {
   if (path === '/slack-qa') return qaThreads((new URL(req.url ?? '/', ORIGIN).searchParams.get('prs') ?? '').split(',').filter(Boolean).slice(0, 100)).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-channel') return checkChannel(new URL(req.url ?? '/', ORIGIN).searchParams.get('c') ?? '').then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-reply' && req.method === 'POST') return readJson(req).then(slackReply).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
+  if (path === '/slack-sent') return slackSentTo(new URL(req.url ?? '/', ORIGIN).searchParams.get('pr')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-asked') return slackAsked(new URL(req.url ?? '/', ORIGIN).searchParams.get('lab') === '1').then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-request' && req.method === 'POST') return readJson(req).then(requestReply).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-done' && req.method === 'POST') return readJson(req).then(markDone).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));

@@ -27,6 +27,7 @@
     "allow-slack-request",
     "allow-slack-asked",
     "allow-slack-reply",
+    "allow-slack-sent",
     "allow-slack-channel",
     "allow-slack-qa",
     "allow-slack-threads",
