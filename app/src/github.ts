@@ -1728,6 +1728,7 @@ export async function revertsOfMine(me: string): Promise<{ repo: string; number:
 // The PRs asked of me on Slack (platform.ts slackAsks) that GitHub doesn't: open, not drafts, not mine, not asking me
 // already, no review of mine yet. In "Needs your review", with who asked. skip: the list's own (by id).
 export async function slackAskedPRs(asks: { pr: string; login: string | null; name: string | null; url: string | null }[], skip: Set<string>): Promise<QueueItem[]> {
+  if (viewAs()) return lab.labSlackAsked(viewAs(), asks, skip);
   const gh = asks.filter((a) => !isLab(a.pr.split('#')[0])).slice(0, 15);
   if (!gh.length) return [];
   const me = await getGitHubViewer();

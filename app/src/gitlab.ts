@@ -880,6 +880,21 @@ export async function getLabAskedPRs(host: string, login: string): Promise<Queue
     .sort((a, b) => a.waitingSince.localeCompare(b.waitingSince));
 }
 
+// MRs asked of me on Slack on this GitLab (github.ts slackAskedPRs): open, not drafts, not mine, not asking me already,
+// not approved by me.
+export async function labSlackAsked(host: string, asks: { pr: string; login: string | null; name: string | null; url: string | null }[], skip: Set<string>): Promise<QueueItem[]> {
+  const here = asks.filter((a) => split(a.pr).host === host).slice(0, 15);
+  if (!here.length) return [];
+  const me = (await labMe(host)).login;
+  const d = await gql(host, `query{${here.map((a, k) => `a${k}:project(fullPath:${JSON.stringify(split(a.pr.split('#')[0]).path)}){mergeRequest(iid:${JSON.stringify(a.pr.split('#')[1])}){...F state approvedBy{nodes{username}}}}`).join(' ')}} ${ITEM}`).catch(() => ({}) as any);
+  return here.flatMap((a, k) => {
+    const m = d[`a${k}`]?.mergeRequest;
+    if (!m || m.state !== 'opened' || m.draft || m.author?.username === me || m.reviewers.nodes.some((r: any) => r.username === me) || m.approvedBy.nodes.some((u: any) => u.username === me)) return [];
+    const item = itemOf(host, m, me);
+    return skip.has(item.id) ? [] : [{ ...item, requested: true, reviewing: true, slackAsk: { by: a.login ? `@${a.login}` : a.name ?? 'someone', url: a.url } }];
+  });
+}
+
 // Draft MRs in these repos changing files I own (CODEOWNERS, by name or through a group of mine): GitLab asks code
 // owners only once an MR is ready. `owners`: github.ts codeOwners (GitLab's file reads the same, its [Sections] aside).
 const owned = new Map<string, { at: number; text: Promise<string> }>(); // each repo's CODEOWNERS, kept a day

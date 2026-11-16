@@ -570,7 +570,8 @@ pub async fn slack_request(pr: String, author: Option<String>, text: Option<Stri
 /// GitHub PRs someone asked you about on Slack in the last 7 days: a PR link in a DM to you, or beside a tag of you, from
 /// someone else. One per PR, newest first. The server's slackAsked().
 #[tauri::command]
-pub async fn slack_asked() -> Value {
+pub async fn slack_asked(lab: Option<bool>) -> Value {
+    let lab = lab == Some(true);
     let Some(me) = cached(&SLACK_ME, || {
         let r = slackcli(&["auth", "whoami", "--json"], None);
         parse_json(&r.stdout).and_then(|v| v["user_id"].as_str().map(String::from))
@@ -579,10 +580,11 @@ pub async fn slack_asked() -> Value {
     let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0) - 7.0 * 86_400.0;
     let users = config::read("config.json", true).map(|c| c["slackUsers"].clone()).unwrap_or(Value::Null);
     let login_of = |id: &str| users.as_object().and_then(|o| o.iter().find(|(_, v)| v.as_str() == Some(id)).map(|(l, _)| l.clone()));
-    let link = re(r"https://github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)(\D|$)");
+    let link = if lab { re(r"https://([\w.-]+)/([\w./-]+?)/-/merge_requests/(\d+)(\D|$)") } else { re(r"https://github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)(\D|$)") };
     let tag = format!("<@{me}>");
+    let words = if lab { "merge_requests" } else { "github.com pull" };
     let mut out: Vec<Value> = vec![];
-    for (q, dm) in [("github.com pull to:me".to_string(), true), (format!("github.com pull {tag}"), false)] {
+    for (q, dm) in [(format!("{words} to:me"), true), (format!("{words} {tag}"), false)] {
         let r = slackcli(&["search", "messages", &q, "--json", "--limit", "50"], None);
         let matches = if r.ok { parse_json(&r.stdout).and_then(|v| v["matches"].as_array().cloned()).unwrap_or_default() } else { vec![] };
         for m in &matches {
@@ -594,12 +596,16 @@ pub async fn slack_asked() -> Value {
             if ts.parse::<f64>().unwrap_or(0.0) < since {
                 continue;
             }
+            let thread = m["thread_ts"].as_str().map(String::from)
+                .or_else(|| m["permalink"].as_str().and_then(|p| re(r"thread_ts=(\d+\.\d+)").captures(p).map(|c| c[1].to_string())))
+                .unwrap_or_else(|| ts.clone());
             for c in link.captures_iter(&own_links(m)) {
                 let pr = format!("{}/{}#{}", &c[1], &c[2], &c[3]);
+                let ask = json!({ "pr": pr, "user": user, "url": m["permalink"], "ts": ts, "channel": m["channel"]["id"], "thread": thread });
                 match out.iter_mut().find(|a| a["pr"] == json!(pr)) {
                     Some(a) if a["ts"].as_str().unwrap_or("") >= ts.as_str() => {}
-                    Some(a) => *a = json!({ "pr": pr, "user": user, "url": m["permalink"], "ts": ts }),
-                    None => out.push(json!({ "pr": pr, "user": user, "url": m["permalink"], "ts": ts })),
+                    Some(a) => *a = ask,
+                    None => out.push(ask),
                 }
             }
         }
@@ -611,9 +617,28 @@ pub async fn slack_asked() -> Value {
         let login = login_of(&user);
         a["name"] = if login.is_some() { Value::Null } else { slack_profile(&user).map(|p| p["name"].clone()).unwrap_or(Value::Null) };
         a["login"] = json!(login);
-        a.as_object_mut().unwrap().remove("user");
     }
     json!(out)
+}
+
+/// A reply in a thread (where you were asked: Settings → Slack). The server's slackReply().
+#[tauri::command]
+pub async fn slack_reply(channel: String, thread: String, text: String) -> Result<Value, String> {
+    if !re(r"^[CDG][A-Z0-9]+$").is_match(&channel) || !re(r"^\d+\.\d+$").is_match(&thread) || text.trim().is_empty() || text.chars().count() > 4000 {
+        return Err("Bad Slack request".into());
+    }
+    let users = config::read("config.json", true)?["slackUsers"].clone();
+    let body = mentions(&text, &Recipient { login: String::new(), emails: vec![], at: None }, &users);
+    let (ch, ts) = (format!("--recipient-id={channel}"), format!("--thread-ts={thread}"));
+    let mut args = vec!["messages", "send", ch.as_str(), ts.as_str(), "--message-file", "-", "--json"];
+    if dry_run() {
+        args.push("--dry-run");
+    }
+    let r = slackcli(&args, Some(&body));
+    if !r.ok {
+        return Err(r.error);
+    }
+    Ok(json!({ "ok": true }))
 }
 
 fn request_posts(pr: &str, author: &Option<String>) -> Result<Vec<Value>, String> {

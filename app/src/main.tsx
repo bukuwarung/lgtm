@@ -1470,7 +1470,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       // Drafts showing: also the ones changing files I own, before GitHub asks me (it does once they're ready).
       const owned = showDraftsRef.current ? await getOwnedDrafts([...new Set(queue.map((i) => i.repo))], new Set(queue.map((i) => i.id))).catch(() => []) : [];
       // Asked of me on Slack, not on GitHub (Settings → Slack): in "Needs your review" too.
-      const asked = viewAs() ? [] : await slackAsks().then((a) => slackAskedPRs(a, new Set([...queue, ...owned].map((i) => i.id)))).catch(() => []);
+      const asked = await slackAsks(!!viewAs()).then((a) => slackAskedPRs(a, new Set([...queue, ...owned].map((i) => i.id)))).catch(() => []);
       const items = [...queue, ...owned, ...asked];
       knowRepos(items.map((i) => i.repo));
       knowJiraKeys(items.map((i) => i.title));
@@ -1701,7 +1701,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         ))}
         {i.slackAsk && (
           <QuickPill icon="comment-discussion" tone="" idle={`asked on Slack by ${i.slackAsk.by}`} action={`Add me as reviewer on ${site(i.repo)}`} busy="adding…" done="you're a reviewer" title={`${i.slackAsk.by} asked you on Slack; ${site(i.repo)} doesn't ask you yet`}
-            run={() => getGitHubViewer().then((me) => requestReview(i.repo, i.number, me))} />
+            run={() => getViewer(i.repo).then((me) => requestReview(i.repo, i.number, me))} />
         )}
         {i.codeOwner && <span class="pill" title="It changes files you own (CODEOWNERS). GitHub asks code owners once it's marked ready for review"><Tg i="assigned" t="code owner" /></span>}
         {(i.ci === 'FAILURE' || i.ci === 'ERROR') &&

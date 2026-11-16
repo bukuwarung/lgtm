@@ -1464,6 +1464,21 @@ Object.assign(DEMOS, {
       </div>
     ),
   },
+  askThreadReply: {
+    title: 'Answer in the thread where you were asked',
+    off: (
+      <div class="conversation">
+        <div class="comment"><img class="c-avatar" src={face('rina')} alt="" /> <b>Rina</b> <time>DM · 10:12</time><div class="md"><p>Could you look at <a>acme/shop#412</a> today?</p></div></div>
+        <div class="comment"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>new DM · 15:40</time><div class="md"><p>✅ Approved <a>acme/shop#412</a></p></div></div>
+      </div>
+    ),
+    on: (
+      <div class="conversation">
+        <div class="comment"><img class="c-avatar" src={face('rina')} alt="" /> <b>Rina</b> <time>DM · 10:12</time><div class="md"><p>Could you look at <a>acme/shop#412</a> today?</p></div></div>
+        <div class="comment demo-reply"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>in thread · 15:40</time><div class="md"><p><b>@Rina</b> ✅ Approved <a>acme/shop#412</a></p></div></div>
+      </div>
+    ),
+  },
   againInThread: {
     title: "Ask again in your review request's thread",
     off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>DM with Budi · 15:40</time><div class="md"><p>Addressed your comments 🙏 Could you take another look at <a>acme/shop#412</a>?</p></div></div></div>,

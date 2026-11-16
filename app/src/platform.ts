@@ -677,15 +677,28 @@ export async function slackRequest(pr: string, author?: string, text?: string, r
   return d;
 }
 
-// GitHub PRs someone asked you about on Slack lately (a link in a DM to you, or beside a tag of you): Settings → Slack,
-// slackAsked (off). Asked again at most every 10 minutes (two Slack searches).
-export type SlackAsk = { pr: string; login: string | null; name: string | null; url: string | null; ts: string };
-let asks: { at: number; list: Promise<SlackAsk[]> } | null = null;
-export function slackAsks(): Promise<SlackAsk[]> {
-  if (!flag('slackAsked', false)) return Promise.resolve([]);
-  if (!asks || Date.now() - asks.at > 10 * 60_000)
-    asks = { at: Date.now(), list: (isDesktop ? command<SlackAsk[]>('slack_asked') : fetch('/slack-asked').then((r) => (r.ok ? r.json() : []))).catch(() => []) };
-  return asks.list;
+// PRs someone asked you about on Slack lately (a link in a DM to you, or beside a tag of you): GitHub's, or with lab
+// GitLab's. Asked again at most every 10 minutes (two Slack searches).
+export type SlackAsk = { pr: string; login: string | null; name: string | null; user: string; url: string | null; ts: string; channel: string; thread: string };
+const asks = new Map<boolean, { at: number; list: Promise<SlackAsk[]> }>();
+function askedOnSlack(lab: boolean): Promise<SlackAsk[]> {
+  const had = asks.get(lab);
+  if (had && Date.now() - had.at < 10 * 60_000) return had.list;
+  const list = (isDesktop ? command<SlackAsk[]>('slack_asked', { lab }) : fetch(`/slack-asked${lab ? '?lab=1' : ''}`).then((r) => (r.ok ? r.json() : []))).catch(() => []);
+  asks.set(lab, { at: Date.now(), list });
+  return list;
+}
+// For the list's "Needs your review" (Settings → Slack, slackAsked, off).
+export const slackAsks = (lab: boolean): Promise<SlackAsk[]> => (flag('slackAsked', false) ? askedOnSlack(lab) : Promise.resolve([]));
+// Where you were asked about this PR on Slack, to answer there (Settings → Slack, askThreadReply, off). null: off, or not asked.
+export async function askFor(repo: string, n: number): Promise<SlackAsk | null> {
+  if (!flag('askThreadReply', false)) return null;
+  return (await askedOnSlack(repo.split('/')[0].includes('.'))).find((a) => a.pr === `${repo}#${n}`) ?? null;
+}
+export async function slackReply(channel: string, thread: string, text: string): Promise<void> {
+  if (isDesktop) return void (await command('slack_reply', { channel, thread, text }));
+  const res = await fetch('/slack-reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel, thread, text }) });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Slack request failed');
 }
 
 // Asking again (Settings → Slack, againInThread, off): the "again" message as a reply in your PR's review request's

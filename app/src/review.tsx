@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -1147,17 +1147,22 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (notify && slackTo?.length) {
       // The review is in; a Slack failure is reported, not thrown.
       try {
-        const results = await notifySlack(
-          await slackRecipients(repo, slackTo),
-          slackText(pr, repo, n, event, body, drafts.length ? drafts.map((d) => d.path) : me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).map((t) => t.path) : []),
-          `${repo}#${n}`,
-        );
+        const text = slackText(pr, repo, n, event, body, drafts.length ? drafts.map((d) => d.path) : me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).map((t) => t.path) : []);
+        // Asked about it on Slack (Settings → Slack): the answer replies there, tagging who asked; the others by DM.
+        const asked = await askFor(repo, n).catch(() => null);
+        let there = '';
+        if (asked) {
+          await slackReply(asked.channel, asked.thread, `<@${asked.user}> ${text}`);
+          there = `Answered in the thread where ${asked.login ? '@' + asked.login : asked.name ?? 'they'} asked on Slack.`;
+        }
+        const rest = asked?.login ? slackTo.filter((l) => l !== asked.login) : slackTo;
+        const results = rest.length ? await notifySlack(await slackRecipients(repo, rest), text, `${repo}#${n}`) : [];
         slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads)); // a first message starts a thread
         const failed = results.filter((r) => !r.ok);
         const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : '') + (r.at ? ' (at 9 am their time)' : ''));
         result = {
           ok: !failed.length,
-          text: [sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${slackWhy(r)}`)].filter(Boolean).join(' '),
+          text: [there, sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${slackWhy(r)}`)].filter(Boolean).join(' '),
         };
       } catch (e: any) {
         result = { ok: false, text: `Review submitted, but Slack failed: ${e.message}` };
