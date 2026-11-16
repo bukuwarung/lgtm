@@ -1708,9 +1708,9 @@ export function revertGaps(revert: Pick<PRFile, 'filename' | 'patch'>[], origina
 }
 
 // Open PRs reverting one of mine merged in the last 14 days (their "Reverts owner/repo#n" line; GitHub links them to
-// mine), opened by someone else. ponytail: GitHub only; GitLab's link is a system note on the MR, not asked for.
+// mine), opened by someone else. On GitLab, gitlab.ts labRevertsOfMine.
 export async function revertsOfMine(me: string): Promise<{ repo: string; number: number; title: string; author: string; of: number }[]> {
-  if (viewAs()) return [];
+  if (viewAs()) return lab.labRevertsOfMine(viewAs());
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
   const d = await graphql(
     `query($q:String!){s:search(query:$q,type:ISSUE,first:30){nodes{...on PullRequest{number repository{nameWithOwner} timelineItems(itemTypes:[CROSS_REFERENCED_EVENT],last:10){nodes{...on CrossReferencedEvent{source{...on PullRequest{number title body state author{login} repository{nameWithOwner}}}}}}}}}}`,

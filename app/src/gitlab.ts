@@ -5,7 +5,7 @@
 // A GitLab repo is "host/group/…/project" (gitlab.com/gitlab-org/cli): GitHub owners have no dots, so a dot in the
 // first part says GitLab. An MR is that repo and its iid. GitLab's global IDs travel as "gl:host|gid://…", an MR's as
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
-import { collapseReviews, setOffline } from './github.ts';
+import { collapseReviews, setOffline, revertOf } from './github.ts';
 import { kept, fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
 import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
 
@@ -771,6 +771,23 @@ export async function revertLab(repo: string, n: number, why = ''): Promise<numb
 export async function labRevertsOf(repo: string, n: number) {
   const list: any[] = await json(split(repo).host, `/projects/${pid(repo)}/merge_requests?in=description&per_page=20&search=${encodeURIComponent(`Reverts !${n}`)}`);
   return list.map((m) => ({ number: m.iid as number, body: (m.description ?? '') as string, state: m.state === 'opened' ? 'open' : (m.state as string), at: (m.merged_at ?? m.created_at) as string }));
+}
+
+// Open MRs reverting one of mine merged in the last 14 days (their "Reverts !n" line), opened by someone else: on the
+// GitLab you're viewing as. github.ts revertsOfMine for GitHub.
+export async function labRevertsOfMine(only: string) {
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const out: { repo: string; number: number; title: string; author: string; of: number }[] = [];
+  for (const { host } of (await glabAccounts()).filter((a) => a.host === only)) {
+    const mine: any[] = await json(host, `/merge_requests?scope=created_by_me&state=merged&updated_after=${since}&per_page=50`).catch(() => []);
+    await Promise.all(mine.filter((m) => m.merged_at >= since).map(async (m) => {
+      const repo = `${host}/${m.references.full.split('!')[0]}`;
+      const revs: any[] = await json(host, `/projects/${m.project_id}/merge_requests?state=opened&in=description&per_page=20&search=${encodeURIComponent(`Reverts !${m.iid}`)}`).catch(() => []);
+      for (const r of revs)
+        if (r.author?.username !== m.author?.username && revertOf(r.description, repo) === m.iid) out.push({ repo, number: r.iid, title: r.title, author: r.author.username, of: m.iid });
+    }));
+  }
+  return out;
 }
 
 // --- who to ask ---
