@@ -507,7 +507,52 @@ fn channel_id(channel: &str) -> Result<(String, Option<String>), String> {
 /// time; back: where they were. The server's markDone().
 #[tauri::command]
 pub async fn slack_done(pr: String, author: Option<String>) -> Result<Value, String> {
-    if !re(PR_REF).is_match(&pr) || author.as_ref().is_some_and(|a| a.len() > 100) {
+    let mut done: Vec<String> = vec![];
+    for m in request_posts(&pr, &author)? {
+        let ch = format!("--channel-id={}", m["channel"]["id"].as_str().unwrap_or(""));
+        let ts = format!("--timestamp={}", m["ts"].as_str().unwrap_or(""));
+        let mut args = vec!["messages", "react", ch.as_str(), ts.as_str(), "--emoji", "white_check_mark", "--json"];
+        if dry_run() {
+            args.push("--dry-run");
+        }
+        let x = slackcli(&args, None);
+        let at = posted_in(&m);
+        if (x.ok || x.error.contains("already_reacted")) && !done.contains(&at) {
+            done.push(at);
+        }
+    }
+    Ok(json!({ "done": done }))
+}
+
+fn posted_in(m: &Value) -> String {
+    if m["channel"]["is_mpim"] == json!(true) { "a group message".to_string() } else { format!("#{}", m["channel"]["name"].as_str().unwrap_or("")) }
+}
+
+/// The PR's review request (the latest of those slack_done finds): where it is, or with text, a reply in its thread.
+/// The server's requestReply().
+#[tauri::command]
+pub async fn slack_request(pr: String, author: Option<String>, text: Option<String>) -> Result<Value, String> {
+    if text.as_ref().is_some_and(|t| t.trim().is_empty() || t.chars().count() > 4000) {
+        return Err("Bad Slack request".into());
+    }
+    let Some(m) = request_posts(&pr, &author)?.into_iter().next() else { return Ok(json!({ "where": null })) };
+    if let Some(t) = &text {
+        let ch = format!("--recipient-id={}", m["channel"]["id"].as_str().unwrap_or(""));
+        let ts = format!("--thread-ts={}", m["ts"].as_str().unwrap_or(""));
+        let mut args = vec!["messages", "send", ch.as_str(), ts.as_str(), "--message-file", "-", "--json"];
+        if dry_run() {
+            args.push("--dry-run");
+        }
+        let r = slackcli(&args, Some(t));
+        if !r.ok {
+            return Err(r.error);
+        }
+    }
+    Ok(json!({ "where": posted_in(&m) }))
+}
+
+fn request_posts(pr: &str, author: &Option<String>) -> Result<Vec<Value>, String> {
+    if !re(PR_REF).is_match(pr) || author.as_ref().is_some_and(|a| a.len() > 100) {
         return Err("Bad Slack request".into());
     }
     let by = match &author {
@@ -517,29 +562,14 @@ pub async fn slack_done(pr: String, author: Option<String>) -> Result<Value, Str
             parse_json(&r.stdout).and_then(|v| v["user_id"].as_str().map(String::from))
         }),
     };
-    let Some(by) = by.filter(|b| re(r"^U[A-Z0-9]+$").is_match(b)) else { return Ok(json!({ "done": [] })) };
-    let (repo, n) = pr.split_once('#').unwrap_or((&pr, ""));
+    let Some(by) = by.filter(|b| re(r"^U[A-Z0-9]+$").is_match(b)) else { return Ok(vec![]) };
+    let (repo, n) = pr.split_once('#').unwrap_or((pr, ""));
     let page = pr_page(repo, n);
     let link = re(&format!(r"{}(\D|$)", regex::escape(&page)));
     let qa = config::read("slack-threads.json", false).ok().and_then(|t| t[&format!("{pr}:#qa")]["ts"].as_str().map(String::from));
     let r = slackcli(&["search", "messages", &page, "--json", "--limit", "40"], None);
     let matches = if r.ok { parse_json(&r.stdout).and_then(|v| v["matches"].as_array().cloned()).unwrap_or_default() } else { vec![] };
-    let mut done: Vec<String> = vec![];
-    let posts = matches.iter().filter(|m| m["channel"].is_object() && m["channel"]["is_im"] != json!(true) && m["user"].as_str() == Some(&by) && m["ts"].as_str() != qa.as_deref() && link.is_match(&own_links(m)));
-    for m in posts.take(3) {
-        let ch = format!("--channel-id={}", m["channel"]["id"].as_str().unwrap_or(""));
-        let ts = format!("--timestamp={}", m["ts"].as_str().unwrap_or(""));
-        let mut args = vec!["messages", "react", ch.as_str(), ts.as_str(), "--emoji", "white_check_mark", "--json"];
-        if dry_run() {
-            args.push("--dry-run");
-        }
-        let x = slackcli(&args, None);
-        let at = if m["channel"]["is_mpim"] == json!(true) { "a group message".to_string() } else { format!("#{}", m["channel"]["name"].as_str().unwrap_or("")) };
-        if (x.ok || x.error.contains("already_reacted")) && !done.contains(&at) {
-            done.push(at);
-        }
-    }
-    Ok(json!({ "done": done }))
+    Ok(matches.into_iter().filter(|m| m["channel"].is_object() && m["channel"]["is_im"] != json!(true) && m["user"].as_str() == Some(&by) && m["ts"].as_str() != qa.as_deref() && link.is_match(&own_links(m))).take(3).collect())
 }
 
 /// A message in a channel (the QA request, Settings → Slack): its ID, #name or link. Back: its permalink.

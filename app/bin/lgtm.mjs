@@ -388,23 +388,38 @@ const SLACK_CHANNEL = /^([CG][A-Z0-9]+|#[\w.-]+|https:\/\/[\w-]+\.slack\.com\/ar
 // ✅ on the posts outside DMs where the PR's author linked it (their review request), once it's approved or merged
 // (Settings → Slack). author: a GitHub login matched on Slack; none: you. Not your QA request. Searched fresh each time;
 // back: where they were.
-async function markDone({ pr, author }) {
+async function requestPosts({ pr, author }) {
   if (typeof pr !== 'string' || !PR_REF.test(pr) || (author != null && (typeof author !== 'string' || author.length > 100))) throw new Error('Bad Slack request');
   slackMe ??= slackcli(['auth', 'whoami', '--json']).then((r) => parseJson(r.stdout)?.user_id);
   const by = author ? (await readConfig()).slackUsers?.[author] : await slackMe;
-  if (!/^U[A-Z0-9]+$/.test(by ?? '')) return { done: [] };
+  if (!/^U[A-Z0-9]+$/.test(by ?? '')) return [];
   const [repo, n] = pr.split('#');
   const page = prPage(repo, n);
   const link = new RegExp(`${page.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`);
   const qa = (await readThreads())[`${pr}:#qa`]?.ts;
   const r = await slackcli(['search', 'messages', page, '--json', '--limit', '40']);
-  const posts = ((r.ok && parseJson(r.stdout)?.matches) || []).filter((m) => m.channel && !m.channel.is_im && m.user === by && m.ts !== qa && link.test(ownLinks(m))).slice(0, 3);
+  return ((r.ok && parseJson(r.stdout)?.matches) || []).filter((m) => m.channel && !m.channel.is_im && m.user === by && m.ts !== qa && link.test(ownLinks(m))).slice(0, 3);
+}
+const postedIn = (m) => (m.channel.is_mpim ? 'a group message' : `#${m.channel.name}`);
+async function markDone(b) {
   const done = new Set();
-  for (const m of posts) {
+  for (const m of await requestPosts(b)) {
     const x = await slackcli(['messages', 'react', `--channel-id=${m.channel.id}`, `--timestamp=${m.ts}`, '--emoji', 'white_check_mark', '--json', ...(DRY_RUN ? ['--dry-run'] : [])]);
-    if (x.ok || /already_reacted/.test(x.error)) done.add(m.channel.is_mpim ? 'a group message' : `#${m.channel.name}`);
+    if (x.ok || /already_reacted/.test(x.error)) done.add(postedIn(m));
   }
   return { done: [...done] };
+}
+// The PR's review request (the latest of those markDone finds): where it is, or with text, a reply in its thread (a
+// revert, said where the PR was asked about).
+async function requestReply({ pr, author, text }) {
+  if (text != null && (typeof text !== 'string' || !text.trim() || text.length > 4000)) throw new Error('Bad Slack request');
+  const [m] = await requestPosts({ pr, author });
+  if (!m) return { where: null };
+  if (text != null) {
+    const r = await slackcli(['messages', 'send', `--recipient-id=${m.channel.id}`, `--thread-ts=${m.ts}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
+    if (!r.ok) throw new Error(r.error);
+  }
+  return { where: postedIn(m) };
 }
 
 async function postToChannel({ channel, text, pr }) {
@@ -829,7 +844,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-request', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
     return readJson(req)
       .then((b) => agentText(b?.input, b?.model, b?.effort, b?.agent))
@@ -883,6 +898,7 @@ const server = createServer(async (req, res) => {
   if (path === '/slack-threads') return (req.method === 'POST' ? readJson(req).then((b) => backupThreads(b?.threads)) : backupThreads()).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-qa') return qaThreads((new URL(req.url ?? '/', ORIGIN).searchParams.get('prs') ?? '').split(',').filter(Boolean).slice(0, 100)).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-channel') return checkChannel(new URL(req.url ?? '/', ORIGIN).searchParams.get('c') ?? '').then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
+  if (path === '/slack-request' && req.method === 'POST') return readJson(req).then(requestReply).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-done' && req.method === 'POST') return readJson(req).then(markDone).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-post' && req.method === 'POST') return readJson(req).then(postToChannel).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack') {

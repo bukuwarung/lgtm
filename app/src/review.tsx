@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -608,11 +608,20 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   }, [repo, n, !!data?.pr.merged]);
   // Revert, on a merged PR: once you say so, the PR that undoes it, opened here.
   async function revert(id: string, base: string) {
-    const why = await askText(`Open a ${pageTerm().PR} that reverts this one on ${base}? It's reviewed and merged like any other. Why goes in its description.`, 'Revert', 'Why (optional): what it breaks');
-    if (why == null) return;
+    // The PR's review request on Slack, if any: a box to say so in its thread.
+    const author = data && data.pr.user.login !== me ? data.pr.user.login : undefined;
+    const where = slackRequest(`${repo}#${n}`, author).then((d) => d.where && `Reply in its review request's thread in ${d.where}`, () => null);
+    const a = await askText(`Open a ${pageTerm().PR} that reverts this one on ${base}? It's reviewed and merged like any other. Why goes in its description.`, 'Revert', 'Why (optional): what it breaks', where);
+    if (!a) return;
     setReverting(true);
     try {
-      location.hash = `/${repo}/pull/${await revertPR(repo, n, id, why)}`;
+      const made = await revertPR(repo, n, id, a.text);
+      if (a.checked)
+        slackRequest(`${repo}#${n}`, author, `Reverting this: ${prWebUrl(repo, made)}${a.text ? `\n${a.text}` : ''}`).then(
+          (d) => d.where && dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Replied in ${d.where} on Slack.` } })),
+          (e) => reportError(`Couldn't reply on Slack: ${e.message}`),
+        );
+      location.hash = `/${repo}/pull/${made}`;
     } catch (e: any) {
       reportError(`Couldn't revert: ${e.message}`);
     } finally {

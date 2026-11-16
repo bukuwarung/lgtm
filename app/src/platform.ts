@@ -666,6 +666,16 @@ export async function markDoneOnSlack(pr: string, author?: string) {
   }
 }
 
+// The PR's review request on Slack (where markDoneOnSlack puts its ✅): where it is ("#channel", "a group message"),
+// or with text, a reply in its thread.
+export async function slackRequest(pr: string, author?: string, text?: string): Promise<{ where: string | null }> {
+  if (isDesktop) return command('slack_request', { pr, author, text });
+  const res = await fetch('/slack-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pr, author, text }) });
+  const d = await res.json();
+  if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
+  return d;
+}
+
 // A message in a Slack channel (an ID, #name or channel link): the QA request. Its link back, when Slack gives one.
 // Kept with the PR's Slack threads (pr: "owner/repo#n"), as login "#qa".
 export async function postSlack(channel: string, text: string, pr: string): Promise<{ url: string | null }> {
@@ -1062,8 +1072,9 @@ export function ask(text: string, yes = 'OK'): Promise<boolean> {
   return new Promise((done) => d.addEventListener('close', () => (done(d.returnValue === 'y'), d.remove())));
 }
 
-// ask() with a line to fill in: what was typed ('' when nothing), or null when cancelled.
-export function askText(text: string, yes: string, placeholder: string): Promise<string | null> {
+// ask() with a line to fill in: what was typed ('' when nothing), or null when cancelled. check: a checkbox's label,
+// added (unticked) once it's known; none, no checkbox.
+export function askText(text: string, yes: string, placeholder: string, check?: Promise<string | null>): Promise<{ text: string; checked: boolean } | null> {
   const d = document.createElement('dialog');
   d.className = 'ask';
   d.innerHTML = '<p></p><form method="dialog"><input maxlength="500"><button value="">Cancel</button><button class="primary" value="y"></button></form>';
@@ -1075,7 +1086,15 @@ export function askText(text: string, yes: string, placeholder: string): Promise
   document.body.append(d);
   d.showModal();
   input.focus();
-  return new Promise((done) => d.addEventListener('close', () => (done(d.returnValue === 'y' ? input.value.trim() : null), d.remove())));
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  check?.then((label) => {
+    if (!label || !d.open) return;
+    const l = document.createElement('label');
+    l.append(box, ' ' + label);
+    d.querySelector('form')!.insertBefore(l, input.nextSibling);
+  });
+  return new Promise((done) => d.addEventListener('close', () => (done(d.returnValue === 'y' ? { text: input.value.trim(), checked: box.checked } : null), d.remove())));
 }
 
 export function recordError(text: string) {

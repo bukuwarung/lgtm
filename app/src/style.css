@@ -1269,7 +1269,7 @@ dialog.ask { max-width: min(440px, calc(100vw - 32px)); padding: 16px 20px; colo
 dialog.ask::backdrop { background: rgb(0 0 0 / .3); }
 dialog.ask p { margin: 0 0 14px; line-height: 1.45; }
 dialog.ask form { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-dialog.ask form input { flex: 1 0 100%; margin-bottom: 4px; }
+dialog.ask form > input, dialog.ask form > label { flex: 1 0 100%; margin-bottom: 4px; }
 /* A spec chip's menu in a file's header: over the file (content-visibility would clip it), opening leftward */
 .file:has(> * .pill-menu[open]) { content-visibility: visible; position: relative; z-index: 5; }
 .file .pill-pop { left: auto; right: 0; }
