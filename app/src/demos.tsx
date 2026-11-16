@@ -1454,6 +1454,16 @@ Object.assign(DEMOS, {
     off: <div class="demo-bar"><b>#412 Retry failed payments with backoff</b><button><Octicon name="dependabot" /> Agents</button></div>,
     on: <div class="demo-bar"><b>#412 Retry failed payments with backoff</b><span class="bar-slack bar-qa"><Octicon name="comment-discussion" /><span class="qa-new">2</span></span><button><Octicon name="dependabot" /> Agents</button></div>,
   },
+  againInThread: {
+    title: "Ask again in your review request's thread",
+    off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>DM with Budi · 15:40</time><div class="md"><p>Addressed your comments 🙏 Could you take another look at <a>acme/shop#412</a>?</p></div></div></div>,
+    on: (
+      <div class="conversation">
+        <div class="comment"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>#shop-reviews · 10:12</time><div class="md"><p><b>@Budi</b> could you review <b>Retry failed payments with backoff</b>? 🙏 <a>acme/shop#412</a></p></div></div>
+        <div class="comment demo-reply"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>in thread · 15:40</time><div class="md"><p><b>@Budi</b> Addressed your comments 🙏 Could you take another look at <a>acme/shop#412</a>?</p></div></div>
+      </div>
+    ),
+  },
   jiraOnReview: {
     title: 'Move the Jira ticket when you ask for review',
     off: <div class="demo-bar"><button>Ready for review</button><span class="pill">BUKU-4120 · In Progress</span></div>,

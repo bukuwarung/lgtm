@@ -1075,6 +1075,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .template-see { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .prompt-preview { margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); white-space: pre-wrap; font: calc(12px * var(--ts))/1.5 var(--sans); }
 /* Settings → Slack → Messages: each one as Slack will show it, with a sample PR. */
+.demo-reply { margin-left: 24px; }
 .demo-reaction { display: inline-block; margin-top: 4px; padding: 0 6px; border: 1px solid #1d9bd1; border-radius: 10px; background: color-mix(in srgb, #1d9bd1 12%, transparent); font-size: calc(12px * var(--ts)); }
 .slack-preview { padding: 8px 10px; border-left: 3px solid color-mix(in srgb, var(--fg) 15%, transparent); background: color-mix(in srgb, var(--soft) 60%, transparent); border-radius: 0 6px 6px 0; font-size: calc(13px * var(--ts)); line-height: 1.5; }
 .slack-preview img { width: 1.35em; height: 1.35em; vertical-align: -.3em; object-fit: contain; }

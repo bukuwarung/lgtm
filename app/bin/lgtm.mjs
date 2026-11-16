@@ -418,8 +418,10 @@ async function requestReply({ pr, author, text, replies }) {
   // The thread it's in: its own, or, when the request is itself a reply (in a channel's daily review thread, say), that one.
   const root = m.thread_ts ?? m.permalink?.match(/thread_ts=(\d+\.\d+)/)?.[1] ?? m.ts;
   if (text != null) {
-    const r = await slackcli(['messages', 'send', `--recipient-id=${m.channel.id}`, `--thread-ts=${root}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], text);
+    const body = await mentions(text, { login: '', emails: [] }, (await readConfig()).slackUsers ?? {}); // <@gh:login> tags them
+    const r = await slackcli(['messages', 'send', `--recipient-id=${m.channel.id}`, `--thread-ts=${root}`, '--message-file', '-', '--json', ...(DRY_RUN ? ['--dry-run'] : [])], body);
     if (!r.ok) throw new Error(r.error);
+    if (DRY_RUN) return { where: postedIn(m), dryRun: r.stdout.trim() };
   }
   if (replies !== true) return { where: postedIn(m) };
   const r = await slackcli(['conversations', 'read', m.channel.id, '--thread-ts', root, '--json', '--limit', '200']);

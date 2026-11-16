@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview } from './platform.ts';
+import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -1259,6 +1259,8 @@ async function askAgain(i: QueueItem): Promise<string> {
   const text = fillSlack(slackTemplate('again'), prValues({ repo: i.repo, number: i.number, title: i.title, url: prWebUrl(i.repo, i.number), author: i.author }));
   if (!text || !(await slackStatus(`${i.repo}#${i.number}`).catch(() => null))?.configured) return `Asked again on ${site(i.repo)}`;
   try {
+    const where = await againInThread(`${i.repo}#${i.number}`, i.changesBy, text);
+    if (where) return `Asked again on ${site(i.repo)} and in ${where} on Slack`;
     const missed = (await notifySlack(await slackRecipients(i.repo, i.changesBy), text, `${i.repo}#${i.number}`)).filter((r) => !r.ok);
     return missed.length ? `Asked again on ${site(i.repo)}; Slack didn't reach ${missed.map((r) => '@' + r.login).join(', ')}` : `Asked again on ${site(i.repo)} and Slack`;
   } catch (e: any) {

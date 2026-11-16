@@ -677,6 +677,14 @@ export async function slackRequest(pr: string, author?: string, text?: string, r
   return d;
 }
 
+// Asking again (Settings → Slack, againInThread, off): the "again" message as a reply in your PR's review request's
+// thread, tagging who you asked, instead of a DM. Back: where; null when it's off or there's no request (the DM goes).
+export async function againInThread(pr: string, logins: string[], text: string): Promise<string | null> {
+  if (!text || !flag('againInThread', false)) return null;
+  const tags = logins.map((l) => `<@gh:${l}>`).join(' ');
+  return (await slackRequest(pr, undefined, text.includes('<@gh:*>') ? text.replaceAll('<@gh:*>', tags) : `${tags} ${text}`)).where;
+}
+
 // A message in a Slack channel (an ID, #name or channel link): the QA request. Its link back, when Slack gives one.
 // Kept with the PR's Slack threads (pr: "owner/repo#n"), as login "#qa".
 // kind 'review': a review request instead (Settings → Slack), not kept: slackRequest finds it again.

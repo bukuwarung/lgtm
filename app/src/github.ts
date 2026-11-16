@@ -818,7 +818,8 @@ async function blameShares(repo: string, owner: string, name: string, base: stri
   );
 }
 
-export async function suggestReviewers(repo: string, skip: Set<string>, team: string, knows: Knows[] = []): Promise<ReviewerPick[]> {
+// only: just these people (a team asked on the PR), whether or not they review here.
+export async function suggestReviewers(repo: string, skip: Set<string>, team: string, knows: Knows[] = [], only?: string[]): Promise<ReviewerPick[]> {
   const [owner, name] = repo.split('/');
   // Who reviewed the last 40 PRs here, kept a day.
   const count = new Map(await kept(`reviewers:${repo}`, async () => {
@@ -835,9 +836,10 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
   }));
   const fit = (p: { login: string }) => !skip.has(p.login) && !p.login.endsWith('[bot]');
   let people: { login: string; why: string; knows?: number }[] = [...count].sort((a, b) => b[1] - a[1]).map(([login, k]) => ({ login, why: `reviewed ${k} of the last 40 PRs here` })).filter(fit);
-  if (!people.length && team && isLab(team) === isLab(repo)) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${isLab(team) ? team.slice(team.lastIndexOf('/') + 1) : team.split('/')[1]}` })).filter(fit);
+  if (only) people = only.filter((login) => fit({ login })).map((login) => people.find((p) => p.login === login) ?? { login, why: 'in the team asked' });
+  else if (!people.length && team && isLab(team) === isLab(repo)) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${isLab(team) ? team.slice(team.lastIndexOf('/') + 1) : team.split('/')[1]}` })).filter(fit);
   // Whoever wrote a real share (10%+) of the code being changed: named for it, and in the list even if they don't review here.
-  for (const k of knows.filter((k) => k.share >= 0.1 && fit(k))) {
+  for (const k of knows.filter((k) => k.share >= 0.1 && fit(k) && (!only || only.includes(k.login)))) {
     const said = `wrote ${Math.round(k.share * 100)}% of the code this PR changes, most in ${k.file.split('/').pop()}`;
     const p = people.find((p) => p.login === k.login);
     if (p) (p.knows = k.share), (p.why = `${said}; ${p.why}`);

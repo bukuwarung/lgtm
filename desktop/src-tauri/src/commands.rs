@@ -548,7 +548,9 @@ pub async fn slack_request(pr: String, author: Option<String>, text: Option<Stri
         if dry_run() {
             args.push("--dry-run");
         }
-        let r = slackcli(&args, Some(t));
+        let users = config::read("config.json", true)?["slackUsers"].clone();
+        let body = mentions(t, &Recipient { login: String::new(), emails: vec![], at: None }, &users); // <@gh:login> tags them
+        let r = slackcli(&args, Some(&body));
         if !r.ok {
             return Err(r.error);
         }

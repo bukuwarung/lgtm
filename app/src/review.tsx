@@ -12,7 +12,7 @@ import { baselineChanges, isLintBaseline, type Suppression } from './lintbaselin
 import { addedLines, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, getTeamMembers, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
   ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy } from './github.ts';
@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -666,6 +666,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => setBatch([]), [repo, n]);
   const [me, setMe] = useState('');
   const myOpenPR = !!me && data?.pr.user.login === me && data.pr.state === 'open';
+  // My PR asks only a team (no one by name, no reviews yet): GitHub tells all of them, so it's no one's. Its least busy
+  // member, to ask by name.
+  const teamOnly = myOpenPR && !data.pr.draft && !(data.pr.requested_reviewers ?? []).length && !conversation.some((c) => c.state && c.author !== me) ? data.pr.requested_teams?.[0]?.slug : undefined;
+  const [teamPick, setTeamPick] = useState<ReviewerPick | null>(null);
+  useEffect(() => {
+    setTeamPick(null);
+    if (teamOnly && data)
+      getTeamMembers(`${repo.split('/')[0]}/${teamOnly}`)
+        .then((members) => suggestReviewers(repo, new Set([me, ...bots]), '', [], members))
+        .then((l) => setTeamPick(l.find((p) => !p.busy) ?? null), () => {});
+  }, [repo, n, teamOnly]);
   useEffect(() => {
     setRequest(null);
     if (myOpenPR && (reviewAsk || reviewReplies)) slackRequest(`${repo}#${n}`, undefined, undefined, true).then(setRequest, () => {});
@@ -1341,8 +1352,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     const text = fillSlack(slackTemplate('again'), prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
     if (text && slackPeople !== null) {
       try {
-        const [r] = await notifySlack(await slackRecipients(repo, [login]), text, `${repo}#${n}`);
-        note = r?.ok ? `Asked @${login} to review again, on ${site(repo)} and Slack.` : `Asked @${login} again on ${site(repo)}; Slack didn't reach them: ${r?.error ?? 'no reply'}`;
+        const where = await againInThread(`${repo}#${n}`, [login], text);
+        const [r] = where ? [{ ok: true, error: '' }] : await notifySlack(await slackRecipients(repo, [login]), text, `${repo}#${n}`);
+        note = where ? `Asked @${login} to review again, on ${site(repo)} and in ${where} on Slack.` : r?.ok ? `Asked @${login} to review again, on ${site(repo)} and Slack.` : `Asked @${login} again on ${site(repo)}; Slack didn't reach them: ${r?.error ?? 'no reply'}`;
       } catch (e: any) {
         note = `Asked @${login} again on ${site(repo)}; Slack failed (${e.message}).`;
       }
@@ -1729,6 +1741,22 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 title={gaps.differ.length ? `Not what undoing #${undoes} exactly would change:\n${gaps.differ.join('\n')}` : gaps.unknown.length ? `Every file lgtm could compare undoes #${undoes} exactly. No diff to compare for:\n${gaps.unknown.join('\n')}` : `Every line it changes undoes #${undoes}, and nothing else`}
               >
                 <Tg i="history" t={gaps.differ.length ? `differs from a clean revert of #${undoes} in ${gaps.differ.length} file${gaps.differ.length > 1 ? 's' : ''}` : `exactly undoes #${undoes}${gaps.unknown.length ? ` (${gaps.unknown.length} not compared)` : ''}`} />
+              </span>
+            )}
+            {teamPick && (
+              <span class="pill p-warn" title={`Only @${pr.requested_teams![0].slug} is asked: everyone in it is told, so it's no one's. @${teamPick.login} ${teamPick.why}, with ${teamPick.load} open review request${teamPick.load === 1 ? '' : 's'}.`}>
+                <Tg i="nobody" t="asked a team, no one named" />{' '}
+                <button
+                  class="link"
+                  onClick={() =>
+                    requestReview(repo, n, teamPick.login).then(
+                      () => (void ticketsToReview(jiraKeys(pr.title, pr.head.ref)), setTeamPick(null), setNotice({ ok: true, text: `Asked @${teamPick.login} for a review.` }), dispatchEvent(new Event('lgtm:refresh'))),
+                      (e) => setNotice({ ok: false, text: `Couldn't ask @${teamPick.login} on ${site(repo)}: ${e.message}` }),
+                    )
+                  }
+                >
+                  ask @{teamPick.login}
+                </button>
               </span>
             )}
             {/* What needs you, or blocks the merge */}
