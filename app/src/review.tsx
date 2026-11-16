@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -161,7 +161,7 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa' }: { pr: PR; repo: string; n
     if (!text?.trim()) return;
     setBusy(true);
     postSlack(channel, text, `${repo}#${n}`, review ? 'review' : undefined).then(
-      () => (close(), onPosted()),
+      () => (close(), onPosted(), review || void ticketsToQa(jiraKeys(pr.title, pr.head.ref))),
       (e) => setErr(e.message),
     ).finally(() => setBusy(false));
   };
@@ -674,6 +674,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (myOpenPR) slackSentTo(`${repo}#${n}`).then(setSentTo, () => {});
   }, [repo, n, myOpenPR]);
   const slackOnly = data ? sentTo.map((s) => s.login).filter((l) => l !== me && !bots.has(l) && !(data.pr.requested_reviewers ?? []).some((u) => u.login === l) && !conversation.some((c) => c.state && c.author === l)) : [];
+  // My PR closed without merging somewhere else (Settings → Slack, closeReply): whether its review request's thread can
+  // still hear it (where it is), once.
+  const myClosed = !!me && data?.pr.user.login === me && data.pr.state === 'closed' && !data.pr.merged;
+  const [closeWhere, setCloseWhere] = useState<string | null>(null);
+  useEffect(() => {
+    setCloseWhere(null);
+    if (myClosed && !closeTold(`${repo}#${n}`)) slackRequest(`${repo}#${n}`).then((r) => setCloseWhere(r.where), () => {});
+  }, [repo, n, myClosed]);
   // My PR asks a group but no one in it by name (a GitHub team, a GitLab approval rule: github.ts unnamedGroup): everyone
   // in it is told, so it's no one's. Its least busy member, to ask by name.
   const reviewedYet = conversation.some((c) => c.state && c.author !== me);
@@ -1709,7 +1717,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
-            {mine && <MergeBox repo={repo} n={n} revert={!!undoes} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
+            {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
           </div>
         </div>
@@ -1735,6 +1743,20 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           ) : pr.state === 'closed' ? (
             <p class="pr-state closed">
               <Octicon name="git-pull-request-closed" size={16} /> <span><b>Closed without merging</b>{pr.closed_at && <> <Time at={pr.closed_at} /></>}. A review now can only comment.</span>
+              {closeWhere && (
+                <button
+                  class="pr-state-act"
+                  title={`Reply in your review request's thread in ${closeWhere}, tagging the reviewers asked, that it's closed and needs no review`}
+                  onClick={() =>
+                    closedOnSlack(`${repo}#${n}`, (pr.requested_reviewers ?? []).map((u) => u.login)).then(
+                      (w) => (setCloseWhere(null), w && setNotice({ ok: true, text: `Said so in your review request's thread in ${w}.` })),
+                      (e) => setNotice({ ok: false, text: `Couldn't reply on Slack: ${e.message}` }),
+                    )
+                  }
+                >
+                  Tell the review thread
+                </button>
+              )}
             </p>
           ) : pr.draft ? (
             <p class="pr-state draft">

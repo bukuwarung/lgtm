@@ -1494,6 +1494,21 @@ Object.assign(DEMOS, {
       </div>
     ),
   },
+  jiraOnQa: {
+    title: 'Move the Jira ticket when you ask QA',
+    off: <div class="demo-bar"><button>Ask QA</button><span class="pill">BUKU-4120 · In Review</span></div>,
+    on: <div class="demo-bar"><button>Ask QA</button><span class="pill p-ok">BUKU-4120 · In QA</span></div>,
+  },
+  closeReply: {
+    title: 'Tell your review request when you close',
+    off: <div class="conversation"><div class="comment"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>#shop-reviews · 10:12</time><div class="md"><p><b>@Budi</b> could you review <b>Retry failed payments with backoff</b>? 🙏 <a>acme/shop#412</a></p></div></div></div>,
+    on: (
+      <div class="conversation">
+        <div class="comment"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>#shop-reviews · 10:12</time><div class="md"><p><b>@Budi</b> could you review <b>Retry failed payments with backoff</b>? 🙏 <a>acme/shop#412</a></p></div></div>
+        <div class="comment demo-reply"><img class="c-avatar" src={face('ana')} alt="" /> <b>Ana</b> <time>in thread · 16:05</time><div class="md"><p><b>@Budi</b> Closed without merging: no review needed.</p></div></div>
+      </div>
+    ),
+  },
   jiraOnReview: {
     title: 'Move the Jira ticket when you ask for review',
     off: <div class="demo-bar"><button>Ready for review</button><span class="pill">BUKU-4120 · In Progress</span></div>,

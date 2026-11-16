@@ -631,6 +631,7 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .pr-state.draft { color: var(--muted); border-color: var(--border); background: var(--soft); }
 .pr-state b { color: inherit; }
 .pr-state-act { margin-left: auto; flex: none; }
+.merge-close { margin-left: auto; }
 .state-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: calc(12px * var(--ts)); font-weight: 600; color: #fff; }
 .state-chip.merged { background: light-dark(#8250df, #8957e5); }
 .state-chip.closed { background: light-dark(#cf222e, #da3633); }

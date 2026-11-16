@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 // its cached copy, the bell, PRs opened lately, files marked viewed on GitLab, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|threadCheck:|askConvos$|kept:|readSaved$)/;
+const OWN = /^(closeTold:|drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|threadCheck:|askConvos$|kept:|readSaved$)/;
 let account = '';
 // The account of last time, per site (GitHub's, or a GitLab host's): the next launch starts as it.
 const lastKey = () => (viewAs() ? `lastLogin:${viewAs()}` : 'lastLogin');
@@ -677,6 +677,18 @@ export async function slackRequest(pr: string, author?: string, text?: string, r
   return d;
 }
 
+// My PR closed without merging (Settings → Slack, closeReply, off): a reply in its review request's thread, tagging
+// the reviewers asked, so no one reviews it for nothing. Once per PR. Back: where; null when off or there's no request.
+const toldKey = (pr: string) => own(`closeTold:${pr}`);
+export const closeTold = (pr: string) => !flag('closeReply', false) || !!localStorage.getItem(toldKey(pr));
+export async function closedOnSlack(pr: string, reviewers: string[]): Promise<string | null> {
+  if (closeTold(pr)) return null;
+  const tags = reviewers.map((l) => `<@gh:${l}>`).join(' ');
+  const where = (await slackRequest(pr, undefined, `${tags ? tags + ' ' : ''}Closed without merging: no review needed.`)).where;
+  if (where) localStorage.setItem(toldKey(pr), '1');
+  return where;
+}
+
 // PRs someone asked you about on Slack lately (a link in a DM to you, or beside a tag of you): GitHub's, or with lab
 // GitLab's. Asked again at most every 10 minutes (two Slack searches).
 export type SlackAsk = { pr: string; login: string | null; name: string | null; user: string; url: string | null; ts: string; channel: string; thread: string };
@@ -781,11 +793,14 @@ export async function fetchJira(key: string): Promise<JiraIssue> {
 }
 
 // Asking for review on your PR (Ready for review, or a reviewer asked): its Jira tickets move to the status in Settings →
-// Reviewing (jiraOnReview, off; jiraInReview). Not done ones, nor ones there already. Says so in a toast.
+// Reviewing (jiraOnReview, off; jiraInReview); asking QA, to jiraInQa (jiraOnQa, off). Not done ones, nor ones there
+// already. Says so in a toast.
 // ponytail: a ticket further on (in QA, say) moves back too: Jira's statuses have no order beyond their category.
-export async function ticketsToReview(keys: string[]) {
-  if (!keys.length || !flag('jiraOnReview', false)) return;
-  const to = localStorage.getItem(own('jiraInReview')) ?? 'In Review';
+export const ticketsToReview = (keys: string[]) => ticketsTo(keys, 'jiraOnReview', 'jiraInReview', 'In Review');
+export const ticketsToQa = (keys: string[]) => ticketsTo(keys, 'jiraOnQa', 'jiraInQa', 'In QA');
+async function ticketsTo(keys: string[], on: string, status: string, initial: string) {
+  if (!keys.length || !flag(on, false)) return;
+  const to = localStorage.getItem(own(status)) ?? initial;
   const said = await Promise.all(
     keys.map((k) =>
       fetchJira(k).then(

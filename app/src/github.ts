@@ -996,6 +996,8 @@ export const getHead = async (repo: string, n: number): Promise<string> => {
 // My PR's title and description, rewritten.
 export const updatePR = (repo: string, n: number, f: { title: string; body: string }) =>
   isLab(repo) ? lab.updateLab(repo, n, f) : json(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify(f) });
+// Closed without merging.
+export const closePR = (repo: string, n: number) => (isLab(repo) ? lab.closeLab(repo, n) : json(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed' }) }));
 export const getPR = (repo: string, n: number): Promise<PR> => isLab(repo) ? lab.getLabPR(repo, n) : json(`/repos/${repo}/pulls/${n}`, undefined, FULL);
 
 export const getFiles = (repo: string, n: number) => isLab(repo) ? lab.getLabFiles(repo, n) : paginate<PRFile>(`/repos/${repo}/pulls/${n}/files?per_page=100`);

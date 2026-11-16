@@ -767,6 +767,8 @@ export async function revertLab(repo: string, n: number, why = ''): Promise<numb
   return made.iid;
 }
 
+export const closeLab = (repo: string, n: number) => send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', { state_event: 'close' });
+
 // MRs whose description mentions reverting this one (github.ts revertedBy reads their "Reverts !n" line).
 export async function labRevertsOf(repo: string, n: number) {
   const list: any[] = await json(split(repo).host, `/projects/${pid(repo)}/merge_requests?in=description&per_page=20&search=${encodeURIComponent(`Reverts !${n}`)}`);

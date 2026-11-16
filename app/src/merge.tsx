@@ -2,8 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
-import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview } from './platform.ts';
-import { deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview, closedOnSlack } from './platform.ts';
+import { closePR, deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -37,7 +37,7 @@ export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) =>
 // open: the PR's unresolved review threads, the ones waiting on my reply first.
 export type OpenThread = { id: string; path: string; awaiting: boolean; bot: boolean };
 // qa: the PR's QA request (Ask QA) — its link, and its replies once read — when it has one.
-export function MergeBox({ repo, n, revert, url, checks, onChange, tickets = [], openThreads = [], qa }: { repo: string; n: number; revert?: boolean; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[]; qa?: { url: string; thread: QaThread | null } }) {
+export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, tickets = [], openThreads = [], qa }: { repo: string; n: number; revert?: boolean; asked?: string[]; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[]; qa?: { url: string; thread: QaThread | null } }) {
   const [s, setS] = useState<MergeState | null>(null);
   const [err, setErr] = useState('');
   const fail = (text: string) => (setErr(text), reportError(text)); // in the box, and in the bar at the top
@@ -241,6 +241,21 @@ export function MergeBox({ repo, n, revert, url, checks, onChange, tickets = [],
         {!ready && !s.autoMergeRequest && s.viewerCanEnableAutoMerge && (
           <button disabled={!!busy} onClick={() => open('auto')}>Enable auto-merge</button>
         )}
+        <button
+          class="link merge-close"
+          disabled={!!busy}
+          title={`Close this ${pageTerm().PR} without merging (it can be reopened). With Settings → Slack → "Tell your review request when you close", its review request's thread hears it too`}
+          onClick={async () => {
+            if (!(await ask(`Close this ${pageTerm().PR} without merging? It can be reopened later.`, 'Close'))) return;
+            run('close', async () => {
+              await closePR(repo, n);
+              const where = await closedOnSlack(`${repo}#${n}`, asked).catch(() => null);
+              if (where) dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Closed. Said so in your review request's thread in ${where}.` } }));
+            });
+          }}
+        >
+          {busy === 'close' ? 'Closing…' : 'Close'}
+        </button>
         {!ready && !s.isDraft && !conflict && s.viewerCanMergeAsAdmin && (
           <label title="You're an admin here: merge even though requirements aren't met">
             <input type="checkbox" checked={bypass} onChange={() => setBypass(!bypass)} /> Merge without waiting for requirements

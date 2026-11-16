@@ -447,6 +447,7 @@ export function Settings() {
           <Flag k="reviewReplies" initial={false} label="Replies to your review request" hint={`Beside your ${T.PR}'s title: your post in a Slack channel that links it, with how many replies you haven't opened. It's looked for when you open the ${T.PR}.`} demo />
           <Flag k="slackAsked" initial={false} label={`${T.PRs} asked of you on Slack, in Needs your review`} hint={`A ${T.PR} linked in a DM to you, or beside a tag of you, in the last 7 days, when GitHub or GitLab doesn't ask you yet: open, not yours, and not reviewed by you. Its pill adds you as a reviewer.`} demo />
           <Flag k="slackSent" initial={false} label="People you asked on Slack, not as reviewers" hint={`On your ${T.PR}: whoever you sent its link to in a Slack DM but haven't asked to review it (and who hasn't), with a button to ask them there too, so it's in their list and the ${T.PR} waits on them. Looked for when you open the ${T.PR}.`} demo />
+          <Flag k="closeReply" initial={false} label="Tell your review request when you close" hint={`Closing your ${T.PR} without merging (Close, beside Merge) replies in its review request's thread, tagging the reviewers asked: closed, no review needed. Closed elsewhere, its banner offers the same.`} demo />
           <Flag k="askThreadReply" initial={false} label="Answer in the thread where you were asked" hint={`When someone asked you about a ${T.PR} on Slack (a link in a DM to you, or beside a tag of you, in the last 7 days), the message after your review replies in that thread, tagging them, instead of a DM. Others it goes to still get a DM.`} demo />
           <Flag k="againInThread" initial={false} label="Ask again in your review request's thread" hint={`When you ask a reviewer to look again, the "Ask to look again" message goes as a reply in the thread of your post that linked the ${T.PR}, tagging them, instead of a DM. With no such post, the DM goes.`} demo />
           <Flag k="qaRequest" initial={true} label={`A button to ask QA, on your ${T.PRs}`} hint={`Ask QA posts your QA request to the channel below, filled in from the ${T.PR}: you read and can change it before it goes. Its wording is under Messages.`} demo>
@@ -514,6 +515,9 @@ export function Settings() {
         <JiraAfterMerge />
         <Flag k="jiraOnReview" initial={false} label="Move the Jira ticket when you ask for review" hint={`When you mark your ${T.PR} ready for review or ask a reviewer, its tickets (from its title, else its branch) move to the status below. Not done ones.`} demo>
           <JiraStatusRow k="jiraInReview" initial="In Review" label="When you ask for review, move the Jira ticket to" />
+        </Flag>
+        <Flag k="jiraOnQa" initial={false} label="Move the Jira ticket when you ask QA" hint={`When Ask QA posts your request, the ${T.PR}'s tickets (from its title, else its branch) move to the status below. Not done ones.`} demo>
+          <JiraStatusRow k="jiraInQa" initial="In QA" label="When you ask QA, move the Jira ticket to" />
         </Flag>
         <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Specs and docs, then build and config, models and contracts, the implementation (each file with its tests right below it), other tests, and last resources and assets. Off: GitHub's order, by path. Drag the steps into the order you read in." demo>
           <ReadingSteps />
