@@ -39,6 +39,7 @@ import { reviewNow } from './agentreview.ts';
 import { AGENTS, askAgent, autoAgent, detectAgents, setAskAgent, runAgent, useAgents, type AgentId } from './agents.ts';
 import { checkThreads, savedCheck, type ThreadCheck, type Verdict } from './threadcheck.ts';
 import { toPerson } from './person.tsx';
+import { SymbolNav } from './symbolnav.tsx';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
@@ -1207,6 +1208,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [byModule] = useStoredFlag('gradleModules', true);
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
+  const [symbolNav] = useStoredFlag('symbolNav', true); // Settings → Diff: where a declared name is used
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
   const none = { list: [], byPath: new Map() };
   const secrets = chkSecrets ? secretsOf(data.files) : none;
@@ -2113,6 +2115,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />
           <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} onComment={(path, line, body) => ctx.suggest(path, line && ctx.suggestion({ path, side: 'RIGHT', line }) != null ? line : undefined, body)} />
+          {symbolNav && (
+            <SymbolNav
+              ix={codeIx}
+              go={jumpToLine}
+              repoSearch={(name) => (isLab(repo) ? `https://${repo.split('/')[0]}/${repo.slice(repo.indexOf('/') + 1)}/-/search?scope=blobs&search=${encodeURIComponent(name)}` : `https://github.com/search?type=code&q=${encodeURIComponent(`repo:${repo} ${name}`)}`)}
+            />
+          )}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} />
           {inOrder.map(section)}
           {generated.length > 0 &&
@@ -3526,17 +3535,18 @@ function jumpToSpec(r: SpecRef) {
   setTimeout(go, 50);
 }
 
-// To a changed file, at its new-side line when that's on show (not folded away), else its top.
-function jumpToLine(path: string, line?: number) {
+// To a changed file, at its new-side line when that's on show (not folded away), else its top. old: a removed line, by
+// its old number.
+function jumpToLine(path: string, line?: number, old = false) {
   if (!line) return jumpTo('f-' + path);
   noteJump();
   const sec = document.getElementById('f-' + path);
   sec?.scrollIntoView();
   let tries = 0;
   const go = () => {
-    const row = [...(sec?.querySelectorAll('tr.ln') ?? [])].find((r) => r.children[1]?.textContent === String(line));
+    const row = [...(sec?.querySelectorAll('tr.ln') ?? [])].find((r) => (old ? r.children[1]?.getAttribute('data-old') : r.children[1]?.textContent) === String(line));
     if (!row) return void (tries++ < 30 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + path, undefined, true)); // drawing, or not on show
-    row.id ||= `ln-${path}-${line}`;
+    row.id ||= `ln-${path}-${old ? 'o' : ''}${line}`;
     jumpTo(row.id, undefined, true);
   };
   setTimeout(go, 50);

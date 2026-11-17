@@ -1519,3 +1519,22 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .ask-again-label { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-assigned .pr-face + .pr-face { margin-left: -4px; } /* several assignees: their faces overlap a little */
 .assigned-to { color: var(--muted); font-weight: 400; }
+
+/* Where a declared name is used (symbolnav.tsx): its badge beside the name, as rendered markdown's "+", and the list. */
+.sym-badge { position: fixed; z-index: 39; display: grid; place-items: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; color: #fff; background: var(--accent); cursor: pointer; box-shadow: 0 1px 3px var(--shadow); }
+.sym-pop { position: fixed; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: 320px; display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); font-size: calc(12px * var(--ts)); }
+.sym-h { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.sym-h small { color: var(--muted); }
+.sym-list { overflow: auto; padding: 4px 0; }
+.sym-list .note { margin: 4px 10px; }
+.sym-group { padding: 4px 10px 2px; color: var(--muted); font-size: calc(11px * var(--ts)); text-transform: uppercase; letter-spacing: .04em; }
+.sym-use { display: flex; gap: 10px; width: 100%; padding: 3px 10px; border: 0; border-radius: 0; background: none; text-align: left; cursor: pointer; color: var(--fg); }
+.sym-use:hover { background: var(--soft); }
+.sym-use.old code { text-decoration: line-through; color: var(--muted); }
+.sym-at { flex: none; min-width: 9em; color: var(--muted); }
+.sym-use code { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: calc(12px * var(--cs)) / 1.5 var(--mono); }
+.sym-use mark { color: inherit; background: color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 2px; }
+.sym-more { padding: 6px 10px; border-top: 1px solid var(--border); }
+.demo-sym-name { position: relative; }
+.demo-sym-badge { position: absolute; right: -18px; top: -10px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: #fff; background: var(--accent); }
+.demo-sym-list { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 0; font-size: calc(12px * var(--ts)); }

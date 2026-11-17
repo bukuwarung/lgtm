@@ -13,12 +13,20 @@ type F = { filename: string; patch?: string };
 
 // Declarations in the diff's added and unchanged lines; a file named like a class stands for it (Kotlin, Java, Swift).
 const DECL = /\b(?:class|interface|object|enum|fun|def|func|function|struct|trait|protocol|record)\s+([A-Za-z_]\w{2,})/g;
+// A method with modifiers (Java's, TypeScript's: `public static Money convert(`), an arrow function in a const.
+const METHOD = /^\s*(?:(?:public|private|protected|internal|static|final|abstract|override|synchronized|async|export)\s+)+(?:[\w<>[\],.?]+\s+)?([A-Za-z_]\w{2,})\s*\(/;
+const ARROW = /\b(?:const|let)\s+([A-Za-z_]\w{2,})\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_]\w*)\s*(?::[^=]+)?=>/;
+const COMMENT = /^\s*(?:\/\/|\/\*|\*|#(?!include|define)|--)/; // prose: "a class and its…" names no class
+const KEYWORD = new Set(['class', 'interface', 'function', 'return', 'new', 'void', 'static', 'final', 'async', 'await', 'override', 'abstract', 'public', 'private', 'protected', 'internal']);
 export function codeIndex(files: F[]): CodeIndex {
   const code = files.filter((f) => !isDoc(f.filename));
   const symbols = new Map<string, Ref>();
   for (const f of code)
     for (const h of parsePatch(f.patch ?? ''))
-      for (const l of h.lines) if (l.kind !== '-' && l.new != null) for (const m of l.text.matchAll(DECL)) if (!symbols.has(m[1])) symbols.set(m[1], { path: f.filename, line: l.new });
+      for (const l of h.lines)
+        if (l.kind !== '-' && l.new != null && !COMMENT.test(l.text))
+          for (const name of [...[...l.text.matchAll(DECL)].map((m) => m[1]), l.text.match(METHOD)?.[1], l.text.match(ARROW)?.[1]])
+            if (name && !KEYWORD.has(name) && !symbols.has(name)) symbols.set(name, { path: f.filename, line: l.new });
   for (const f of code) {
     const name = base(f.filename).replace(/\.\w+$/, '');
     if (/^[A-Z]\w{2,}$/.test(name) && !symbols.has(name)) symbols.set(name, { path: f.filename });
@@ -90,3 +98,25 @@ export function specRefs(files: F[], ix: CodeIndex): Map<string, SpecRef[]> {
       }
   return out;
 }
+
+// Where a declared name is used (symbolnav.tsx): every line naming it, by name and whole word, in every changed code file's
+// diff (added, unchanged and removed lines). Not what a compiler knows: two classes' same-named methods both count.
+export type Use = { path: string; line: number; old: boolean; text: string; decl: boolean; imp: boolean }; // imp: an import line
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function usesOf(name: string, patches: Map<string, string>): Use[] {
+  const word = new RegExp(`(?<![\\w$])${esc(name)}(?![\\w$])`);
+  const decl = new RegExp(
+    `\\b(?:class|interface|object|enum|fun|def|func|function|struct|trait|protocol|record|typealias|type)\\s+(?:[\\w.<>]+\\.)?${esc(name)}\\b` +
+      `|\\b(?:const|let|var|val)\\s+${esc(name)}\\s*=` +
+      `|^\\s*(?:(?:public|private|protected|internal|static|final|abstract|override|suspend|async|open|export)\\s+)+(?:[\\w<>\\[\\],.?]+\\s+)?${esc(name)}\\s*\\(`,
+  );
+  const out: Use[] = [];
+  for (const [path, patch] of patches) {
+    if (isDoc(path)) continue;
+    for (const h of parsePatch(patch))
+      for (const l of h.lines) if (word.test(l.text)) out.push({ path, line: (l.new ?? l.old)!, old: l.new == null, text: l.text.trim(), decl: l.new != null && decl.test(l.text), imp: IMPORT.test(l.text) });
+    if (out.length >= 200) break;
+  }
+  return out;
+}
+

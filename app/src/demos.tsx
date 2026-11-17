@@ -1454,6 +1454,22 @@ Object.assign(DEMOS, {
     off: <div class="demo-bar"><b>#412 Retry failed payments with backoff</b><button><Octicon name="dependabot" /> Agents</button></div>,
     on: <div class="demo-bar"><b>#412 Retry failed payments with backoff</b><span class="bar-slack bar-qa"><Octicon name="comment-discussion" /><span class="qa-new">2</span></span><button><Octicon name="dependabot" /> Agents</button></div>,
   },
+  symbolNav: {
+    title: 'Where functions and classes are used',
+    off: <div class="demo-panel"><code>val fee = <span>convertFee</span>(amount)</code></div>,
+    on: (
+      <div class="demo-panel demo-sym">
+        <code>val fee = <span class="demo-sym-name">convertFee<span class="demo-sym-badge"><Octicon name="list-unordered" size={10} /></span></span>(amount)</code>
+        <div class="demo-sym-list">
+          <div class="sym-group">Declared</div>
+          <div class="sym-use"><span class="sym-at">FeeService.kt:41</span><code>fun <mark>convertFee</mark>(amount: Money): Money {'{'}</code></div>
+          <div class="sym-group">Used (2)</div>
+          <div class="sym-use"><span class="sym-at">Checkout.kt:88</span><code>val fee = <mark>convertFee</mark>(amount)</code></div>
+          <div class="sym-use"><span class="sym-at">FeeServiceTest.kt:20</span><code>assertEquals(fee, <mark>convertFee</mark>(cost))</code></div>
+        </div>
+      </div>
+    ),
+  },
   slackAsked: {
     title: 'Asked of you on Slack',
     off: <div class="demo-list">{listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-ok', <Tg i="assigned" t="review requested" />]])}</div>,

@@ -796,6 +796,21 @@ test('collapseReviews: comments posted one by one are one review, its strongest 
   assert.equal(out[0].waited, 60 * 60_000);
 });
 
+test('usesOf: every line of the PR naming it, whole word, its declaration marked', async () => {
+  const { usesOf } = await import('../src/specrefs.ts');
+  const patches = new Map([
+    ['a/Fee.kt', '@@ -10,3 +10,4 @@\n class Fee {\n+  fun convertFee(x: Int) = x\n-  fun oldFee() = convertFee(1)\n   val convertFees = 2\n'],
+    ['b/Checkout.kt', '@@ -1,2 +1,3 @@\n-val a = 1\n+import a.convertFee\n+val fee = convertFee(amount)\n'],
+    ['docs/spec.md', '@@ -1 +1 @@\n+uses convertFee\n'],
+  ]);
+  const u = usesOf('convertFee', patches);
+  assert.deepEqual(u.map((x) => [x.path, x.line, x.old, x.decl]), [['a/Fee.kt', 11, false, true], ['a/Fee.kt', 11, true, false], ['b/Checkout.kt', 1, false, false], ['b/Checkout.kt', 2, false, false]]);
+  assert.deepEqual(u.map((x) => x.imp), [false, false, true, false]);
+  const { codeIndex } = await import('../src/specrefs.ts');
+  const ix = codeIndex([{ filename: 'S.java', patch: '@@ -0,0 +1,3 @@\n+  public static Money convert(Money m) {\n+  private final List<String> items;\n+export const loadFees = async (id: string) => id\n' }]);
+  assert.ok(ix.symbols.has('convert') && ix.symbols.has('loadFees') && !ix.symbols.has('items') && !ix.symbols.has('List'));
+});
+
 test('revertOf and revertGaps: what a revert undoes, and whether it undoes exactly that', async () => {
   const { revertOf, revertGaps } = await import('../src/github.ts');
   assert.equal(revertOf('Reverts acme/shop#412', 'acme/shop'), 412);
