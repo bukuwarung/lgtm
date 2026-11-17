@@ -1865,7 +1865,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       {shown && !fresh && !err && <p class="list-updating"><span class="sk-dot" /> Updating…</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', shown.filter(listed).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', `${T.Team}`, teamData && teamItems.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', `${T.Team}`, teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
               {name} {n != null && <span class="count">{n}</span>}
             </button>

@@ -1209,6 +1209,28 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
   const [symbolNav] = useStoredFlag('symbolNav', true); // Settings → Diff: where a declared name is used
+  const symPeek = useRefPeek(codeIx); // a line in its list, previewed
+  // Code names in comments (threads, the conversation) link to the code they name, previewed on hover, as the
+  // description's and specs' do: linked as comments are drawn.
+  const commentPeek = useRefPeek(codeIx);
+  useEffect(() => {
+    let frame = 0;
+    const link = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => document.querySelectorAll<HTMLElement>('.comment:not(#pr-description) .md').forEach((el) => linkSpecRefs(el, codeIx, false)));
+    };
+    link();
+    const watch = new MutationObserver(link);
+    watch.observe(document.body, { childList: true, subtree: true });
+    const inComment = (e: Event) => !!(e.target as Element).closest?.('.comment:not(#pr-description) .md [data-jump]'); // the description has its own
+    const over = (e: MouseEvent) => inComment(e) && commentPeek.over(e);
+    const out = (e: MouseEvent) => inComment(e) && commentPeek.out();
+    const click = (e: MouseEvent) => inComment(e) && commentPeek.click(e);
+    addEventListener('mouseover', over);
+    addEventListener('mouseout', out);
+    addEventListener('click', click);
+    return () => (cancelAnimationFrame(frame), watch.disconnect(), removeEventListener('mouseover', over), removeEventListener('mouseout', out), removeEventListener('click', click));
+  }, [codeIx]);
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
   const none = { list: [], byPath: new Map() };
   const secrets = chkSecrets ? secretsOf(data.files) : none;
@@ -2115,10 +2137,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />
           <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} onComment={(path, line, body) => ctx.suggest(path, line && ctx.suggestion({ path, side: 'RIGHT', line }) != null ? line : undefined, body)} />
+          {commentPeek.node}
+          {symPeek.node}
           {symbolNav && (
             <SymbolNav
               ix={codeIx}
               go={jumpToLine}
+              peek={symPeek}
               repoSearch={(name) => (isLab(repo) ? `https://${repo.split('/')[0]}/${repo.slice(repo.indexOf('/') + 1)}/-/search?scope=blobs&search=${encodeURIComponent(name)}` : `https://github.com/search?type=code&q=${encodeURIComponent(`repo:${repo} ${name}`)}`)}
             />
           )}
@@ -3490,7 +3515,7 @@ const rawSeen = new Map<string, string>();
 // A spec's code spans naming a changed file become links to it (specrefs.ts); its tasks ("[ ] 2.1 …") say how many of
 // the PR's files they name (one naming none says nothing: "build it", "delete the X block" name no file). Run after
 // each draw (the blocks' HTML is set as is).
-function linkSpecRefs(root: HTMLElement | null, ix: CodeIndex) {
+function linkSpecRefs(root: HTMLElement | null, ix: CodeIndex, tasks = true) {
   if (!root) return;
   for (const c of root.querySelectorAll('code')) {
     if (c.closest('pre, a') || c.hasAttribute('data-ref')) continue;
@@ -3503,7 +3528,7 @@ function linkSpecRefs(root: HTMLElement | null, ix: CodeIndex) {
       c.title = `${to.path}${to.line ? `:${to.line}` : ''}: go there`;
     }
   }
-  if (!root.querySelector('[data-jump]')) return; // a spec that names no code: its tasks aren't about this PR's files
+  if (!tasks || !root.querySelector('[data-jump]')) return; // a spec that names no code: its tasks aren't about this PR's files
   for (const li of root.querySelectorAll('li')) {
     if (!/^\s*\[[ xX]\]/.test(li.textContent ?? '')) continue;
     const files = new Set([...li.querySelectorAll('[data-jump]')].filter((e) => e.closest('li') === li).map((e) => e.getAttribute('data-jump')));

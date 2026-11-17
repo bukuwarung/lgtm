@@ -28,7 +28,10 @@ function wordAt(x: number, y: number): { name: string; rect: DOMRect } | null {
   return x >= rect.left - 1 && x <= rect.right + 1 && y >= rect.top - 1 && y <= rect.bottom + 1 ? { name: t.slice(s, e), rect } : null;
 }
 
-export function SymbolNav({ ix, repoSearch, go }: { ix: CodeIndex; repoSearch: (name: string) => string; go: (path: string, line: number, old: boolean) => void }) {
+// peek: review.tsx useRefPeek, to preview a listed line (beside the list) before going there.
+type Peek = { show: (p: { path: string; line?: number; go: () => void }, el: Element) => void; out: () => void };
+export function SymbolNav({ ix, repoSearch, go, peek }: { ix: CodeIndex; repoSearch: (name: string) => string; go: (path: string, line: number, old: boolean) => void; peek?: Peek }) {
+  const popRef = useRef<HTMLDivElement>(null);
   const [badge, setBadge] = useState<{ name: string; rect: DOMRect } | null>(null);
   const [open, setOpen] = useState<{ name: string; rect: DOMRect; uses: Use[] } | null>(null);
   const hide = useRef(0);
@@ -36,7 +39,7 @@ export function SymbolNav({ ix, repoSearch, go }: { ix: CodeIndex; repoSearch: (
     let frame = 0;
     const move = (e: PointerEvent) => {
       const el = e.target as Element;
-      if (el.closest?.('.sym-badge, .sym-pop')) return clearTimeout(hide.current);
+      if (el.closest?.('.sym-badge, .sym-pop, .spec-peek')) return clearTimeout(hide.current);
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const hit = el.closest?.('.diff td.code, .diff span.code') && wordAt(e.clientX, e.clientY);
@@ -50,7 +53,7 @@ export function SymbolNav({ ix, repoSearch, go }: { ix: CodeIndex; repoSearch: (
       });
     };
     const away = () => (setBadge(null), setOpen(null));
-    const click = (e: PointerEvent) => !(e.target as Element).closest?.('.sym-pop, .sym-badge') && setOpen(null);
+    const click = (e: PointerEvent) => !(e.target as Element).closest?.('.sym-pop, .sym-badge, .spec-peek') && setOpen(null);
     const key = (e: KeyboardEvent) => e.key === 'Escape' && away();
     addEventListener('pointermove', move, { passive: true });
     addEventListener('scroll', away, { passive: true });
@@ -71,7 +74,13 @@ export function SymbolNav({ ix, repoSearch, go }: { ix: CodeIndex; repoSearch: (
       <>
         <div class="sym-group">{title}</div>
         {list.map((u) => (
-          <button class={u.old ? 'sym-use old' : 'sym-use'} onClick={() => (setOpen(null), setBadge(null), go(u.path, u.line, u.old))} title={`${u.path}:${u.line}`}>
+          <button
+            class={u.old ? 'sym-use old' : 'sym-use'}
+            onClick={() => (peek?.out(), setOpen(null), setBadge(null), go(u.path, u.line, u.old))}
+            onMouseEnter={() => !u.old && popRef.current && peek?.show({ path: u.path, line: u.line, go: () => (setOpen(null), go(u.path, u.line, false)) }, popRef.current)}
+            onMouseLeave={() => peek?.out()}
+            title={`${u.path}:${u.line}`}
+          >
             <span class="sym-at">{fileLabel(u.path)}:{u.line}</span>
             <code>{mark(u.text, name)}</code>
           </button>
@@ -98,7 +107,7 @@ export function SymbolNav({ ix, repoSearch, go }: { ix: CodeIndex; repoSearch: (
         const imported = open.uses.filter((u) => !u.decl && !u.old && u.imp);
         const gone = open.uses.filter((u) => u.old);
         return (
-          <div class="sym-pop" style={pos(open.rect)}>
+          <div class="sym-pop" ref={popRef} style={pos(open.rect)}>
             <div class="sym-h">
               <code>{open.name}</code> <small>in this {pageTerm().PR}'s changes, matched by name</small>
             </div>
