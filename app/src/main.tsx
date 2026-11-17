@@ -1112,7 +1112,26 @@ const needsMyReview = (i: QueueItem) => i.reviewing && groupOf(i) === 'needs' &&
 // What every count of "waiting for you" reads, so the list, the start page, Review Mode, the Dock badge, the window title
 // and the menu bar agree: the PRs in "Needs your review" (drafts too while the list shows them), and the threads and
 // mentions waiting on your reply (the inbox).
-const toReview = (items: QueueItem[], showDrafts: boolean) => items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts));
+const toReview = (items: QueueItem[], showDrafts: boolean) => items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts) && !isDismissed(i));
+// PRs dismissed from the list (its ×), by "owner/repo#n": as they stood then (updatedAt). Anything new on one (a push, a
+// comment, a review, asked again) brings it back; until then it's out of the list, the counts and Review mode.
+const readDismissed = (): Record<string, string> => {
+  try {
+    return JSON.parse(localStorage.getItem(own('dismissedPRs')) ?? '{}');
+  } catch {
+    return {};
+  }
+};
+const isDismissed = (i: QueueItem) => readDismissed()[`${i.repo}#${i.number}`] === i.updatedAt;
+function setDismissed(i: QueueItem, on: boolean) {
+  const d = readDismissed();
+  if (on) d[`${i.repo}#${i.number}`] = i.updatedAt;
+  else delete d[`${i.repo}#${i.number}`];
+  try {
+    localStorage.setItem(own('dismissedPRs'), JSON.stringify(Object.fromEntries(Object.entries(d).slice(-300))));
+  } catch {}
+  dispatchEvent(new Event('lgtm:storage')); // the list draws again
+}
 const repliesWaiting = (items: QueueItem[]) => items.reduce((n, i) => n + (i.thread?.awaiting ?? 0) + +!!i.mentionWaiting, 0);
 const groupOf = (i: QueueItem): Group =>
   !i.reviewing && i.mentioned ? 'mentioned'
@@ -1623,13 +1642,15 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   // Other people's draft PRs are hidden unless asked for; mine, and the one you're viewing, always show.
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
-  const shown = items?.filter((i) => i.mine || showDrafts || !i.isDraft || isCurrent(i));
+  const [showDismissed, setShowDismissed] = useState(false);
+  const shown = items?.filter((i) => (i.mine || showDrafts || !i.isDraft || isCurrent(i)) && (showDismissed || !isDismissed(i) || isCurrent(i)));
   const teamDrafts = teamData?.items.filter((i) => i.isDraft && !isCurrent(i)).length ?? 0;
   const teamItems = teamData?.items.filter((i) => showDrafts || !i.isDraft || isCurrent(i)) ?? [];
   // Slack statuses (slackmsg.ts isAway) of the reviewers my PRs wait on, and of the team's members on its tab.
   // A GitLab MR's reviewers by their Slack-people key (login@host): see who().
   const presence = usePresence([...(items ?? []).filter((i) => i.authored).flatMap((i) => i.pendingReviewers.map((r) => personKey(i.repo, r))), ...(tab === 'team' ? (teamData?.members ?? []).map((m) => (isLab(teamData!.team) ? `${m}@${viewAs()}` : m)) : [])]);
   const listed = (i: QueueItem) => inReviewing(i) || (!!i.mentioned && !i.reviewing && !i.authored && isCurrent(i)); // the one you're on stays
+  const dismissedCount = items?.filter((i) => isDismissed(i) && !isCurrent(i) && (tab === 'mine' ? i.mine : listed(i))).length ?? 0;
   // The top PRs waiting on me load ahead, a few at a time, so opening one is instant; only ones that changed since
   // their cached copy, and not while lgtm is in the background.
   useEffect(() => {
@@ -1670,7 +1691,16 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     );
   };
   const item = (kind: Kind, i: QueueItem, layer?: string, who?: string) => (
-    <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}`} href={`#/${i.repo}/pull/${i.number}`} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
+    <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}${isDismissed(i) ? ' dismissed' : ''}`} href={`#/${i.repo}/pull/${i.number}`} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
+      {(kind === REVIEWING || kind === MINE) && (isDismissed(i) ? (
+        <button class="pr-x" title="Put it back in the list" aria-label="Put back" onClick={(e) => (e.preventDefault(), e.stopPropagation(), setDismissed(i, false))}>
+          <Octicon name="reply" />
+        </button>
+      ) : (
+        <button class="pr-x" title="Dismiss: out of the list until something new happens on it" aria-label="Dismiss" onClick={(e) => (e.preventDefault(), e.stopPropagation(), setDismissed(i, true), offerUndo(`Dismissed ${repoLabel(i.repo)}${numRef(i.repo, i.number)} until something new happens on it`, () => setDismissed(i, false)))}>
+          <Octicon name="x" />
+        </button>
+      ))}
       <span class="pr-title">{i.title}</span>
       <span class="meta">
         {i.face !== who && <><span class="person-link" onClick={toPerson(i.face, i.repo)}><img class="pr-face" src={avatar(i.face)} alt="" title={`${i.face === i.author ? `@${i.author}` : `@${i.face}, assigned (opened by ${i.author})`}: their page`} /> {shownName(i.face, i.repo)}</span>{assignedTo(i, who)} ·{' '}</>}
@@ -1852,6 +1882,11 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           {showDrafts ? `Hide ${c} draft ${T.PR}${c > 1 ? 's' : ''}` : `${c} draft ${T.PR}${c > 1 ? 's' : ''} hidden · show`}
         </button>
       ))(tab === 'team' ? teamDrafts : draftCount)}
+      {(tab === 'reviewing' || tab === 'mine') && dismissedCount > 0 && (
+        <button class="drafts-toggle" onClick={() => setShowDismissed(!showDismissed)} title="Dismissed with their ×: each comes back by itself once something new happens on it">
+          {showDismissed ? `Hide ${dismissedCount} dismissed` : `${dismissedCount} dismissed · show`}
+        </button>
+      )}
       {!shown ? (
         !err && <ListSkeleton tabs />
       ) : (

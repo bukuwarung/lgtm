@@ -223,6 +223,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 .count { margin-left: 4px; padding: 0 6px; border-radius: 10px; background: var(--soft); border: 1px solid var(--border); font-weight: 400; }
 .pr-item { display: grid; gap: 1px; margin: 2px 0; padding: 6px 8px; border-left: 3px solid var(--g); border-radius: 0 6px 6px 0; color: var(--fg); }
 .pr-item:hover { background: var(--soft); text-decoration: none; }
+.pr-item { position: relative; }
+.pr-x { position: absolute; top: 4px; right: 4px; display: none; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: var(--bg); color: var(--muted); }
+.pr-x:hover { color: var(--fg); background: var(--border); }
+.pr-item:hover .pr-x, .pr-item:focus-within .pr-x { display: grid; }
+.pr-item.dismissed { opacity: .55; }
 .stack { margin: 6px 0; padding: 2px 0 2px 4px; border: 1px dashed var(--border); border-radius: 6px; }
 .stack-h { padding: 2px 4px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .member-tabs { display: flex; gap: 12px; margin: 2px 4px 4px; border-bottom: 1px solid var(--border); }
