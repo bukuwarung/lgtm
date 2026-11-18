@@ -2150,7 +2150,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {symbolNav && (
             <SymbolNav
               ix={codeIx}
-              go={jumpToLine}
+              go={(path, line, old) => (isDoc(path) ? jumpToSpec({ spec: path, line, label: '' }) : jumpToLine(path, line, old))}
               peek={symPeek}
               usageKey={bindings.usages}
               repoSearch={(name) => (isLab(repo) ? `https://${repo.split('/')[0]}/${repo.slice(repo.indexOf('/') + 1)}/-/search?scope=blobs&search=${encodeURIComponent(name)}` : `https://github.com/search?type=code&q=${encodeURIComponent(`repo:${repo} ${name}`)}`)}
@@ -3558,10 +3558,11 @@ function jumpToSpec(r: SpecRef) {
   sec?.scrollIntoView();
   let tries = 0;
   const go = () => {
-    const el = [...(sec?.querySelectorAll('[data-src]') ?? [])].find((e) => {
+    // The deepest block holding the line (blocks nest: a list, its item): the last in document order that covers it.
+    const el = [...(sec?.querySelectorAll('[data-src]') ?? [])].filter((e) => {
       const [s, end] = e.getAttribute('data-src')!.split('-').map(Number);
       return s <= r.line && r.line <= end;
-    });
+    }).at(-1);
     if (!el) return void (tries++ < 60 ? (sec?.scrollIntoView(), setTimeout(go, 100)) : jumpTo('f-' + r.spec, undefined, true)); // it may still be loading
     el.id ||= `sl-${r.spec}-${r.line}`;
     jumpTo(el.id, undefined, true);

@@ -65,12 +65,16 @@ export function Editor(p: Props) {
   useEffect(() => void renderMermaid(previewRef.current), [preview]);
 
   // Replace the value and put the caret at `caret` (after React-style re-render).
+  // The box takes the text and caret at once (not a frame later, when a key typed meanwhile would land where the caret
+  // was); the state follows, and its redraw finds the box already holding that text.
   const set = (value: string, caret: number, selEnd = caret) => {
+    const el = area.current;
+    if (el) {
+      el.value = value;
+      el.focus();
+      el.setSelectionRange(caret, selEnd);
+    }
     p.onInput(value);
-    requestAnimationFrame(() => {
-      area.current?.focus();
-      area.current?.setSelectionRange(caret, selEnd);
-    });
   };
   const sel = () => {
     const el = area.current!;

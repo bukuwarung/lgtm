@@ -801,9 +801,11 @@ test('usesOf: every line of the PR naming it, whole word, its declaration marked
   const patches = new Map([
     ['a/Fee.kt', '@@ -10,3 +10,4 @@\n class Fee {\n+  fun convertFee(x: Int) = x\n-  fun oldFee() = convertFee(1)\n   val convertFees = 2\n'],
     ['b/Checkout.kt', '@@ -1,2 +1,3 @@\n-val a = 1\n+import a.convertFee\n+val fee = convertFee(amount)\n'],
-    ['docs/spec.md', '@@ -1 +1 @@\n+uses convertFee\n'],
+    ['docs/spec.md', '@@ -1 +1,2 @@\n+uses convertFee\n+calls `Fee.convertFee()` first\n'],
   ]);
-  const u = usesOf('convertFee', patches);
+  const all = usesOf('convertFee', patches);
+  assert.deepEqual(all.filter((x) => x.spec).map((x) => [x.path, x.line]), [['docs/spec.md', 2]]); // a code span only
+  const u = all.filter((x) => !x.spec);
   assert.deepEqual(u.map((x) => [x.path, x.line, x.old, x.decl]), [['a/Fee.kt', 11, false, true], ['a/Fee.kt', 11, true, false], ['b/Checkout.kt', 1, false, false], ['b/Checkout.kt', 2, false, false]]);
   assert.deepEqual(u.map((x) => x.imp), [false, false, true, false]);
   const { codeIndex } = await import('../src/specrefs.ts');

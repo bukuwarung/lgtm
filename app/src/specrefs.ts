@@ -101,7 +101,7 @@ export function specRefs(files: F[], ix: CodeIndex): Map<string, SpecRef[]> {
 
 // Where a declared name is used (symbolnav.tsx): every line naming it, by name and whole word, in every changed code file's
 // diff (added, unchanged and removed lines). Not what a compiler knows: two classes' same-named methods both count.
-export type Use = { path: string; line: number; old: boolean; text: string; decl: boolean; imp: boolean }; // imp: an import line
+export type Use = { path: string; line: number; old: boolean; text: string; decl: boolean; imp: boolean; spec?: boolean }; // imp: an import line; spec: a spec's code span naming it
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function usesOf(name: string, patches: Map<string, string>): Use[] {
   const word = new RegExp(`(?<![\\w$])${esc(name)}(?![\\w$])`);
@@ -111,8 +111,13 @@ export function usesOf(name: string, patches: Map<string, string>): Use[] {
       `|^\\s*(?:(?:public|private|protected|internal|static|final|abstract|override|suspend|async|open|export)\\s+)+(?:[\\w<>\\[\\],.?]+\\s+)?${esc(name)}\\s*\\(`,
   );
   const out: Use[] = [];
+  // A spec names it in a code span (`Name`, `Name.method()`, `Foo#Name`), on a line it has now.
+  const names = (line: string) => [...line.matchAll(/`([^`\n]+)`/g)].some((m) => m[1].replace(/\(.*\)$/, '').split(/[.#:]+/).includes(name));
   for (const [path, patch] of patches) {
-    if (isDoc(path)) continue;
+    if (isDoc(path)) {
+      for (const h of parsePatch(patch)) for (const l of h.lines) if (l.new != null && names(l.text)) out.push({ path, line: l.new, old: false, text: l.text.trim(), decl: false, imp: false, spec: true });
+      continue;
+    }
     for (const h of parsePatch(patch))
       for (const l of h.lines) if (word.test(l.text)) out.push({ path, line: (l.new ?? l.old)!, old: l.new == null, text: l.text.trim(), decl: l.new != null && decl.test(l.text), imp: IMPORT.test(l.text) });
     if (out.length >= 200) break;

@@ -113,9 +113,11 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
         </button>
       )}
       {open && (() => {
-        const decl = open.uses.filter((u) => u.decl);
-        const used = open.uses.filter((u) => !u.decl && !u.old && !u.imp);
-        const imported = open.uses.filter((u) => !u.decl && !u.old && u.imp);
+        const decl = open.uses.filter((u) => u.decl && !u.spec);
+        const code = open.uses.filter((u) => !u.spec);
+        const used = code.filter((u) => !u.decl && !u.old && !u.imp);
+        const imported = code.filter((u) => !u.decl && !u.old && u.imp);
+        const specs = open.uses.filter((u) => u.spec);
         const gone = open.uses.filter((u) => u.old);
         return (
           <div class="sym-pop" ref={popRef} style={pos(open.rect)}>
@@ -127,6 +129,7 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
               {group(used.length ? `Used (${used.length})` : 'Used', used, open.name)}
               {!used.length && <p class="note">Not used anywhere else in this {pageTerm().PR}'s changes.</p>}
               {group(`Imported (${imported.length})`, imported, open.name)}
+              {group('Named in specs', specs, open.name)}
               {group('Removed', gone, open.name)}
             </div>
             <a class="sym-more" href={repoSearch(open.name)} target="_blank" rel="noopener">
