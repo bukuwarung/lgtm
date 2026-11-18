@@ -437,6 +437,9 @@ main { padding: 16px; }
 .md pre code { padding: 0; background: none; }
 /* Cells keep words whole (overflow-wrap: anywhere would let a column shrink to "Sche/dule"); a table too wide scrolls. */
 .md table { display: block; width: max-content; max-width: 100%; overflow: auto; border-collapse: collapse; }
+/* A wide table scrolls in its own box, which would clip each row's "+" (drawn left of the row): in rendered markdown the
+   table reaches into the gutter by the "+"'s room, and pads it back, so the "+" sits inside the box. */
+.chunk table { box-sizing: border-box; max-width: calc(100% + 38px); margin-left: -38px; padding-left: 38px; }
 .md th, .md td { padding: 4px 10px; border: 1px solid var(--border); overflow-wrap: normal; }
 .md blockquote { margin: 0; padding: 0 1em; color: var(--muted); border-left: 3px solid var(--border); }
 .chunk [data-src], .chunk tr[data-src] > :first-child { position: relative; }
