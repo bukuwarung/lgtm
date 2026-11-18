@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, DAY, kept, knowFace, reportUsage, fetchJobLog, fetchToken, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
+import { agentsAsBots, DAY, kept, knowFace, reportUsage, fetchJobLog, fetchToken, knownRepos, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 import * as lab from './gitlab.ts';
@@ -527,6 +527,13 @@ export async function getTeamMembers(team: string): Promise<string[]> {
 export type Busy = Record<string, string>;
 export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
   if (team.startsWith('repos:')) return { members: [], items: await getRepoPRs(team.slice(6).split(',').filter(Boolean)), load: {} };
+  if (team.startsWith('user:')) {
+    // A person (Browse): their open PRs, then the ones waiting on their review (getPerson, in the orgs lgtm knows).
+    const login = team.slice(5);
+    const p = await getPerson(login, browseOrgs());
+    const seen = new Set(p.mine.map((i) => i.id));
+    return { members: [login], items: [...p.mine, ...p.asked.filter((i) => !seen.has(i.id))], load: { [login]: p.asked.length } };
+  }
   if (isLab(team)) return lab.getLabTeamPRs(team);
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
@@ -599,6 +606,12 @@ export const myActiveRepos = (): Promise<string[]> =>
         for (const n of [...d.a.nodes, ...d.r.nodes]) if (n?.repository) count.set(n.repository.nameWithOwner, (count.get(n.repository.nameWithOwner) ?? 0) + 1);
         return [...count].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).map(([r]) => r);
       });
+
+// The orgs Browse looks in: the GitHub repos' lgtm has seen.
+export const browseOrgs = () => [...new Set(knownRepos().map((r) => r.split('/')[0]).filter((o) => !o.includes('.')))];
+// An org's members (Browse's people search past the ones lgtm has seen), kept a day.
+export const orgMembers = (org: string): Promise<string[]> =>
+  kept(`orgMembers:${org}`, async () => (await paginate<{ login: string }>(`/orgs/${encodeURIComponent(org)}/members?per_page=100`)).map((m) => m.login).sort());
 
 // Repos whose name has `q`, in these orgs (the switcher's search, past the repos lgtm has seen): up to 10. GitLab: its
 // projects you're a member of.
@@ -1819,6 +1832,19 @@ export async function unnamedGroup(repo: string, n: number, pr: Pick<PR, 'reques
   if (!slug || pr.requested_reviewers?.length || reviewed) return null;
   return { label: `@${slug}`, members: await getTeamMembers(`${repo.split('/')[0]}/${slug}`) };
 }
+
+// What you may do to a PR (the PR page's Close / Reopen / Convert to draft): GitHub's own say for your account.
+// Reopen only while its branch is there: neither forge reopens one without it.
+export type PrRights = { close: boolean; reopen: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string };
+export async function prRights(repo: string, n: number): Promise<PrRights> {
+  if (isLab(repo)) return lab.labPrRights(repo, n);
+  const [o, r] = repo.split('/');
+  const p = (await graphql(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){viewerCanClose viewerCanReopen viewerCanUpdate isCrossRepository headRefName headRef{id}}}}`, { o, r, n })).repository?.pullRequest;
+  return { close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '' };
+}
+export const reopenPR = (repo: string, n: number) => (isLab(repo) ? lab.reopenLab(repo, n) : json(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify({ state: 'open' }) }));
+export const convertToDraft = (id: string) =>
+  isLabId(id) ? lab.markLabDraft(id) : graphql(`mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 
 // A merged PR's branch, unless another open PR builds on it (deleting it would close that one).
 export async function deleteBranch(repo: string, s: Pick<MergeState, 'headRef' | 'headRefName'>) {

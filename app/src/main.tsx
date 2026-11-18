@@ -3,7 +3,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers } from './github.ts';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos } from './platform.ts';
+import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -284,9 +284,11 @@ function BellMenu() {
 // The Browse tab's switcher, as GitHub's branch picker: a button naming what's shown; it opens a search over your
 // teams and repos (the ones lgtm has seen, then GitHub's by name), the ones you picked lately first. ↑/↓ move, Enter
 // picks, Esc closes. A pick is a team ("org/slug") or a repo ("repo:owner/name").
-const groupLabel = (v: string, teams: string[]) => (v.startsWith('repo:') ? repoLabel(v.slice(5)) : v ? teamLabel(v, teams) : '');
+const groupLabel = (v: string, teams: string[]) => (v.startsWith('repo:') ? repoLabel(v.slice(5)) : v.startsWith('user:') ? shownName(v.slice(5)) : v ? teamLabel(v, teams) : '');
+const groupIcon = (v: string) => (v.startsWith('repo:') ? 'repo' : v.startsWith('user:') ? 'mention' : 'person');
 let browseOpenPending = false; // Shift+B before the Browse tab was on show: open on mount
-function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams: string[]; recent: string[]; onPick: (v: string) => void }) {
+// here: the open PR's repo, offered first (Browse this repo).
+function GroupSwitcher({ value, teams, recent, onPick, here }: { value: string; teams: string[]; recent: string[]; onPick: (v: string) => void; here?: string }) {
   const [open, setOpen] = useState(() => ((o) => ((browseOpenPending = false), o))(browseOpenPending));
   const [q, setQ] = useState('');
   const [at, setAt] = useState(0);
@@ -297,6 +299,7 @@ function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams:
     return () => removeEventListener('lgtm:browse-open', show);
   }, []);
   const [found, setFound] = useState<string[]>([]);
+  const [people, setPeople] = useState<string[]>([]); // the orgs' members, once you type
   useDismiss(open, () => setOpen(false), '.group-switch');
   const ql = q.trim().toLowerCase();
   const fits = (v: string) => !ql || v.toLowerCase().includes(ql) || groupLabel(v, teams).toLowerCase().includes(ql);
@@ -309,8 +312,11 @@ function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams:
   useEffect(() => {
     setFound([]);
     if (ql.length < 2) return;
-    const orgs = [...new Set([...teams.map((t) => t.split('/')[0]), ...knownRepos().filter((r) => !r.split('/')[0].includes('.')).map((r) => r.split('/')[0])])];
-    const t = setTimeout(() => searchRepos(ql, orgs).then(setFound, () => {}), 350);
+    const orgs = [...new Set([...teams.map((t) => t.split('/')[0]), ...browseOrgs()])];
+    const t = setTimeout(() => {
+      searchRepos(ql, orgs).then(setFound, () => {});
+      if (!viewAs()) Promise.all(orgs.map((o) => orgMembers(o).catch(() => [] as string[]))).then((l) => setPeople([...new Set(l.flat())]));
+    }, 350);
     return () => clearTimeout(t);
   }, [ql]);
   // Untyped: only yours (your teams, the repos you work in). Typed: those first, then every team and repo that matches.
@@ -319,24 +325,29 @@ function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams:
   const teamPool = ql ? [...new Set([...myTeams, ...teams])] : myTeams;
   const repoPool = ql ? [...new Set([...myRepos, ...[...knownRepos(), ...found].map((r) => 'repo:' + r)])] : myRepos;
   const recentShown = recent.filter(fits).slice(0, 5);
+  // People: whoever lgtm has seen, then the orgs' members, by login or name; only once you type.
+  const peoplePool = ql ? [...new Set([...peopleSeen(), ...people])].map((l) => 'user:' + l) : [];
+  const hereShown = here && !ql && value !== 'repo:' + here ? ['repo:' + here] : [];
   const sections: [string, string[]][] = [
-    ['Recent', recentShown],
+    ['This repository', hereShown],
+    ['Recent', recentShown.filter((v) => !hereShown.includes(v))],
     [ql ? T.Teams : `Your ${T.teams}`, teamPool.filter((t) => fits(t) && !recentShown.includes(t))],
-    [ql ? 'Repositories' : 'Repositories you work in', repoPool.filter((r) => fits(r) && !recentShown.includes(r))],
+    [ql ? 'Repositories' : 'Repositories you work in', repoPool.filter((r) => fits(r) && !recentShown.includes(r) && !hereShown.includes(r))],
+    ['People', peoplePool.filter((p) => fits(p) && !recentShown.includes(p)).slice(0, 8)],
   ];
   const flat = sections.flatMap(([, l]) => l);
   const pick = (v: string) => (onPick(v), setOpen(false), setQ(''));
   return (
     <div class="group-switch">
       <button class="group-btn" aria-expanded={open} onClick={() => (setOpen(!open), setAt(0))} title={`Switch to another ${T.team} or repository`}>
-        <Octicon name={value.startsWith('repo:') ? 'repo' : 'person'} /> <span class="group-name">{groupLabel(value, teams) || `Pick a ${T.team} or repository…`}</span> <span class="caret" aria-hidden="true" />
+        <Octicon name={groupIcon(value)} /> <span class="group-name">{groupLabel(value, teams) || `Pick a ${T.team}, repository or person…`}</span> <span class="caret" aria-hidden="true" />
       </button>
       {open && (
         <div class="group-pop" role="dialog" aria-label={`Switch ${T.team} or repository`}>
           <input
             autoFocus
             type="search"
-            placeholder={`Find a ${T.team} or repository…`}
+            placeholder={`Find a ${T.team}, repository or person…`}
             value={q}
             onInput={(e) => (setQ(e.currentTarget.value), setAt(0))}
             onKeyDown={(e) => {
@@ -355,7 +366,8 @@ function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams:
                   <div class="group-sec">{title}</div>
                   {list.map((v) => (
                     <button role="option" aria-selected={flat[at] === v} class={`group-opt${flat[at] === v ? ' on' : ''}${v === value ? ' cur' : ''}`} onClick={() => pick(v)} onMouseEnter={() => setAt(flat.indexOf(v))} title={v.startsWith('repo:') ? v.slice(5) : v}>
-                      <Octicon name={v.startsWith('repo:') ? 'repo' : 'person'} /> {groupLabel(v, teams)}
+                      {v.startsWith('user:') ? <img class="pr-face" src={avatar(v.slice(5))} alt="" /> : <Octicon name={groupIcon(v)} />} {groupLabel(v, teams)}
+                      {v.startsWith('user:') && shownName(v.slice(5)) !== v.slice(5) && <small>@{v.slice(5)}</small>}
                       {v.startsWith('repo:') && repoLabel(v.slice(5)) !== v.slice(5) ? null : v.startsWith('repo:') && <small>{v.slice(5, v.lastIndexOf('/'))}</small>}
                       {v === value && <Octicon name="check" class="group-check" />}
                     </button>
@@ -1284,6 +1296,21 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
 };
 // A repo in the Browse tab: its open PRs by where they stand, as in Your PRs.
 const REPO: Kind = { ...MINE, name: 'Repository' };
+// …or by who opened them, the busiest first.
+const repoByAuthor = (items: QueueItem[]): Kind => ({
+  name: 'Repository',
+  groups: [...Map.groupBy(items, (i) => i.author)].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).map(([a]) => [a, shownName(a)]),
+  groupOf: (i) => i.author,
+  colorOf: MINE.groupOf,
+  people: true,
+});
+// A person in Browse: the PRs they opened, then the ones waiting on their review.
+const personKind = (login: string): Kind => ({
+  name: 'Person',
+  groups: [['p-opened', 'Opened'], ['p-asked', 'Waiting on their review']],
+  groupOf: (i) => (i.author === login ? 'p-opened' : 'p-asked'),
+  colorOf: MINE.groupOf,
+});
 const avatar = (login: string) => faceOf(login);
 type Tab = 'reviewing' | 'mine' | 'team';
 
@@ -1542,9 +1569,12 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       const k = e.shiftKey && /^[a-z]$/.test(e.key) ? e.key.toUpperCase() : e.key;
       if (k === readBindings(localStorage.getItem('shortcuts') ?? '{}').browse) (e.preventDefault(), browse());
     };
+    // Browse This Repository (a PR's menu): that repo, picked.
+    const browseRepo = (e: Event) => (pickGroupRef.current?.('repo:' + (e as CustomEvent<string>).detail), setTab('team'));
     addEventListener('lgtm:browse', browse);
+    addEventListener('lgtm:browse-repo', browseRepo);
     addEventListener('keydown', key);
-    return () => (removeEventListener('lgtm:browse', browse), removeEventListener('keydown', key));
+    return () => (removeEventListener('lgtm:browse', browse), removeEventListener('lgtm:browse-repo', browseRepo), removeEventListener('keydown', key));
   }, []);
   const tab = tabValue as Tab;
   const tabRef = useRef(tab); // the refresh timer closes over the first render
@@ -1555,7 +1585,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   // ones picked lately come first in its switcher.
   const [groupPick, setGroupPick] = useStoredValue('groupPick', '');
   const shownGroup = groupPick || team;
-  const view = shownGroup.startsWith('repo:') ? `repos:${shownGroup.slice(5)}` : shownGroup; // what the tab loads (getTeamPRs)
+  const view = shownGroup.startsWith('repo:') ? `repos:${shownGroup.slice(5)}` : shownGroup; // what the tab loads (getTeamPRs; a person as user:login)
+  const [repoGroupBy, setRepoGroupBy] = useStoredValue('repoGroupBy', 'status'); // a repo's PRs by status or author
   const [groupRecent, setGroupRecent] = useStoredValue('groupRecent', '[]');
   const recentGroups: string[] = (() => {
     try {
@@ -1564,11 +1595,13 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       return [];
     }
   })();
+  const pickGroupRef = useRef<(v: string) => void>();
   const pickGroup = (v: string) => {
     setGroupPick(v);
-    if (!v.startsWith('repo:')) setTeam(v); // a team picked here is your team, as before
+    if (!v.startsWith('repo:') && !v.startsWith('user:')) setTeam(v); // a team picked here is your team, as before
     setGroupRecent(JSON.stringify([v, ...recentGroups.filter((x) => x !== v)].slice(0, 8)));
   };
+  pickGroupRef.current = pickGroup;
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
   const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
@@ -2032,8 +2065,14 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           {tab === 'team' && (
             <>
               <div class="team-head">
-                <GroupSwitcher value={shownGroup} teams={teams ?? []} recent={recentGroups} onPick={pickGroup} />
-                {!shownGroup.startsWith('repo:') && (
+                <GroupSwitcher value={shownGroup} teams={teams ?? []} recent={recentGroups} onPick={pickGroup} here={current?.repo} />
+                {shownGroup.startsWith('repo:') && (
+                  <select value={repoGroupBy} onChange={(e) => setRepoGroupBy(e.currentTarget.value)} aria-label="Group the repository's PRs by">
+                    <option value="status">By status</option>
+                    <option value="author">By author</option>
+                  </select>
+                )}
+                {!shownGroup.startsWith('repo:') && !shownGroup.startsWith('user:') && (
                   <select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
                     <option value="waiting">Waiting longest</option>
                     <option value="free">Least busy</option>
@@ -2043,7 +2082,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
               </div>
               {teamErr && <p class="error">{teamErr}</p>}
               {!!shownGroup && teamData?.team !== view && !teamErr && <ListSkeleton rows={4} />}
-              {teamData?.team === view && section(shownGroup.startsWith('repo:') ? REPO : teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamItems)}
+              {teamData?.team === view && section(shownGroup.startsWith('repo:') ? (repoGroupBy === 'author' ? repoByAuthor(teamItems) : REPO) : shownGroup.startsWith('user:') ? personKind(shownGroup.slice(5)) : teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamItems)}
             </>
           )}
         </>

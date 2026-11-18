@@ -470,6 +470,17 @@ export const resolveLab = (id: string, resolve: boolean) =>
   mutate(unId(id).host, `mutation($id:DiscussionID!,$r:Boolean!){discussionToggleResolve(input:{id:$id,resolve:$r}){errors}}`, { id: unId(id).rest, r: resolve });
 export const updateLab = (repo: string, n: number, f: { title: string; body: string }) => send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', { title: f.title, description: f.body });
 export const getLabHead = async (repo: string, n: number) => (await getMR(repo, n, 'diffHeadSha')).diffHeadSha as string;
+export const markLabDraft = (id: string) => {
+  const { repo, n } = mrOf(id);
+  return mutate(split(repo).host, `mutation($p:ID!,$i:String!){mergeRequestSetDraft(input:{projectPath:$p,iid:$i,draft:true}){errors}}`, { p: split(repo).path, i: String(n) });
+};
+export const reopenLab = (repo: string, n: number) => send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', { state_event: 'reopen' });
+// What you may do to an MR (github.ts prRights): GitLab's update right covers closing, reopening and drafts.
+export async function labPrRights(repo: string, n: number) {
+  const m = await getMR(repo, n, 'state sourceBranch sourceBranchExists sourceProjectId targetProjectId userPermissions{updateMergeRequest}');
+  const update = !!m.userPermissions?.updateMergeRequest;
+  return { close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string };
+}
 export const markLabReady = (id: string) => {
   const { repo, n } = mrOf(id);
   return mutate(split(repo).host, `mutation($p:ID!,$i:String!){mergeRequestSetDraft(input:{projectPath:$p,iid:$i,draft:false}){errors}}`, { p: split(repo).path, i: String(n) });
