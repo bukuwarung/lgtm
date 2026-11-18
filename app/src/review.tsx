@@ -1573,6 +1573,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       if (again) setTimeout(() => jumpChange(dir, false), 250); // once it has drawn, its first change
     };
     const act: Record<Action, () => void> = {
+      usages: () => {}, // symbolnav.tsx, which knows the name under the mouse
       nextFile: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
       prevFile: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
       nextChange: () => jumpChange(1),
@@ -2151,6 +2152,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               ix={codeIx}
               go={jumpToLine}
               peek={symPeek}
+              usageKey={bindings.usages}
               repoSearch={(name) => (isLab(repo) ? `https://${repo.split('/')[0]}/${repo.slice(repo.indexOf('/') + 1)}/-/search?scope=blobs&search=${encodeURIComponent(name)}` : `https://github.com/search?type=code&q=${encodeURIComponent(`repo:${repo} ${name}`)}`)}
             />
           )}

@@ -30,7 +30,9 @@ function wordAt(x: number, y: number): { name: string; rect: DOMRect } | null {
 
 // peek: review.tsx useRefPeek, to preview a listed line (beside the list) before going there.
 type Peek = { show: (p: { path: string; line?: number; go: () => void }, el: Element) => void; out: () => void };
-export function SymbolNav({ ix, repoSearch, go, peek }: { ix: CodeIndex; repoSearch: (name: string) => string; go: (path: string, line: number, old: boolean) => void; peek?: Peek }) {
+// usageKey: the key that opens the list for the name under the mouse (Settings → Keyboard), as a click on its badge does.
+export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeIndex; repoSearch: (name: string) => string; go: (path: string, line: number, old: boolean) => void; peek?: Peek; usageKey?: string }) {
+  const badgeRef = useRef<{ name: string; rect: DOMRect } | null>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [badge, setBadge] = useState<{ name: string; rect: DOMRect } | null>(null);
   const [open, setOpen] = useState<{ name: string; rect: DOMRect; uses: Use[] } | null>(null);
@@ -54,13 +56,22 @@ export function SymbolNav({ ix, repoSearch, go, peek }: { ix: CodeIndex; repoSea
     };
     const away = () => (setBadge(null), setOpen(null));
     const click = (e: PointerEvent) => !(e.target as Element).closest?.('.sym-pop, .sym-badge, .spec-peek') && setOpen(null);
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && away();
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return away();
+      const typing = (e.target as Element).closest?.('input, textarea, select, [contenteditable]');
+      if (usageKey && e.key === usageKey && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && badgeRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        show(badgeRef.current);
+      }
+    };
     addEventListener('pointermove', move, { passive: true });
     addEventListener('scroll', away, { passive: true });
     addEventListener('pointerdown', click);
-    addEventListener('keydown', key);
-    return () => (cancelAnimationFrame(frame), clearTimeout(hide.current), removeEventListener('pointermove', move), removeEventListener('scroll', away), removeEventListener('pointerdown', click), removeEventListener('keydown', key));
-  }, [ix]);
+    addEventListener('keydown', key, true);
+    return () => (cancelAnimationFrame(frame), clearTimeout(hide.current), removeEventListener('pointermove', move), removeEventListener('scroll', away), removeEventListener('pointerdown', click), removeEventListener('keydown', key, true));
+  }, [ix, usageKey]);
+  badgeRef.current = badge;
 
   const show = (b: { name: string; rect: DOMRect }) => setOpen({ ...b, uses: usesOf(b.name, ix.patches) });
   // From a little before its first mention, so a long line still shows it.

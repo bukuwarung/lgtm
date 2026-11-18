@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getEmojis, renderGfm } from './github.ts';
 import { renderMermaid } from './mermaid.ts';
-import { useSavedReplies } from './platform.ts';
+import { own, recentPRs, useSavedReplies } from './platform.ts';
+import { isLab } from './github.ts';
 import { AGENTS, type AgentId } from './agents.ts';
 import { AgentMark } from './tags.tsx';
 
@@ -19,12 +20,30 @@ type Props = {
   placeholder?: string;
 };
 
-type Completion = { kind: ':' | '@' | '/' | '`'; start: number; items: { name: string; img?: string; body?: string }[]; i: number };
+type Completion = { kind: ':' | '@' | '/' | '`' | '#' | 'jira'; start: number; items: { name: string; img?: string; body?: string }[]; i: number };
 
 // The open PR's code names (review.tsx sets them): the functions and classes it declares, and its files, offered after
 // a backtick, so a comment names them right (and links to them once shown).
 let codeNames: { name: string; where: string }[] = [];
 export const setCodeNames = (names: typeof codeNames) => void (codeNames = names);
+
+// PRs of this repo lgtm knows (the PR list's, the recently viewed), by number, for "#" (GitLab: "!").
+function knownPRs(repo: string): { n: number; title: string }[] {
+  const out = new Map<number, string>();
+  try {
+    for (const i of JSON.parse(localStorage.getItem(own('queueCache')) ?? '[]') ?? []) if (i.repo === repo) out.set(i.number, i.title);
+  } catch {}
+  for (const r of recentPRs()) if (r.repo === repo && !out.has(r.n)) out.set(r.n, r.title);
+  return [...out].map(([n, title]) => ({ n, title }));
+}
+// Jira tickets lgtm has shown (review.tsx keepJira), newest last, for a key being typed.
+function knownTickets(): { key: string; summary: string }[] {
+  try {
+    return Object.values(JSON.parse(localStorage.getItem('jiraSeen') ?? '{}') as Record<string, { key: string; summary: string }>).reverse();
+  } catch {
+    return [];
+  }
+}
 
 // Comment editor: Write/Preview (rendered by GitHub, so it's exactly what gets posted), :emoji: and @mention
 // completion, a formatting toolbar with the usual shortcuts, and "Suggest" for a GitHub suggested change.
@@ -85,6 +104,21 @@ export function Editor(p: Props) {
   const complete = (v: string, caret: number) => {
     const r = v.slice(0, caret).match(/(?:^|\n)\/([\w-]*)$/);
     if (r) return offerReplies(r[1], caret - r[1].length - 1);
+    const ref = isLab(p.repo) ? '!' : '#';
+    const h = v.slice(0, caret).match(new RegExp(`(?:^|[\\s(])\\${ref}(\\w+)$`));
+    if (h) {
+      const q = h[1].toLowerCase();
+      const items = knownPRs(p.repo)
+        .filter((x) => String(x.n).startsWith(q) || x.title.toLowerCase().includes(q))
+        .sort((a, b) => +!String(a.n).startsWith(q) - +!String(b.n).startsWith(q) || b.n - a.n)
+        .slice(0, 8);
+      return setAc(items.length ? { kind: '#', start: caret - h[1].length - 1, items: items.map((x) => ({ name: `${ref}${x.n}`, body: x.title })), i: 0 } : null);
+    }
+    const j = v.slice(0, caret).match(/(?:^|[\s(])([A-Z][A-Z0-9]{1,9}-\d*)$/);
+    if (j) {
+      const items = knownTickets().filter((t) => t.key.startsWith(j[1])).slice(0, 8);
+      if (items.length) return setAc({ kind: 'jira', start: caret - j[1].length, items: items.map((t) => ({ name: t.key, body: t.summary })), i: 0 });
+    }
     const c = v.slice(0, caret).match(/(?:^|[\s(])`([\w.$-]+)$/);
     if (c && codeNames.length) {
       const ql = c[1].toLowerCase();
@@ -107,7 +141,7 @@ export function Editor(p: Props) {
   };
   const pick = (name: string) => {
     const { v, s } = sel();
-    const ins = ac!.kind === '/' ? ac!.items.find((it) => it.name === name)!.body! : ac!.kind === '`' ? `\`${name}\`` : ac!.kind === ':' ? `:${name}: ` : `@${name} `;
+    const ins = ac!.kind === '/' ? ac!.items.find((it) => it.name === name)!.body! : ac!.kind === '#' || ac!.kind === 'jira' ? `${name} ` : ac!.kind === '`' ? `\`${name}\`` : ac!.kind === ':' ? `:${name}: ` : `@${name} `;
     set(v.slice(0, ac!.start) + ins + v.slice(s), ac!.start + ins.length);
     setAc(null);
   };
@@ -237,7 +271,7 @@ export function Editor(p: Props) {
                     pick(it.name);
                   }}
                 >
-                  {it.img ? <img src={it.img} alt="" width={18} height={18} /> : <span class="ed-at">{ac.kind === '/' ? '/' : ac.kind === '`' ? '‹›' : '@'}</span>}
+                  {it.img ? <img src={it.img} alt="" width={18} height={18} /> : <span class="ed-at">{ac.kind === '/' ? '/' : ac.kind === '`' ? '‹›' : ac.kind === '#' ? '' : ac.kind === 'jira' ? '◆' : '@'}</span>}
                   {ac.kind === ':' ? `:${it.name}:` : it.name}
                   {it.body && <span class="ed-reply">{it.body}</span>}
                 </li>
