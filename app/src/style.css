@@ -1571,3 +1571,5 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .bot-group > .comment.bot { margin-left: 16px; }
 .bot-group > summary::before { content: "▸ "; }
 .bot-group[open] > summary::before { content: "▾ "; }
+/* t: the diff's threads hidden while reading (the ones waiting on you stay). */
+html.threads-hidden .file .thread:not(.awaiting), html.threads-hidden .file .settled-group, html.threads-hidden .file .thread-again { display: none; }

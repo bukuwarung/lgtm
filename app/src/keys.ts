@@ -22,6 +22,7 @@ export const ACTIONS = [
   ['agents', 'Open / close the Agents menu (coding agents)', 'a'],
   ['docCode', 'Jump between the specs (Markdown) and the code', 'g'],
   ['usages', 'Where the function or class under the mouse is used', 'u'],
+  ['threads', 'Hide / show the review threads in the diff (ones waiting on you stay)', 't'],
   ['skip', words('Skip to the next PR (review mode)'), 'N'],
   ['help', 'Keyboard shortcuts', '?'],
 ] as const;

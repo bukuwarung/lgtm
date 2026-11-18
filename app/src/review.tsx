@@ -665,6 +665,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const rootsAt = data && `${data.headRepo}@${data.pr.head.sha}`;
   useEffect(() => void (data && getBuildRoots(data.headRepo, data.pr.head.sha).then(setRoots, () => setRoots(null))), [rootsAt]);
   useEffect(() => setBatch([]), [repo, n]);
+  useEffect(() => void document.documentElement.classList.remove('threads-hidden'), [repo, n]); // t's hiding is for one PR
   const [me, setMe] = useState('');
   const myOpenPR = !!me && data?.pr.user.login === me && data.pr.state === 'open';
   // People I sent my PR to in a Slack DM (Settings → Slack): the ones GitHub or GitLab doesn't ask, and who haven't
@@ -1585,6 +1586,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       comment: () => commentAtCurrentLine() || scrollBy({ top: innerHeight * 0.85 }), // nothing to comment on: scroll as Space would
       index: toggleIndex,
       whitespace: toggleWs,
+      // The diff's threads out of the way while reading the code through (ones waiting on me stay): the page's class.
+      threads: () => {
+        const off = document.documentElement.classList.toggle('threads-hidden');
+        dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: off ? `Threads hidden while you read. ${bindings.threads ? `${bindings.threads === ' ' ? 'Space' : bindings.threads} shows them.` : ''}` : 'Threads shown.', ms: 2500 } }));
+      },
       stackPrev: () => stackAt(-1) && (location.hash = `/${repo}/pull/${stackAt(-1)!.number}`),
       stackNext: () => stackAt(1) && (location.hash = `/${repo}/pull/${stackAt(1)!.number}`),
       help: () => setHelp(!help),
