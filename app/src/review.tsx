@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -724,6 +724,27 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     setCloseWhere(null);
     if (myClosed && !closeTold(`${repo}#${n}`)) slackRequest(`${repo}#${n}`).then((r) => setCloseWhere(r.where), () => {});
   }, [repo, n, myClosed]);
+  // The agent's drafts in my pending review, in file order (set below, once the PR is in): r steps to the next one not
+  // looked at, focused, where ↵ keeps it, e edits and ⌫ drops it (PendingComment); Finish review counts the rest.
+  const agentDraftsRef = useRef<{ id: string; path: string }[]>([]);
+  const [, setLookTick] = useState(0);
+  useEffect(() => {
+    const seen = () => setLookTick((t) => t + 1);
+    const next = () => {
+      const list = agentDraftsRef.current, looked = new Set(lookedDrafts());
+      const cur = (document.activeElement as HTMLElement | null)?.closest?.('[data-agent-draft]')?.getAttribute('data-agent-draft');
+      const at = list.findIndex((d) => d.id === cur);
+      const d = [...list.slice(at + 1), ...list.slice(0, at + 1)].find((d) => !looked.has(d.id) && d.id !== cur);
+      if (!d) return setNotice({ ok: true, text: list.length ? 'You looked at every agent draft.' : 'No agent drafts in your review.' });
+      jumpTo('ad-' + d.id, 'f-' + d.path);
+      let tries = 0;
+      const focus = () => ((el) => (el ? el.focus({ preventScroll: true }) : tries++ < 40 && setTimeout(focus, 50)))(document.getElementById('ad-' + d.id));
+      focus();
+    };
+    addEventListener('lgtm:looked', seen);
+    addEventListener('lgtm:agent-next', next);
+    return () => (removeEventListener('lgtm:looked', seen), removeEventListener('lgtm:agent-next', next));
+  }, []);
   // What you may do to the PR itself (github.ts prRights): Close, Close and delete branch, Convert to draft, Reopen, in
   // the ⋯ menu; a PR quiet for 30 days or more has them up front, in a banner.
   const [rights, setRights] = useState<PrRights | null>(null);
@@ -1604,6 +1625,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const layer = stack.findIndex((l) => l.number === n);
   const failingChecks = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const waitingOnMe = me ? allThreads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
+  const fileAt = new Map([...shown, ...files].reverse().map((f, k, all) => [f.filename, all.length - k])); // as shown, hidden ones after
+  agentDraftsRef.current = allThreads
+    .flatMap((t) => t.comments.nodes.filter((c) => c.state === 'PENDING' && c.id && agentSays(c.body)).map((c) => ({ id: c.id!, path: t.path, line: t.line ?? 0 })))
+    .sort((a, b) => (fileAt.get(a.path) ?? 0) - (fileAt.get(b.path) ?? 0) || a.line - b.line);
+  const lookedSet = new Set(lookedDrafts());
+  const unlooked = agentDraftsRef.current.filter((d) => !lookedSet.has(d.id)).length;
   // Threads I started that are still open and whose code hasn't changed since (or no commit came after): approving
   // past them is worth a word in the submit panel.
   const stillOpen = me
@@ -1683,6 +1710,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       // The next or previous PR as the list shows it (its tab, groups and order), from the one open.
       browse: () => dispatchEvent(new Event('lgtm:browse')), // main.tsx: the Browse tab, its switcher open
       prActions: () => dispatchEvent(new Event('lgtm:pr-acts')), // StateMenu opens
+      agentDraft: () => dispatchEvent(new Event('lgtm:agent-next')), // Review: the next agent draft not looked at
       nextPR: () => stepPR(1),
       prevPR: () => stepPR(-1),
       // The diff's threads out of the way while reading the code through (ones waiting on me stay): the page's class.
@@ -1857,7 +1885,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             {rights && (rights.close || rights.reopen || rights.restore) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -2312,6 +2340,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 }
 
 type SubmitProps = {
+  unlooked?: number; // the agent's drafts in my pending review I haven't looked at (kept or edited)
   stillOpen?: { id: string; path: string; line?: number | null }[]; // threads I started, unresolved, their code unchanged since
   saveAs: string; // where an unsent summary is kept
   count: number;
@@ -2350,7 +2379,7 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 const slackWhy = (r: { login: string; error?: string }) =>
   /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
 
-function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [] }: SubmitProps) {
+function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0 }: SubmitProps) {
   const [open, setOpen] = useState(false);
   useDismiss(open, () => setOpen(false), '.review-submit');
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
@@ -2455,6 +2484,12 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
           )}
           {slackNote && <p class="note">{slackNote}</p>}
           {notify && slackWarn && <p class="warn">{slackWarn}</p>}
+          {unlooked > 0 && (
+            <p class="warn">
+              {unlooked === 1 ? "An agent draft you haven't looked at goes" : `${unlooked} agent drafts you haven't looked at go`} with this review.{' '}
+              <button class="link" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:agent-next')))}>Look now</button>
+            </p>
+          )}
           {event === 'APPROVE' && stillOpen.length > 0 && (
             <p class="warn approve-open">
               {stillOpen.length === 1 ? 'A thread you started is' : `${stillOpen.length} threads you started are`} still open, and{' '}
@@ -4403,7 +4438,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   });
 
   // A 🤖 finding posted again: one line pointing at the first, until shown.
-  if (again && !showAgain)
+  if (again && !showAgain && first?.state !== 'PENDING')
     return (
       <div class="thread-again" id={'t-' + t.id}>
         🤖 Posted again, the same as{' '}
@@ -4473,27 +4508,47 @@ function PendingComment({ c, ctx, path }: { c: Thread['comments']['nodes'][numbe
   const [text, setText] = useState<string | null>(null); // being edited
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const run = (body: string | null) => (setBusy(true), setErr(''), ctx.editPending(c.id!, body).then(() => setText(null), (e) => setErr(e.message)).finally(() => setBusy(false)));
+  const run = (body: string | null) => (setBusy(true), setErr(''), ctx.editPending(c.id!, body).then(() => (setText(null), true), (e) => (setErr(e.message), false)).finally(() => setBusy(false)));
+  // The agent's draft: kept, edited or dropped from the keyboard once r focuses it; edited counts as looked at.
+  const agent = agentSays(c.body);
+  const looked = agent && lookedDrafts().includes(c.id!);
+  const next = () => dispatchEvent(new Event('lgtm:agent-next'));
+  const save = (body: string) => run(body).then((ok) => ok && agent && markLooked(c.id!));
+  const drop = () => run(null).then((ok) => ok && next());
+  const onKey = (e: KeyboardEvent) => {
+    if (e.target !== e.currentTarget || e.metaKey || e.ctrlKey || e.altKey || busy) return;
+    const k = e.key === 'Enter' ? () => (markLooked(c.id!), next()) : e.key === 'e' ? () => setText(c.body ?? c.bodyText) : e.key === 'Delete' || e.key === 'Backspace' ? drop : null;
+    if (k) (e.preventDefault(), e.stopPropagation(), k());
+  };
   if (text != null)
     return (
       <>
-        <Editor value={text} onInput={setText} onSubmit={() => text.trim() && run(text)} onCancel={() => setText(null)} repo={ctx.repo} mentions={ctx.mentions} autoFocus />
+        <Editor value={text} onInput={setText} onSubmit={() => text.trim() && save(text)} onCancel={() => setText(null)} repo={ctx.repo} mentions={ctx.mentions} autoFocus />
         <div class="row">
-          <button class="primary" disabled={busy || !text.trim()} onClick={() => run(text)}>Update comment</button>
+          <button class="primary" disabled={busy || !text.trim()} onClick={() => save(text)}>Update comment</button>
           <button onClick={() => setText(null)}>Cancel</button>
         </div>
         {err && <p class="error">{err}</p>}
       </>
     );
   return (
-    <>
+    <div
+      class={agent ? `agent-draft${looked ? ' looked' : ''}` : undefined}
+      id={agent ? 'ad-' + c.id : undefined}
+      data-agent-draft={agent ? c.id : undefined}
+      tabIndex={agent ? -1 : undefined}
+      onKeyDown={agent ? onKey : undefined}
+      title={agent ? `The agent's draft: ↵ keep, e edit, ⌫ drop, ${keyLabel(readBindings(localStorage.getItem('shortcuts') ?? '{}').agentDraft ?? 'r')} the next one` : undefined}
+    >
       <div class="md" data-lang={ctx.langFor(path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(path), languageFor(path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
       <div class="row">
+        {agent && !looked && <button disabled={busy} onClick={() => markLooked(c.id!)} title="Keep it in your review (↵)">Keep</button>}
         <button disabled={busy} onClick={() => setText(c.body ?? c.bodyText)}>Edit</button>
-        <button disabled={busy} onClick={async () => (await ask(`Delete this comment from your review in progress on ${site(ctx.repo)}? Its text goes with it.`, 'Delete')) && run(null)}>Delete</button>
+        <button disabled={busy} onClick={async () => (agent || (await ask(`Delete this comment from your review in progress on ${site(ctx.repo)}? Its text goes with it.`, 'Delete'))) && run(null)} title={agent ? 'Drop it from your review (⌫)' : undefined}>{agent ? 'Drop' : 'Delete'}</button>
+        {looked && <span class="note">Kept</span>}
       </div>
       {err && <p class="error">{err}</p>}
-    </>
+    </div>
   );
 }
 

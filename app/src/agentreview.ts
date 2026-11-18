@@ -164,7 +164,7 @@ type Finding = { path: string; line?: number; start_line?: number; side?: 'RIGHT
 const SKIP = /(^|\/)([\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.(min\.js|map|svg|png|jpe?g|gif|webp|pdf|zip|jar)$/i;
 
 async function review(i: Target & { agent: AgentId; since?: string }): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
-  const { pr, files } = await loadPR(i.repo, i.number);
+  const { pr, files, threads } = await loadPR(i.repo, i.number);
   // A re-review reads the changes since the last run, in the PR's files; after a rebase (no shared history), all of it.
   // ponytail: a merge of the base branch in those commits shows its changes to the PR's files too.
   const cmp = i.since ? await getCompare(i.repo, i.since, pr.head.sha).catch(() => null) : null;
@@ -182,12 +182,24 @@ async function review(i: Target & { agent: AgentId; since?: string }): Promise<P
     room -= t.length;
   }
   const T = term(i.repo);
+  // What's been said already: the open threads, people's and bots', and this agent's own earlier findings (sent, or
+  // still in your pending review), so a run doesn't say them again.
+  let saidRoom = 30_000;
+  const said = threads.filter((t) => !t.isResolved).flatMap((t) => {
+    const c = t.comments.nodes[0];
+    const text = (c?.body ?? '').replace(/<!--[\s\S]*?-->/g, '').trim().slice(0, 600);
+    if (!c || !text || saidRoom <= 0) return [];
+    const line = `- ${t.path}${t.line ? `:${t.line}` : ''} (@${c.author?.login ?? 'ghost'}${c.state === 'PENDING' ? ', unsent' : ''}${t.isOutdated ? ', on older code' : ''}${t.comments.nodes.length > 1 ? `, ${t.comments.nodes.length - 1} repl${t.comments.nodes.length > 2 ? 'ies' : 'y'}` : ''}): ${text.replace(/\n+/g, ' ')}`;
+    saidRoom -= line.length;
+    return [line];
+  });
   const prompt = [
     fillPrompt(promptTemplate('agent'), prFields(pr, i.repo)), // yours to change (Settings → Coding agents → Prompts)
     'Answer with JSON only, no prose around it: {"summary": "one or two sentences", "findings": [{"path": "file path as in the diff", "line": 12, "side": "RIGHT", "severity": "high|medium|low", "title": "short", "body": "what is wrong and why, and what to do (Markdown)"}]}',
     'Line numbers: use the R numbers in the diff below (the new file); use side "LEFT" with an L number only for a removed line. Leave "line" out for a finding about a whole file.',
     'A simple fix: when a finding\'s fix is small and certain (a few lines, nothing to decide), add "fix": the replacement for its R lines, from "start_line" (add it when it is more than one line) to "line", whole lines with their indentation, no code fences. They must all be lines of the diff. Otherwise leave "fix" out.',
     since ? `This is a re-review: you reviewed this ${T.PR} before, and its author asked again. The diff below is only what changed since then (from commit ${since.slice(0, 7)}): review those changes, including whether they break anything around them.` : '',
+    said.length ? `Already said on this ${T.PR}, in open review threads (people, bots, and your own earlier findings; "unsent" ones wait in the reviewer's pending review):\n${said.join('\n')}\n\nDon't report any of these again, even in other words or on another line. Report only what none of them covers; if one of them is wrong, or misses something that matters, make that its own finding and say which one.` : '',
     `${T.PR}: ${pr.title}\n${pr.body ?? ''}`.slice(0, 8000),
     `The diff, each line numbered (R: the new file, L: the old):\n${shown.map((f) => numbered(f)).join('\n\n')}`.slice(0, 200_000),
     texts.join('\n\n'),

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 // its cached copy, the bell, PRs opened lately, files marked viewed on GitLab, and the saved PR copies. Settings are
 // shared. Set once signed in (main.tsx); anything stored without an account moves to it: data from before this
 // existed, and a Claude link taken from the address before sign-in (so it's the newer one).
-const OWN = /^(dismissedPRs$|closeTold:|drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|threadCheck:|askConvos$|kept:|readSaved$)/;
+const OWN = /^(dismissedPRs$|closeTold:|drafts:|visit:|claudeFrom:|team$|repliesDone$|notices$|qaSeen:|recent$|queueCache$|glViewed:|agentRuns$|agentLooked$|threadCheck:|askConvos$|kept:|readSaved$)/;
 let account = '';
 // The account of last time, per site (GitHub's, or a GitLab host's): the next launch starts as it.
 const lastKey = () => (viewAs() ? `lastLogin:${viewAs()}` : 'lastLogin');
@@ -683,6 +683,22 @@ export async function slackRequest(pr: string, author?: string, text?: string, r
 // the reviewers asked, so no one reviews it for nothing. Once per PR. Back: where; null when off or there's no request.
 const toldKey = (pr: string) => own(`closeTold:${pr}`);
 export const closeTold = (pr: string) => !flag('closeReply', false) || !!localStorage.getItem(toldKey(pr));
+// The agent's drafts in my pending review that I've looked at (kept or edited), by comment id: Finish review counts the
+// rest, and r steps through them (review.tsx).
+export const lookedDrafts = (): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem(own('agentLooked')) ?? '[]');
+  } catch {
+    return [];
+  }
+};
+export const markLooked = (id: string) => {
+  try {
+    localStorage.setItem(own('agentLooked'), JSON.stringify([id, ...lookedDrafts().filter((x) => x !== id)].slice(0, 500)));
+  } catch {}
+  dispatchEvent(new Event('lgtm:looked'));
+};
+
 // Closing asks why (optional): it goes on the PR as a comment, and in the review request's thread.
 export const WHY_CLOSE = 'Why (optional): posted as a comment, and in its review thread';
 export async function closedOnSlack(pr: string, reviewers: string[], why = ''): Promise<string | null> {
