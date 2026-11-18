@@ -4161,13 +4161,28 @@ function ScrollMarks({ files }: { files: File[] }) {
 const where = (d: { side: Side; line?: number; startLine?: number }) =>
   d.line == null ? 'File' : `${d.side === 'LEFT' ? 'Old line' : 'Line'}${d.startLine ? `s ${d.startLine}–${d.line}` : ` ${d.line}`}`;
 
+// Two or more resolved or outdated threads in one place (a file's top gathers its outdated ones) fold behind one line;
+// a jump to one of them opens it (jumpTo opens the details around its target).
+const settledThread = (t: Thread) => (t.isResolved || t.isOutdated) && !t.comments.nodes.some((c) => c.state === 'PENDING');
 function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; drafts: Draft[]; form: boolean }) {
   if (!threads.length && !drafts.length && !form) return null;
+  const settled = threads.filter(settledThread);
+  const grouped = settled.length >= 2;
   return (
     <div class="notes">
-      {threads.map((t) => (
+      {threads.filter((t) => !grouped || !settledThread(t)).map((t) => (
         <ThreadView key={t.id} t={t} ctx={ctx} />
       ))}
+      {grouped && (
+        <details class="settled-group">
+          <summary>
+            <Octicon name="check" /> {settled.length} resolved or outdated threads
+          </summary>
+          {settled.map((t) => (
+            <ThreadView key={t.id} t={t} ctx={ctx} />
+          ))}
+        </details>
+      )}
       {drafts
         .filter((d) => d.id !== ctx.target?.editId)
         .map((d) => (
@@ -4239,7 +4254,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       </div>
     );
   return (
-    <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot && !others}>
+    <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}${t.isResolved || t.isOutdated ? ' settled' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot && !others}>
       <summary>
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}
@@ -4580,12 +4595,21 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
 
 // A review's comments on the code, under its verdict: each its thread's place and first words, a click away (a resolved
 // or outdated one hidden here is shown first: reveal).
+// A review's threads, one line each; its resolved and outdated ones folded behind one line, unless asked for.
 function ReviewThreads({ review, threads, reveal }: { review: ConversationItem; threads: Thread[]; reveal: () => void }) {
   const id = review.id.startsWith('r') ? Number(review.id.slice(1)) : NaN;
-  const mine = threads.flatMap((t) => t.comments.nodes.filter((c) => c.pullRequestReview?.databaseId === id).map((c) => ({ t, c })));
-  if (!mine.length) return null;
+  const [showSettled, setShowSettled] = useState(false);
+  const all = threads.flatMap((t) => t.comments.nodes.filter((c) => c.pullRequestReview?.databaseId === id).map((c) => ({ t, c })));
+  if (!all.length) return null;
+  const settled = all.filter(({ t }) => t.isResolved || t.isOutdated);
+  const mine = showSettled ? all : all.filter(({ t }) => !t.isResolved && !t.isOutdated);
   return (
     <div class="review-threads">
+      {settled.length > 0 && (
+        <button class="review-threads-settled" onClick={() => setShowSettled(!showSettled)} title={showSettled ? 'Fold them again' : 'List them'}>
+          <Octicon name="check" /> {settled.length} resolved or outdated thread{settled.length === 1 ? '' : 's'}{showSettled ? ' · hide' : ' · show'}
+        </button>
+      )}
       {mine.map(({ t, c }) => (
         <a
           href={c.url}
