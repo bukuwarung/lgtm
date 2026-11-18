@@ -918,14 +918,14 @@ export async function setLaunchAtLogin(on: boolean) {
   await (on ? a.enable() : a.disable());
 }
 
-// An image of the page in Preview: its file name from its address, its bytes from where the page got it (an address
-// lgtm signed, or one the page holds as blob: or data:).
+// An image of the page in Preview: the bytes the page already has (the browser's cached copy: nothing downloaded again),
+// handed over raw, its file name from its address.
 async function openImage(img: HTMLImageElement) {
   const src = img.currentSrc;
-  const name = decodeURIComponent(new URL(src, location.href).pathname.split('/').pop() || '') || img.alt || 'image';
-  if (/^https:/.test(src)) return command('open_image', { url: src, name });
-  const bytes = [...new Uint8Array(await (await fetch(src)).arrayBuffer())];
-  return command('open_image', { bytes, name });
+  const name = (decodeURIComponent(new URL(src, location.href).pathname.split('/').pop() || '') || img.alt || 'image').replace(/[^\w. -]/g, '_');
+  const bytes = new Uint8Array(await (await fetch(src, { cache: 'force-cache' })).arrayBuffer());
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('open_image', bytes, { headers: { 'x-name': name } });
 }
 
 // In the app: web links open in the default browser (not inside lgtm), and lgtm://<owner>/<repo>/pull/<n> links
