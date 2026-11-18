@@ -285,10 +285,17 @@ function BellMenu() {
 // teams and repos (the ones lgtm has seen, then GitHub's by name), the ones you picked lately first. ↑/↓ move, Enter
 // picks, Esc closes. A pick is a team ("org/slug") or a repo ("repo:owner/name").
 const groupLabel = (v: string, teams: string[]) => (v.startsWith('repo:') ? repoLabel(v.slice(5)) : v ? teamLabel(v, teams) : '');
+let browseOpenPending = false; // Shift+B before the Browse tab was on show: open on mount
 function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams: string[]; recent: string[]; onPick: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => ((o) => ((browseOpenPending = false), o))(browseOpenPending));
   const [q, setQ] = useState('');
   const [at, setAt] = useState(0);
+  // Shift+B (Settings → Keyboard) opens it, on a PR or not.
+  useEffect(() => {
+    const show = () => ((browseOpenPending = false), setOpen(true), setAt(0));
+    addEventListener('lgtm:browse-open', show);
+    return () => removeEventListener('lgtm:browse-open', show);
+  }, []);
   const [found, setFound] = useState<string[]>([]);
   useDismiss(open, () => setOpen(false), '.group-switch');
   const ql = q.trim().toLowerCase();
@@ -1527,6 +1534,18 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const [paceRaw] = useStoredValue('reviewPace', '150'); // Settings → Time to review: estimates ÷ your pace
   const pace = (Number(paceRaw) || 100) / 100;
   const [tabValue, setTab] = useStoredValue('prTab', 'reviewing'); // which tab, remembered
+  // Shift+B: the Browse tab, its switcher open (from a PR's page: review.tsx; anywhere else: here).
+  useEffect(() => {
+    const browse = () => ((browseOpenPending = true), setTab('team'), dispatchEvent(new Event('lgtm:browse-open'))); // mounted already: the event; else on mount
+    const key = (e: KeyboardEvent) => {
+      if (location.hash.includes('/pull/') || e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest?.('input, textarea, select, [contenteditable]')) return;
+      const k = e.shiftKey && /^[a-z]$/.test(e.key) ? e.key.toUpperCase() : e.key;
+      if (k === readBindings(localStorage.getItem('shortcuts') ?? '{}').browse) (e.preventDefault(), browse());
+    };
+    addEventListener('lgtm:browse', browse);
+    addEventListener('keydown', key);
+    return () => (removeEventListener('lgtm:browse', browse), removeEventListener('keydown', key));
+  }, []);
   const tab = tabValue as Tab;
   const tabRef = useRef(tab); // the refresh timer closes over the first render
   tabRef.current = tab;

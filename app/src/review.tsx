@@ -1588,6 +1588,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       whitespace: toggleWs,
       finish: () => dispatchEvent(new Event('lgtm:finish')), // SubmitPanel opens, its summary box focused
       // The next or previous PR as the list shows it (its tab, groups and order), from the one open.
+      browse: () => dispatchEvent(new Event('lgtm:browse')), // main.tsx: the Browse tab, its switcher open
       nextPR: () => stepPR(1),
       prevPR: () => stepPR(-1),
       // The diff's threads out of the way while reading the code through (ones waiting on me stay): the page's class.
