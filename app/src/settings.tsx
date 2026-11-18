@@ -1,7 +1,7 @@
 import { PROMPTS, fillPrompt, type PromptKind } from './prompts.ts';
 import { labMe } from './gitlab.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { budgets, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
+import { budgets, commitEmails, tokenScopes, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
 import { AGENTS, AGENT_IDS, EFFORT_NAME, effortsOf, modelsOf, agentEffort, agentModel, agentOn, detectAgents, setAgentEffort, setAgentModel, setAgentOn, useAgents, type AgentId } from './agents.ts';
 import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, agentSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, forgetKept, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, agentMod, MOD_INSTALL, CODEX_MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel, loginEnding } from './platform.ts';
@@ -383,6 +383,7 @@ export function Settings() {
           <b>GitHub</b> {me ? <>signed in as <code>@{me}</code> through the GitHub CLI</> : me === '' ? 'not signed in' : 'checking…'}
           {me === '' && <pre>gh auth login</pre>}
           {me && <ApiBudget />}
+          {me && <MissingScopes />}
           {accounts && accounts.length > 1 ? (
             <label class="gh-account">
               Account lgtm uses{' '}
@@ -957,6 +958,32 @@ function CenterCols() {
   );
 }
 
+// What lgtm can't do with the gh login's scopes, and the command that adds them (gh's own login lacks read:user).
+function MissingScopes() {
+  const [scopes, setScopes] = useState<string[] | null>(null);
+  useEffect(() => void tokenScopes().then(setScopes, () => {}), []);
+  if (!scopes) return null;
+  const has = (...any: string[]) => any.some((x) => scopes.includes(x));
+  const missing = [
+    !has('read:user', 'user', 'user:email') && ['read:user', "people's public GitHub emails, for matching them on Slack (their names, their org's verified emails and their commit emails still work)"],
+    !has('read:org', 'admin:org', 'write:org') && ['read:org', "teams and their members, and the org's verified emails"],
+  ].filter(Boolean) as [string, string][];
+  if (!missing.length) return null;
+  const cmd = `gh auth refresh -s ${missing.map(([s]) => s).join(',')}`;
+  return (
+    <div class="note scopes">
+      {missing.map(([s, what]) => (
+        <p>
+          Without <code>{s}</code>, lgtm can't read {what}.
+        </p>
+      ))}
+      <p>
+        To allow it: <code>{cmd}</code> <button class="link" onClick={() => void copyText(cmd)}>Copy</button>
+      </p>
+    </div>
+  );
+}
+
 // The status a merged PR's Jira ticket moves to, as the merge box offers it (you can change it there each time).
 const JiraAfterMerge = () => <JiraStatusRow k="jiraAfterMerge" initial="Done" label="After merging, move the Jira ticket to" note="As you merge (above), or offered under the merge box once your PR is merged." />;
 function JiraStatusRow({ k, initial, label, note = '' }: { k: string; initial: string; label: string; note?: string }) {
@@ -1503,9 +1530,15 @@ function SlackPeople({ team }: { team: string }) {
     }
     setBusy('');
   };
+  // Their profile (name, public and org-verified emails) and the emails their commits in the org carry, which need no
+  // scope beyond gh's own. ponytail: commits for the first 25 (GitHub's search allows 30 a minute).
+  const withCommits = async (logins: string[]) => {
+    const [people, commits] = await Promise.all([getPeople(org, logins), Promise.all(logins.map((l, k) => (k < 25 ? commitEmails(org, l).catch(() => []) : Promise.resolve([] as string[]))))]);
+    return Object.fromEntries(logins.map((l, k) => [l, { name: people[l]?.name ?? null, emails: [...new Set([...(people[l]?.emails ?? []), ...commits[k]])] }]));
+  };
   const find = () =>
     run('find', async () => {
-      const people = await getPeople(org, unmapped);
+      const people = await withCommits(unmapped);
       const found = await findSlackPeople(unmapped.map((login) => ({ login, ...people[login] })));
       setMatches(Object.fromEntries(found.map((m) => [m.login, m])));
     });
@@ -1514,7 +1547,7 @@ function SlackPeople({ team }: { team: string }) {
   // One person, looked up on Slack again: by their GitHub name and emails, or what you typed.
   const lookUp = (login: string, query = '') =>
     run('find', async () => {
-      const people = await getPeople(org, [login]);
+      const people = await withCommits([login]);
       const found = await findSlackPeople([{ login, ...people[login], query: query.trim() || undefined }]);
       setMatches((m) => ({ ...m, ...Object.fromEntries(found.map((x) => [x.login, x])) }));
     });

@@ -565,6 +565,13 @@ export async function commitEmails(org: string, login: string): Promise<string[]
   const items: { commit: { author?: { email?: string } } }[] = (await (await ok(res)).json()).items ?? [];
   return [...new Set(items.map((c) => c.commit.author?.email ?? ''))].filter((e) => e && !e.endsWith('noreply.github.com'));
 }
+// The scopes of the gh login lgtm uses, as GitHub names them on every REST answer (X-OAuth-Scopes); null when it doesn't
+// (a fine-grained token). Asked of /rate_limit, which costs nothing.
+export async function tokenScopes(): Promise<string[] | null> {
+  const h = (await ok(await gh('/rate_limit'))).headers.get('x-oauth-scopes');
+  return h == null ? null : h.split(',').map((x) => x.trim()).filter(Boolean);
+}
+
 // GitHub profile names of these logins ('' for none, or no such user), 50 a query.
 export async function userNames(logins: string[]): Promise<Record<string, string>> {
   const parts = Array.from({ length: Math.ceil(logins.length / 50) }, (_, k) => logins.slice(k * 50, k * 50 + 50));
