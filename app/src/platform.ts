@@ -683,10 +683,12 @@ export async function slackRequest(pr: string, author?: string, text?: string, r
 // the reviewers asked, so no one reviews it for nothing. Once per PR. Back: where; null when off or there's no request.
 const toldKey = (pr: string) => own(`closeTold:${pr}`);
 export const closeTold = (pr: string) => !flag('closeReply', false) || !!localStorage.getItem(toldKey(pr));
-export async function closedOnSlack(pr: string, reviewers: string[]): Promise<string | null> {
+// Closing asks why (optional): it goes on the PR as a comment, and in the review request's thread.
+export const WHY_CLOSE = 'Why (optional): posted as a comment, and in its review thread';
+export async function closedOnSlack(pr: string, reviewers: string[], why = ''): Promise<string | null> {
   if (closeTold(pr)) return null;
   const tags = reviewers.map((l) => `<@gh:${l}>`).join(' ');
-  const where = (await slackRequest(pr, undefined, `${tags ? tags + ' ' : ''}Closed without merging: no review needed.`)).where;
+  const where = (await slackRequest(pr, undefined, `${tags ? tags + ' ' : ''}Closed without merging: no review needed.${why ? `\n${why}` : ''}`)).where;
   if (where) localStorage.setItem(toldKey(pr), '1');
   return where;
 }

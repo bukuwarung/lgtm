@@ -1322,6 +1322,22 @@ test("an agent finding's fix becomes a suggestion only for lines in the diff, re
   assert.equal(noteBody({ body, line: 3 }), body);
 });
 
+test("the agent's runs are read as the account they belong to, not before it's known (each launch reviewed again)", async () => {
+  const { agentRunOf } = await import('../src/agentreview.ts'); // imported before any account, as at launch
+  const { setAccount } = await import('../src/platform.ts');
+  const d: Record<string, string> = { '@me/agentRuns': JSON.stringify({ PR1: { version: 'abc', state: 'done', at: 1 } }) };
+  const ls: any = { getItem: (k: string) => d[k] ?? null, setItem: (k: string, v: string) => void (d[k] = v), removeItem: (k: string) => void delete d[k] };
+  (globalThis as any).localStorage = new Proxy(ls, { ownKeys: () => Object.keys(d), getOwnPropertyDescriptor: (_t, k) => ({ enumerable: true, configurable: true, value: d[k as string] }) });
+  try {
+    assert.equal(agentRunOf({ id: 'PR1' }), undefined); // no account yet: nobody's runs
+    setAccount('me');
+    assert.equal(agentRunOf({ id: 'PR1' })?.state, 'done');
+  } finally {
+    setAccount('');
+    delete (globalThis as any).localStorage;
+  }
+});
+
 test('kept: a fetch is kept until it expires, asked once at a time, and the stale copy stands in when asking fails', async () => {
   const { kept } = await import('../src/platform.ts');
   const ls: any = { getItem: (k: string) => (k in ls.d ? ls.d[k] : null), setItem: (k: string, v: string) => void (ls.d[k] = v), removeItem: (k: string) => void delete ls.d[k], d: { 'kept:old': JSON.stringify({ until: 1, v: 0 }) } };

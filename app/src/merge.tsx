@@ -2,8 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
-import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview, closedOnSlack } from './platform.ts';
-import { closePR, deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview, closedOnSlack, WHY_CLOSE, askText } from './platform.ts';
+import { closeWithReason, deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranch, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -246,10 +246,11 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
           disabled={!!busy}
           title={`Close this ${pageTerm().PR} without merging (it can be reopened). With Settings → Slack → "Tell your review request when you close", its review request's thread hears it too`}
           onClick={async () => {
-            if (!(await ask(`Close this ${pageTerm().PR} without merging? It can be reopened later.`, 'Close'))) return;
+            const a = await askText(`Close this ${pageTerm().PR} without merging? It can be reopened later.`, 'Close', WHY_CLOSE);
+            if (!a) return;
             run('close', async () => {
-              await closePR(repo, n);
-              const where = await closedOnSlack(`${repo}#${n}`, asked).catch(() => null);
+              await closeWithReason(repo, n, a.text);
+              const where = await closedOnSlack(`${repo}#${n}`, asked, a.text).catch(() => null);
               if (where) dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Closed. Said so in your review request's thread in ${where}.` } }));
             });
           }}

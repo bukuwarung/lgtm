@@ -35,7 +35,11 @@ const read = (): Record<string, AgentRun> => {
     return {};
   }
 };
-let runs = read();
+// Read once the account is known, and again when it changes: read at import, before lgtm knows who you are, it found
+// nothing, so every launch reviewed each waiting PR again and saved over what was there.
+let runs: Record<string, AgentRun> = {};
+let readAs = '';
+const all = () => (own(KEY) !== readAs && ((readAs = own(KEY)), (runs = read())), runs);
 const save = () => {
   try {
     // ponytail: the latest 200 runs kept; an older PR that comes back is simply reviewed again.
@@ -44,7 +48,7 @@ const save = () => {
   } catch {}
   dispatchEvent(new Event('lgtm:agents'));
 };
-const set = (id: string, r: AgentRun) => ((runs = { ...runs, [id]: r }), save());
+const set = (id: string, r: AgentRun) => ((runs = { ...all(), [id]: r }), save());
 
 export const agentReviewOn = () => {
   try {
@@ -62,7 +66,7 @@ const postMode = (): 'pending' | 'comment' => {
 };
 type Target = Pick<QueueItem, 'id' | 'repo' | 'number'> & { headSha?: string; waitingSince?: string };
 // Its latest run, on whichever commit: new pushes alone don't run it again.
-export const agentRunOf = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => runs[i.id];
+export const agentRunOf = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => all()[i.id];
 // Whether a PR sits in "Agents reviewing" rather than "Needs your review".
 export const agentBusy = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => {
   const r = agentRunOf(i);
@@ -84,14 +88,14 @@ let active = 0;
 const queue: (Target & { manual?: boolean; agent: AgentId; since?: string })[] = [];
 const inflight = new Set<string>(); // queued or running in this window
 export async function reviewWithAgents(waiting: QueueItem[]) {
-  if (!agentReviewOn()) return;
+  if (!agentReviewOn() || own(KEY) === KEY) return; // not before lgtm knows whose runs these are
   await detectAgents();
   const agent = autoAgent();
   if (!agent) return; // none installed and on
   const today = new Date().toDateString();
-  let used = Object.values(runs).filter((r) => !r.manual && r.state !== 'limited' && r.day === today).length;
+  let used = Object.values(all()).filter((r) => !r.manual && r.state !== 'limited' && r.day === today).length;
   for (const i of waiting) {
-    const r = runs[i.id];
+    const r = all()[i.id];
     if (!i.headSha || inflight.has(i.id)) continue;
     let since = r?.since;
     if (r && (r.state === 'done' || r.state === 'failed')) {
@@ -116,9 +120,9 @@ export async function reviewWithAgents(waiting: QueueItem[]) {
 }
 // Again, after it failed (the pill's retry): asked for, so not against the limit.
 export function retryAgent(i: QueueItem) {
-  const agent = agentIdOf(runs[i.id]?.by) ?? autoAgent();
+  const agent = agentIdOf(all()[i.id]?.by) ?? autoAgent();
   if (!agent) return;
-  delete runs[i.id];
+  delete all()[i.id];
   reviewNow(i, agent);
 }
 // A review asked for from the PR (its Agents menu), by the agent picked there: next in line, the automatic setting on or off, your own PRs too.
@@ -126,7 +130,7 @@ export function retryAgent(i: QueueItem) {
 export function reviewNow(i: Target, agent: AgentId) {
   if (!i.headSha || inflight.has(i.id)) return false;
   inflight.add(i.id);
-  set(i.id, { version: i.headSha, state: 'queued', at: Date.now(), manual: true, by: AGENTS[agent].name, asked: runs[i.id]?.asked ?? i.waitingSince });
+  set(i.id, { version: i.headSha, state: 'queued', at: Date.now(), manual: true, by: AGENTS[agent].name, asked: all()[i.id]?.asked ?? i.waitingSince });
   queue.unshift({ ...i, manual: true, agent });
   pump();
   return true;
@@ -135,7 +139,7 @@ function pump() {
   while (active < 2 && queue.length) {
     const i = queue.shift()!;
     const v = i.headSha ?? '', manual = i.manual, by = AGENTS[i.agent].name;
-    const { day, asked, since } = runs[i.id] ?? {};
+    const { day, asked, since } = all()[i.id] ?? {};
     const base = { version: v, day, manual, by, asked, since };
     active++;
     set(i.id, { ...base, state: 'running', at: Date.now() });

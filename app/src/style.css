@@ -668,7 +668,6 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .pr-state-act { margin-left: auto; flex: none; }
 .pr-state.idle { color: var(--text); border-color: var(--warn, #d29922); background: var(--soft); }
 .pr-state.idle .pr-state-act { display: flex; gap: 6px; }
-.pr-acts .pill-pop button { display: block; width: 100%; text-align: left; }
 .merge-close { margin-left: auto; }
 .state-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: calc(12px * var(--ts)); font-weight: 600; color: #fff; }
 .state-chip.merged { background: light-dark(#8250df, #8957e5); }

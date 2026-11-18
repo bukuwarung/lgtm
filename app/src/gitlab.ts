@@ -474,12 +474,13 @@ export const markLabDraft = (id: string) => {
   const { repo, n } = mrOf(id);
   return mutate(split(repo).host, `mutation($p:ID!,$i:String!){mergeRequestSetDraft(input:{projectPath:$p,iid:$i,draft:true}){errors}}`, { p: split(repo).path, i: String(n) });
 };
+export const restoreLabBranch = (repo: string, name: string, sha: string) => send(split(repo).host, `/projects/${pid(repo)}/repository/branches?branch=${encodeURIComponent(name)}&ref=${sha}`, 'POST');
 export const reopenLab = (repo: string, n: number) => send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', { state_event: 'reopen' });
 // What you may do to an MR (github.ts prRights): GitLab's update right covers closing, reopening and drafts.
 export async function labPrRights(repo: string, n: number) {
-  const m = await getMR(repo, n, 'state sourceBranch sourceBranchExists sourceProjectId targetProjectId userPermissions{updateMergeRequest}');
+  const m = await getMR(repo, n, 'state sourceBranch sourceBranchExists sourceProjectId targetProjectId diffHeadSha userPermissions{updateMergeRequest}');
   const update = !!m.userPermissions?.updateMergeRequest;
-  return { close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string };
+  return { close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, restore: update && m.state === 'closed' && !m.sourceBranchExists && m.sourceProjectId === m.targetProjectId && !!m.diffHeadSha, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string, headSha: (m.diffHeadSha ?? '') as string };
 }
 export const markLabReady = (id: string) => {
   const { repo, n } = mrOf(id);

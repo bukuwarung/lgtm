@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closePR, deleteBranch, type PrRights } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -361,7 +361,7 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
 
 // A pill that says what it counts: a click opens the list behind it (what each item is, in a line on top), each one a
 // link or a jump; a click elsewhere, or Esc, closes it.
-type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen';
+type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore';
 function StateActs({ rights, draft, acting, act }: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void }) {
   const b = (a: StateAct, label: string, busy: string, title: string) => <button disabled={!!acting} title={title} onClick={() => act(a)}>{acting === a ? busy : label}</button>;
   const t = pageTerm().PR;
@@ -371,7 +371,33 @@ function StateActs({ rights, draft, acting, act }: { rights: PrRights; draft: bo
       {rights.close && b('close', 'Close', 'Closing…', `Close without merging; it can be reopened`)}
       {rights.close && rights.branch && b('closeBranch', 'Close and delete branch', 'Closing…', `Close without merging and delete ${rights.headRefName}, unless another open ${t} builds on it`)}
       {rights.reopen && b('reopen', 'Reopen', 'Reopening…', `Open it again for review`)}
+      {rights.restore && b('restore', 'Restore branch and reopen', 'Reopening…', `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`)}
     </>
+  );
+}
+
+// The bar's ⋯ (X): StateActs in a menu, its button like Agents'.
+function StateMenu(p: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void }) {
+  const [open, setOpen] = useState(false);
+  const pop = useRef<HTMLDivElement>(null);
+  useDismiss(open, () => setOpen(false), '.pr-acts');
+  useEffect(() => {
+    const toggle = () => setOpen((o) => !o);
+    addEventListener('lgtm:pr-acts', toggle);
+    return () => removeEventListener('lgtm:pr-acts', toggle);
+  }, []);
+  useEffect(() => void (open && pop.current?.querySelector('button')?.focus()), [open]);
+  return (
+    <span class="agents-menu pr-acts">
+      <button class="agents-btn" title={`Close, reopen or convert to draft${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').prActions)}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Octicon name="kebab-horizontal" />
+      </button>
+      {open && (
+        <div class="account-menu" role="menu" ref={pop} onClick={(e) => (e.target as Element).closest('button') && setOpen(false)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+          <StateActs {...p} />
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -711,19 +737,23 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     const t = pageTerm().PR;
     const [q, yes] = {
       close: [`Close this ${t} without merging? It can be reopened later.`, 'Close'],
-      closeBranch: [`Close this ${t} and delete its branch ${rights.headRefName}? To reopen it, the branch has to be pushed again.`, 'Close and delete'],
+      closeBranch: [`Close this ${t} and delete its branch ${rights.headRefName}? lgtm can bring the branch back to reopen it.`, 'Close and delete'],
       draft: [`Convert this ${t} to a draft? It stays open; it's marked ready again when it's worth reviewing.`, 'Convert to draft'],
       reopen: [`Reopen this ${t}?`, 'Reopen'],
+      restore: [`Make ${rights.headRefName} again at this ${t}'s last commit, and reopen it?`, 'Restore and reopen'],
     }[a];
-    if (!(await ask(q, yes))) return;
+    // Closing asks why (optional): a comment on the PR, and the review thread hears it.
+    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE) : (await ask(q, yes)) && { text: '' };
+    if (!said) return;
     setActing(a);
     try {
       if (a === 'draft') await convertToDraft(data.pr.node_id);
       else if (a === 'reopen') await reopenPR(repo, n);
+      else if (a === 'restore') await restoreBranch(repo, rights).then(() => reopenPR(repo, n));
       else {
-        await closePR(repo, n);
+        await closeWithReason(repo, n, said.text);
         if (a === 'closeBranch') await deleteBranch(repo, rights).catch((e) => setNotice({ ok: false, text: `Closed, but ${e.message}` }));
-        if (data.pr.user.login === me) closedOnSlack(`${repo}#${n}`, (data.pr.requested_reviewers ?? []).map((u) => u.login)).then((w) => w && setNotice({ ok: true, text: `Closed. Said so in your review request's thread in ${w}.` }), () => {});
+        if (data.pr.user.login === me) closedOnSlack(`${repo}#${n}`, (data.pr.requested_reviewers ?? []).map((u) => u.login), said.text).then((w) => w && setNotice({ ok: true, text: `Closed. Said so in your review request's thread in ${w}.` }), () => {});
       }
       onSubmitted(); // the lists
       dispatchEvent(new Event('lgtm:refresh')); // this page, and what you may do now
@@ -1652,7 +1682,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       finish: () => dispatchEvent(new Event('lgtm:finish')), // SubmitPanel opens, its summary box focused
       // The next or previous PR as the list shows it (its tab, groups and order), from the one open.
       browse: () => dispatchEvent(new Event('lgtm:browse')), // main.tsx: the Browse tab, its switcher open
-      prActions: () => ((d) => d && ((d.open = !d.open), d.open && d.querySelector<HTMLElement>('.pill-pop button')?.focus()))(document.querySelector<HTMLDetailsElement>('.pr-acts details')),
+      prActions: () => dispatchEvent(new Event('lgtm:pr-acts')), // StateMenu opens
       nextPR: () => stepPR(1),
       prevPR: () => stepPR(-1),
       // The diff's threads out of the way while reading the code through (ones waiting on me stay): the page's class.
@@ -1826,13 +1856,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
-            {rights && (rights.close || rights.reopen) && (
-              <span class="pr-acts">
-                <PillMenu label="⋯" head={`This ${pageTerm().PR}`}>
-                  <StateActs rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} />
-                </PillMenu>
-              </span>
-            )}
+            {rights && (rights.close || rights.reopen || rights.restore) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} />
           </div>
         </div>
@@ -1858,7 +1882,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           ) : pr.state === 'closed' ? (
             <p class="pr-state closed">
               <Octicon name="git-pull-request-closed" size={16} /> <span><b>Closed without merging</b>{pr.closed_at && <> <Time at={pr.closed_at} /></>}. A review now can only comment.</span>
-              {rights?.reopen && <button class="pr-state-act" disabled={!!acting} onClick={() => void stateAct('reopen')}>{acting === 'reopen' ? 'Reopening…' : 'Reopen'}</button>}
+              {(rights?.reopen || rights?.restore) && (
+                <button class="pr-state-act" disabled={!!acting} title={rights.reopen ? undefined : `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`} onClick={() => void stateAct(rights.reopen ? 'reopen' : 'restore')}>
+                  {acting ? 'Reopening…' : rights.reopen ? 'Reopen' : 'Restore branch and reopen'}
+                </button>
+              )}
               {closeWhere && (
                 <button
                   class="pr-state-act"
