@@ -5234,7 +5234,9 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
       {foldBots && items.some((c) => c.bot) && (
         <details class="bots-hidden">
           <summary><Octicon name="dependabot" /> {items.filter((c) => c.bot).length} comment{items.filter((c) => c.bot).length === 1 ? '' : 's'} from bots</summary>
-          {items.filter((c) => c.bot).map((c) => (
+          {/* One line per bot with more than one comment (a bot posting on every push), its comments newest first. */}
+          {[...Map.groupBy(items.filter((c) => c.bot), (c) => c.author)].map(([author, list]) => {
+            const one = (c: ConversationItem) => (
             <details class="comment bot" key={c.id} id={'cv-' + c.id}>
               <summary>
                 <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b>{' '}
@@ -5244,7 +5246,18 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
               </summary>
               {c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />}
             </details>
-          ))}
+            );
+            if (list.length === 1) return one(list[0]);
+            const newest = [...list].sort((a, b) => b.at.localeCompare(a.at));
+            return (
+              <details class="bot-group" key={author}>
+                <summary>
+                  <Avatar login={author} src={list[0].avatar} /> <b>{shownName(author, repo)}</b> · {list.length} comments · latest <Time at={newest[0].at} />
+                </summary>
+                {newest.map(one)}
+              </details>
+            );
+          })}
         </details>
       )}
     </details>

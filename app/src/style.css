@@ -1564,3 +1564,10 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .comment.done-review > summary .bot-excerpt { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
 .comment.done-review > summary small { flex: none; color: var(--muted); }
 .comment.done-review:not([open]) { opacity: .8; }
+.bot-group > summary { padding: 4px 8px; cursor: pointer; color: var(--muted); list-style: none; }
+.bot-group > summary::-webkit-details-marker { display: none; }
+.bot-group > summary:hover { color: var(--fg); }
+.bot-group[open] > summary { color: var(--fg); }
+.bot-group > .comment.bot { margin-left: 16px; }
+.bot-group > summary::before { content: "▸ "; }
+.bot-group[open] > summary::before { content: "▾ "; }
