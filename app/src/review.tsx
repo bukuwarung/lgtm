@@ -20,7 +20,7 @@ import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLa
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
-import { Editor } from './editor.tsx';
+import { Editor, setCodeNames } from './editor.tsx';
 import { MergeBox } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
 import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
@@ -1210,6 +1210,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
   const [symbolNav] = useStoredFlag('symbolNav', true); // Settings → Diff: where a declared name is used
   const symPeek = useRefPeek(codeIx); // a line in its list, previewed
+  // What a backtick offers in comment boxes (editor.tsx): the declared names (with their file), then the files.
+  useEffect(() => {
+    const seen = new Set<string>();
+    setCodeNames(
+      [...[...codeIx.symbols].map(([name, r]) => ({ name, where: base(r.path) + (r.line ? `:${r.line}` : '') })), ...codeIx.files.map((f) => ({ name: base(f), where: f.slice(0, f.lastIndexOf('/') + 1) }))].filter((x) => !seen.has(x.name) && seen.add(x.name)),
+    );
+  }, [codeIx]);
   // Code names in comments (threads, the conversation) link to the code they name, previewed on hover, as the
   // description's and specs' do: linked as comments are drawn.
   const commentPeek = useRefPeek(codeIx);

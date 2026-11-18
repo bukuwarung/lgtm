@@ -19,7 +19,12 @@ type Props = {
   placeholder?: string;
 };
 
-type Completion = { kind: ':' | '@' | '/'; start: number; items: { name: string; img?: string; body?: string }[]; i: number };
+type Completion = { kind: ':' | '@' | '/' | '`'; start: number; items: { name: string; img?: string; body?: string }[]; i: number };
+
+// The open PR's code names (review.tsx sets them): the functions and classes it declares, and its files, offered after
+// a backtick, so a comment names them right (and links to them once shown).
+let codeNames: { name: string; where: string }[] = [];
+export const setCodeNames = (names: typeof codeNames) => void (codeNames = names);
 
 // Comment editor: Write/Preview (rendered by GitHub, so it's exactly what gets posted), :emoji: and @mention
 // completion, a formatting toolbar with the usual shortcuts, and "Suggest" for a GitHub suggested change.
@@ -80,6 +85,13 @@ export function Editor(p: Props) {
   const complete = (v: string, caret: number) => {
     const r = v.slice(0, caret).match(/(?:^|\n)\/([\w-]*)$/);
     if (r) return offerReplies(r[1], caret - r[1].length - 1);
+    const c = v.slice(0, caret).match(/(?:^|[\s(])`([\w.$-]+)$/);
+    if (c && codeNames.length) {
+      const ql = c[1].toLowerCase();
+      const at = (n: string) => n.toLowerCase().indexOf(ql);
+      const items = codeNames.filter((x) => at(x.name) >= 0).sort((a, b) => +(at(a.name) > 0) - +(at(b.name) > 0) || a.name.length - b.name.length).slice(0, 8);
+      return setAc(items.length ? { kind: '`', start: caret - c[1].length - 1, items: items.map((x) => ({ name: x.name, body: x.where })), i: 0 } : null);
+    }
     const m = v.slice(0, caret).match(/(?:^|[\s(])([:@])([\w+-]+)$/);
     if (!m) return setAc(null);
     const [, kind, q] = m as unknown as [string, ':' | '@', string];
@@ -95,7 +107,7 @@ export function Editor(p: Props) {
   };
   const pick = (name: string) => {
     const { v, s } = sel();
-    const ins = ac!.kind === '/' ? ac!.items.find((it) => it.name === name)!.body! : ac!.kind === ':' ? `:${name}: ` : `@${name} `;
+    const ins = ac!.kind === '/' ? ac!.items.find((it) => it.name === name)!.body! : ac!.kind === '`' ? `\`${name}\`` : ac!.kind === ':' ? `:${name}: ` : `@${name} `;
     set(v.slice(0, ac!.start) + ins + v.slice(s), ac!.start + ins.length);
     setAc(null);
   };
@@ -203,7 +215,7 @@ export function Editor(p: Props) {
           <textarea
             ref={area}
             rows={p.rows ?? 4}
-            placeholder={p.placeholder ?? 'Leave a comment · : for emoji, @ to mention, / for saved replies · ⌘↵ to save'}
+            placeholder={p.placeholder ?? 'Leave a comment · : for emoji, @ to mention, ` for code, / for saved replies · ⌘↵ to save'}
             value={p.value}
             onInput={(e) => {
               p.onInput(e.currentTarget.value);
@@ -225,7 +237,7 @@ export function Editor(p: Props) {
                     pick(it.name);
                   }}
                 >
-                  {it.img ? <img src={it.img} alt="" width={18} height={18} /> : <span class="ed-at">{ac.kind === '/' ? '/' : '@'}</span>}
+                  {it.img ? <img src={it.img} alt="" width={18} height={18} /> : <span class="ed-at">{ac.kind === '/' ? '/' : ac.kind === '`' ? '‹›' : '@'}</span>}
                   {ac.kind === ':' ? `:${it.name}:` : it.name}
                   {it.body && <span class="ed-reply">{it.body}</span>}
                 </li>
