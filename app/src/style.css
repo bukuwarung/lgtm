@@ -646,9 +646,9 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .group-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .group-pop { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; width: 100%; box-sizing: border-box; display: grid; gap: 4px; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
 .group-pop input { width: 100%; box-sizing: border-box; }
-.group-list { max-height: 320px; overflow: auto; display: grid; }
+.group-list { max-height: 360px; overflow: auto; display: flex; flex-direction: column; } /* not a grid: it would squeeze the rows to fit */
 .group-sec { padding: 6px 6px 2px; color: var(--muted); font-size: calc(11px * var(--ts)); text-transform: uppercase; letter-spacing: .04em; }
-.group-opt { display: flex; justify-content: flex-start; align-items: center; gap: 6px; min-width: 0; padding: 4px 6px; border: 0; border-radius: 4px; background: none; text-align: left; color: var(--fg); white-space: nowrap; overflow: hidden; }
+.group-opt { flex: none; display: flex; justify-content: flex-start; align-items: center; gap: 8px; min-width: 0; min-height: 28px; padding: 4px 8px; line-height: 1.4; border: 0; border-radius: 4px; background: none; text-align: left; color: var(--fg); white-space: nowrap; overflow: hidden; }
 .group-opt .octicon { flex: none; }
 .group-opt small { overflow: hidden; text-overflow: ellipsis; }
 .group-opt.on { background: var(--soft); }

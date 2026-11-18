@@ -3,7 +3,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs, searchRepos } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos } from './github.ts';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
@@ -293,6 +293,11 @@ function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams:
   useDismiss(open, () => setOpen(false), '.group-switch');
   const ql = q.trim().toLowerCase();
   const fits = (v: string) => !ql || v.toLowerCase().includes(ql) || groupLabel(v, teams).toLowerCase().includes(ql);
+  // Before you type: your teams and the repos you work in (github.ts getMyTeams, myActiveRepos), asked when it opens.
+  const [mine, setMine] = useState<{ teams: string[]; repos: string[] } | null>(null);
+  useEffect(() => {
+    if (open && !mine) Promise.all([getMyTeams().catch(() => [] as string[]), myActiveRepos().catch(() => [] as string[])]).then(([teams, repos]) => setMine({ teams, repos }));
+  }, [open]);
   // Past what lgtm knows: GitHub's repos by name in your orgs, a moment after you stop typing.
   useEffect(() => {
     setFound([]);
@@ -301,12 +306,16 @@ function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams:
     const t = setTimeout(() => searchRepos(ql, orgs).then(setFound, () => {}), 350);
     return () => clearTimeout(t);
   }, [ql]);
-  const repos = [...new Set([...knownRepos(), ...found])].map((r) => 'repo:' + r);
+  // Untyped: only yours (your teams, the repos you work in). Typed: those first, then every team and repo that matches.
+  const myTeams = mine?.teams ?? [];
+  const myRepos = (mine?.repos ?? []).map((r) => 'repo:' + r);
+  const teamPool = ql ? [...new Set([...myTeams, ...teams])] : myTeams;
+  const repoPool = ql ? [...new Set([...myRepos, ...[...knownRepos(), ...found].map((r) => 'repo:' + r)])] : myRepos;
   const recentShown = recent.filter(fits).slice(0, 5);
   const sections: [string, string[]][] = [
     ['Recent', recentShown],
-    [T.Teams, teams.filter((t) => fits(t) && !recentShown.includes(t))],
-    ['Repositories', repos.filter((r) => fits(r) && !recentShown.includes(r))],
+    [ql ? T.Teams : `Your ${T.teams}`, teamPool.filter((t) => fits(t) && !recentShown.includes(t))],
+    [ql ? 'Repositories' : 'Repositories you work in', repoPool.filter((r) => fits(r) && !recentShown.includes(r))],
   ];
   const flat = sections.flatMap(([, l]) => l);
   const pick = (v: string) => (onPick(v), setOpen(false), setQ(''));
@@ -347,7 +356,7 @@ function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams:
                 </>
               ),
             )}
-            {!flat.length && <p class="note">{ql.length >= 2 ? 'Nothing by that name.' : 'Nothing yet.'}</p>}
+            {!flat.length && <p class="note">{!mine ? 'Loading…' : ql.length >= 2 ? 'Nothing by that name.' : 'Type to find any team or repository.'}</p>}
           </div>
         </div>
       )}

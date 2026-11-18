@@ -575,6 +575,31 @@ export async function getRepoPRs(repos: string[]): Promise<QueueItem[]> {
   return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+// What Browse's switcher offers before you type: the teams you're in (GitLab: your groups), and the repos you've opened
+// or reviewed PRs in over the last 60 days, the busiest first. Kept a day.
+export const getMyTeams = (): Promise<string[]> =>
+  viewAs()
+    ? lab.getLabTeams(viewAs())
+    : kept('myTeamList', async () => {
+        const me = await getGitHubViewer();
+        const d = await graphql(`query($me:[String!]){viewer{organizations(first:20){nodes{login teams(first:100,userLogins:$me){nodes{slug}}}}}}`, { me: [me] });
+        return (d.viewer.organizations.nodes as any[]).flatMap((o) => o.teams.nodes.map((t: any) => `${o.login}/${t.slug}`)).sort();
+      });
+export const myActiveRepos = (): Promise<string[]> =>
+  viewAs()
+    ? Promise.resolve([])
+    : kept('activeRepos', async () => {
+        const since = new Date(Date.now() - 60 * DAY).toISOString().slice(0, 10);
+        const R = 'nodes{...on PullRequest{repository{nameWithOwner}}}';
+        const d = await graphql(`query($a:String!,$r:String!){a:search(query:$a,type:ISSUE,first:100){${R}} r:search(query:$r,type:ISSUE,first:100){${R}}}`, {
+          a: `is:pr author:@me updated:>=${since}`,
+          r: `is:pr reviewed-by:@me -author:@me updated:>=${since}`,
+        });
+        const count = new Map<string, number>();
+        for (const n of [...d.a.nodes, ...d.r.nodes]) if (n?.repository) count.set(n.repository.nameWithOwner, (count.get(n.repository.nameWithOwner) ?? 0) + 1);
+        return [...count].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).map(([r]) => r);
+      });
+
 // Repos whose name has `q`, in these orgs (the switcher's search, past the repos lgtm has seen): up to 10. GitLab: its
 // projects you're a member of.
 export async function searchRepos(q: string, orgs: string[]): Promise<string[]> {
