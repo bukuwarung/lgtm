@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
+import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -3005,6 +3005,8 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
     ]).then(([before, after]) => (before || after ? setShots({ before, after }) : onFail()), onFail);
   }, []);
   if (!shots) return <div class="pad"><Lines n={4} /></div>;
+  // Its file name in Preview: before-icon.png and after-icon.png (a drawable, drawn as SVG, as .svg).
+  const shotName = (label: string, s: Shot) => `${label.toLowerCase()}-${file.filename.split('/').pop()!.replace(/\.xml$/, '')}${s.src.startsWith('data:image/svg') && !/\.svg$/.test(file.filename) ? '.svg' : ''}`;
   const fig = (label: string, s: Shot | null) =>
     s && (
       <figure>
@@ -3012,6 +3014,7 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
         <img
           src={s.src}
           alt={`${label}: ${file.filename}`}
+          data-name={shotName(label, s)}
           // Small icons scale up to be seen; big images scale down.
           style={{ height: '96px' }}
           onLoad={(e) => {
@@ -3039,10 +3042,11 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
       <div class="vector-preview swipe-preview">
         {modes}
         <div class="img-swipe">
-          <img src={shots.before!.src} alt={`Before: ${file.filename}`} style={{ height: `${h}px` }} />
+          <img src={shots.before!.src} alt={`Before: ${file.filename}`} data-name={shotName('Before', shots.before!)} style={{ height: `${h}px` }} />
           <img
             src={shots.after!.src}
             alt={`After: ${file.filename}`}
+            data-name={shotName('After', shots.after!)}
             style={{ height: `${h}px`, clipPath: `inset(0 0 0 ${x}%)` }}
             onLoad={(e) => setH(Math.min(320, Math.max(96, e.currentTarget.naturalHeight)))}
           />
@@ -3149,13 +3153,27 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   const gapBefore = (i: number) => gapList.find((g) => g.before === i);
   const t = ctx.target?.path === path ? ctx.target : null;
 
+  // A line on GitHub at this PR's commit (the old file for a removed line).
+  const lineUrl = (side: Side, line: number) =>
+    side === 'LEFT' ? blobWebUrl(ctx.repo, ctx.pr.base.sha, file.previous_filename ?? path, line) : blobWebUrl(ctx.headRepo, ctx.pr.head.sha, path, line);
+  // Right-click on a line (in the app): what its number does, in one menu. Selected text keeps the system's own menu.
+  const lineMenu = async (e: MouseEvent, side: Side, line: number) => {
+    if (!isDesktop || (e.target as Element).closest('a, img, video') || getSelection()?.toString()) return;
+    e.preventDefault();
+    const { Menu } = await import('@tauri-apps/api/menu');
+    const menu = await Menu.new({
+      items: [
+        { text: 'Comment on This Line', action: () => pick({ altKey: false, shiftKey: false } as MouseEvent, side, line) },
+        { text: 'Copy Link to Line', action: () => pick({ altKey: true, shiftKey: false } as MouseEvent, side, line) },
+        { text: `Open on ${site(ctx.repo)}`, action: () => void openExternal(lineUrl(side, line)) },
+      ],
+    });
+    await menu.popup();
+  };
   const pick = (e: MouseEvent, side: Side, line: number) => {
     // ⌥-click: a link to the line on GitHub at this PR's commit (the old file for a removed line), to share.
     if (e.altKey) {
-      const url =
-        side === 'LEFT'
-          ? blobWebUrl(ctx.repo, ctx.pr.base.sha, file.previous_filename ?? path, line)
-          : blobWebUrl(ctx.headRepo, ctx.pr.head.sha, path, line);
+      const url = lineUrl(side, line);
       void copyText(url).then(
         () => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Link to line ${line} copied`, ms: 2500 } })),
         () => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: "Couldn't copy the link", ms: 2500 } })),
@@ -3408,10 +3426,10 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                   const n = x ? (right ? x.new! : x.old!) : 0;
                   return (
                     <>
-                      <span class={x ? 'num' : 'num none'} title={x ? 'Comment (shift-click to extend)' : undefined} onClick={x ? (e) => pick(e, right ? 'RIGHT' : s, n) : undefined}>
+                      <span class={x ? 'num' : 'num none'} title={x ? 'Comment (shift-click to extend)' : undefined} onClick={x ? (e) => pick(e, right ? 'RIGHT' : s, n) : undefined} onContextMenu={x ? (e) => void lineMenu(e, right ? 'RIGHT' : s, n) : undefined}>
                         {x ? n : ''}
                       </span>
-                      <span class={`code${!x ? ' none' : x.kind === '-' ? ' d' : x.kind === '+' ? ' a' : ''}`} dangerouslySetInnerHTML={{ __html: x && i != null ? codeHtml(hi, i, x.text) : '' }} />
+                      <span class={`code${!x ? ' none' : x.kind === '-' ? ' d' : x.kind === '+' ? ' a' : ''}`} onContextMenu={x ? (e) => void lineMenu(e, right ? 'RIGHT' : s, n) : undefined} dangerouslySetInnerHTML={{ __html: x && i != null ? codeHtml(hi, i, x.text) : '' }} />
                     </>
                   );
                 };
@@ -3461,7 +3479,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : '')} data-k={`${hi}-${li}`} title={l.kind !== '+' ? undefined : secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : undefined}>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : '')} data-k={`${hi}-${li}`} onContextMenu={(e) => void lineMenu(e, side, num)} title={l.kind !== '+' ? undefined : secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : undefined}>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />

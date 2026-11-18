@@ -1643,6 +1643,18 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const isCurrent = (i: QueueItem) => current?.repo === i.repo && current.n === i.number;
   const draftCount = items?.filter((i) => i.reviewing && i.isDraft && !isCurrent(i)).length ?? 0;
   const [showDismissed, setShowDismissed] = useState(false);
+  // The list's right-click menu (platform.ts): Dismiss or Put Back, by "owner/repo#n".
+  useEffect(() => {
+    const flip = (e: Event) => {
+      const i = items?.find((x) => `${x.repo}#${x.number}` === (e as CustomEvent<string>).detail);
+      if (!i) return;
+      const on = !isDismissed(i);
+      setDismissed(i, on);
+      if (on) offerUndo(`Dismissed ${repoLabel(i.repo)}${numRef(i.repo, i.number)} until something new happens on it`, () => setDismissed(i, false));
+    };
+    addEventListener('lgtm:dismiss', flip);
+    return () => removeEventListener('lgtm:dismiss', flip);
+  }, [items]);
   const shown = items?.filter((i) => (i.mine || showDrafts || !i.isDraft || isCurrent(i)) && (showDismissed || !isDismissed(i) || isCurrent(i)));
   const teamDrafts = teamData?.items.filter((i) => i.isDraft && !isCurrent(i)).length ?? 0;
   const teamItems = teamData?.items.filter((i) => showDrafts || !i.isDraft || isCurrent(i)) ?? [];
@@ -1691,7 +1703,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     );
   };
   const item = (kind: Kind, i: QueueItem, layer?: string, who?: string) => (
-    <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}${isDismissed(i) ? ' dismissed' : ''}`} href={`#/${i.repo}/pull/${i.number}`} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
+    <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}${isDismissed(i) ? ' dismissed' : ''}`} href={`#/${i.repo}/pull/${i.number}`}
+      data-pr={`${i.repo}#${i.number}`} data-url={prWebUrl(i.repo, i.number)} data-title={i.title} data-dismiss={kind === REVIEWING || kind === MINE ? (isDismissed(i) ? 'back' : 'on') : undefined} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
       {(kind === REVIEWING || kind === MINE) && (isDismissed(i) ? (
         <button class="pr-x" title="Put it back in the list" aria-label="Put back" onClick={(e) => (e.preventDefault(), e.stopPropagation(), setDismissed(i, false))}>
           <Octicon name="reply" />

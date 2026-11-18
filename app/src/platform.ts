@@ -925,16 +925,18 @@ const mediaName = (src: string, alt = '') => (decodeURIComponent(new URL(src, lo
 async function saveImage(img: HTMLImageElement): Promise<string> {
   const bytes = new Uint8Array(await (await fetch(img.currentSrc, { cache: 'force-cache' })).arrayBuffer());
   const { invoke } = await import('@tauri-apps/api/core');
-  return invoke<string>('save_media', bytes, { headers: { 'x-name': mediaName(img.currentSrc, img.alt) } });
+  return invoke<string>('save_media', bytes, { headers: { 'x-name': img.dataset.name?.replace(/[^\w. -]/g, '_') || mediaName(img.currentSrc, img.alt) } });
 }
 // The pictures of a comment, description or document, in order: not emoji, avatars or badges (a bot's "Review in…"
 // button is an image too: anything under 80 pixels tall stays a link).
-const isPicture = (x: HTMLImageElement) => !!x.currentSrc && x.naturalHeight >= 80 && !x.closest('.c-avatar') && !x.classList.contains('emoji') && !x.classList.contains('c-avatar');
-const picturesBeside = (img: HTMLImageElement) => [...(img.closest('.md, .rich') ?? img.parentElement ?? document).querySelectorAll<HTMLImageElement>('img')].filter(isPicture);
-// The comment's pictures in one Preview window, the clicked one first (the arrow keys step through the rest in order).
+// A changed image file's preview in the diff (.vector-preview: its old and new versions) is one, icons too.
+const isPicture = (x: HTMLImageElement) => !!x.currentSrc && (x.naturalHeight >= 80 || !!x.closest('.vector-preview')) && !x.closest('.c-avatar') && !x.classList.contains('emoji') && !x.classList.contains('c-avatar');
+const picturesBeside = (img: HTMLImageElement) => [...(img.closest('.vector-preview, .md, .rich') ?? img.parentElement ?? document).querySelectorAll<HTMLImageElement>('img')].filter(isPicture);
+// The comment's pictures in one Preview window, the clicked one first (the arrow keys step through the rest in order);
+// a changed image's old and new, in that order.
 async function openImages(img: HTMLImageElement) {
   const all = picturesBeside(img);
-  const at = Math.max(0, all.indexOf(img));
+  const at = img.closest('.vector-preview') ? 0 : Math.max(0, all.indexOf(img));
   const paths = await Promise.all([...all.slice(at), ...all.slice(0, at)].map(saveImage));
   await command('open_media', { paths, app: 'Preview' });
 }
@@ -959,6 +961,8 @@ export async function initDesktop(go: (route: string) => void) {
     'click',
     (e) => {
       const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      const shot = (e.target as Element | null)?.closest?.('.vector-preview img') as HTMLImageElement | null;
+      if (!a && shot && isPicture(shot) && !e.defaultPrevented) return void openImages(shot).catch((x) => recordError(String(x)));
       if (!a || !/^(https?|mailto):/i.test(a.href) || e.defaultPrevented) return;
       e.preventDefault();
       // A picture (its link is GitHub's page for it, or the image itself): opened in Preview, as the page shows it.
@@ -974,6 +978,21 @@ export async function initDesktop(go: (route: string) => void) {
   // An image (linked or not) adds Open in Preview and Copy Image; a video, Open in your video player.
   addEventListener('contextmenu', async (e) => {
     const t = e.target as Element | null;
+    // A PR in the list (main.tsx: data-pr, data-url, data-title; data-dismiss when it can be dismissed).
+    const item = t?.closest?.('a.pr-item[data-url]') as HTMLAnchorElement | null;
+    if (item && !e.defaultPrevented) {
+      e.preventDefault();
+      const { url, title, pr, dismiss } = item.dataset as Record<string, string>;
+      const ref = pr.includes('.') ? '!' + pr.split('#')[1] : '#' + pr.split('#')[1];
+      const { Menu } = await import('@tauri-apps/api/menu');
+      const items = [
+        { text: `Open on ${/gitlab/i.test(url) || pr.split('/')[0].includes('.') ? 'GitLab' : 'GitHub'}`, action: () => void openUrl(url) },
+        { text: 'Copy Link', action: () => void copyText(url) },
+        { text: 'Copy as Markdown', action: () => void copyText(`[${title} (${ref})](${url})`) },
+        ...(dismiss ? [{ text: dismiss === 'back' ? 'Put Back' : 'Dismiss', action: () => void dispatchEvent(new CustomEvent('lgtm:dismiss', { detail: pr })) }] : []),
+      ];
+      return void (await (await Menu.new({ items })).popup());
+    }
     const a = t?.closest?.('a[href]') as HTMLAnchorElement | null;
     const img = t?.closest?.('img') as HTMLImageElement | null;
     const pic = img && isPicture(img) ? img : null;
