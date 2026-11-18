@@ -281,7 +281,7 @@ function BellMenu() {
   );
 }
 
-// The Groups tab's switcher, as GitHub's branch picker: a button naming what's shown; it opens a search over your
+// The Browse tab's switcher, as GitHub's branch picker: a button naming what's shown; it opens a search over your
 // teams and repos (the ones lgtm has seen, then GitHub's by name), the ones you picked lately first. ↑/↓ move, Enter
 // picks, Esc closes. A pick is a team ("org/slug") or a repo ("repo:owner/name").
 const groupLabel = (v: string, teams: string[]) => (v.startsWith('repo:') ? repoLabel(v.slice(5)) : v ? teamLabel(v, teams) : '');
@@ -1266,7 +1266,7 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     asked: (m) => load[m] ?? 0,
   };
 };
-// A repo in the Groups tab: its open PRs by where they stand, as in Your PRs.
+// A repo in the Browse tab: its open PRs by where they stand, as in Your PRs.
 const REPO: Kind = { ...MINE, name: 'Repository' };
 const avatar = (login: string) => faceOf(login);
 type Tab = 'reviewing' | 'mine' | 'team';
@@ -1523,7 +1523,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   tabRef.current = tab;
   // Team tab: a GitHub team ("org/slug") and its members' open PRs. Settings can change it too.
   const [team, setTeam] = useStoredValue('team', '');
-  // The Groups tab shows a team (your team, Settings, unless another is picked) or a repo ("repo:owner/name"); the
+  // The Browse tab shows a team (your team, Settings, unless another is picked) or a repo ("repo:owner/name"); the
   // ones picked lately come first in its switcher.
   const [groupPick, setGroupPick] = useStoredValue('groupPick', '');
   const shownGroup = groupPick || team;
@@ -1973,7 +1973,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       {shown && !fresh && !err && <p class="list-updating"><span class="sk-dot" /> Updating…</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', 'Groups', teamData && teamItems.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
               {name} {n != null && <span class="count">{n}</span>}
             </button>

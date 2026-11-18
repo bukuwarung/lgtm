@@ -878,7 +878,7 @@ export async function searchLabProjects(host: string, q: string): Promise<string
   return list.map((p) => `${host}/${p.path_with_namespace}`);
 }
 
-// The open MRs of these projects (the Groups tab's repositories): 100 a project.
+// The open MRs of these projects (the Browse tab's repositories): 100 a project.
 export async function getLabRepoMRs(repos: string[]): Promise<QueueItem[]> {
   const out: QueueItem[] = [];
   for (const [host, list] of Map.groupBy(repos, (r) => split(r).host)) {
