@@ -907,7 +907,8 @@ async function fetchPeople(org: string, logins: string[]): Promise<Record<string
   if (!logins.length) return {};
   const query = async (ls: string[], withOrg: boolean): Promise<any[]> => {
     const vars = Object.fromEntries(ls.map((l, i) => [`l${i}`, l]));
-    const fields = ls.map((_, i) => `u${i}:user(login:$l${i}){name${noEmailScope ? '' : ' email'}${withOrg ? ' organizationVerifiedDomainEmails(login:$org)' : ''}}`).join(' ');
+    const withEmail = !noEmailScope; // this query's own: another lookup may learn there's no scope while this one runs
+    const fields = ls.map((_, i) => `u${i}:user(login:$l${i}){name${withEmail ? ' email' : ''}${withOrg ? ' organizationVerifiedDomainEmails(login:$org)' : ''}}`).join(' ');
     const decl = [...ls.map((_, i) => `$l${i}:String!`), ...(withOrg ? ['$org:String!'] : [])].join(',');
     try {
       const d = await graphql(`query(${decl}){${fields}}`, withOrg ? { ...vars, org } : vars, true);
@@ -915,7 +916,7 @@ async function fetchPeople(org: string, logins: string[]): Promise<Record<string
     } catch (e) {
       // A public email needs the read:user or user:email scope, which gh's own login doesn't ask for: without it, the
       // org's verified emails and names still find people.
-      if (noEmailScope || !/'email' field requires/.test(String(e))) throw e;
+      if (!withEmail || !/'email' field requires/.test(String(e))) throw e;
       noEmailScope = true;
       return query(ls, withOrg);
     }

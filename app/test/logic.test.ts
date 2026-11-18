@@ -1366,6 +1366,30 @@ test('PR parts asked at once go to GitHub as one query, across PRs, each PR gett
   }
 });
 
+test("getPeople without the email scope: lookups running at once each fall back to names and the org's emails", async () => {
+  const { getPeople } = await import('../src/github.ts');
+  const was = globalThis.fetch;
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  let asked = 0;
+  globalThis.fetch = (async (_u: string, init: RequestInit) => {
+    const q = JSON.parse(String(init.body)).query as string;
+    if (/\bemail\b/.test(q)) {
+      if (++asked === 2) release();
+      await gate; // both ask with email before either hears back
+      return new Response(JSON.stringify({ errors: [{ type: 'INSUFFICIENT_SCOPES', message: "Your token has not been granted the required scopes to execute this query. The 'email' field requires one of the following scopes: ['user:email', 'read:user']" }] }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ data: { u0: { name: 'Budi', organizationVerifiedDomainEmails: ['budi@acme.test'] } } }), { headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const [a, b] = await Promise.all([getPeople('acme-scope-a', ['budi']), getPeople('acme-scope-b', ['budi'])]);
+    assert.deepEqual(a.budi, { name: 'Budi', emails: ['budi@acme.test'] });
+    assert.deepEqual(b.budi, { name: 'Budi', emails: ['budi@acme.test'] });
+  } finally {
+    globalThis.fetch = was;
+  }
+});
+
 test('hiddenChanges: changed lines whitespace-ignoring and import folding keep out of sight', async () => {
   const { hiddenChanges } = await import('../src/diff.ts');
   const patch = ['@@ -1,6 +1,7 @@', ' package com.acme', ' ', '-import a.B', '+import a.C', '+import a.D', ' ', '-fun x() {  }', '+fun x() { }', '+val y = 1'].join('\n');
