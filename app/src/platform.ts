@@ -997,6 +997,21 @@ export async function initDesktop(go: (route: string) => void) {
     const img = t?.closest?.('img') as HTMLImageElement | null;
     const pic = img && isPicture(img) ? img : null;
     const video = t?.closest?.('video') as HTMLVideoElement | null;
+    // A comment (review.tsx: data-url, and data-src, its Markdown, for a review comment), away from its links and pictures;
+    // selected text keeps the system's own menu.
+    const cm = !a && !pic && !video ? (t?.closest?.('.comment[data-url]') as HTMLElement | null) : null;
+    if (cm && !e.defaultPrevented && !getSelection()?.toString()) {
+      e.preventDefault();
+      const { url, src } = cm.dataset as Record<string, string>;
+      const text = () => (cm.querySelector(':scope > .md, :scope > div > .md, .md') as HTMLElement | null)?.innerText.trim() ?? '';
+      const { Menu } = await import('@tauri-apps/api/menu');
+      const items = [
+        { text: 'Copy Link to Comment', action: () => void copyText(url) },
+        src ? { text: 'Copy as Markdown', action: () => void copyText(src) } : { text: 'Copy Text', action: () => void copyText(text()) },
+        { text: `Open on ${/gitlab/i.test(url) ? 'GitLab' : 'GitHub'}`, action: () => void openUrl(url) },
+      ];
+      return void (await (await Menu.new({ items })).popup());
+    }
     if ((!a && !pic && !video) || e.defaultPrevented) return;
     e.preventDefault();
     const { Menu } = await import('@tauri-apps/api/menu');

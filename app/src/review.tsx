@@ -2559,6 +2559,23 @@ type SectionProps = {
 };
 
 function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleViewed, onExpand, changed }: SectionProps) {
+  // Right-click on the header (in the app): what its buttons do, in one menu.
+  const fileMenu = async (e: MouseEvent) => {
+    if (!isDesktop || getSelection()?.toString()) return;
+    e.preventDefault();
+    const { Menu } = await import('@tauri-apps/api/menu');
+    const p = file.filename;
+    const menu = await Menu.new({
+      items: [
+        { text: 'Copy Path', action: () => void copyText(p) },
+        { text: 'Copy File Name', action: () => void copyText(p.slice(p.lastIndexOf('/') + 1)) },
+        { text: `Open on ${site(ctx.repo)}`, action: () => void openExternal(file.blob_url) },
+        { text: 'Comment on This File', action: () => ctx.setTarget({ path: p, side: 'RIGHT' }) },
+        { text: viewed ? 'Mark as Not Viewed' : 'Mark as Viewed', action: onToggleViewed },
+      ],
+    });
+    await menu.popup();
+  };
   const canRich = isMarkdown(file.filename) && file.status !== 'removed' && !!file.patch;
   const [stringsView] = useStoredFlag('stringsView', true);
   const [translationChecks] = useStoredFlag('translationChecks', true);
@@ -2625,7 +2642,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
 
   return (
     <section class={viewed ? 'file viewed' : 'file'} id={'f-' + path} ref={ref} style={{ containIntrinsicSize: placeholder }}>
-      <header class="file-h">
+      <header class="file-h" onContextMenu={(e) => void fileMenu(e)}>
         {file.status !== 'modified' && <span class={`st s-${file.status}`}><Tg i={file.status} t={file.status} /></span>}{/* modified: the usual, untagged */}
         {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
             src/), cut from the left (the nearest folders stay); the full path on hover. */}
@@ -4311,7 +4328,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       )}
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
-        <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId}>
+        <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId} data-url={c.url} data-src={c.body ?? undefined}>
           <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)} title={`@${c.author?.login ?? 'ghost'}`}>{shownName(c.author?.login ?? 'ghost', ctx.repo)}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
@@ -5248,7 +5265,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         const own = reviewThreads(c);
         if (c.html?.trim() && own.length && own.every((t) => t.isResolved || t.isOutdated))
           return (
-            <details class="comment done-review" key={c.id} id={'cv-' + c.id}>
+            <details class="comment done-review" key={c.id} id={'cv-' + c.id} data-url={c.url}>
               <summary>
                 {head} <span class="bot-excerpt">{botExcerpt(c.html)}</span>
                 <small> · {own.length} thread{own.length === 1 ? '' : 's'}, all resolved or outdated</small>
@@ -5258,7 +5275,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             </details>
           );
         return (
-          <div class="comment" key={c.id} id={'cv-' + c.id}>
+          <div class="comment" key={c.id} id={'cv-' + c.id} data-url={c.url}>
             {head}
             {body}
             {earlierOnes}
@@ -5274,7 +5291,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
           {/* One line per bot with more than one comment (a bot posting on every push), its comments newest first. */}
           {[...Map.groupBy(items.filter((c) => c.bot), (c) => c.author)].map(([author, list]) => {
             const one = (c: ConversationItem) => (
-            <details class="comment bot" key={c.id} id={'cv-' + c.id}>
+            <details class="comment bot" key={c.id} id={'cv-' + c.id} data-url={c.url}>
               <summary>
                 <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b>{' '}
                 <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
