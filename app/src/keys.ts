@@ -23,6 +23,9 @@ export const ACTIONS = [
   ['docCode', 'Jump between the specs (Markdown) and the code', 'g'],
   ['usages', 'Where the function or class under the mouse is used', 'u'],
   ['threads', 'Hide / show the review threads in the diff (ones waiting on you stay)', 't'],
+  ['finish', words('Open Finish review (Comment, on your own PRs)'), 'f'],
+  ['nextPR', words('Next PR in the list'), 'J'],
+  ['prevPR', words('Previous PR in the list'), 'K'],
   ['skip', words('Skip to the next PR (review mode)'), 'N'],
   ['help', 'Keyboard shortcuts', '?'],
 ] as const;

@@ -1570,7 +1570,13 @@ function SlackPeople({ team }: { team: string }) {
         <button disabled={!!busy || !unmapped.length || !org} onClick={find}>
           {busy === 'find' ? 'Searching Slack…' : `Find Slack accounts for ${unmapped.length} unmapped`}
         </button>
-        {suggested.length > 1 && (
+        {((byEmail) =>
+          byEmail.length > 0 && (
+            <button disabled={!!busy} title="The ones whose GitHub, org or commit email is exactly one Slack account; guesses by name wait for you" onClick={() => save(Object.fromEntries(byEmail.map((m) => [m.login, m.id!])))}>
+              Save the {byEmail.length} found by email
+            </button>
+          ))(suggested.filter((m) => m.via === 'email'))}
+        {suggested.length > 1 && suggested.some((m) => m.via !== 'email') && (
           <button disabled={!!busy} onClick={() => save(Object.fromEntries(suggested.map((m) => [m.login, m.id!])))}>
             Save all {suggested.length} matches
           </button>

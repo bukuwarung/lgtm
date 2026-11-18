@@ -58,11 +58,21 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
     const click = (e: PointerEvent) => !(e.target as Element).closest?.('.sym-pop, .sym-badge, .spec-peek') && setOpen(null);
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return away();
+      // The list open: ↑/↓ move between its lines (the preview follows), Enter goes there.
+      const list = popRef.current ? [...popRef.current.querySelectorAll<HTMLElement>('.sym-use, .sym-more')] : [];
+      if (list.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const at = list.indexOf(document.activeElement as HTMLElement);
+        list[at < 0 ? (e.key === 'ArrowDown' ? 0 : list.length - 1) : (at + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length].focus();
+        return;
+      }
       const typing = (e.target as Element).closest?.('input, textarea, select, [contenteditable]');
       if (usageKey && e.key === usageKey && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && badgeRef.current) {
         e.preventDefault();
         e.stopImmediatePropagation();
         show(badgeRef.current);
+        requestAnimationFrame(() => popRef.current?.querySelector<HTMLElement>('.sym-use')?.focus()); // from the keyboard, on its first line
       }
     };
     addEventListener('pointermove', move, { passive: true });
@@ -89,6 +99,7 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
             class={u.old ? 'sym-use old' : 'sym-use'}
             onClick={() => (peek?.out(), setOpen(null), setBadge(null), go(u.path, u.line, u.old))}
             onMouseEnter={() => !u.old && popRef.current && peek?.show({ path: u.path, line: u.line, go: () => (setOpen(null), go(u.path, u.line, false)) }, popRef.current)}
+            onFocus={() => !u.old && popRef.current && peek?.show({ path: u.path, line: u.line, go: () => (setOpen(null), go(u.path, u.line, false)) }, popRef.current)}
             onMouseLeave={() => peek?.out()}
             title={`${u.path}:${u.line}`}
           >

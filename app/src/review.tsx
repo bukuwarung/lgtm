@@ -1586,6 +1586,10 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       comment: () => commentAtCurrentLine() || scrollBy({ top: innerHeight * 0.85 }), // nothing to comment on: scroll as Space would
       index: toggleIndex,
       whitespace: toggleWs,
+      finish: () => dispatchEvent(new Event('lgtm:finish')), // SubmitPanel opens, its summary box focused
+      // The next or previous PR as the list shows it (its tab, groups and order), from the one open.
+      nextPR: () => stepPR(1),
+      prevPR: () => stepPR(-1),
       // The diff's threads out of the way while reading the code through (ones waiting on me stay): the page's class.
       threads: () => {
         const off = document.documentElement.classList.toggle('threads-hidden');
@@ -1612,7 +1616,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       threadCursor.current = i;
       jumpTo(ordered[i].id, 'f-' + ordered[i].path);
     }
-    const k = e.key === '/' && e.shiftKey ? '?' : e.key;
+    // Shift with a letter is its capital (some keyboards report the letter as typed, with Shift held).
+    const k = e.key === '/' && e.shiftKey ? '?' : e.shiftKey && /^[a-z]$/.test(e.key) ? e.key.toUpperCase() : e.key;
     if (k === 'Escape') return setHelp(false);
     const a = ACTIONS.find(([a]) => bindings[a] === k)?.[0];
     if (a) {
@@ -3574,6 +3579,14 @@ function jumpToSpec(r: SpecRef) {
     jumpTo(el.id, undefined, true);
   };
   setTimeout(go, 50);
+}
+
+// To the PR after (or before) the open one in the PR list, as it's shown.
+function stepPR(by: 1 | -1) {
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('.side.prs a.pr-item')];
+  const at = links.findIndex((a) => a.classList.contains('cur'));
+  const to = at < 0 ? links[0] : links[at + by];
+  if (to) location.hash = to.getAttribute('href')!;
 }
 
 // To a changed file, at its new-side line when that's on show (not folded away), else its top. old: a removed line, by

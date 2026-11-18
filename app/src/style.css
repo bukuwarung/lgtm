@@ -1547,7 +1547,7 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .sym-list .note { margin: 4px 10px; }
 .sym-group { padding: 4px 10px 2px; color: var(--muted); font-size: calc(11px * var(--ts)); text-transform: uppercase; letter-spacing: .04em; }
 .sym-use { display: flex; gap: 10px; width: 100%; padding: 3px 10px; border: 0; border-radius: 0; background: none; text-align: left; cursor: pointer; color: var(--fg); }
-.sym-use:hover { background: var(--soft); }
+.sym-use:hover, .sym-use:focus { background: var(--soft); outline: none; }
 .sym-use.old code { text-decoration: line-through; color: var(--muted); }
 .sym-at { flex: none; min-width: 9em; color: var(--muted); }
 .sym-use code { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: calc(12px * var(--cs)) / 1.5 var(--mono); }
