@@ -636,12 +636,21 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .hljs-kt-arg { color: var(--hl-arg); }
 .hljs-kt-it { color: var(--hl-it); font-weight: 600; }
 .pill.p-strong { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
-.team-head { display: flex; gap: 6px; margin-bottom: 8px; }
-.repo-picker { display: grid; gap: 6px; margin-bottom: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: calc(12px * var(--ts)); }
-.repo-picker-list { display: grid; gap: 2px; max-height: 220px; overflow: auto; }
-.repo-picker-list label { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.repo-picker form { display: flex; gap: 6px; }
-.repo-picker form input { flex: 1; min-width: 0; }
+.team-head { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.team-head .group-switch { flex: 1 1 160px; }
+.group-switch { position: relative; flex: 1; min-width: 0; }
+.group-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; text-align: left; }
+.group-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.group-pop { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; width: 100%; box-sizing: border-box; display: grid; gap: 4px; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
+.group-pop input { width: 100%; box-sizing: border-box; }
+.group-list { max-height: 320px; overflow: auto; display: grid; }
+.group-sec { padding: 6px 6px 2px; color: var(--muted); font-size: calc(11px * var(--ts)); text-transform: uppercase; letter-spacing: .04em; }
+.group-opt { display: flex; justify-content: flex-start; align-items: center; gap: 6px; min-width: 0; padding: 4px 6px; border: 0; border-radius: 4px; background: none; text-align: left; color: var(--fg); white-space: nowrap; overflow: hidden; }
+.group-opt .octicon { flex: none; }
+.group-opt small { overflow: hidden; text-overflow: ellipsis; }
+.group-opt.on { background: var(--soft); }
+.group-opt small { color: var(--muted); }
+.group-opt .group-check { margin-left: auto; }
 .team-pick { flex: 1; min-width: 0; }
 .bar h1 a { color: inherit; }
 .bar h1 a:hover { color: var(--accent); }

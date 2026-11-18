@@ -872,7 +872,13 @@ export async function getLabTeamPRs(team: string): Promise<{ members: string[]; 
     load,
   };
 }
-// The open MRs of these projects (the Team tab's Repositories): 100 a project.
+// Projects you're a member of whose name has `q` (github.ts searchRepos): host/path, up to 10.
+export async function searchLabProjects(host: string, q: string): Promise<string[]> {
+  const list: any[] = await json(host, `/projects?membership=true&archived=false&simple=true&per_page=10&search=${encodeURIComponent(q)}`).catch(() => []);
+  return list.map((p) => `${host}/${p.path_with_namespace}`);
+}
+
+// The open MRs of these projects (the Groups tab's repositories): 100 a project.
 export async function getLabRepoMRs(repos: string[]): Promise<QueueItem[]> {
   const out: QueueItem[] = [];
   for (const [host, list] of Map.groupBy(repos, (r) => split(r).host)) {

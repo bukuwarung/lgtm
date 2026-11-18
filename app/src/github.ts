@@ -575,6 +575,15 @@ export async function getRepoPRs(repos: string[]): Promise<QueueItem[]> {
   return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+// Repos whose name has `q`, in these orgs (the switcher's search, past the repos lgtm has seen): up to 10. GitLab: its
+// projects you're a member of.
+export async function searchRepos(q: string, orgs: string[]): Promise<string[]> {
+  if (viewAs()) return lab.searchLabProjects(viewAs(), q);
+  if (!orgs.length) return [];
+  const res = await gh(`/search/repositories?q=${encodeURIComponent(`${q} in:name archived:false ${orgs.map((o) => 'org:' + o).join(' ')}`)}&per_page=10`);
+  return ((await (await ok(res)).json()).items ?? []).map((r: { full_name: string }) => r.full_name);
+}
+
 // GitHub statuses set to busy (aliased u0, u1… in `d`, in the order of `logins`): their messages.
 const busyOf = (d: any, logins: string[]): Busy =>
   Object.fromEntries(logins.flatMap((login, k) => (d[`u${k}`]?.status?.indicatesLimitedAvailability ? [[login, d[`u${k}`].status.message || 'busy']] : [])));

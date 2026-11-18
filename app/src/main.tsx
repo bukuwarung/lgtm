@@ -3,7 +3,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs, searchRepos } from './github.ts';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
@@ -281,32 +281,76 @@ function BellMenu() {
   );
 }
 
-// The Team tab's Repositories: the repos lgtm has seen (its lists, recently viewed) to tick, and any other by name.
-function RepoPicker({ picked, onChange }: { picked: string[]; onChange: (repos: string[]) => void }) {
-  const [typed, setTyped] = useState('');
-  const [filter, setFilter] = useState('');
-  const all = [...new Set([...picked, ...knownRepos()])].filter((r) => !filter || r.toLowerCase().includes(filter.toLowerCase()));
-  const flip = (r: string) => onChange(picked.includes(r) ? picked.filter((x) => x !== r) : [...picked, r].sort());
-  const add = () => {
-    const r = typed.trim().replace(/^https?:\/\/(github\.com\/)?/, '').replace(/\/$/, '');
-    if (/^[\w.-]+(\/[\w.-]+)+$/.test(r) && !picked.includes(r)) onChange([...picked, r].sort());
-    setTyped('');
-  };
+// The Groups tab's switcher, as GitHub's branch picker: a button naming what's shown; it opens a search over your
+// teams and repos (the ones lgtm has seen, then GitHub's by name), the ones you picked lately first. ↑/↓ move, Enter
+// picks, Esc closes. A pick is a team ("org/slug") or a repo ("repo:owner/name").
+const groupLabel = (v: string, teams: string[]) => (v.startsWith('repo:') ? repoLabel(v.slice(5)) : v ? teamLabel(v, teams) : '');
+function GroupSwitcher({ value, teams, recent, onPick }: { value: string; teams: string[]; recent: string[]; onPick: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [at, setAt] = useState(0);
+  const [found, setFound] = useState<string[]>([]);
+  useDismiss(open, () => setOpen(false), '.group-switch');
+  const ql = q.trim().toLowerCase();
+  const fits = (v: string) => !ql || v.toLowerCase().includes(ql) || groupLabel(v, teams).toLowerCase().includes(ql);
+  // Past what lgtm knows: GitHub's repos by name in your orgs, a moment after you stop typing.
+  useEffect(() => {
+    setFound([]);
+    if (ql.length < 2) return;
+    const orgs = [...new Set([...teams.map((t) => t.split('/')[0]), ...knownRepos().filter((r) => !r.split('/')[0].includes('.')).map((r) => r.split('/')[0])])];
+    const t = setTimeout(() => searchRepos(ql, orgs).then(setFound, () => {}), 350);
+    return () => clearTimeout(t);
+  }, [ql]);
+  const repos = [...new Set([...knownRepos(), ...found])].map((r) => 'repo:' + r);
+  const recentShown = recent.filter(fits).slice(0, 5);
+  const sections: [string, string[]][] = [
+    ['Recent', recentShown],
+    [T.Teams, teams.filter((t) => fits(t) && !recentShown.includes(t))],
+    ['Repositories', repos.filter((r) => fits(r) && !recentShown.includes(r))],
+  ];
+  const flat = sections.flatMap(([, l]) => l);
+  const pick = (v: string) => (onPick(v), setOpen(false), setQ(''));
   return (
-    <div class="repo-picker">
-      <input type="search" placeholder="Filter" value={filter} onInput={(e) => setFilter(e.currentTarget.value)} aria-label="Filter repositories" />
-      <div class="repo-picker-list">
-        {all.map((r) => (
-          <label>
-            <input type="checkbox" checked={picked.includes(r)} onChange={() => flip(r)} /> {r}
-          </label>
-        ))}
-        {!all.length && <p class="note">No repositories seen yet: add one below.</p>}
-      </div>
-      <form onSubmit={(e) => (e.preventDefault(), add())}>
-        <input placeholder="owner/repo" value={typed} onInput={(e) => setTyped(e.currentTarget.value)} aria-label="Add a repository" />
-        <button type="submit" disabled={!typed.trim()}>Add</button>
-      </form>
+    <div class="group-switch">
+      <button class="group-btn" aria-expanded={open} onClick={() => (setOpen(!open), setAt(0))} title={`Switch to another ${T.team} or repository`}>
+        <Octicon name={value.startsWith('repo:') ? 'repo' : 'person'} /> <span class="group-name">{groupLabel(value, teams) || `Pick a ${T.team} or repository…`}</span> <span class="caret" aria-hidden="true" />
+      </button>
+      {open && (
+        <div class="group-pop" role="dialog" aria-label={`Switch ${T.team} or repository`}>
+          <input
+            autoFocus
+            type="search"
+            placeholder={`Find a ${T.team} or repository…`}
+            value={q}
+            onInput={(e) => (setQ(e.currentTarget.value), setAt(0))}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                setAt((a) => (flat.length ? (a + (e.key === 'ArrowDown' ? 1 : flat.length - 1)) % flat.length : 0));
+              } else if (e.key === 'Enter' && flat[at]) pick(flat[at]);
+              else if (e.key === 'Escape') setOpen(false);
+            }}
+            aria-label={`Find a ${T.team} or repository`}
+          />
+          <div class="group-list" role="listbox">
+            {sections.map(([title, list]) =>
+              list.length > 0 && (
+                <>
+                  <div class="group-sec">{title}</div>
+                  {list.map((v) => (
+                    <button role="option" aria-selected={flat[at] === v} class={`group-opt${flat[at] === v ? ' on' : ''}${v === value ? ' cur' : ''}`} onClick={() => pick(v)} onMouseEnter={() => setAt(flat.indexOf(v))} title={v.startsWith('repo:') ? v.slice(5) : v}>
+                      <Octicon name={v.startsWith('repo:') ? 'repo' : 'person'} /> {groupLabel(v, teams)}
+                      {v.startsWith('repo:') && repoLabel(v.slice(5)) !== v.slice(5) ? null : v.startsWith('repo:') && <small>{v.slice(5, v.lastIndexOf('/'))}</small>}
+                      {v === value && <Octicon name="check" class="group-check" />}
+                    </button>
+                  ))}
+                </>
+              ),
+            )}
+            {!flat.length && <p class="note">{ql.length >= 2 ? 'Nothing by that name.' : 'Nothing yet.'}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1222,8 +1266,8 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     asked: (m) => load[m] ?? 0,
   };
 };
-// The Team tab's Repositories: their open PRs, one group per repo, coloured by where each PR stands.
-const repoKind = (repos: string[]): Kind => ({ name: 'Repositories', groups: repos.map((r) => [r, repoLabel(r)]), groupOf: (i) => i.repo, colorOf: MINE.groupOf });
+// A repo in the Groups tab: its open PRs by where they stand, as in Your PRs.
+const REPO: Kind = { ...MINE, name: 'Repository' };
 const avatar = (login: string) => faceOf(login);
 type Tab = 'reviewing' | 'mine' | 'team';
 
@@ -1479,12 +1523,24 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   tabRef.current = tab;
   // Team tab: a GitHub team ("org/slug") and its members' open PRs. Settings can change it too.
   const [team, setTeam] = useStoredValue('team', '');
-  // The Team tab shows a team, or (teamView "repos") the open PRs of the repos picked there (teamRepos, comma-separated).
-  const [teamView, setTeamView] = useStoredValue('teamView', '');
-  const [teamRepos, setTeamRepos] = useStoredValue('teamRepos', '');
-  const repoList = teamRepos.split(',').filter(Boolean);
-  const view = teamView === 'repos' ? `repos:${teamRepos}` : team; // what the tab loads (getTeamPRs)
-  const [pickRepos, setPickRepos] = useState(false);
+  // The Groups tab shows a team (your team, Settings, unless another is picked) or a repo ("repo:owner/name"); the
+  // ones picked lately come first in its switcher.
+  const [groupPick, setGroupPick] = useStoredValue('groupPick', '');
+  const shownGroup = groupPick || team;
+  const view = shownGroup.startsWith('repo:') ? `repos:${shownGroup.slice(5)}` : shownGroup; // what the tab loads (getTeamPRs)
+  const [groupRecent, setGroupRecent] = useStoredValue('groupRecent', '[]');
+  const recentGroups: string[] = (() => {
+    try {
+      return JSON.parse(groupRecent);
+    } catch {
+      return [];
+    }
+  })();
+  const pickGroup = (v: string) => {
+    setGroupPick(v);
+    if (!v.startsWith('repo:')) setTeam(v); // a team picked here is your team, as before
+    setGroupRecent(JSON.stringify([v, ...recentGroups.filter((x) => x !== v)].slice(0, 8)));
+  };
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
   const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
@@ -1917,7 +1973,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       {shown && !fresh && !err && <p class="list-updating"><span class="sk-dot" /> Updating…</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', `${T.Team}`, teamData && teamItems.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', 'Groups', teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
               {name} {n != null && <span class="count">{n}</span>}
             </button>
@@ -1948,24 +2004,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           {tab === 'team' && (
             <>
               <div class="team-head">
-                <select
-                  class="team-pick"
-                  value={teamView === 'repos' ? '#repos' : team}
-                  onChange={(e) => {
-                    const v = e.currentTarget.value;
-                    if (v === '#repos') return void (setTeamView('repos'), !repoList.length && setPickRepos(true));
-                    setTeamView('');
-                    setTeam(v);
-                  }}
-                  aria-label={`GitHub ${T.team} or repositories`}
-                >
-                  <option value="">Pick a {T.site} {T.team}…</option>
-                  {((all) => all.map((t) => <option value={t}>{teamLabel(t, all)}</option>))([...new Set([...(team ? [team] : []), ...(teams ?? [])])])}
-                  <option value="#repos">{repoList.length ? `Repositories: ${repoList.map(repoLabel).join(', ')}` : 'Repositories…'}</option>
-                </select>
-                {teamView === 'repos' ? (
-                  <button onClick={() => setPickRepos(!pickRepos)} aria-expanded={pickRepos}>Choose…</button>
-                ) : (
+                <GroupSwitcher value={shownGroup} teams={teams ?? []} recent={recentGroups} onPick={pickGroup} />
+                {!shownGroup.startsWith('repo:') && (
                   <select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
                     <option value="waiting">Waiting longest</option>
                     <option value="free">Least busy</option>
@@ -1973,10 +2013,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
                   </select>
                 )}
               </div>
-              {teamView === 'repos' && pickRepos && <RepoPicker picked={repoList} onChange={(l) => setTeamRepos(l.join(','))} />}
               {teamErr && <p class="error">{teamErr}</p>}
-              {(teamView === 'repos' ? repoList.length > 0 : !!team) && teamData?.team !== view && !teamErr && <ListSkeleton rows={4} />}
-              {teamData?.team === view && section(teamView === 'repos' ? repoKind(repoList) : teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamItems)}
+              {!!shownGroup && teamData?.team !== view && !teamErr && <ListSkeleton rows={4} />}
+              {teamData?.team === view && section(shownGroup.startsWith('repo:') ? REPO : teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamItems)}
             </>
           )}
         </>
