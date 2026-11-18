@@ -5151,9 +5151,34 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
           </div>
         )}
       </div>
-      {items.map((c) => {
-        if (c.bot && foldBots) return null; // below, behind one line
-        if (replaced.has(c.id)) return null; // folded under the same person's later verdict
+      {(() => {
+        // Plain approvals (no text, no comments on the code) one after another: one line, "Approved by budi, rina and ana".
+        const reviewThreads = (c: ConversationItem) => threads.filter((t) => t.comments.nodes.some((x) => x.pullRequestReview?.databaseId === Number(c.id.slice(1))));
+        const bare = (c: ConversationItem) => c.state === 'APPROVED' && !c.html?.trim() && !earlier.has(c.id) && !reviewThreads(c).length;
+        const units: (ConversationItem | ConversationItem[])[] = [];
+        for (const c of items) {
+          if ((c.bot && foldBots) || replaced.has(c.id)) continue; // bots below, behind one line; earlier verdicts under the later one
+          const last = units.at(-1);
+          if (bare(c) && Array.isArray(last)) last.push(c);
+          else units.push(bare(c) ? [c] : c);
+        }
+        return units.map((u) => {
+        if (Array.isArray(u) && u.length > 1)
+          return (
+            <div class="comment approvals" key={u[0].id}>
+              <span class="rstate r-APPROVED"><Octicon name="check" /> Approved</span> by{' '}
+              {u.map((c, k) => (
+                <>
+                  {k ? (k === u.length - 1 ? ' and ' : ', ') : ''}
+                  <span id={'cv-' + c.id} title={new Date(c.at).toLocaleString()}>
+                    <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{shownName(c.author, repo)}</b>
+                  </span>
+                </>
+              ))}
+              {' · '}<Time at={u.at(-1)!.at} />
+            </div>
+          );
+        const c = Array.isArray(u) ? u[0] : u;
         const head = (
           <>
             <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
@@ -5167,11 +5192,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             <ReviewThreads review={c} threads={threads} reveal={reveal} />
           </>
         );
-        return (
-          <div class="comment" key={c.id} id={'cv-' + c.id}>
-            {head}
-            {body}
-            {earlier.get(c.id)?.map((id) => {
+        const earlierOnes = earlier.get(c.id)?.map((id) => {
               const e = items.find((x) => x.id === id)!;
               const n = threads.filter((t) => t.comments.nodes.some((x) => x.pullRequestReview?.databaseId === Number(id.slice(1)))).length;
               return (
@@ -5185,10 +5206,29 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
                   <ReviewThreads review={e} threads={threads} reveal={reveal} />
                 </details>
               );
-            })}
+            });
+        // A review whose comments on the code are all resolved or outdated: folded to one line, its text a preview.
+        const own = reviewThreads(c);
+        if (c.html?.trim() && own.length && own.every((t) => t.isResolved || t.isOutdated))
+          return (
+            <details class="comment done-review" key={c.id} id={'cv-' + c.id}>
+              <summary>
+                {head} <span class="bot-excerpt">{botExcerpt(c.html)}</span>
+                <small> · {own.length} thread{own.length === 1 ? '' : 's'}, all resolved or outdated</small>
+              </summary>
+              {body}
+              {earlierOnes}
+            </details>
+          );
+        return (
+          <div class="comment" key={c.id} id={'cv-' + c.id}>
+            {head}
+            {body}
+            {earlierOnes}
           </div>
         );
-      })}
+        });
+      })()}
       {/* Bot reports (CI summaries, AI reviewers, coverage): all behind one line, each a line of its own inside; the
           index's jump to one opens them. */}
       {foldBots && items.some((c) => c.bot) && (

@@ -1556,3 +1556,11 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .demo-sym-name { position: relative; }
 .demo-sym-badge { position: absolute; right: -18px; top: -10px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: #fff; background: var(--accent); }
 .demo-sym-list { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 0; font-size: calc(12px * var(--ts)); }
+/* The conversation's one-line rows: plain approvals together, and a review whose threads are all settled. */
+.comment.approvals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); }
+.comment.approvals .c-avatar { vertical-align: middle; }
+.comment.done-review > summary { display: flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; cursor: pointer; list-style: none; }
+.comment.done-review > summary::-webkit-details-marker { display: none; }
+.comment.done-review > summary .bot-excerpt { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.comment.done-review > summary small { flex: none; color: var(--muted); }
+.comment.done-review:not([open]) { opacity: .8; }
