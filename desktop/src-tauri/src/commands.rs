@@ -1642,3 +1642,32 @@ mod codex_plugin_tests {
         assert!(!codex_plugin_on("[plugins.\"pdf@x\"]\nenabled = true\n"));
     }
 }
+
+/// An image from a PR opened in Preview (macOS's viewer), not the browser: saved under its own name in a temp folder,
+/// from its address (signed when it's a private repo's) or, for one the page already holds (blob:, data:), its bytes.
+#[tauri::command]
+pub async fn open_image(url: Option<String>, bytes: Option<Vec<u8>>, name: String) -> Result<(), String> {
+    let mut name: String = name.chars().filter(|c| c.is_alphanumeric() || "._- ".contains(*c)).take(120).collect();
+    name = name.trim_start_matches('.').to_string();
+    if name.is_empty() {
+        name = "image".into();
+    }
+    if !name.contains('.') {
+        name.push_str(".png");
+    }
+    let dir = std::env::temp_dir().join("lgtm-images");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(&name);
+    let file = path.to_string_lossy().to_string();
+    if let Some(b) = bytes {
+        std::fs::write(&path, b).map_err(|e| e.to_string())?;
+    } else {
+        let url = url.filter(|u| u.starts_with("https://")).ok_or("No image to open")?;
+        let got = run("curl", &["-fsSL", "--max-time", "60", "-o", &file, &url], None, std::time::Duration::from_secs(70));
+        if !got.ok {
+            return Err("Couldn't download the image".into());
+        }
+    }
+    let shown = run("open", &["-a", "Preview", &file], None, std::time::Duration::from_secs(15));
+    if shown.ok { Ok(()) } else { Err("Preview didn't open it".into()) }
+}

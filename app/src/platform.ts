@@ -918,6 +918,16 @@ export async function setLaunchAtLogin(on: boolean) {
   await (on ? a.enable() : a.disable());
 }
 
+// An image of the page in Preview: its file name from its address, its bytes from where the page got it (an address
+// lgtm signed, or one the page holds as blob: or data:).
+async function openImage(img: HTMLImageElement) {
+  const src = img.currentSrc;
+  const name = decodeURIComponent(new URL(src, location.href).pathname.split('/').pop() || '') || img.alt || 'image';
+  if (/^https:/.test(src)) return command('open_image', { url: src, name });
+  const bytes = [...new Uint8Array(await (await fetch(src)).arrayBuffer())];
+  return command('open_image', { bytes, name });
+}
+
 // In the app: web links open in the default browser (not inside lgtm), and lgtm://<owner>/<repo>/pull/<n> links
 // open that PR. `go` receives the PR's route ("/owner/repo/pull/n").
 export async function initDesktop(go: (route: string) => void) {
@@ -929,6 +939,9 @@ export async function initDesktop(go: (route: string) => void) {
       const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
       if (!a || !/^(https?|mailto):/i.test(a.href) || e.defaultPrevented) return;
       e.preventDefault();
+      // A picture (its link is GitHub's page for it, or the image itself): opened in Preview, as the page shows it.
+      const img = (e.target as Element).closest('img') ?? (a.querySelectorAll('img').length === 1 ? a.querySelector('img') : null);
+      if (img?.currentSrc && !img.classList.contains('emoji') && !e.metaKey) return void openImage(img).catch(() => openUrl(a.href));
       void openUrl(a.href);
     },
     true,

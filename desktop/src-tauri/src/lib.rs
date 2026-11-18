@@ -152,6 +152,7 @@ pub fn run() {
             commands::slack_asked,
             commands::slack_reply,
             commands::slack_sent,
+            commands::open_image,
             commands::slack_channel,
             commands::slack_qa,
             commands::slack_threads,

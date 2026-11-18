@@ -28,6 +28,7 @@
     "allow-slack-asked",
     "allow-slack-reply",
     "allow-slack-sent",
+    "allow-open-image",
     "allow-slack-channel",
     "allow-slack-qa",
     "allow-slack-threads",
