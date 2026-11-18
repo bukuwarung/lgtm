@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-copy-media"
+description = "Enables the copy_media command without any pre-configured scope."
+commands.allow = ["copy_media"]
+
+[[permission]]
+identifier = "deny-copy-media"
+description = "Denies the copy_media command without any pre-configured scope."
+commands.deny = ["copy_media"]

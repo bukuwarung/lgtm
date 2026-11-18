@@ -1573,3 +1573,4 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .bot-group[open] > summary::before { content: "▾ "; }
 /* t: the diff's threads hidden while reading (the ones waiting on you stay). */
 html.threads-hidden .file .thread:not(.awaiting), html.threads-hidden .file .settled-group, html.threads-hidden .file .thread-again { display: none; }
+.video-open { display: block; margin: 2px 0 8px; font-size: calc(12px * var(--ts)); }

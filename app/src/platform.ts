@@ -918,14 +918,36 @@ export async function setLaunchAtLogin(on: boolean) {
   await (on ? a.enable() : a.disable());
 }
 
-// An image of the page in Preview: the bytes the page already has (the browser's cached copy: nothing downloaded again),
-// handed over raw, its file name from its address.
-async function openImage(img: HTMLImageElement) {
-  const src = img.currentSrc;
-  const name = (decodeURIComponent(new URL(src, location.href).pathname.split('/').pop() || '') || img.alt || 'image').replace(/[^\w. -]/g, '_');
-  const bytes = new Uint8Array(await (await fetch(src, { cache: 'force-cache' })).arrayBuffer());
+// Images and videos of the page in the Mac's own apps. A file's name from its address.
+const mediaName = (src: string, alt = '') => (decodeURIComponent(new URL(src, location.href).pathname.split('/').pop() || '') || alt || 'file').replace(/[^\w. -]/g, '_');
+// An image saved as a temp file from the bytes the page already has (the browser's cached copy: nothing downloaded
+// again), handed over raw. Back: its path.
+async function saveImage(img: HTMLImageElement): Promise<string> {
+  const bytes = new Uint8Array(await (await fetch(img.currentSrc, { cache: 'force-cache' })).arrayBuffer());
   const { invoke } = await import('@tauri-apps/api/core');
-  await invoke('open_image', bytes, { headers: { 'x-name': name } });
+  return invoke<string>('save_media', bytes, { headers: { 'x-name': mediaName(img.currentSrc, img.alt) } });
+}
+// The pictures of a comment, description or document, in order: not emoji, avatars or badges (a bot's "Review in…"
+// button is an image too: anything under 80 pixels tall stays a link).
+const isPicture = (x: HTMLImageElement) => !!x.currentSrc && x.naturalHeight >= 80 && !x.closest('.c-avatar') && !x.classList.contains('emoji') && !x.classList.contains('c-avatar');
+const picturesBeside = (img: HTMLImageElement) => [...(img.closest('.md, .rich') ?? img.parentElement ?? document).querySelectorAll<HTMLImageElement>('img')].filter(isPicture);
+// The comment's pictures in one Preview window, the clicked one first (the arrow keys step through the rest in order).
+async function openImages(img: HTMLImageElement) {
+  const all = picturesBeside(img);
+  const at = Math.max(0, all.indexOf(img));
+  const paths = await Promise.all([...all.slice(at), ...all.slice(0, at)].map(saveImage));
+  await command('open_media', { paths, app: 'Preview' });
+}
+// A video in the default video player (IINA, QuickTime…): downloaded from the address it plays from.
+async function openVideo(v: HTMLVideoElement) {
+  const src = v.currentSrc || v.src;
+  const path = await command<string>('download_media', { url: src, name: mediaName(src) });
+  await command('open_media', { paths: [path] });
+}
+// An image on the clipboard, as a PNG other apps paste.
+async function copyImage(img: HTMLImageElement) {
+  await command('copy_media', { path: await saveImage(img) });
+  dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Image copied.', ms: 2000 } }));
 }
 
 // In the app: web links open in the default browser (not inside lgtm), and lgtm://<owner>/<repo>/pull/<n> links
@@ -941,7 +963,7 @@ export async function initDesktop(go: (route: string) => void) {
       e.preventDefault();
       // A picture (its link is GitHub's page for it, or the image itself): opened in Preview, as the page shows it.
       const img = (e.target as Element).closest('img') ?? (a.querySelectorAll('img').length === 1 ? a.querySelector('img') : null);
-      if (img?.currentSrc && !img.classList.contains('emoji') && !e.metaKey) return void openImage(img).catch(() => openUrl(a.href));
+      if (img && isPicture(img) && !e.metaKey) return void openImages(img).catch(() => openUrl(a.href));
       void openUrl(a.href);
     },
     true,
@@ -949,21 +971,38 @@ export async function initDesktop(go: (route: string) => void) {
   // Right-clicking a link: WebKit's own menu (Open Link, Open Link in New Window, Download Linked File) does nothing in
   // the app, so a web link gets Open in Browser and Copy Link instead, and lgtm's own links none. (Selected text inside a
   // link copies with ⌘C: a right-click selects the word under it, so a selection can't tell what you meant.)
+  // An image (linked or not) adds Open in Preview and Copy Image; a video, Open in your video player.
   addEventListener('contextmenu', async (e) => {
-    const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
-    if (!a || e.defaultPrevented) return;
+    const t = e.target as Element | null;
+    const a = t?.closest?.('a[href]') as HTMLAnchorElement | null;
+    const img = t?.closest?.('img') as HTMLImageElement | null;
+    const pic = img && isPicture(img) ? img : null;
+    const video = t?.closest?.('video') as HTMLVideoElement | null;
+    if ((!a && !pic && !video) || e.defaultPrevented) return;
     e.preventDefault();
-    if (!/^(https?|mailto):/i.test(a.href)) return;
     const { Menu } = await import('@tauri-apps/api/menu');
-    const href = a.href.replace(/^mailto:/i, '');
-    const menu = await Menu.new({
-      items: [
-        { text: 'Open in Browser', action: () => void openUrl(a.href) },
-        { text: a.href.startsWith('mailto:') ? 'Copy Address' : 'Copy Link', action: () => void copyText(href) },
-      ],
-    });
+    const items: { text: string; action: () => void }[] = [];
+    if (pic) items.push({ text: 'Open in Preview', action: () => void openImages(pic).catch((x) => recordError(String(x))) }, { text: 'Copy Image', action: () => void copyImage(pic).catch((x) => recordError(String(x))) });
+    if (video) items.push({ text: 'Open in Your Video Player', action: () => void openVideo(video).catch((x) => recordError(String(x))) });
+    if (a && /^(https?|mailto):/i.test(a.href)) {
+      const href = a.href.replace(/^mailto:/i, '');
+      items.push({ text: 'Open in Browser', action: () => void openUrl(a.href) }, { text: a.href.startsWith('mailto:') ? 'Copy Address' : 'Copy Link', action: () => void copyText(href) });
+    }
+    if (!items.length) return;
+    const menu = await Menu.new({ items });
     await menu.popup();
   });
+  // A video in a comment or description: a quiet "Open in your video player" under it.
+  new MutationObserver(() => {
+    for (const v of document.querySelectorAll<HTMLVideoElement>('.md video:not([data-player])')) {
+      v.dataset.player = '';
+      const b = document.createElement('button');
+      b.className = 'link video-open';
+      b.textContent = 'Open in your video player';
+      b.onclick = () => void openVideo(v).catch(() => openUrl(v.currentSrc || v.src));
+      v.after(b);
+    }
+  }).observe(document.body, { childList: true, subtree: true });
   const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
   const open = (urls: string[] | null) => {
     // lgtm://owner/repo/pull/n, or a GitLab MR's lgtm://host/group/…/project/pull/n (or …/-/merge_requests/n).

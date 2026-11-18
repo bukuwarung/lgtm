@@ -1643,25 +1643,75 @@ mod codex_plugin_tests {
     }
 }
 
-/// An image from a PR opened in Preview (macOS's viewer), not the browser: the bytes the page already shows (sent raw,
-/// not as JSON), saved under its own name (the x-name header) in a temp folder.
-#[tauri::command]
-pub async fn open_image(request: tauri::ipc::Request<'_>) -> Result<(), String> {
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err("No image to open".into()) };
-    let given = request.headers().get("x-name").and_then(|v| v.to_str().ok()).unwrap_or("");
+// Images and videos from a PR, opened in the Mac's own apps (Preview, the default video player) rather than the browser:
+// each saved under its own name in a temp folder first.
+fn media_dir() -> Result<std::path::PathBuf, String> {
+    let dir = std::env::temp_dir().join("lgtm-images");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+fn media_name(given: &str, fallback_ext: &str) -> String {
     let mut name: String = given.chars().filter(|c| c.is_alphanumeric() || "._- ".contains(*c)).take(120).collect();
     name = name.trim_start_matches('.').to_string();
     if name.is_empty() {
-        name = "image".into();
+        name = "file".into();
     }
     if !name.contains('.') {
-        name.push_str(".png");
+        name = format!("{name}.{fallback_ext}");
     }
-    let dir = std::env::temp_dir().join("lgtm-images");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(&name);
+    name
+}
+fn in_media_dir(path: &str) -> bool {
+    media_dir().map(|d| std::path::Path::new(path).starts_with(&d) && !path.contains("..")).unwrap_or(false)
+}
+
+/// The bytes the page already shows (sent raw, not as JSON) saved as a temp file named by the x-name header. Back: its path.
+#[tauri::command]
+pub async fn save_media(request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err("Nothing to save".into()) };
+    let given = request.headers().get("x-name").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let path = media_dir()?.join(media_name(given, "png"));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// A file the page plays from its address (a video), downloaded into the temp folder. Back: its path.
+#[tauri::command]
+pub async fn download_media(url: String, name: String) -> Result<String, String> {
+    if !url.starts_with("https://") {
+        return Err("Not a web address".into());
+    }
+    let path = media_dir()?.join(media_name(&name, "mp4"));
     let file = path.to_string_lossy().to_string();
-    let shown = run("open", &["-a", "Preview", &file], None, std::time::Duration::from_secs(15));
-    if shown.ok { Ok(()) } else { Err("Preview didn't open it".into()) }
+    let got = run("curl", &["-fsSL", "--max-time", "300", "-o", &file, &url], None, std::time::Duration::from_secs(310));
+    if got.ok { Ok(file) } else { Err("Couldn't download it".into()) }
+}
+
+/// Saved files opened together: in Preview (one window, in this order), or with each one's default app (no app).
+#[tauri::command]
+pub async fn open_media(paths: Vec<String>, app: Option<String>) -> Result<(), String> {
+    if paths.is_empty() || !paths.iter().all(|p| in_media_dir(p)) || app.as_deref().is_some_and(|a| a != "Preview") {
+        return Err("Not lgtm's files".into());
+    }
+    let mut args: Vec<&str> = vec![];
+    if let Some(a) = app.as_deref() {
+        args.extend(["-a", a]);
+    }
+    args.extend(paths.iter().map(|p| p.as_str()));
+    let shown = run("open", &args, None, std::time::Duration::from_secs(15));
+    if shown.ok { Ok(()) } else { Err("It didn't open".into()) }
+}
+
+/// A saved image on the clipboard, as a PNG (what other apps paste): converted with sips, set through AppleScript.
+#[tauri::command]
+pub async fn copy_media(path: String) -> Result<(), String> {
+    if !in_media_dir(&path) {
+        return Err("Not lgtm's file".into());
+    }
+    let png = format!("{path}.clip.png");
+    if !run("sips", &["-s", "format", "png", &path, "--out", &png], None, std::time::Duration::from_secs(20)).ok {
+        return Err("Couldn't read the image".into());
+    }
+    let script = format!("set the clipboard to (read (POSIX file \"{}\") as «class PNGf»)", png.replace('"', ""));
+    if run("osascript", &["-e", &script], None, std::time::Duration::from_secs(10)).ok { Ok(()) } else { Err("Couldn't copy it".into()) }
 }
