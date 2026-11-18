@@ -872,6 +872,17 @@ export async function getLabTeamPRs(team: string): Promise<{ members: string[]; 
     load,
   };
 }
+// The open MRs of these projects (the Team tab's Repositories): 100 a project.
+export async function getLabRepoMRs(repos: string[]): Promise<QueueItem[]> {
+  const out: QueueItem[] = [];
+  for (const [host, list] of Map.groupBy(repos, (r) => split(r).host)) {
+    const me = (await labMe(host)).login;
+    const d: any = await gql(host, `query{${list.map((r, k) => `p${k}:project(fullPath:${JSON.stringify(split(r).path)}){mergeRequests(state:opened,first:100){nodes{...F}}}`).join(' ')}} ${ITEM}`).catch(() => ({}));
+    list.forEach((_, k) => out.push(...(d[`p${k}`]?.mergeRequests?.nodes ?? []).map((m: any) => itemOf(host, m, me))));
+  }
+  return out;
+}
+
 // The open MRs on a GitLab asking someone for a review and still waiting on them, the longest-waiting first.
 export async function getLabAskedPRs(host: string, login: string): Promise<QueueItem[]> {
   const me = (await labMe(host)).login;

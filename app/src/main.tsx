@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks } from './platform.ts';
+import { readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -278,6 +278,36 @@ function BellMenu() {
         </div>
       )}
     </span>
+  );
+}
+
+// The Team tab's Repositories: the repos lgtm has seen (its lists, recently viewed) to tick, and any other by name.
+function RepoPicker({ picked, onChange }: { picked: string[]; onChange: (repos: string[]) => void }) {
+  const [typed, setTyped] = useState('');
+  const [filter, setFilter] = useState('');
+  const all = [...new Set([...picked, ...knownRepos()])].filter((r) => !filter || r.toLowerCase().includes(filter.toLowerCase()));
+  const flip = (r: string) => onChange(picked.includes(r) ? picked.filter((x) => x !== r) : [...picked, r].sort());
+  const add = () => {
+    const r = typed.trim().replace(/^https?:\/\/(github\.com\/)?/, '').replace(/\/$/, '');
+    if (/^[\w.-]+(\/[\w.-]+)+$/.test(r) && !picked.includes(r)) onChange([...picked, r].sort());
+    setTyped('');
+  };
+  return (
+    <div class="repo-picker">
+      <input type="search" placeholder="Filter" value={filter} onInput={(e) => setFilter(e.currentTarget.value)} aria-label="Filter repositories" />
+      <div class="repo-picker-list">
+        {all.map((r) => (
+          <label>
+            <input type="checkbox" checked={picked.includes(r)} onChange={() => flip(r)} /> {r}
+          </label>
+        ))}
+        {!all.length && <p class="note">No repositories seen yet: add one below.</p>}
+      </div>
+      <form onSubmit={(e) => (e.preventDefault(), add())}>
+        <input placeholder="owner/repo" value={typed} onInput={(e) => setTyped(e.currentTarget.value)} aria-label="Add a repository" />
+        <button type="submit" disabled={!typed.trim()}>Add</button>
+      </form>
+    </div>
   );
 }
 
@@ -1192,6 +1222,8 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     asked: (m) => load[m] ?? 0,
   };
 };
+// The Team tab's Repositories: their open PRs, one group per repo, coloured by where each PR stands.
+const repoKind = (repos: string[]): Kind => ({ name: 'Repositories', groups: repos.map((r) => [r, repoLabel(r)]), groupOf: (i) => i.repo, colorOf: MINE.groupOf });
 const avatar = (login: string) => faceOf(login);
 type Tab = 'reviewing' | 'mine' | 'team';
 
@@ -1447,6 +1479,12 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   tabRef.current = tab;
   // Team tab: a GitHub team ("org/slug") and its members' open PRs. Settings can change it too.
   const [team, setTeam] = useStoredValue('team', '');
+  // The Team tab shows a team, or (teamView "repos") the open PRs of the repos picked there (teamRepos, comma-separated).
+  const [teamView, setTeamView] = useStoredValue('teamView', '');
+  const [teamRepos, setTeamRepos] = useStoredValue('teamRepos', '');
+  const repoList = teamRepos.split(',').filter(Boolean);
+  const view = teamView === 'repos' ? `repos:${teamRepos}` : team; // what the tab loads (getTeamPRs)
+  const [pickRepos, setPickRepos] = useState(false);
   const [teams, setTeams] = useState<string[] | null>(null);
   const [teamSort, setTeamSort] = useStoredValue('teamSort', 'waiting');
   const [teamData, setTeamData] = useState<{ team: string; members: string[]; items: QueueItem[]; load: Record<string, number> } | null>(null);
@@ -1456,20 +1494,21 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const loadAsked = (login: string) =>
     getAskedPRs(team.split('/')[0], login).then((l) => setAsked((a) => ({ ...a, [login]: l })), (e) => setAsked((a) => ({ ...a, [login]: a[login] ?? e.message })));
   const [teamErr, setTeamErr] = useState('');
-  const teamRef = useRef(team); // the 3-minute refresh closes over the first render; read the current team here
-  teamRef.current = team;
+  const teamRef = useRef(view); // the 3-minute refresh closes over the first render; read the current team here
+  teamRef.current = view;
   const requested = useRef(''); // the team last fetched, so a team change (here or in Settings) fetches once
   const loadTeam = (t = teamRef.current) => {
     requested.current = t;
     if (!t) return;
     setTeamErr('');
     getTeamPRs(t).then((d) => {
+      if (requested.current !== t) return; // another team (or set of repos) was picked meanwhile: its answer counts
       setTeamData({ team: t, ...d });
       getEstimates(d.items).then(
         (est) => setTeamData((cur) => (cur?.team === t ? { ...cur, items: cur.items.map((i) => ({ ...i, estimate: est.get(i.id) })) } : cur)),
         () => {},
       );
-    }, (e) => setTeamErr(e.message));
+    }, (e) => requested.current === t && setTeamErr(e.message));
   };
   useEffect(() => {
     if (tab === 'team' && !teams) getTeams().then(setTeams, (e) => setTeamErr(e.message));
@@ -1534,8 +1573,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     return () => (removeEventListener('lgtm:list-refresh', more), removeEventListener('online', more));
   }, []);
   useEffect(() => {
-    if (tab === 'team' && (requested.current !== team || !teamData)) loadTeam(team);
-  }, [team, tab]);
+    if (tab === 'team' && (requested.current !== view || !teamData)) loadTeam(view);
+  }, [view, tab]);
   useEffect(() => {
     const t = setInterval(() => (!document.hidden || Date.now() - lastLoad.current > 9.5 * 60_000) && load(), 3 * 60 * 1000);
     return () => clearInterval(t);
@@ -1909,19 +1948,35 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           {tab === 'team' && (
             <>
               <div class="team-head">
-                <select class="team-pick" value={team} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="GitHub team">
+                <select
+                  class="team-pick"
+                  value={teamView === 'repos' ? '#repos' : team}
+                  onChange={(e) => {
+                    const v = e.currentTarget.value;
+                    if (v === '#repos') return void (setTeamView('repos'), !repoList.length && setPickRepos(true));
+                    setTeamView('');
+                    setTeam(v);
+                  }}
+                  aria-label={`GitHub ${T.team} or repositories`}
+                >
                   <option value="">Pick a {T.site} {T.team}…</option>
                   {((all) => all.map((t) => <option value={t}>{teamLabel(t, all)}</option>))([...new Set([...(team ? [team] : []), ...(teams ?? [])])])}
+                  <option value="#repos">{repoList.length ? `Repositories: ${repoList.map(repoLabel).join(', ')}` : 'Repositories…'}</option>
                 </select>
-                <select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
-                  <option value="waiting">Waiting longest</option>
-                  <option value="free">Least busy</option>
-                  <option value="name">Name</option>
-                </select>
+                {teamView === 'repos' ? (
+                  <button onClick={() => setPickRepos(!pickRepos)} aria-expanded={pickRepos}>Choose…</button>
+                ) : (
+                  <select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
+                    <option value="waiting">Waiting longest</option>
+                    <option value="free">Least busy</option>
+                    <option value="name">Name</option>
+                  </select>
+                )}
               </div>
+              {teamView === 'repos' && pickRepos && <RepoPicker picked={repoList} onChange={(l) => setTeamRepos(l.join(','))} />}
               {teamErr && <p class="error">{teamErr}</p>}
-              {team && !teamData && !teamErr && <ListSkeleton rows={4} />}
-              {teamData?.team === team && section(teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamItems)}
+              {(teamView === 'repos' ? repoList.length > 0 : !!team) && teamData?.team !== view && !teamErr && <ListSkeleton rows={4} />}
+              {teamData?.team === view && section(teamView === 'repos' ? repoKind(repoList) : teamKind(teamData.members, teamData.load, teamData.items, teamSort as TeamSort), teamItems)}
             </>
           )}
         </>

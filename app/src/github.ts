@@ -526,6 +526,7 @@ export async function getTeamMembers(team: string): Promise<string[]> {
 // name, for a review (drafts aside).
 export type Busy = Record<string, string>;
 export async function getTeamPRs(team: string): Promise<{ members: string[]; items: QueueItem[]; load: Record<string, number> }> {
+  if (team.startsWith('repos:')) return { members: [], items: await getRepoPRs(team.slice(6).split(',').filter(Boolean)), load: {} };
   if (isLab(team)) return lab.getLabTeamPRs(team);
   const org = team.split('/')[0];
   const members = await getTeamMembers(team);
@@ -555,6 +556,25 @@ export async function getTeamPRs(team: string): Promise<{ members: string[]; ite
   const load = Object.fromEntries(members.map((m, k) => [m, d[`r${k}`].issueCount as number]));
   return { members, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), load };
 }
+// The open PRs of these repos (the Team tab's Repositories), newest activity first: GitHub's in one search (found by id,
+// then read 15 a query, as the list does), GitLab's per project.
+export async function getRepoPRs(repos: string[]): Promise<QueueItem[]> {
+  const hub = repos.filter((r) => !isLab(r));
+  const labs = repos.filter((r) => isLab(r));
+  const ids: string[] = [];
+  if (hub.length) {
+    const q = `is:open is:pr archived:false ${hub.map((r) => 'repo:' + r).join(' ')}`;
+    for (let after: string | null = null, k = 0; k < 10; k++) {
+      const d: any = await graphql(`query RepoPRs($q:String!,$a:String){s:search(query:$q,type:ISSUE,first:100,after:$a){pageInfo{hasNextPage endCursor} nodes{...on PullRequest{id}}}}`, { q, a: after });
+      ids.push(...d.s.nodes.map((n: any) => n.id).filter(Boolean));
+      if (!d.s.pageInfo.hasNextPage) break;
+      after = d.s.pageInfo.endCursor;
+    }
+  }
+  const items = [...(ids.length ? (await readPRs(ids, 'RepoPRs')).map(toItem) : []), ...(labs.length ? await lab.getLabRepoMRs(labs) : [])];
+  return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 // GitHub statuses set to busy (aliased u0, u1… in `d`, in the order of `logins`): their messages.
 const busyOf = (d: any, logins: string[]): Busy =>
   Object.fromEntries(logins.flatMap((login, k) => (d[`u${k}`]?.status?.indicatesLimitedAvailability ? [[login, d[`u${k}`].status.message || 'busy']] : [])));
@@ -846,7 +866,7 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
   const fit = (p: { login: string }) => !skip.has(p.login) && !p.login.endsWith('[bot]');
   let people: { login: string; why: string; knows?: number }[] = [...count].sort((a, b) => b[1] - a[1]).map(([login, k]) => ({ login, why: `reviewed ${k} of the last 40 PRs here` })).filter(fit);
   if (only) people = only.filter((login) => fit({ login })).map((login) => people.find((p) => p.login === login) ?? { login, why: 'in the team asked' });
-  else if (!people.length && team && isLab(team) === isLab(repo)) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${isLab(team) ? team.slice(team.lastIndexOf('/') + 1) : team.split('/')[1]}` })).filter(fit);
+  else if (!people.length && team && !team.startsWith('repos:') && isLab(team) === isLab(repo)) people = (await getTeamMembers(team)).map((login) => ({ login, why: `in ${isLab(team) ? team.slice(team.lastIndexOf('/') + 1) : team.split('/')[1]}` })).filter(fit);
   // Whoever wrote a real share (10%+) of the code being changed: named for it, and in the list even if they don't review here.
   for (const k of knows.filter((k) => k.share >= 0.1 && fit(k) && (!only || only.includes(k.login)))) {
     const said = `wrote ${Math.round(k.share * 100)}% of the code this PR changes, most in ${k.file.split('/').pop()}`;

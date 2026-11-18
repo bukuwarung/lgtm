@@ -63,6 +63,8 @@ export function knowRepos(full: string[]) {
     owners.set(f.slice(i + 1), (owners.get(f.slice(i + 1)) ?? new Set()).add(f.slice(0, i)));
   }
 }
+// The repos lgtm has seen this run (the lists, recently viewed), owner/name or GitLab's host/path.
+export const knownRepos = () => [...owners].flatMap(([name, set]) => [...set].map((o) => `${o}/${name}`)).sort();
 // GitLab's repos are "host/group/…/project": the name is the last part.
 export const repoLabel = (full: string) => ((owners.get(full.slice(full.lastIndexOf('/') + 1))?.size ?? 0) > 1 ? full : full.slice(full.lastIndexOf('/') + 1) || full);
 
