@@ -18,6 +18,7 @@ export type PR = {
   assignees: { login: string; type: string }[];
   requested_reviewers?: { login: string; type?: string }[];
   requested_teams?: { slug: string }[];
+  labels?: { name: string; color?: string; description?: string | null }[];
   head: { sha: string; ref: string; repo: { full_name: string; owner: { login: string } } | null };
   base: { ref: string; sha: string };
   draft?: boolean;
@@ -1850,14 +1851,15 @@ export async function unnamedGroup(repo: string, n: number, pr: Pick<PR, 'reques
 // Reopen only while its branch is there: neither forge reopens one without it.
 // restore: closed, its branch deleted, and you may push here: the branch can be made again at its last commit, then reopened.
 // updateBranch: behind its base and you may bring it up to date (GitHub merges the base in; GitLab rebases: `rebase`).
-export type PrRights = { close: boolean; reopen: boolean; restore: boolean; updateBranch: boolean; rebase: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string; headSha: string };
+// label: may add and remove its labels (triage and up; GitLab's update right).
+export type PrRights = { close: boolean; reopen: boolean; restore: boolean; updateBranch: boolean; rebase: boolean; label: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string; headSha: string };
 export async function prRights(repo: string, n: number): Promise<PrRights> {
   if (isLab(repo)) return lab.labPrRights(repo, n);
   const [o, r] = repo.split('/');
   const d = (await graphql(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){viewerPermission pullRequest(number:$n){viewerCanClose viewerCanReopen viewerCanUpdate viewerCanUpdateBranch isCrossRepository headRefName headRefOid headRef{id}}}}`, { o, r, n })).repository;
   const p = d?.pullRequest;
   const push = ['WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission);
-  return { close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, restore: !!p?.viewerCanReopen && !p.headRef && !p.isCrossRepository && push, updateBranch: !!p?.viewerCanUpdateBranch, rebase: false, update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '', headSha: p?.headRefOid ?? '' };
+  return { close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, restore: !!p?.viewerCanReopen && !p.headRef && !p.isCrossRepository && push, updateBranch: !!p?.viewerCanUpdateBranch, rebase: false, label: ['TRIAGE', 'WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission), update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '', headSha: p?.headRefOid ?? '' };
 }
 // Its branch again, at the commit the PR last had (both forges keep it), so it can be reopened.
 export const restoreBranch = (repo: string, r: PrRights) =>
@@ -1867,6 +1869,25 @@ export async function closeWithReason(repo: string, n: number, why: string) {
   if (why) await commentOnPR(repo, n, why);
   await closePR(repo, n);
 }
+// The repo's labels (the index's Labels: + Add), kept an hour.
+export type Label = { name: string; color?: string; description?: string | null };
+export const repoLabels = (repo: string): Promise<Label[]> =>
+  kept<Label[]>(`labels:${repo}`, () => (isLab(repo) ? lab.labLabels(repo) : paginate<Label>(`/repos/${repo}/labels?per_page=100`).then((l) => l.map(({ name, color, description }) => ({ name, color, description })))), 3_600_000);
+export const setLabel = (repo: string, n: number, name: string, on: boolean) =>
+  isLab(repo)
+    ? lab.setLabLabel(repo, n, name, on)
+    : on
+      ? json(`/repos/${repo}/issues/${n}/labels`, { method: 'POST', body: JSON.stringify({ labels: [name] }) })
+      : json(`/repos/${repo}/issues/${n}/labels/${encodeURIComponent(name)}`, { method: 'DELETE' });
+// Another base for the PR (Change base…): its branches, the latest first, by name.
+export async function searchBranches(repo: string, q: string): Promise<string[]> {
+  if (isLab(repo)) return lab.searchLabBranches(repo, q);
+  const [o, r] = repo.split('/');
+  const d = await graphql(`query($o:String!,$r:String!,$q:String){repository(owner:$o,name:$r){refs(refPrefix:"refs/heads/",query:$q,first:30,orderBy:{field:TAG_COMMIT_DATE,direction:DESC}){nodes{name}}}}`, { o, r, q: q || null });
+  return d.repository.refs.nodes.map((x: { name: string }) => x.name);
+}
+export const changeBase = (repo: string, n: number, base: string) =>
+  isLab(repo) ? lab.changeLabBase(repo, n, base) : json(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify({ base }) });
 export const reopenPR = (repo: string, n: number) => (isLab(repo) ? lab.reopenLab(repo, n) : json(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify({ state: 'open' }) }));
 export const convertToDraft = (id: string) =>
   isLabId(id) ? lab.markLabDraft(id) : graphql(`mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){clientMutationId}}`, { id });

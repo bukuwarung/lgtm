@@ -6,7 +6,7 @@ import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './ta
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { repoLabels, setLabel, type Label, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -75,6 +75,51 @@ const base = fileLabel; // a file's name as shown: unique among the PR's (files.
 
 // A review's verdict: its tag icon (tags.tsx) and words.
 const VERDICT: Record<string, [string, string]> = { APPROVED: ['approved', 'approved'], CHANGES_REQUESTED: ['changes', 'changes requested'], COMMENTED: ['reply', 'reviewed'], DISMISSED: ['', 'dismissed'] };
+
+// The PR's labels: × takes one off, + Add puts one of the repo's on (when you may); typing narrows the list.
+function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels: Label[]; canEdit: boolean }) {
+  const [on, setOn] = useState(labels);
+  useEffect(() => setOn(labels), [labels.map((l) => l.name).join('\n')]);
+  const [all, setAll] = useState<Label[] | null>(null);
+  const [q, setQ] = useState('');
+  const [err, setErr] = useState('');
+  const flip = (l: Label, add: boolean) => {
+    setErr('');
+    setOn((x) => (add ? [...x, l] : x.filter((y) => y.name !== l.name)));
+    setLabel(repo, n, l.name, add).then(
+      () => dispatchEvent(new Event('lgtm:refresh')),
+      (e) => (setErr(e.message), setOn((x) => (add ? x.filter((y) => y.name !== l.name) : [...x, l]))),
+    );
+  };
+  const chip = (l: Label) => ({ '--lc': l.color ? '#' + l.color : 'var(--muted)' }) as preact.JSX.CSSProperties;
+  const left = (all ?? []).filter((l) => !on.some((x) => x.name === l.name) && (!q || l.name.toLowerCase().includes(q.toLowerCase())));
+  return (
+    <Section id="ix-labels" title="Labels" count={on.length}>
+      <div class="ix-labels">
+        {on.map((l) => (
+          <span class="label-chip" style={chip(l)} title={l.description || l.name}>
+            {l.name}
+            {canEdit && <button class="label-x" aria-label={`Remove ${l.name}`} title={`Remove ${l.name}`} onClick={() => flip(l, false)}>×</button>}
+          </span>
+        ))}
+        {!on.length && <span class="note">None.</span>}
+      </div>
+      {canEdit && (
+        <details class="ix-ckgroup" onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && !all && repoLabels(repo).then(setAll, (x) => setErr(x.message))}>
+          <summary>+ Add a label</summary>
+          <input class="label-find" type="search" placeholder="Find a label…" aria-label="Find a label" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && left[0] && (setQ(''), flip(left[0], true))} />
+          {all == null ? <p class="note ix-pad">Loading…</p> : left.slice(0, 30).map((l) => (
+            <button class="ix-item" title={l.description || undefined} onClick={() => (setQ(''), flip(l, true))}>
+              <span class="ix-label"><span class="label-dot" style={chip(l)} /> {l.name}</span>
+            </button>
+          ))}
+          {all != null && !left.length && <p class="note ix-pad">{q ? 'No label matches.' : 'Every label is on.'}</p>}
+        </details>
+      )}
+      {err && <p class="warn ix-pad">{err}</p>}
+    </Section>
+  );
+}
 
 function Section({ id, title, count, extra, children }: { id?: string; title: string; count: number; extra?: ComponentChildren; children: ComponentChildren }) {
   return (
@@ -358,6 +403,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
 
 type IndexProps = {
   repo: string;
+  canLabel?: boolean; // may add and remove its labels (github.ts prRights)
   hidden?: { label: string; show: () => void }[]; // files waiting behind a row in the diff (generated, archived…)
   checksErr?: string; // the checks didn't load
   pr: PR;
@@ -387,7 +433,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -505,6 +551,8 @@ export function ShortcutIndex({ checksErr, hidden = [], repo, pr, conversation, 
         {!ask && !reviewers.size && <p class="note ix-pad">Nobody yet.</p>}
         {addMe && !reviewers.has(me) && <AddMe add={addMe} />}
       </Section>
+
+      {(canLabel || !!pr.labels?.length) && <Labels repo={repo} n={pr.number} labels={pr.labels ?? []} canEdit={canLabel} />}
 
       <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />

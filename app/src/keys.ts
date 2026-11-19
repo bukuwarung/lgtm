@@ -27,6 +27,8 @@ export const ACTIONS = [
   ['browse', words('Browse: switch to a team, repository or person'), 'B'],
   ['prActions', words('PR actions: close, reopen, convert to draft'), 'X'],
   ['askQa', words('Ask QA on Slack (your PR, from the ⋯ menu)'), 'q'],
+  ['ready', words('Ready for review (a draft you may change)'), 'R'],
+  ['changeBase', words('Change the base branch'), 'b'],
   ['updateBranch', words("Update the branch with its base (when it's behind)"), 'U'],
   ['agentDraft', words("Next agent draft you haven't looked at (on it: ↵ keep, e edit, ⌫ drop)"), 'r'],
   ['nextPR', words('Next PR in the list'), 'J'],

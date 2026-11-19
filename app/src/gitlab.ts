@@ -185,7 +185,7 @@ export async function labPeople(keys: string[]): Promise<Record<string, { name: 
 const MR = `detailedMergeStatus id iid title description descriptionHtml webUrl updatedAt createdAt draft state mergedAt closedAt mergeUser{username}
   author{username avatarUrl bot} assignees{nodes{username bot}} reviewers{nodes{username avatarUrl bot mergeRequestInteraction{reviewState}}}
   sourceBranch targetBranch sourceProject{fullPath} targetProject{fullPath} diffHeadSha diffRefs{baseSha headSha startSha}
-  diffStatsSummary{additions deletions fileCount} labels{nodes{title}} approved`;
+  diffStatsSummary{additions deletions fileCount} labels{nodes{title color description}} approved`;
 const WAITING = ['UNREVIEWED', 'REVIEW_STARTED', 'UNAPPROVED'];
 const prOf = (host: string, m: any): PR => ({
   number: Number(m.iid),
@@ -199,6 +199,7 @@ const prOf = (host: string, m: any): PR => ({
   assignees: m.assignees.nodes.map((u: User) => person(host, u)),
   requested_reviewers: m.reviewers.nodes.filter((r: any) => WAITING.includes(r.mergeRequestInteraction?.reviewState ?? 'UNREVIEWED')).map((u: User) => person(host, u)),
   requested_teams: [],
+  labels: (m.labels?.nodes ?? []).map((l: any) => ({ name: l.title, color: (l.color ?? '').replace('#', ''), description: l.description })),
   head: { sha: m.diffHeadSha ?? m.diffRefs?.headSha, ref: m.sourceBranch, repo: m.sourceProject ? { full_name: `${host}/${m.sourceProject.fullPath}`, owner: { login: m.sourceProject.fullPath.split('/')[0] } } : null },
   base: { ref: m.targetBranch, sha: m.diffRefs?.baseSha ?? '' },
   draft: m.draft,
@@ -475,12 +476,20 @@ export const markLabDraft = (id: string) => {
   return mutate(split(repo).host, `mutation($p:ID!,$i:String!){mergeRequestSetDraft(input:{projectPath:$p,iid:$i,draft:true}){errors}}`, { p: split(repo).path, i: String(n) });
 };
 export const restoreLabBranch = (repo: string, name: string, sha: string) => send(split(repo).host, `/projects/${pid(repo)}/repository/branches?branch=${encodeURIComponent(name)}&ref=${sha}`, 'POST');
+export const labLabels = async (repo: string) =>
+  (await pages<any>(split(repo).host, `/projects/${pid(repo)}/labels?per_page=100&include_ancestor_groups=true`)).map((l) => ({ name: l.name as string, color: (l.color ?? '').replace('#', ''), description: l.description }));
+export const setLabLabel = (repo: string, n: number, name: string, on: boolean) => (forget(repo, n), send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', on ? { add_labels: name } : { remove_labels: name }));
+export const searchLabBranches = async (repo: string, q: string) =>
+  ((await (await lab(split(repo).host, `/projects/${pid(repo)}/repository/branches?per_page=30${q ? `&search=${encodeURIComponent(q)}` : ''}`)).json()) as { name: string; commit?: { committed_date?: string } }[])
+    .sort((a, b) => (b.commit?.committed_date ?? '').localeCompare(a.commit?.committed_date ?? ''))
+    .map((b) => b.name);
+export const changeLabBase = (repo: string, n: number, base: string) => (forget(repo, n), send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', { target_branch: base }));
 export const reopenLab = (repo: string, n: number) => send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', { state_event: 'reopen' });
 // What you may do to an MR (github.ts prRights): GitLab's update right covers closing, reopening and drafts.
 export async function labPrRights(repo: string, n: number) {
   const m = await getMR(repo, n, 'state sourceBranch sourceBranchExists sourceProjectId targetProjectId diffHeadSha detailedMergeStatus userPermissions{updateMergeRequest pushToSourceBranch}');
   const update = !!m.userPermissions?.updateMergeRequest;
-  return { close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, restore: update && m.state === 'closed' && !m.sourceBranchExists && m.sourceProjectId === m.targetProjectId && !!m.diffHeadSha, updateBranch: m.state === 'opened' && !!m.userPermissions?.pushToSourceBranch && m.detailedMergeStatus === 'NEED_REBASE', rebase: true, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string, headSha: (m.diffHeadSha ?? '') as string };
+  return { close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, restore: update && m.state === 'closed' && !m.sourceBranchExists && m.sourceProjectId === m.targetProjectId && !!m.diffHeadSha, label: update, updateBranch: m.state === 'opened' && !!m.userPermissions?.pushToSourceBranch && m.detailedMergeStatus === 'NEED_REBASE', rebase: true, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string, headSha: (m.diffHeadSha ?? '') as string };
 }
 export const markLabReady = (id: string) => {
   const { repo, n } = mrOf(id);

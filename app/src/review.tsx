@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -371,19 +371,73 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
 
 // A pill that says what it counts: a click opens the list behind it (what each item is, in a line on top), each one a
 // link or a jump; a click elsewhere, or Esc, closes it.
-type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore' | 'update';
+type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore' | 'update' | 'ready' | 'base';
 function StateActs({ rights, draft, acting, act }: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void }) {
   const b = (a: StateAct, label: string, busy: string, title: string): preact.JSX.Element => <button disabled={!!acting} title={title} onClick={() => act(a)}>{acting === a ? busy : label}</button>;
   const t = pageTerm().PR;
   return (
     <>
+      {draft && rights.update && rights.close && b('ready', 'Ready for review', 'Marking…', 'Mark it ready: reviewers are notified')}
       {rights.updateBranch && (rights.rebase ? b('update', 'Rebase', 'Rebasing…', 'Rebase it onto its target branch, which has moved on') : b('update', 'Update branch', 'Updating…', 'Merge its base branch in: it has moved on'))}
       {rights.close && !draft && rights.update && b('draft', 'Convert to draft', 'Converting…', `Keep it open, but not asking for review until it's marked ready`)}
+      {rights.close && rights.update && b('base', 'Change base…', 'Changing…', `Point it at another branch: its diff becomes what's not on that one`)}
       {rights.close && b('close', 'Close', 'Closing…', `Close without merging; it can be reopened`)}
       {rights.close && rights.branch && b('closeBranch', 'Close and delete branch', 'Closing…', `Close without merging and delete ${rights.headRefName}, unless another open ${t} builds on it`)}
       {rights.reopen && b('reopen', 'Reopen', 'Reopening…', `Open it again for review`)}
       {rights.restore && b('restore', 'Restore branch and reopen', 'Reopening…', `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`)}
     </>
+  );
+}
+
+// Change base…: the repo's branches, the latest first, searched as you type (github.ts searchBranches); picking one
+// points the PR at it and reloads (its diff is now what that branch doesn't have).
+function BaseDialog({ repo, n, base, head, onClose }: { repo: string; n: number; base: string; head: string; onClose: () => void }) {
+  const box = useRef<HTMLDialogElement>(null);
+  const [q, setQ] = useState('');
+  const [list, setList] = useState<string[] | null>(null);
+  const [at, setAt] = useState(0);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  useEffect(() => void box.current?.showModal(), []);
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(() => searchBranches(repo, q.trim()).then((l) => live && (setList(l.filter((b) => b !== base && b !== head)), setAt(0)), (e) => live && setErr(e.message)), q ? 250 : 0);
+    return () => ((live = false), clearTimeout(t));
+  }, [q]);
+  const pick = (b: string) => {
+    setBusy(b);
+    setErr('');
+    changeBase(repo, n, b).then(
+      () => (box.current?.close(), dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Its base is ${b} now.` } })), dispatchEvent(new Event('lgtm:refresh'))),
+      (e) => (setErr(e.message), setBusy('')),
+    );
+  };
+  return (
+    <dialog ref={box} class="ask base-dialog" onClose={onClose} onClick={(e) => e.target === box.current && box.current?.close()}>
+      <p>
+        <b>Change base</b> from <code>{base}</code> to:
+      </p>
+      <input
+        type="search"
+        autoFocus
+        value={q}
+        placeholder="Find a branch…"
+        aria-label="Find a branch"
+        onInput={(e) => setQ(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') (e.preventDefault(), setAt((a) => (list?.length ? (a + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length : 0)));
+          else if (e.key === 'Enter' && list?.[at] && !busy) (e.preventDefault(), pick(list[at]));
+        }}
+      />
+      <div class="base-list" role="listbox">
+        {list == null ? <p class="note">Loading…</p> : !list.length ? <p class="note">No branch matches.</p> : list.map((b, k) => (
+          <button role="option" aria-selected={k === at} class={k === at ? 'on' : ''} disabled={!!busy} onMouseEnter={() => setAt(k)} onClick={() => pick(b)} ref={(el) => void (k === at && el?.scrollIntoView({ block: 'nearest' }))}>
+            {busy === b ? 'Changing…' : b}
+          </button>
+        ))}
+      </div>
+      {err && <p class="warn">{err}</p>}
+    </dialog>
   );
 }
 
@@ -761,12 +815,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // the ⋯ menu; a PR quiet for 30 days or more has them up front, in a banner.
   const [rights, setRights] = useState<PrRights | null>(null);
   const [acting, setActing] = useState<StateAct | null>(null);
+  const [basePick, setBasePick] = useState(false); // Change base…: its dialog open
   useEffect(() => {
     setRights(null);
     if (data && !data.pr.merged) prRights(repo, n).then(setRights, () => {});
   }, [repo, n, data?.pr.state, data?.pr.draft, data?.pr.merged, data?.pr.head.sha]); // a push: up to date again, or not
   const stateAct = async (a: StateAct) => {
     if (!data || !rights) return;
+    if (a === 'base') return setBasePick(true); // its dialog (BaseDialog) does the rest
     const t = pageTerm().PR;
     const [q, yes] = {
       close: [`Close this ${t} without merging? It can be reopened later.`, 'Close'],
@@ -775,13 +831,16 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       reopen: [`Reopen this ${t}?`, 'Reopen'],
       restore: [`Make ${rights.headRefName} again at this ${t}'s last commit, and reopen it?`, 'Restore and reopen'],
       update: ['', rights.rebase ? 'Rebase' : 'Update branch'], // as on GitHub, no question: it only adds the base's commits
+      ready: ['', 'Ready for review'],
+      base: ['', ''],
     }[a];
     // Closing asks why (optional): a comment on the PR, and the review thread hears it.
-    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE) : a === 'update' || (await ask(q, yes)) ? { text: '' } : null;
+    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE) : a === 'update' || a === 'ready' || (await ask(q, yes)) ? { text: '' } : null;
     if (!said) return;
     setActing(a);
     try {
       if (a === 'draft') await convertToDraft(data.pr.node_id);
+      else if (a === 'ready') await markReady(data.pr.node_id).then(() => void ticketsToReview(jiraKeys(data.pr.title, data.pr.head.ref))); // as the Merge panel's does
       else if (a === 'update') await updateBranchAndWait(repo, n, { id: data.pr.node_id, headRefOid: data.pr.head.sha }); // "Updating…" until the new head is there
       else if (a === 'reopen') await reopenPR(repo, n);
       else if (a === 'restore') await restoreBranch(repo, rights).then(() => reopenPR(repo, n));
@@ -1746,6 +1805,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       browse: () => dispatchEvent(new Event('lgtm:browse')), // main.tsx: the Browse tab, its switcher open
       prActions: () => dispatchEvent(new Event('lgtm:pr-acts')), // StateMenu opens
       askQa: () => (askQa ? dispatchEvent(new Event('lgtm:ask-qa')) : setNotice({ ok: true, text: mine ? 'QA is asked already, or no QA channel is set (Settings → Slack).' : 'Ask QA is for your own PRs.' })),
+      ready: () => (pr.draft && rights?.update && rights.close ? void stateAct('ready') : setNotice({ ok: true, text: pr.draft ? "You can't change this one." : "It's not a draft." })),
+      changeBase: () => (rights?.update && rights.close ? setBasePick(true) : setNotice({ ok: true, text: "You can't change this one's base." })),
       updateBranch: () => (rights?.updateBranch ? void stateAct('update') : setNotice({ ok: true, text: `Nothing to update: it's up to date with ${pr.base.ref}, or you can't push to it.` })),
       agentDraft: () => dispatchEvent(new Event('lgtm:agent-next')), // Review: the next agent draft not looked at
       nextPR: () => stepPR(1),
@@ -1807,6 +1868,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <aside class={`side tree${showIndex ? '' : ' collapsed'}${narrowIx && showIndex ? ' over' : ''}`} aria-hidden={!showIndex} onClick={(e) => narrowIx && (e.target as Element).closest('.ix-item, .tree-file, .ix-hidden-row') && setIxOver(false)}>
           <div class="side-scroll">
             <ShortcutIndex
+              canLabel={!!rights?.label}
               checksErr={checksErr}
               hidden={hiddenRows}
               repo={repo}
@@ -1914,6 +1976,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
             {askQa && <AskQA inMenu pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
+            {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
             {(askQa || (rights && (rights.close || rights.reopen || rights.restore || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
           </div>
@@ -1968,6 +2031,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           ) : pr.draft ? (
             <p class="pr-state draft">
               <Octicon name="git-pull-request-draft" size={16} /> <span><b>Draft.</b> {me && pr.user.login === me ? "Reviewers aren't notified until you mark it ready for review." : "The author hasn't asked for review yet: it may still change."}</span>
+              {rights?.update && rights.close && (
+                <button class="pr-state-act" disabled={!!acting} title={`Mark it ready: reviewers are notified${hint(bindings.ready)}`} onClick={() => void stateAct('ready')}>
+                  {acting === 'ready' ? 'Marking…' : 'Ready for review'}
+                </button>
+              )}
             </p>
           ) : null}
           <div class="pills pr-status">

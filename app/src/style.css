@@ -669,6 +669,16 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .pr-state.idle { color: var(--text); border-color: var(--warn, #d29922); background: var(--soft); }
 .pr-state.idle .pr-state-act { display: flex; gap: 6px; }
 .agent-draft { border-radius: 6px; outline-offset: 4px; }
+.ix-labels { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 14px 6px; }
+.label-chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 8px; font-size: calc(11px * var(--ts)); line-height: 18px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--lc) 60%, transparent); background: color-mix(in srgb, var(--lc) 18%, transparent); }
+.label-x { padding: 0 0 0 2px; border: 0; background: none; color: var(--muted); cursor: pointer; line-height: 1; }
+.label-x:hover { color: var(--fg); }
+.label-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--lc); vertical-align: -1px; }
+.label-find { width: calc(100% - 28px); margin: 4px 14px; }
+dialog.base-dialog input { width: 100%; box-sizing: border-box; }
+.base-list { display: flex; flex-direction: column; max-height: 300px; overflow: auto; margin-top: 8px; }
+.base-list button { flex: none; text-align: left; padding: 6px 8px; border: 0; border-radius: 6px; background: none; font-family: var(--mono, monospace); }
+.base-list button.on { background: var(--soft); }
 .agent-draft:focus { outline: 2px solid var(--accent); }
 .agent-draft .row .note { align-self: center; color: var(--muted); }
 .merge-close { margin-left: auto; }
