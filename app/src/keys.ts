@@ -26,6 +26,7 @@ export const ACTIONS = [
   ['finish', words('Open Finish review (Comment, on your own PRs)'), 'f'],
   ['browse', words('Browse: switch to a team, repository or person'), 'B'],
   ['prActions', words('PR actions: close, reopen, convert to draft'), 'X'],
+  ['updateBranch', words("Update the branch with its base (when it's behind)"), 'U'],
   ['agentDraft', words("Next agent draft you haven't looked at (on it: ↵ keep, e edit, ⌫ drop)"), 'r'],
   ['nextPR', words('Next PR in the list'), 'J'],
   ['prevPR', words('Previous PR in the list'), 'K'],

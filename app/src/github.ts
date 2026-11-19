@@ -1849,14 +1849,15 @@ export async function unnamedGroup(repo: string, n: number, pr: Pick<PR, 'reques
 // What you may do to a PR (the PR page's Close / Reopen / Convert to draft): GitHub's own say for your account.
 // Reopen only while its branch is there: neither forge reopens one without it.
 // restore: closed, its branch deleted, and you may push here: the branch can be made again at its last commit, then reopened.
-export type PrRights = { close: boolean; reopen: boolean; restore: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string; headSha: string };
+// updateBranch: behind its base and you may bring it up to date (GitHub merges the base in; GitLab rebases: `rebase`).
+export type PrRights = { close: boolean; reopen: boolean; restore: boolean; updateBranch: boolean; rebase: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string; headSha: string };
 export async function prRights(repo: string, n: number): Promise<PrRights> {
   if (isLab(repo)) return lab.labPrRights(repo, n);
   const [o, r] = repo.split('/');
-  const d = (await graphql(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){viewerPermission pullRequest(number:$n){viewerCanClose viewerCanReopen viewerCanUpdate isCrossRepository headRefName headRefOid headRef{id}}}}`, { o, r, n })).repository;
+  const d = (await graphql(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){viewerPermission pullRequest(number:$n){viewerCanClose viewerCanReopen viewerCanUpdate viewerCanUpdateBranch isCrossRepository headRefName headRefOid headRef{id}}}}`, { o, r, n })).repository;
   const p = d?.pullRequest;
   const push = ['WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission);
-  return { close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, restore: !!p?.viewerCanReopen && !p.headRef && !p.isCrossRepository && push, update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '', headSha: p?.headRefOid ?? '' };
+  return { close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, restore: !!p?.viewerCanReopen && !p.headRef && !p.isCrossRepository && push, updateBranch: !!p?.viewerCanUpdateBranch, rebase: false, update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '', headSha: p?.headRefOid ?? '' };
 }
 // Its branch again, at the commit the PR last had (both forges keep it), so it can be reopened.
 export const restoreBranch = (repo: string, r: PrRights) =>

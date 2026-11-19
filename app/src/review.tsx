@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranch } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -362,12 +362,13 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
 
 // A pill that says what it counts: a click opens the list behind it (what each item is, in a line on top), each one a
 // link or a jump; a click elsewhere, or Esc, closes it.
-type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore';
+type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore' | 'update';
 function StateActs({ rights, draft, acting, act }: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void }) {
-  const b = (a: StateAct, label: string, busy: string, title: string) => <button disabled={!!acting} title={title} onClick={() => act(a)}>{acting === a ? busy : label}</button>;
+  const b = (a: StateAct, label: string, busy: string, title: string): preact.JSX.Element => <button disabled={!!acting} title={title} onClick={() => act(a)}>{acting === a ? busy : label}</button>;
   const t = pageTerm().PR;
   return (
     <>
+      {rights.updateBranch && (rights.rebase ? b('update', 'Rebase', 'Rebasing…', 'Rebase it onto its target branch, which has moved on') : b('update', 'Update branch', 'Updating…', 'Merge its base branch in: it has moved on'))}
       {rights.close && !draft && rights.update && b('draft', 'Convert to draft', 'Converting…', `Keep it open, but not asking for review until it's marked ready`)}
       {rights.close && b('close', 'Close', 'Closing…', `Close without merging; it can be reopened`)}
       {rights.close && rights.branch && b('closeBranch', 'Close and delete branch', 'Closing…', `Close without merging and delete ${rights.headRefName}, unless another open ${t} builds on it`)}
@@ -753,7 +754,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => {
     setRights(null);
     if (data && !data.pr.merged) prRights(repo, n).then(setRights, () => {});
-  }, [repo, n, data?.pr.state, data?.pr.draft, data?.pr.merged]);
+  }, [repo, n, data?.pr.state, data?.pr.draft, data?.pr.merged, data?.pr.head.sha]); // a push: up to date again, or not
   const stateAct = async (a: StateAct) => {
     if (!data || !rights) return;
     const t = pageTerm().PR;
@@ -763,13 +764,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       draft: [`Convert this ${t} to a draft? It stays open; it's marked ready again when it's worth reviewing.`, 'Convert to draft'],
       reopen: [`Reopen this ${t}?`, 'Reopen'],
       restore: [`Make ${rights.headRefName} again at this ${t}'s last commit, and reopen it?`, 'Restore and reopen'],
+      update: ['', rights.rebase ? 'Rebase' : 'Update branch'], // as on GitHub, no question: it only adds the base's commits
     }[a];
     // Closing asks why (optional): a comment on the PR, and the review thread hears it.
-    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE) : (await ask(q, yes)) && { text: '' };
+    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE) : a === 'update' || (await ask(q, yes)) ? { text: '' } : null;
     if (!said) return;
     setActing(a);
     try {
       if (a === 'draft') await convertToDraft(data.pr.node_id);
+      else if (a === 'update') await updateBranch({ id: data.pr.node_id, headRefOid: data.pr.head.sha });
       else if (a === 'reopen') await reopenPR(repo, n);
       else if (a === 'restore') await restoreBranch(repo, rights).then(() => reopenPR(repo, n));
       else {
@@ -1731,6 +1734,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       // The next or previous PR as the list shows it (its tab, groups and order), from the one open.
       browse: () => dispatchEvent(new Event('lgtm:browse')), // main.tsx: the Browse tab, its switcher open
       prActions: () => dispatchEvent(new Event('lgtm:pr-acts')), // StateMenu opens
+      updateBranch: () => (rights?.updateBranch ? void stateAct('update') : setNotice({ ok: true, text: `Nothing to update: it's up to date with ${pr.base.ref}, or you can't push to it.` })),
       agentDraft: () => dispatchEvent(new Event('lgtm:agent-next')), // Review: the next agent draft not looked at
       nextPR: () => stepPR(1),
       prevPR: () => stepPR(-1),
@@ -1898,7 +1902,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
             {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
-            {rights && (rights.close || rights.reopen || rights.restore) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} />}
+            {rights && (rights.close || rights.reopen || rights.restore || rights.updateBranch) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
           </div>
         </div>
@@ -1956,6 +1960,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           ) : null}
           <div class="pills pr-status">
             {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}><Tg i="again" t="updating…" /></span>}
+            {pr.state === 'open' && rights?.updateBranch && (
+              <span class="pill p-warn" title={`${pr.base.ref} has commits this branch doesn't${hint(bindings.updateBranch)}`}>
+                <Tg i={<Octicon name="arrow-down" />} t={`behind ${pr.base.ref}`} />{' '}
+                <button class="link" disabled={!!acting} onClick={() => void stateAct('update')}>{acting === 'update' ? (rights.rebase ? 'Rebasing…' : 'Updating…') : rights.rebase ? 'Rebase' : 'Update branch'}</button>
+              </span>
+            )}
             {status && !pr.draft && (
               <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] || '' }>
                 <Tg i={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
