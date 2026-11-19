@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -70,6 +70,7 @@ type Ctx = {
   checkBy?: AgentId;
   pending: boolean; // a review of mine is open on GitHub: comments join it, none post on their own
   editPending: (id: string, body: string | null) => Promise<void>; // one of its comments changed, or (null) deleted
+  restorePending: (d: Draft) => Promise<void>; // a dropped one put back (its Undo)
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
   me: string; // my login ('' until known)
   ignoreWs: boolean; // hide whitespace-only changes
@@ -826,7 +827,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [early, setEarly] = useState<PR | null>(null); // the PR, before its files (PRSkeleton shows its title)
   const threadCursor = useRef(-1);
   useEffect(() => seenClaudePR(repo, n), []); // for the list's "✳ updated"
-  const keys = useRef<(e: KeyboardEvent) => void>(() => {});
+  const keys = useRef<(e: KeyboardEvent, named?: Action) => void>(() => {});
   const [bindings] = useBindings();
   const key = `drafts:${repo}#${n}`;
 
@@ -847,8 +848,10 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keys.current(e);
+    const named = (e: Event) => keys.current(new KeyboardEvent('keydown'), (e as CustomEvent<Action>).detail); // palette.tsx
     addEventListener('keydown', onKey);
-    return () => removeEventListener('keydown', onKey);
+    addEventListener('lgtm:act', named);
+    return () => (removeEventListener('keydown', onKey), removeEventListener('lgtm:act', named));
   }, []);
 
   const [, setEmojiReady] = useState(false);
@@ -1450,6 +1453,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       setThreads(t);
       setPending(p);
     },
+    restorePending: async (d) => {
+      await postAgentFindings(repo, n, pr, [d], '', 'pending'); // into the pending review, as the agent put it
+      const [t, p] = await Promise.all([getThreads(repo, n), getPendingReview(repo, n)]);
+      setThreads(t);
+      setPending(p);
+    },
     since: since && !!sinceData,
     me,
     mainLang,
@@ -1664,7 +1673,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   }
 
   // Keyboard shortcuts (see the ⌨ help; rebindable in Settings). Reassigned every render so it sees current state.
-  keys.current = (e: KeyboardEvent) => {
+  // `named`: an action picked by name (⌘K, lgtm:act), not a key: none of a key's checks apply.
+  keys.current = (e: KeyboardEvent, named?: Action) => {
+    if (named) return run(named);
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') return setRenderAll(true); // then the browser's find opens
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       if ((e.target as Element).closest('textarea, input')) return; // forms handle their own ⌘↵
@@ -1673,6 +1684,16 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     }
     if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest('input, textarea, select, [contenteditable]')) return;
     if (e.key === ' ' && (e.target as Element).closest('button, a, summary, label')) return; // Space presses a focused control
+    // Shift with a letter is its capital (some keyboards report the letter as typed, with Shift held).
+    const k = e.key === '/' && e.shiftKey ? '?' : e.shiftKey && /^[a-z]$/.test(e.key) ? e.key.toUpperCase() : e.key;
+    if (k === 'Escape') return setHelp(false);
+    const a = ACTIONS.find(([a]) => bindings[a] === k)?.[0];
+    if (a) {
+      e.preventDefault();
+      run(a);
+    }
+  };
+  function run(a: Action) {
     const sections = [...document.querySelectorAll<HTMLElement>('main > .file')];
     const top = 46 + 44 + 60;
     const cur = sections.reduce((c, s, i) => (s.getBoundingClientRect().top <= top ? i : c), -1);
@@ -1739,15 +1760,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       threadCursor.current = i;
       jumpTo(ordered[i].id, 'f-' + ordered[i].path);
     }
-    // Shift with a letter is its capital (some keyboards report the letter as typed, with Shift held).
-    const k = e.key === '/' && e.shiftKey ? '?' : e.shiftKey && /^[a-z]$/.test(e.key) ? e.key.toUpperCase() : e.key;
-    if (k === 'Escape') return setHelp(false);
-    const a = ACTIONS.find(([a]) => bindings[a] === k)?.[0];
-    if (a) {
-      e.preventDefault();
-      act[a]();
-    }
-  };
+    act[a]();
+  }
 
   // The dependency pill: with the amber findings when a major jump or an unpinned version is marked, else with the info.
   const depsPill = deps.length > 0 && (
@@ -4474,7 +4488,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
           {c.state === 'PENDING' && c.id ? (
-            <PendingComment c={c} ctx={ctx} path={t.path} />
+            <PendingComment c={c} ctx={ctx} path={t.path} t={t} />
           ) : (
             <div class="md" data-lang={ctx.langFor(t.path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(t.path), languageFor(t.path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
           )}
@@ -4504,7 +4518,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
 }
 
 // A comment in my review in progress on GitHub: still mine to change or take out, as lgtm's own drafts.
-function PendingComment({ c, ctx, path }: { c: Thread['comments']['nodes'][number]; ctx: Ctx; path: string }) {
+function PendingComment({ c, ctx, path, t }: { c: Thread['comments']['nodes'][number]; ctx: Ctx; path: string; t: Thread }) {
   const [text, setText] = useState<string | null>(null); // being edited
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -4514,7 +4528,14 @@ function PendingComment({ c, ctx, path }: { c: Thread['comments']['nodes'][numbe
   const looked = agent && lookedDrafts().includes(c.id!);
   const next = () => dispatchEvent(new Event('lgtm:agent-next'));
   const save = (body: string) => run(body).then((ok) => ok && agent && markLooked(c.id!));
-  const drop = () => run(null).then((ok) => ok && next());
+  // Dropped without asking, so a few seconds to take it back: the same text, on the same lines.
+  const drop = () =>
+    run(null).then((ok) => {
+      if (!ok) return;
+      const d: Draft = { id: 'undo', path, side: t.diffSide, body: c.body ?? c.bodyText, ...(t.subjectType === 'LINE' && t.line ? { line: t.line, ...(t.startLine && t.startLine < t.line ? { startLine: t.startLine } : {}) } : {}) };
+      offerUndo('Agent draft dropped', () => ctx.restorePending(d).catch((e) => reportError(`Couldn't put it back: ${e.message}`)));
+      next();
+    });
   const onKey = (e: KeyboardEvent) => {
     if (e.target !== e.currentTarget || e.metaKey || e.ctrlKey || e.altKey || busy) return;
     const k = e.key === 'Enter' ? () => (markLooked(c.id!), next()) : e.key === 'e' ? () => setText(c.body ?? c.bodyText) : e.key === 'Delete' || e.key === 'Backspace' ? drop : null;
@@ -4544,7 +4565,7 @@ function PendingComment({ c, ctx, path }: { c: Thread['comments']['nodes'][numbe
       <div class="row">
         {agent && !looked && <button disabled={busy} onClick={() => markLooked(c.id!)} title="Keep it in your review (↵)">Keep</button>}
         <button disabled={busy} onClick={() => setText(c.body ?? c.bodyText)}>Edit</button>
-        <button disabled={busy} onClick={async () => (agent || (await ask(`Delete this comment from your review in progress on ${site(ctx.repo)}? Its text goes with it.`, 'Delete'))) && run(null)} title={agent ? 'Drop it from your review (⌫)' : undefined}>{agent ? 'Drop' : 'Delete'}</button>
+        <button disabled={busy} onClick={async () => (agent ? drop() : (await ask(`Delete this comment from your review in progress on ${site(ctx.repo)}? Its text goes with it.`, 'Delete')) && run(null))} title={agent ? 'Drop it from your review (⌫)' : undefined}>{agent ? 'Drop' : 'Delete'}</button>
         {looked && <span class="note">Kept</span>}
       </div>
       {err && <p class="error">{err}</p>}

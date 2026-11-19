@@ -450,10 +450,10 @@ export async function postLabAgentFindings(repo: string, n: number, drafts: Draf
     return x.line ? { ...where, position_type: 'text', ...(await linePosition(x, f?.patch)) } : { ...where, position_type: 'file' };
   };
   if (mode === 'pending') {
-    await send(host, `${base}/draft_notes`, 'POST', { note: summary });
+    if (summary) await send(host, `${base}/draft_notes`, 'POST', { note: summary }); // none for a draft put back (Undo)
     for (const x of drafts) await send(host, `${base}/draft_notes`, 'POST', { note: noteBody(x), position: await positionOf(x) });
   } else {
-    await send(host, `${base}/notes`, 'POST', { body: summary });
+    if (summary) await send(host, `${base}/notes`, 'POST', { body: summary });
     for (const x of drafts) await send(host, `${base}/discussions`, 'POST', { body: noteBody(x), position: await positionOf(x) });
   }
   forget(repo, n);

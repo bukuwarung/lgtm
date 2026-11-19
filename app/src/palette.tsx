@@ -5,6 +5,7 @@ import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
 import { faceOf, recentPRs, repoLabel, term, useRecentPRs } from './platform.ts';
 import { Octicon } from './tags.tsx';
+import { ACTIONS, keyLabel, readBindings } from './keys.ts';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
 const T = term();
@@ -39,7 +40,17 @@ function entries(queue: QueueItem[]): Entry[] {
     const path = el.id.slice(2);
     return { kind: 'File', label: fileLabel(path), sub: path, run: () => el.scrollIntoView() };
   });
-  return [...recent.slice(0, 8), ...files, ...index, ...recent.slice(8), ...prs]; // the latest few first, as a browser's box has them
+  // What the keys do, by name, each with its key (Settings → Shortcuts): on a PR all of them (review.tsx runs one picked
+  // here as its key would, lgtm:act); elsewhere Browse. Not the one that needs the mouse (usages).
+  const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
+  const onPR = !!document.querySelector('main > .file, .bar-actions');
+  const actions = ACTIONS.filter(([a]) => a !== 'usages' && (onPR || a === 'browse')).map(([a, label]) => ({
+    kind: 'Action',
+    label,
+    sub: keys[a] ? keyLabel(keys[a]) : '',
+    run: () => dispatchEvent(onPR ? new CustomEvent('lgtm:act', { detail: a }) : new Event('lgtm:browse')),
+  }));
+  return [...recent.slice(0, 8), ...files, ...index, ...recent.slice(8), ...prs, ...actions]; // the latest few first, as a browser's box has them
 }
 
 // Every word of the query, in any order, somewhere in the entry.
@@ -113,7 +124,7 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
       <input
         ref={input}
         value={q}
-        placeholder={here ? '' : `Go to a ${T.PR}, file or thread, or paste a ${T.PR} link`}
+        placeholder={here ? '' : `Go to a ${T.PR}, file or thread, do an action, or paste a ${T.PR} link`}
         aria-label={`Go to, or open a ${T.PR} link`}
         onFocus={open}
         onBlur={() => setTimeout(() => (setList(null), setQ((v) => (v === url ? '' : v))), 150)}

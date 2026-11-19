@@ -37,7 +37,7 @@ export type Bindings = Record<Action, string>;
 
 export const FIXED: [string, string][] = [
   ['⌘↵', 'Finish review (submit inside the panel)'],
-  ['⌘K', words('Go to a PR, file, thread or check')],
+  ['⌘K', words('Go to a PR, file, thread or check, or do any action here by name')],
   ['⌘F', 'Find, in every file'],
   ['Esc', 'Close this help'],
 ];
