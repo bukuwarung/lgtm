@@ -1899,6 +1899,13 @@ export const disableAutoMerge = (id: string) =>
   isLabId(id) ? lab.cancelLabAutoMerge(id) : graphql(`mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 export const updateBranch = (s: { id: string; headRefOid?: string }) =>
   isLabId(s.id) ? lab.rebaseLab(s.id) : graphql(`mutation($id:ID!,$oid:GitObjectID){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}`, { id: s.id, oid: s.headRefOid });
+// Then wait for the new head: GitHub (GitLab's rebase too) makes it a moment later; half a minute at most. So what
+// reloads after is the updated branch, its checks included.
+export async function updateBranchAndWait(repo: string, n: number, s: { id: string; headRefOid?: string }) {
+  await updateBranch(s);
+  const was = s.headRefOid;
+  for (let k = 0; was && k < 15 && (await getHead(repo, n).catch(() => was)) === was; k++) await new Promise((r) => setTimeout(r, 2000));
+}
 export const markReady = (id: string) =>
   isLabId(id) ? lab.markLabReady(id) : graphql(`mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}`, { id });
 
