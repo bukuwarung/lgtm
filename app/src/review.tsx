@@ -135,7 +135,8 @@ type Notice = { text: string; ok: boolean };
 // button goes. kind 'channel': the review request in the review channel instead (Settings → Slack), naming each reviewer
 // asked on the PR (so it's someone's, not the channel's); it needs some.
 let jiraSite: Promise<string | undefined> | undefined;
-function AskQA({ pr, repo, n, onPosted, kind = 'qa' }: { pr: PR; repo: string; n: number; onPosted: () => void; kind?: Extract<SlackKind, 'qa' | 'channel'> }) {
+// inMenu: no button of its own; the ⋯ menu (or q) opens it (lgtm:ask-qa).
+function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: string; n: number; onPosted: () => void; kind?: Extract<SlackKind, 'qa' | 'channel'>; inMenu?: boolean }) {
   const review = kind === 'channel';
   const [channel] = useStoredValue(review ? 'reviewChannel' : 'qaChannel', review ? '' : QA_CHANNEL);
   const reviewers = (pr.requested_reviewers ?? []).map((u) => u.login);
@@ -167,9 +168,17 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa' }: { pr: PR; repo: string; n
       (e) => setErr(e.message),
     ).finally(() => setBusy(false));
   };
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    if (!inMenu) return;
+    const show = () => openRef.current();
+    addEventListener('lgtm:ask-qa', show);
+    return () => removeEventListener('lgtm:ask-qa', show);
+  }, [inMenu]);
   return (
     <>
-      {review ? (
+      {inMenu ? null : review ? (
         <button disabled={!reviewers.length} title={reviewers.length ? `Post a review request for this ${pageTerm().PR} to ${channel || 'your review channel'} on Slack, naming ${reviewers.map((l) => '@' + l).join(', ')} (you see it first)` : 'Ask reviewers first: the post names each of them'} onClick={open}>
           Ask in channel
         </button>
@@ -379,7 +388,7 @@ function StateActs({ rights, draft, acting, act }: { rights: PrRights; draft: bo
 }
 
 // The bar's ⋯ (X): StateActs in a menu, its button like Agents'.
-function StateMenu(p: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void }) {
+function StateMenu({ askQa, rights, ...p }: { rights: PrRights | null; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void; askQa?: boolean }) {
   const [open, setOpen] = useState(false);
   const pop = useRef<HTMLDivElement>(null);
   useDismiss(open, () => setOpen(false), '.pr-acts');
@@ -391,12 +400,13 @@ function StateMenu(p: { rights: PrRights; draft: boolean; acting: StateAct | nul
   useEffect(() => void (open && pop.current?.querySelector('button')?.focus()), [open]);
   return (
     <span class="agents-menu pr-acts">
-      <button class="agents-btn" title={`Close, reopen or convert to draft${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').prActions)}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button class="agents-btn" title={`${askQa ? 'Ask QA, ' : ''}Close, reopen or convert to draft${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').prActions)}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         <Octicon name="kebab-horizontal" />
       </button>
       {open && (
         <div class="account-menu" role="menu" ref={pop} onClick={(e) => (e.target as Element).closest('button') && setOpen(false)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
-          <StateActs {...p} />
+          {askQa && <button title={`Post a QA request for this ${pageTerm().PR} on Slack (you see it first)${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').askQa)}`} onClick={() => dispatchEvent(new Event('lgtm:ask-qa'))}>Ask QA…</button>}
+          {rights && <StateActs rights={rights} {...p} />}
         </div>
       )}
     </span>
@@ -1637,6 +1647,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const layer = stack.findIndex((l) => l.number === n);
   const failingChecks = checks?.filter((c) => c.state === 'failure').length ?? 0;
   const waitingOnMe = me ? allThreads.filter((t) => awaitsMe(t, me, pr.user.login === me)).length : 0;
+  const askQa = !!(mine && qaRequest && !slackThreads.some((t) => t.login === '#qa')); // Ask QA, in the ⋯ menu
   const fileAt = new Map([...shown, ...files].reverse().map((f, k, all) => [f.filename, all.length - k])); // as shown, hidden ones after
   agentDraftsRef.current = allThreads
     .flatMap((t) => t.comments.nodes.filter((c) => c.state === 'PENDING' && c.id && agentSays(c.body)).map((c) => ({ id: c.id!, path: t.path, line: t.line ?? 0 })))
@@ -1734,6 +1745,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       // The next or previous PR as the list shows it (its tab, groups and order), from the one open.
       browse: () => dispatchEvent(new Event('lgtm:browse')), // main.tsx: the Browse tab, its switcher open
       prActions: () => dispatchEvent(new Event('lgtm:pr-acts')), // StateMenu opens
+      askQa: () => (askQa ? dispatchEvent(new Event('lgtm:ask-qa')) : setNotice({ ok: true, text: mine ? 'QA is asked already, or no QA channel is set (Settings → Slack).' : 'Ask QA is for your own PRs.' })),
       updateBranch: () => (rights?.updateBranch ? void stateAct('update') : setNotice({ ok: true, text: `Nothing to update: it's up to date with ${pr.base.ref}, or you can't push to it.` })),
       agentDraft: () => dispatchEvent(new Event('lgtm:agent-next')), // Review: the next agent draft not looked at
       nextPR: () => stepPR(1),
@@ -1900,9 +1912,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           <div class="bar-group bar-actions">
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
-            {mine && qaRequest && !slackThreads.some((t) => t.login === '#qa') && <AskQA pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
+            {askQa && <AskQA inMenu pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
             {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
-            {rights && (rights.close || rights.reopen || rights.restore || rights.updateBranch) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} />}
+            {(askQa || (rights && (rights.close || rights.reopen || rights.restore || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} />}
             <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
           </div>
         </div>
