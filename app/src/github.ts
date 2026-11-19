@@ -1063,6 +1063,19 @@ export function getBuildRoots(repo: string, sha: string): Promise<BuildRoot[] | 
   return rootsSeen.get(key)!;
 }
 
+// A repo's own guidance for agents and reviewers at a commit (CLAUDE.md, AGENTS.md, REVIEW.md, at any folder; .claude/CLAUDE.md
+// and .github/copilot-instructions.md), from its file list (one request, kept per commit). A huge repo whose list is cut
+// short: the root ones only.
+const GUIDE = /(^|\/)(CLAUDE|AGENTS|REVIEW)\.md$|^\.github\/copilot-instructions\.md$/;
+export const guideDir = (path: string) => path.replace(/(^|\/)(\.claude\/|\.github\/)?[^/]+$/, '') || '.';
+export const getReviewGuides = (repo: string, sha: string): Promise<string[]> =>
+  kept(`guides:${repo}@${sha}`, () =>
+    (isLab(repo) ? lab.labTree(repo, sha).then((tree) => ({ truncated: !tree, tree: tree ?? [] })) : json(`/repos/${repo}/git/trees/${sha}?recursive=1`)).then((d: any) =>
+      d.truncated
+        ? ['CLAUDE.md', 'AGENTS.md', 'REVIEW.md', '.claude/CLAUDE.md', '.github/copilot-instructions.md']
+        : (d.tree as { path: string; type: string }[]).filter((e) => e.type === 'blob' && GUIDE.test(e.path) && !/(^|\/)node_modules\//.test(e.path)).map((e) => e.path),
+    ), 7 * DAY); // a commit's tree never changes
+
 // The PR's head commit now, cheaply: to notice a push while it's open.
 export const getHead = async (repo: string, n: number): Promise<string> => {
   if (isLab(repo)) return lab.getLabHead(repo, n);

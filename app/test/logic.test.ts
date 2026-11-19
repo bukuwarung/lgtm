@@ -1338,6 +1338,15 @@ test("the agent's runs are read as the account they belong to, not before it's k
   }
 });
 
+test("a repo guide's folder: where it sits, .claude/ and .github/ counting as their parent", async () => {
+  const { guideDir } = await import('../src/github.ts');
+  assert.equal(guideDir('CLAUDE.md'), '.');
+  assert.equal(guideDir('.claude/CLAUDE.md'), '.');
+  assert.equal(guideDir('.github/copilot-instructions.md'), '.');
+  assert.equal(guideDir('app/AGENTS.md'), 'app');
+  assert.equal(guideDir('app/feature/.claude/CLAUDE.md'), 'app/feature');
+});
+
 test('kept: a fetch is kept until it expires, asked once at a time, and the stale copy stands in when asking fails', async () => {
   const { kept } = await import('../src/platform.ts');
   const ls: any = { getItem: (k: string) => (k in ls.d ? ls.d[k] : null), setItem: (k: string, v: string) => void (ls.d[k] = v), removeItem: (k: string) => void delete ls.d[k], d: { 'kept:old': JSON.stringify({ until: 1, v: 0 }) } };
