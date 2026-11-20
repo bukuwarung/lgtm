@@ -810,9 +810,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       const focus = () => ((el) => (el ? el.focus({ preventScroll: true }) : tries++ < 40 && setTimeout(focus, 50)))(document.getElementById('ad-' + d.id));
       focus();
     };
+    // Finish review's Look now: Your threads, at the first one not looked at.
+    const look = () => (setOnlyMine(true), setTimeout(next, 50));
     addEventListener('lgtm:looked', seen);
     addEventListener('lgtm:agent-next', next);
-    return () => (removeEventListener('lgtm:looked', seen), removeEventListener('lgtm:agent-next', next));
+    addEventListener('lgtm:look-drafts', look);
+    return () => (removeEventListener('lgtm:looked', seen), removeEventListener('lgtm:agent-next', next), removeEventListener('lgtm:look-drafts', look));
   }, []);
   // What you may do to the PR itself (github.ts prRights): Close, Close and delete branch, Convert to draft, Reopen, in
   // the ⋯ menu; a PR quiet for 30 days or more has them up front, in a banner.
@@ -2674,7 +2677,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
           {unlooked > 0 && (
             <p class="warn">
               {unlooked === 1 ? "An agent draft you haven't looked at goes" : `${unlooked} agent drafts you haven't looked at go`} with this review.{' '}
-              <button class="link" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:agent-next')))}>Look now</button>
+              <button class="link" title="Your threads, at the first agent draft you haven't looked at" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:look-drafts')))}>Look now</button>
             </p>
           )}
           {event === 'APPROVE' && stillOpen.length > 0 && (
