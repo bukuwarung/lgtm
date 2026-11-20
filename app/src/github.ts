@@ -698,6 +698,26 @@ export async function ownersToAsk(repo: string, n: number, away: string): Promis
   return [...new Set(people.flat())];
 }
 
+// How CODEOWNERS can name me: @me, and each team I'm in as @org/team; lowercase. My teams are kept a day.
+async function ownerNames() {
+  const me = await getGitHubViewer();
+  const teams = await kept('myTeams', async () =>
+    ((await graphql(`query($me:[String!]){viewer{organizations(first:20){nodes{login teams(first:100,userLogins:$me){nodes{slug}}}}}}`, { me: [me] })).viewer.organizations.nodes as any[]).flatMap(
+      (o) => o.teams.nodes.map((t: any) => `@${o.login}/${t.slug}`.toLowerCase()),
+    ),
+  );
+  return new Set([`@${me}`.toLowerCase(), ...teams]);
+}
+// Of these files, the ones CODEOWNERS gives me (by name, or a team I'm in). GitHub only.
+// ponytail: the default branch's CODEOWNERS, as for drafts; GitHub reads the base branch's.
+export async function myOwnedFiles(repo: string, paths: string[]): Promise<string[]> {
+  if (isLab(repo)) return [];
+  const text = await repoCodeOwners(repo);
+  if (!text) return [];
+  const mine = await ownerNames();
+  return paths.filter((p) => codeOwners(text, p).some((o) => mine.has(o.toLowerCase())));
+}
+
 // Drafts in these repos changing files I own (CODEOWNERS, by name or through a team), for the review list while drafts
 // show: GitHub asks code owners only once a PR is ready. Each repo's CODEOWNERS and my teams are kept a day.
 export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promise<QueueItem[]> {
@@ -705,13 +725,7 @@ export async function getOwnedDrafts(repos: string[], skip: Set<string>): Promis
   repos = repos.filter((r) => !isLab(r));
   if (labRepos.length) return [...(await lab.getLabOwnedDrafts(labRepos, skip, codeOwners)), ...(repos.length ? await getOwnedDrafts(repos, skip) : [])];
   if (!repos.length) return [];
-  const me = await getGitHubViewer();
-  const teams = await kept('myTeams', async () =>
-    ((await graphql(`query($me:[String!]){viewer{organizations(first:20){nodes{login teams(first:100,userLogins:$me){nodes{slug}}}}}}`, { me: [me] })).viewer.organizations.nodes as any[]).flatMap(
-      (o) => o.teams.nodes.map((t: any) => `@${o.login}/${t.slug}`.toLowerCase()),
-    ),
-  );
-  const mine = new Set([`@${me}`.toLowerCase(), ...teams]);
+  const mine = await ownerNames();
   const owners = new Map<string, string>();
   for (const repo of repos) {
     const text = await repoCodeOwners(repo);

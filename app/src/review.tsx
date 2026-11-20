@@ -15,7 +15,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, type Fix, type Comment as GhComment } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
@@ -680,6 +680,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [showWsOnly, setShowWsOnly] = useState(false);
   const [showImportsOnly, setShowImportsOnly] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [owned, setOwned] = useState<Set<string>>(new Set()); // the PR's files CODEOWNERS gives me
+  const [onlyOwned, setOnlyOwned] = useState(false);
   const [foldImports] = useStoredFlag('foldImports', true);
   // Feature switches (Settings → Diff).
   const { bots } = useBots();
@@ -1325,6 +1327,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     roomCheck(data.files, read).then((r) => !stop && setRoom(r), () => {});
     return () => void (stop = true);
   }, [data?.files, chkRoom]);
+  useEffect(() => {
+    if (!data) return;
+    let stop = false;
+    myOwnedFiles(repo, data.files.map((f) => f.filename)).then((l) => !stop && setOwned(new Set(l)), () => {});
+    return () => void (stop = true);
+  }, [data?.files]);
   if (error) return <p class="error page">{error} <Retry onClick={() => (setError(''), dispatchEvent(new Event('lgtm:refresh')))} /></p>;
   if (!data) return <PRSkeleton pr={early} />;
   const { pr, headRepo } = data;
@@ -1747,23 +1755,26 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     }
   }
 
+  // Only the files I own, when asked (the pill, o), and I own some but not all; the rest of the page still knows them all.
+  const ownSome = owned.size > 0 && files.some((f) => !owned.has(f.filename));
+  const viewFiles = onlyOwned && ownSome ? files.filter((f) => owned.has(f.filename)) : files;
   // With whitespace ignored, files whose every change is whitespace wait behind one row too.
   const wsOnlySet = new Set(
-    ignoreWs ? files.filter((f) => !f.generated && !f.noDiff && whitespaceOnly(f)).map((f) => f.filename) : [],
+    ignoreWs ? viewFiles.filter((f) => !f.generated && !f.noDiff && whitespaceOnly(f)).map((f) => f.filename) : [],
   );
   // And, with imports folded, files whose every change is an import.
   const importsOnlySet = new Set(
-    foldImports ? files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && onlyImports(f, ignoreWs)).map((f) => f.filename) : [],
+    foldImports ? viewFiles.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && onlyImports(f, ignoreWs)).map((f) => f.filename) : [],
   );
   // Specs in an archive folder (docs/archive/…, specs/archived/…): history, not this change (Settings → Diff).
-  const archivedSet = new Set(foldArchived ? files.filter((f) => !f.generated && !f.noDiff && isArchivedSpec(f.filename)).map((f) => f.filename) : []);
-  const visible = files.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && !importsOnlySet.has(f.filename) && !archivedSet.has(f.filename));
+  const archivedSet = new Set(foldArchived ? viewFiles.filter((f) => !f.generated && !f.noDiff && isArchivedSpec(f.filename)).map((f) => f.filename) : []);
+  const visible = viewFiles.filter((f) => !f.generated && !f.noDiff && !wsOnlySet.has(f.filename) && !importsOnlySet.has(f.filename) && !archivedSet.has(f.filename));
   const wsFolded = ignoreWs ? visible.reduce((n, f) => n + wsSections(f).folded, 0) : 0; // sections folded in the rest
-  const generated = files.filter((f) => f.generated);
-  const noDiff = files.filter((f) => f.noDiff && !f.generated);
-  const wsOnly = files.filter((f) => wsOnlySet.has(f.filename));
-  const importOnly = files.filter((f) => importsOnlySet.has(f.filename));
-  const archived = files.filter((f) => archivedSet.has(f.filename) && !wsOnlySet.has(f.filename) && !importsOnlySet.has(f.filename));
+  const generated = viewFiles.filter((f) => f.generated);
+  const noDiff = viewFiles.filter((f) => f.noDiff && !f.generated);
+  const wsOnly = viewFiles.filter((f) => wsOnlySet.has(f.filename));
+  const importOnly = viewFiles.filter((f) => importsOnlySet.has(f.filename));
+  const archived = viewFiles.filter((f) => archivedSet.has(f.filename) && !wsOnlySet.has(f.filename) && !importsOnlySet.has(f.filename));
   const genOpen = showGenerated || !foldGenerated, noDiffOpen = showNoDiff || !foldNoDiff;
   // The files on show in reading order (files.ts reviewPlan: specs, build, models, the change, tests, resources) or
   // GitHub's (Settings → Pull request view); a big PR also gets the plan itself, with how much of each step is viewed.
@@ -1944,6 +1955,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       skip: () => dispatchEvent(new Event('lgtm:skip')), // review mode (main.tsx) moves on
       docCode: () => dispatchEvent(new Event('lgtm:doc-code')), // DocCodeJump
       myThreads: () => (setOnlyMine((v) => !v), scrollTo({ top: 0 })),
+      ownFiles: () => ownSome && (setOnlyOwned((v) => !v), scrollTo({ top: 0 })),
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
       agents: () => dispatchEvent(new Event('lgtm:agents-menu')), // the PR bar's Agents (AgentsMenu)
@@ -2406,6 +2418,21 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {deps.some((d) => d.major || d.unpinned) && depsPill}
             {/* Info */}
             {!deps.some((d) => d.major || d.unpinned) && depsPill}
+            {ownSome && (
+              <PillMenu cls={onlyOwned ? 'p-reply' : ''} label={<Tg i="assigned" n={`${num(owned.size)} of ${num(files.length)}`} t={onlyOwned ? 'files yours, only those shown' : 'files yours'} />} head={`Files CODEOWNERS gives you, by name or through a team you're in:`}>
+                <div class="pill-row">
+                  <button onClick={() => (setOnlyOwned((v) => !v), scrollTo({ top: 0 }))} title={`${onlyOwned ? 'Show every file again' : 'Show only these files'}${hint(bindings.ownFiles)}`}>
+                    {onlyOwned ? 'Show all files' : 'Show only these'}
+                  </button>
+                </div>
+                {files.filter((f) => owned.has(f.filename)).slice(0, 40).map((f) => (
+                  <button class="link" onClick={() => jumpTo('f-' + f.filename)} title={f.filename}>
+                    <FileIcon path={f.filename} /> <FileName path={f.filename} />
+                  </button>
+                ))}
+                {owned.size > 40 && <small>…and {owned.size - 40} more</small>}
+              </PillMenu>
+            )}
             <ModulesPill modules={view !== 'none' ? shownModules : undefined} />
             {pr.additions != null && (
               <span class="pill p-size">
