@@ -1628,3 +1628,9 @@ main.only-mine > :not(.my-threads) { display: none; } /* just them: not the desc
 /* A suggested change in a comment is a diff, not a Markdown table: no cell borders, full width. */
 .md .suggestion table.diff { display: table; width: 100%; max-width: none; }
 .md .suggestion .diff td { border: 0; padding: 0 8px; }
+
+/* A few lines of a diff above a thread (Your threads, the inbox): drawn as the diff, the commented lines marked. */
+.snippet { border: 1px solid var(--border); border-radius: 6px; overflow: auto hidden; }
+.snippet .diff .num { cursor: default; min-width: 36px; }
+.snippet .diff .num:hover { color: var(--muted); }
+.snippet tr.hit > td.num { color: var(--fg); box-shadow: inset 3px 0 var(--accent); }

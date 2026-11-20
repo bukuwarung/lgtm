@@ -5,6 +5,8 @@ import { OCTICONS } from './octicons.ts';
 import { ago, copyText, useStoredFlag, faceOf, shownName } from './platform.ts';
 import { useState } from 'preact/hooks';
 import type { Thread } from './github.ts';
+import { commonIndent, parsePatch, type Line } from './diff.ts';
+import { highlightCode, languageFor, splitLines } from './highlight.ts';
 
 // An Octicon, in the text's colour; `slash` strikes it through (no person, no test change).
 export function Octicon({ name, size = 12, slash, class: cls }: { name: string; size?: number; slash?: boolean; class?: string }) {
@@ -162,17 +164,33 @@ export const Updating = () => (
 );
 
 // The lines a review thread is on: the end of the diff its first comment was written on (as GitHub's thread shows),
-// the commented lines and a few above them. The inbox's, and the PR page's Your threads.
+// the commented lines and a few above them, drawn as the diff draws code. The inbox's, and the PR page's Your threads.
 export function ThreadCode({ t }: { t: Thread }) {
   const hunk = t.hunk?.nodes[0]?.diffHunk;
   if (!hunk || t.subjectType === 'FILE') return null; // on a whole file: no lines to show
-  const lines = hunk.split('\n').filter((l) => !l.startsWith('@@'));
-  const span = t.line && t.startLine ? t.line - t.startLine + 1 : 1;
+  const lines = parsePatch(hunk).flatMap((h) => h.lines);
+  const to = t.originalLine ?? t.line, from = t.originalStartLine ?? t.startLine ?? to;
+  return <CodeSnippet lines={lines.slice(-Math.min(12, Math.max(4, to && from ? to - from + 1 : 1)))} path={t.path} hit={(l) => !!to && !!from && ((n) => n != null && n >= from && n <= to)(t.diffSide === 'LEFT' ? l.old : l.new)} />;
+}
+// A few lines of a diff: one line-number column, the language's colours, the shared indent dropped; hit: the lines a
+// comment is on.
+export function CodeSnippet({ lines, path, hit }: { lines: Line[]; path: string; hit: (l: Line) => boolean }) {
+  const indent = commonIndent(lines.map((l) => l.text));
+  const lang = languageFor(path);
+  const text = lines.map((l) => l.text.slice(indent)).join('\n');
+  const html = lang ? splitLines(highlightCode(text, lang)) : text.split('\n').map((l) => l.replace(/[&<>]/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt' }[c]};`));
   return (
-    <pre class="inbox-code">
-      {lines.slice(-Math.min(12, Math.max(4, span))).map((l) => (
-        <div class={l[0] === '+' ? 'a' : l[0] === '-' ? 'd' : ''}>{l || ' '}</div>
-      ))}
-    </pre>
+    <div class="snippet">
+      <table class="diff">
+        <tbody>
+          {lines.map((l, i) => (
+            <tr class={`ln${l.kind === '+' ? ' a' : l.kind === '-' ? ' d' : ''}${hit(l) ? ' hit' : ''}`}>
+              <td class="num">{l.kind === '-' ? l.old : l.new}</td>
+              <td class="code" dangerouslySetInnerHTML={{ __html: html[i] || ' ' }} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

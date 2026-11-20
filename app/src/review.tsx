@@ -23,7 +23,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
 import { MergeBox, mergeOnceApproved } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode } from './tags.tsx';
+import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode, CodeSnippet } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
@@ -4952,13 +4952,9 @@ function DraftCode({ d, files }: { d: Draft; files: PRFile[] }) {
   const at = lines.findIndex((l) => (d.side === 'LEFT' ? l.old === d.line && l.kind !== '+' : l.new === d.line && l.kind !== '-'));
   if (at < 0) return null;
   const span = d.startLine ? d.line - d.startLine + 1 : 1;
-  return (
-    <pre class="inbox-code">
-      {lines.slice(Math.max(0, at + 1 - Math.min(12, Math.max(4, span))), at + 1).map((l) => (
-        <div class={l.kind === '+' ? 'a' : l.kind === '-' ? 'd' : ''}>{l.kind + l.text}</div>
-      ))}
-    </pre>
-  );
+  const shown = lines.slice(Math.max(0, at + 1 - Math.min(12, Math.max(4, span))), at + 1);
+  const from = d.startLine ?? d.line;
+  return <CodeSnippet lines={shown} path={d.path} hit={(l) => ((n) => n != null && n >= from && n <= d.line!)(d.side === 'LEFT' ? l.old : l.new)} />;
 }
 
 function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; newCommits: number | null; sinceComment: Map<string, SinceComment>; onCommits: () => void; check: ThreadCheck | null; onRecheck: () => void; onResolveAll: () => void; onFocus: () => void }) {
