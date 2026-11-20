@@ -71,6 +71,7 @@ type Ctx = {
   pending: boolean; // a review of mine is open on GitHub: comments join it, none post on their own
   editPending: (id: string, body: string | null) => Promise<void>; // one of its comments changed, or (null) deleted
   restorePending: (d: Draft) => Promise<void>; // a dropped one put back (its Undo)
+  dropPending: (ids: string[]) => Promise<void>; // several of its comments deleted at once (Your threads: the outdated ones)
   since: boolean; // showing only changes since my last review: old-side lines aren't the PR's base, so no LEFT comments
   me: string; // my login ('' until known)
   ignoreWs: boolean; // hide whitespace-only changes
@@ -1586,6 +1587,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       setThreads(t);
       setPending(p);
     },
+    dropPending: async (ids) => {
+      let gone = 0;
+      try {
+        for (const id of ids) await deleteReviewComment(id), gone++;
+      } finally {
+        const [t, p] = await Promise.all([getThreads(repo, n), getPendingReview(repo, n)]);
+        setThreads(t);
+        setPending(p);
+        if (gone < ids.length) setNotice({ ok: false, text: `Dropped ${gone} of ${ids.length}.` });
+      }
+    },
     restorePending: async (d) => {
       await postAgentFindings(repo, n, pr, [d], '', 'pending'); // into the pending review, as the agent put it
       const [t, p] = await Promise.all([getThreads(repo, n), getPendingReview(repo, n)]);
@@ -2676,16 +2688,12 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
           )}
           {slackNote && <p class="note">{slackNote}</p>}
           {notify && slackWarn && <p class="warn">{slackWarn}</p>}
+          {/* One place to look them over (Your threads): at the first agent draft not looked at, when there is one. */}
           {count > 0 && (
-            <p class="note">
-              <button class="link" title="Your comments to send, then your other threads, each with the code it's on" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:my-threads')))}>Look them over</button> before sending.
-            </p>
-          )}
-          {unlooked > 0 && (
-            <p class="warn">
-              {unlooked === 1 ? "An agent draft you haven't looked at goes" : `${unlooked} agent drafts you haven't looked at go`} with this review.{' '}
-              <button class="link" title="Your threads, at the first agent draft you haven't looked at" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:look-drafts')))}>Look now</button>
-            </p>
+            <button class={unlooked ? 'look-over warn' : 'look-over'} title="Your comments to send, then your other threads, each with the code it's on" onClick={() => (setOpen(false), dispatchEvent(new Event(unlooked ? 'lgtm:look-drafts' : 'lgtm:my-threads')))}>
+              {unlooked > 0 && <>{unlooked === 1 ? "An agent draft you haven't looked at goes" : `${unlooked} agent drafts you haven't looked at go`} with this review. </>}
+              <span class="look-go">Look {count === 1 ? 'it' : `the ${count} comments`} over before sending →</span>
+            </button>
           )}
           {event === 'APPROVE' && stillOpen.length > 0 && (
             <p class="warn approve-open">
@@ -4879,6 +4887,17 @@ function MyThreads({ threads, drafts, files, ctx, close }: { threads: Thread[]; 
   const open = mine.filter((t) => first.get(t.id) && !unsent(t)).sort((a, b) => +waits(b) - +waits(a));
   const done = mine.filter((t) => !first.get(t.id));
   const sending = drafts.length + toSend.length;
+  // Comments to send whose code has changed since they were written (an agent's run on an older commit, say): gone in
+  // one go, after asking (they can't be put back where they were).
+  const stale = toSend.filter((t) => t.isOutdated).flatMap((t) => t.comments.nodes.filter((c) => c.state === 'PENDING' && c.id && c.author?.login === ctx.me).map((c) => c.id!));
+  const [dropping, setDropping] = useState(false);
+  const dropStale = async () => {
+    const n = stale.length;
+    if (!(await ask(`Drop the ${n === 1 ? 'outdated comment' : `${n} outdated comments`} from your review? The code under ${n === 1 ? 'it' : 'them'} changed since; ${n === 1 ? 'it' : 'they'} can't be put back.`, 'Drop'))) return;
+    setDropping(true);
+    await ctx.dropPending(stale).catch((e) => reportError(`Couldn't drop them all: ${e.message}`));
+    setDropping(false);
+  };
   const [showDone, setShowDone] = useState(!open.length);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && !(e.target as Element).closest?.('input, textarea, [contenteditable], dialog') && close();
@@ -4910,7 +4929,12 @@ function MyThreads({ threads, drafts, files, ctx, close }: { threads: Thread[]; 
         <button onClick={() => close()}>Back to the diff <kbd>Esc</kbd></button>
       </h3>
       {!mine.length && !drafts.length && <p class="note">You haven't commented on its code yet.</p>}
-      {sending > 0 && <h4 class="my-threads-sub">To send with your review</h4>}
+      {sending > 0 && (
+        <h4 class="my-threads-sub">
+          To send with your review
+          {stale.length > 0 && <button disabled={dropping} title="Your comments to send whose code changed since they were written" onClick={() => void dropStale()}>{dropping ? 'Dropping…' : `Drop ${stale.length} outdated`}</button>}
+        </h4>
+      )}
       {drafts.map(draft)}
       {toSend.map(one)}
       {sending > 0 && open.length > 0 && <h4 class="my-threads-sub">Open</h4>}
@@ -5681,7 +5705,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         );
         const body = (
           <>
-            {c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />}
+            {c.html && <div class="md" data-lang={lang ?? ''} ref={(el) => void (el && highlightBlocks(el, lang))} dangerouslySetInnerHTML={{ __html: c.html }} />}
             <ReviewThreads review={c} threads={threads} reveal={reveal} />
           </>
         );
@@ -5695,7 +5719,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
                     <Time at={e.at} />
                     {n > 0 && ` · ${n} comment${n === 1 ? '' : 's'} on the code`}
                   </summary>
-                  {e.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: e.html }} />}
+                  {e.html && <div class="md" data-lang={lang ?? ''} ref={(el) => void (el && highlightBlocks(el, lang))} dangerouslySetInnerHTML={{ __html: e.html }} />}
                   <ReviewThreads review={e} threads={threads} reveal={reveal} />
                 </details>
               );
@@ -5737,7 +5761,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
                 {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}{' '}
                 <span class="bot-excerpt">{botExcerpt(c.html)}</span>
               </summary>
-              {c.html && <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: c.html }} />}
+              {c.html && <div class="md" data-lang={lang ?? ''} ref={(el) => void (el && highlightBlocks(el, lang))} dangerouslySetInnerHTML={{ __html: c.html }} />}
             </details>
             );
             if (list.length === 1) return one(list[0]);

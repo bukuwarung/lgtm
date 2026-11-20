@@ -5,6 +5,7 @@ import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, 
 import { syncLabTodo } from './gitlab.ts';
 import { PageSkeleton } from './history.tsx';
 import { Tg, Who, Time, Retry, Updating, ThreadCode } from './tags.tsx';
+import { highlightBlocks, languageFor } from './highlight.ts';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
 const T = term();
@@ -175,12 +176,12 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
           {t.comments.nodes.slice(0, -1).map((c) => (
             <div class="inbox-earlier-one">
               <small>{c.author ? <Who login={c.author.login} src={c.author.avatarUrl} /> : 'someone'} · <Time at={c.createdAt} /></small>
-              <div class="md" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+              <div class="md" ref={(el) => void (el && highlightBlocks(el, languageFor(t.path), languageFor(t.path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
             </div>
           ))}
         </details>
       )}
-      {last && <div class="md inbox-last" dangerouslySetInnerHTML={{ __html: last.bodyHTML }} />}
+      {last && <div class="md inbox-last" ref={(el) => void (el && highlightBlocks(el, languageFor(t.path), languageFor(t.path)))} dangerouslySetInnerHTML={{ __html: last.bodyHTML }} />}
       <textarea rows={2} placeholder={`Reply to ${last?.author?.login === me ? 'this thread' : `@${last?.author?.login ?? 'them'}`}`} value={text}
         onInput={(e) => setText(e.currentTarget.value)}
         onKeyDown={(e) => (e.key === 'Escape' ? e.currentTarget.blur() : e.key === 'Enter' && (e.metaKey || e.ctrlKey) && (e.preventDefault(), send()))}
@@ -231,7 +232,7 @@ function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: 
         <a href={`#/${item.repo}/pull/${item.number}`} data-k="o" hidden />
         <small>{c.author ? <Who login={c.author.login} src={c.author.avatarUrl} /> : 'someone'} · <Time at={c.createdAt} /></small>
       </div>
-      <div class="md inbox-last" dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+      <div class="md inbox-last" ref={(el) => void (el && highlightBlocks(el))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
       <textarea
         rows={2}
         placeholder={`Reply to @${c.author?.login ?? 'them'} on the ${T.PR}`}

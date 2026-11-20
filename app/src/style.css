@@ -1617,3 +1617,14 @@ main.only-mine > :not(.my-threads) { display: none; } /* just them: not the desc
 .my-thread { margin: 0 0 18px; display: grid; gap: 6px; }
 .my-thread-at { justify-self: start; font: calc(12px * var(--cs)) var(--mono); }
 .my-thread > .thread { margin: 0; }
+
+/* Finish review: look the comments over first (Your threads), the whole box the button. */
+.panel .look-over { display: block; width: 100%; margin: 0; text-align: left; font: inherit; color: inherit; background: var(--soft); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; cursor: pointer; box-shadow: none; }
+.panel .look-over.warn { background: var(--warn); border-color: transparent; }
+.panel .look-over:hover { border-color: var(--accent); }
+.panel .look-over .look-go { color: var(--accent); white-space: nowrap; }
+.my-threads-sub { display: flex; align-items: center; gap: 10px; }
+.my-threads-sub button { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: normal; }
+/* A suggested change in a comment is a diff, not a Markdown table: no cell borders, full width. */
+.md .suggestion table.diff { display: table; width: 100%; max-width: none; }
+.md .suggestion .diff td { border: 0; padding: 0 8px; }
