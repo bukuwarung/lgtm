@@ -1635,3 +1635,10 @@ main.only-mine > :not(.my-threads) { display: none; } /* just them: not the desc
 .snippet .diff .num { cursor: default; min-width: 36px; }
 .snippet .diff .num:hover { color: var(--muted); }
 .snippet tr.hit > td.num { color: var(--fg); box-shadow: inset 3px 0 var(--accent); }
+/* A gist (gist.tsx): its title, a patch's commit message, a hunk's @@ line above its rows. */
+.gist { max-width: 1100px; margin: 0 auto; padding-bottom: 40px; }
+.gist-h h2 { margin: 16px 0 4px; }
+.gist-h { margin-bottom: 16px; }
+.gist-lead { white-space: pre-wrap; background: var(--soft); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 12px; }
+.gist .file .snippet { border: 0; border-radius: 0; }
+.gist-hunk { font: 12px var(--mono, monospace); color: var(--muted); background: var(--soft); padding: 4px 10px; border-top: 1px solid var(--border); }

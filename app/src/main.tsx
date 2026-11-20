@@ -3,7 +3,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview } from './github.ts';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
@@ -24,6 +24,7 @@ import { DemoPage } from './demos.tsx';
 import { CODE_DEFAULT, TEXT_DEFAULT, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
+import { GistPage } from './gist.tsx';
 import { hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { movePending } from './merge.tsx';
 
@@ -39,6 +40,8 @@ addEventListener(
     const a = (e.target as Element | null)?.closest?.('.md a[href], .slack-preview a[href]') as HTMLAnchorElement | null;
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.defaultPrevented) return;
     if (!dispatchEvent(new CustomEvent('lgtm:link', { detail: a.href, cancelable: true }))) return e.preventDefault();
+    const gist = /^https:\/\/gist\.github\.com\//.test(a.href) && gistId(a.href);
+    if (gist) return (e.preventDefault(), void (location.hash = `/gist/${gist}`));
     const m = a.href.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/);
     if (!m) return;
     e.preventDefault();
@@ -899,6 +902,8 @@ function App() {
             practice={rm?.practice}
             flash={flash?.route === route ? flash : null}
           />
+        ) : route.startsWith('#/gist/') && gistId(route) ? (
+          <GistPage id={gistId(route)!} />
         ) : route === '#/history' ? (
           <History />
         ) : route === '#/inbox' ? (

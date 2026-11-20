@@ -1063,6 +1063,8 @@ export async function initDesktop(go: (route: string) => void) {
     const m = urls?.[0]?.replace(/^lgtm:\/\//, '').split(/[?#]/)[0].replace('/-/merge_requests/', '/pull/').match(/^([\w.:-]+(?:\/[\w.-]+)+)\/pull\/(\d+)\/?$/);
     const from = urls?.[0]?.match(/[?&](claude|codex)=([\w-]{1,80})/); // the Claude Code session or Codex conversation that sent it (its skill)
     if (m) go(`/${m[1]}/pull/${m[2]}${from ? `?${from[1]}=${from[2]}` : ''}`);
+    const gist = urls?.[0]?.match(/^lgtm:\/\/gist\/([0-9a-f]{20,40})\b/i); // lgtm://gist/<id>
+    if (gist) go(`/gist/${gist[1]}`);
   };
   open(await getCurrent()); // the link that launched the app
   await onOpenUrl(open);

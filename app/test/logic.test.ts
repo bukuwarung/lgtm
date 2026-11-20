@@ -1552,3 +1552,12 @@ test('approve and merge: merges when clear, auto-merge when only checks are left
   assert.match(afterApproval({ ...s, holds: ['the “wip” label'] }), /marked not to merge/);
   assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED', viewerCanEnableAutoMerge: false }), "it can't merge yet");
 });
+
+test('splitPatch: a commit message, then each file of a git or plain diff', async () => {
+  const { splitPatch } = await import('../src/diff.ts');
+  const p = splitPatch(['From abc Mon Sep 17 00:00:00 2001', 'Subject: [PATCH] Fix it', '', 'diff --git a/x.kt b/x.kt', 'index 1..2 100644', '--- a/x.kt', '+++ b/x.kt', '@@ -1,2 +1,2 @@', ' a', '-b', '+c', 'diff --git a/n.md b/n.md', 'new file mode 100644', '--- /dev/null', '+++ b/n.md', '@@ -0,0 +1 @@', '+hi', '-- ', '2.39.0', ''].join('\n'));
+  assert.equal(p.lead, 'From abc Mon Sep 17 00:00:00 2001\nSubject: [PATCH] Fix it');
+  assert.deepEqual(p.files.map((f) => [f.path, f.status, f.additions, f.deletions]), [['x.kt', 'modified', 1, 1], ['n.md', 'added', 1, 0]]);
+  const u = splitPatch('--- a.txt\t2024\n+++ a.txt\t2024\n@@ -1 +1 @@\n-x\n+y\n--- b.txt\n+++ b.txt\n@@ -1 +1 @@\n-p\n+q\n');
+  assert.deepEqual(u.files.map((f) => [f.path, f.additions]), [['a.txt', 1], ['b.txt', 1]]);
+});

@@ -494,3 +494,23 @@ export function wholeFromPatch(f: { status: string; patch?: string | null }): st
   if (!side || !f.patch) return null;
   return f.patch.split('\n').filter((l) => l[0] === side).map((l) => l.slice(1)).join('\n');
 }
+
+// A patch file (git diff, git format-patch, diff -u): what comes before its first file (a commit's message), then each
+// file's part, with its path, what happened to it, and its hunks.
+export type PatchFile = { path: string; status: 'added' | 'removed' | 'modified' | 'renamed'; hunks: Hunk[]; additions: number; deletions: number };
+export function splitPatch(text: string): { lead: string; files: PatchFile[] } {
+  const lines = text.replace(/\n-- \n[\w.-]+\s*$/, '\n').split('\n'); // format-patch's "-- " signature isn't a removed line
+  const starts = lines.flatMap((l, i) => (l.startsWith('diff --git ') || (l.startsWith('--- ') && lines[i + 1]?.startsWith('+++ ') && !lines[i - 1]?.startsWith('index ') && !lines[i - 1]?.startsWith('rename to ') && !/^(new|deleted) file mode/.test(lines[i - 1] ?? '') && !lines[i - 2]?.startsWith('diff --git ')) ? [i] : []));
+  const files = starts.map((s, k) => {
+    const part = lines.slice(s, starts[k + 1] ?? lines.length);
+    const from = part.find((l) => l.startsWith('--- '))?.slice(4).replace(/^a\//, '').replace(/\t.*$/, '');
+    const to = part.find((l) => l.startsWith('+++ '))?.slice(4).replace(/^b\//, '').replace(/\t.*$/, '');
+    const git = part[0].match(/^diff --git a\/(.+) b\/(.+)$/);
+    const hunks = parsePatch(part.join('\n'));
+    const status: PatchFile['status'] = from === '/dev/null' ? 'added' : to === '/dev/null' ? 'removed' : part.some((l) => l.startsWith('rename from ')) ? 'renamed' : 'modified';
+    const path = (to && to !== '/dev/null' ? to : from && from !== '/dev/null' ? from : git?.[2]) ?? '';
+    const n = (k: Line['kind']) => hunks.reduce((a, h) => a + h.lines.filter((l) => l.kind === k).length, 0);
+    return { path, status, hunks, additions: n('+'), deletions: n('-') };
+  });
+  return { lead: lines.slice(0, starts[0] ?? lines.length).join('\n').trim(), files };
+}

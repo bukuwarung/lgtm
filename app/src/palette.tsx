@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { numRef, prWebUrl } from './github.ts';
+import { gistId, numRef, prWebUrl } from './github.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
@@ -106,8 +106,9 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
   const shown = !list
     ? []
     : [
+        ...(!atHere && gistId(q) ? [{ kind: 'Open', label: 'Gist', sub: gistId(q)!.slice(0, 8), run: () => (location.hash = `/gist/${gistId(q)}`) }] : []),
         ...(pr ? [{ kind: 'Open', label: `${repoLabel(pr.repo)}${numRef(pr.repo, pr.n)}`, sub: `${term(pr.repo).PR} from the link`, run: () => (location.hash = `/${pr.repo}/pull/${pr.n}`) }] : []),
-        ...(pr ? [] : list.filter((e) => atHere || matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50)),
+        ...(pr || (!atHere && gistId(q)) ? [] : list.filter((e) => atHere || matches(q, `${e.kind} ${e.label} ${e.sub}`)).slice(0, 50)),
       ];
   const go = (e?: Entry) => {
     if (!e) return;
