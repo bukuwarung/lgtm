@@ -4850,11 +4850,12 @@ function agentCheck(c: ThreadCheck | null, again: () => void, whose = 'your', re
   );
 }
 
-// Your threads (y), on their own in place of the diff: the ones I started or replied in, each with the lines it's on and
+// Your threads (y), on their own in place of the diff: the ones I started or replied in (my agent's too, sent or still
+// drafts in my pending review), each with the lines it's on and
 // what changed under it since, to go through on a re-review. Waiting on me first; resolved and outdated ones folded.
 // The open ones stay where they are while I go through them (resolving one doesn't move it); Esc goes back.
 function MyThreads({ threads, ctx, close }: { threads: Thread[]; ctx: Ctx; close: (t?: Thread) => void }) {
-  const mine = threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === ctx.me && c.state !== 'PENDING'));
+  const mine = threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === ctx.me)); // with my agent's drafts not sent yet
   const settled = (t: Thread) => t.isResolved || t.isOutdated;
   const waits = (t: Thread) => awaitsMe(t, ctx.me, ctx.pr.user.login === ctx.me);
   const [first] = useState(() => new Set(mine.filter((t) => !settled(t)).map((t) => t.id)));
