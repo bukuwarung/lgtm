@@ -2942,6 +2942,26 @@ const keepHeight = (k: string, h: number) => {
   }, 1000);
 };
 
+// What's come near and waits to be drawn, drawn one per task, the nearest to the screen first; one that leaves reach
+// before its turn waits till it comes near again. A fast scroll passes dozens of files: drawn all at once, in page
+// order, the ones you land on stayed blank till those you'd passed were done, and nothing could be drawn meanwhile.
+const toDraw = new Map<Element, () => void>();
+let drawing = 0;
+const drawNearest = () => {
+  drawing = 0;
+  let best: Element | undefined;
+  let far = Infinity;
+  for (const el of toDraw.keys()) {
+    const r = el.getBoundingClientRect();
+    const d = Math.max(0, r.top - innerHeight, -r.bottom);
+    if (d < far) (best = el), (far = d);
+  }
+  if (!best) return;
+  toDraw.get(best)!();
+  toDraw.delete(best);
+  if (toDraw.size) drawing = window.setTimeout(drawNearest);
+};
+
 // Render a file's body only once it scrolls near the viewport (2000px either way, so it's drawn before it's seen).
 // A shorter reach, on an element of its own, for work that costs a request (filling small gaps reads the file).
 function useNear<T extends Element>(margin = '2000px', given?: { current: T | null }) {
@@ -2949,17 +2969,18 @@ function useNear<T extends Element>(margin = '2000px', given?: { current: T | nu
   const ref = given ?? own;
   const [near, setNear] = useState(false);
   useEffect(() => {
+    const el = ref.current!;
     const io = new IntersectionObserver(
-      ([e]) => {
-        if (e.isIntersecting) {
-          setNear(true);
-          io.disconnect();
-        }
+      (es) => {
+        if (es[es.length - 1].isIntersecting) {
+          toDraw.set(el, () => (setNear(true), io.disconnect()));
+          drawing ||= window.setTimeout(drawNearest);
+        } else toDraw.delete(el);
       },
       { rootMargin: `${margin} 0px` },
     );
-    io.observe(ref.current!);
-    return () => io.disconnect();
+    io.observe(el);
+    return () => (io.disconnect(), toDraw.delete(el));
   }, []);
   return [ref, near] as const;
 }
