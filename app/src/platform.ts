@@ -1236,10 +1236,18 @@ export const selfUpdate = () => command<void>('self_update');
 export const UPGRADE = isDesktop ? 'brew upgrade --cask lgtm' : 'git pull && npm run build'; // the browser version: development only, from source
 
 // --- Diagnostics (Help → Copy Diagnostics, Settings): what a bug report needs, with no tokens or PR text ---
-const errors: string[] = [];
+// The last 50 errors, kept across launches (only the error lines: no tokens, no PR text), so a bug report days later
+// still has them.
+const errors: string[] = (() => {
+  try {
+    return JSON.parse(localStorage.getItem('errorLog') ?? '[]');
+  } catch {
+    return [];
+  }
+})();
 // Something the user did failed (a review, a merge, a Slack message): main.tsx shows it in a red bar under the title
 // bar until dismissed, review mode too.
-export const reportError = (text: string) => dispatchEvent(new CustomEvent('lgtm:error', { detail: text }));
+export const reportError = (text: string) => (recordError(`shown: ${text}`), dispatchEvent(new CustomEvent('lgtm:error', { detail: text })));
 
 // confirm() in the Mac app's web view says no without asking (wry doesn't show it), so lgtm asks in its own dialog.
 export function ask(text: string, yes = 'OK'): Promise<boolean> {
@@ -1281,7 +1289,10 @@ export function askText(text: string, yes: string, placeholder: string, check?: 
 
 export function recordError(text: string) {
   errors.push(`${new Date().toISOString().slice(0, 19)} ${text.slice(0, 300)}`);
-  if (errors.length > 20) errors.shift();
+  if (errors.length > 50) errors.shift();
+  try {
+    localStorage.setItem('errorLog', JSON.stringify(errors));
+  } catch {}
 }
 if (typeof window !== 'undefined') {
   addEventListener('error', (e) => recordError(`error: ${e.message}`));
