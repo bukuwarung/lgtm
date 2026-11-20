@@ -2185,7 +2185,7 @@ export function threadTiers<T extends Pick<Thread, 'isResolved'> & { comments: {
 
 // --- Gists: read, shown on a page of their own (gist.tsx) ---
 // A gist's id from its address (gist.github.com/<user>/<id>, or lgtm's #/gist/<id>).
-export const gistId = (s: string) => s.match(/(?:gist\.github\.com\/(?:[\w-]+\/)?|^#?\/gist\/)([0-9a-f]{20,40})\b/i)?.[1] ?? null;
+export const gistId = (s: string) => s.match(/(?:gist\.github\.com\/(?:[\w-]+\/)?|^#?\/gist\/)([0-9a-f]{5,40})\b/i)?.[1] ?? null;
 export type Gist = { id: string; description: string | null; html_url: string; updated_at: string; owner?: { login: string; avatar_url: string }; files: Record<string, { filename: string; language: string | null; content: string; truncated?: boolean; raw_url: string }> };
 export async function getGist(id: string): Promise<Gist> {
   const g: Gist = await json(`/gists/${id}`);

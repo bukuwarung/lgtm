@@ -1555,6 +1555,10 @@ test('approve and merge: merges when clear, auto-merge when only checks are left
 
 test('splitPatch: a commit message, then each file of a git or plain diff', async () => {
   const { splitPatch } = await import('../src/diff.ts');
+  const { gistId } = await import("../src/github.ts");
+  assert.equal(gistId("https://gist.github.com/BennettSmith/7150245"), "7150245"); // an old gist: a number
+  assert.equal(gistId("gist.github.com/andika-buku/7e75468c5aa5dbd0ef095bfc9ae4952d"), "7e75468c5aa5dbd0ef095bfc9ae4952d");
+  assert.equal(gistId("#/gist/7150245"), "7150245");
   const p = splitPatch(['From abc Mon Sep 17 00:00:00 2001', 'Subject: [PATCH] Fix it', '', 'diff --git a/x.kt b/x.kt', 'index 1..2 100644', '--- a/x.kt', '+++ b/x.kt', '@@ -1,2 +1,2 @@', ' a', '-b', '+c', 'diff --git a/n.md b/n.md', 'new file mode 100644', '--- /dev/null', '+++ b/n.md', '@@ -0,0 +1 @@', '+hi', '-- ', '2.39.0', ''].join('\n'));
   assert.equal(p.lead, 'From abc Mon Sep 17 00:00:00 2001\nSubject: [PATCH] Fix it');
   assert.deepEqual(p.files.map((f) => [f.path, f.status, f.additions, f.deletions]), [['x.kt', 'modified', 1, 1], ['n.md', 'added', 1, 0]]);
