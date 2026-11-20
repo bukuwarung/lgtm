@@ -812,10 +812,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     };
     // Finish review's Look now: Your threads, at the first one not looked at.
     const look = () => (setOnlyMine(true), setTimeout(next, 50));
+    const mineOnly = () => (setOnlyMine(true), scrollTo({ top: 0 }));
+    addEventListener('lgtm:my-threads', mineOnly);
     addEventListener('lgtm:looked', seen);
     addEventListener('lgtm:agent-next', next);
     addEventListener('lgtm:look-drafts', look);
-    return () => (removeEventListener('lgtm:looked', seen), removeEventListener('lgtm:agent-next', next), removeEventListener('lgtm:look-drafts', look));
+    return () => (removeEventListener('lgtm:looked', seen), removeEventListener('lgtm:agent-next', next), removeEventListener('lgtm:look-drafts', look), removeEventListener('lgtm:my-threads', mineOnly));
   }, []);
   // What you may do to the PR itself (github.ts prRights): Close, Close and delete branch, Convert to draft, Reopen, in
   // the ⋯ menu; a PR quiet for 30 days or more has them up front, in a banner.
@@ -2469,7 +2471,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           )}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} />
           {onlyMine ? (
-            <MyThreads threads={threads} ctx={ctx} close={(t) => (setOnlyMine(false), t && setTimeout(() => jumpTo('t-' + t.id, 'f-' + t.path), 50))} />
+            <MyThreads threads={threads} drafts={drafts} files={data.files} ctx={ctx} close={(t) => (setOnlyMine(false), t && setTimeout(() => jumpTo(('comments' in t ? 't-' : 'd-') + t.id, 'f-' + t.path), 50))} />
           ) : (
           <>
           {inOrder.map(section)}
@@ -2674,6 +2676,11 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
           )}
           {slackNote && <p class="note">{slackNote}</p>}
           {notify && slackWarn && <p class="warn">{slackWarn}</p>}
+          {count > 0 && (
+            <p class="note">
+              <button class="link" title="Your comments to send, then your other threads, each with the code it's on" onClick={() => (setOpen(false), dispatchEvent(new Event('lgtm:my-threads')))}>Look them over</button> before sending.
+            </p>
+          )}
           {unlooked > 0 && (
             <p class="warn">
               {unlooked === 1 ? "An agent draft you haven't looked at goes" : `${unlooked} agent drafts you haven't looked at go`} with this review.{' '}
@@ -4857,16 +4864,24 @@ function agentCheck(c: ThreadCheck | null, again: () => void, whose = 'your', re
 // drafts in my pending review), each with the lines it's on and
 // what changed under it since, to go through on a re-review. Waiting on me first; resolved and outdated ones folded.
 // The open ones stay where they are while I go through them (resolving one doesn't move it); Esc goes back.
-function MyThreads({ threads, ctx, close }: { threads: Thread[]; ctx: Ctx; close: (t?: Thread) => void }) {
-  const mine = threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === ctx.me)); // with my agent's drafts not sent yet
+// What's still to send comes first (my drafts here, and what's in my pending review on the site, my agent's too), to
+// look over before submitting.
+function MyThreads({ threads, drafts, files, ctx, close }: { threads: Thread[]; drafts: Draft[]; files: PRFile[]; ctx: Ctx; close: (t?: Thread | Draft) => void }) {
+  const mine = threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === ctx.me));
+  const unsent = (t: Thread) => t.comments.nodes.some((c) => c.state === 'PENDING');
   const settled = (t: Thread) => t.isResolved || t.isOutdated;
   const waits = (t: Thread) => awaitsMe(t, ctx.me, ctx.pr.user.login === ctx.me);
-  const [first] = useState(() => new Set(mine.filter((t) => !settled(t)).map((t) => t.id)));
-  const open = mine.filter((t) => first.has(t.id)).sort((a, b) => +waits(b) - +waits(a));
-  const done = mine.filter((t) => !first.has(t.id));
+  // Where each thread goes is settled when it first shows (threads that load later too): resolving one as I go through
+  // them doesn't move it.
+  const first = useRef(new Map<string, boolean>()).current;
+  for (const t of mine) if (!first.has(t.id)) first.set(t.id, !settled(t) || unsent(t));
+  const toSend = mine.filter((t) => first.get(t.id) && unsent(t));
+  const open = mine.filter((t) => first.get(t.id) && !unsent(t)).sort((a, b) => +waits(b) - +waits(a));
+  const done = mine.filter((t) => !first.get(t.id));
+  const sending = drafts.length + toSend.length;
   const [showDone, setShowDone] = useState(!open.length);
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && !(e.target as Element).closest('input, textarea, [contenteditable], dialog') && close();
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && !(e.target as Element).closest?.('input, textarea, [contenteditable], dialog') && close();
     addEventListener('keydown', esc);
     return () => removeEventListener('keydown', esc);
   }, []);
@@ -4879,16 +4894,46 @@ function MyThreads({ threads, ctx, close }: { threads: Thread[]; ctx: Ctx; close
       <ThreadView t={t} ctx={ctx} />
     </section>
   );
+  const draft = (d: Draft) => (
+    <section class="my-thread" key={d.id}>
+      <button class="link my-thread-at" title="Show it in the diff" onClick={() => close(d)}>
+        <FileName path={d.path} />{d.line ? `:${d.line}` : ''}
+      </button>
+      <DraftCode d={d} files={files} />
+      <Notes ctx={ctx} threads={[]} drafts={[d]} form={ctx.target?.editId === d.id} />
+    </section>
+  );
   return (
     <div class="my-threads">
       <h3>
-        Your threads <span class="note">{open.length} open{done.length ? `, ${done.length} resolved or outdated` : ''}</span>
+        Your threads <span class="note">{[sending && `${sending} to send`, open.length && `${open.length} open`, done.length && `${done.length} resolved or outdated`].filter(Boolean).join(', ') || 'none yet'}</span>
         <button onClick={() => close()}>Back to the diff <kbd>Esc</kbd></button>
       </h3>
-      {!mine.length && <p class="note">You haven't commented on its code yet.</p>}
+      {!mine.length && !drafts.length && <p class="note">You haven't commented on its code yet.</p>}
+      {sending > 0 && <h4 class="my-threads-sub">To send with your review</h4>}
+      {drafts.map(draft)}
+      {toSend.map(one)}
+      {sending > 0 && open.length > 0 && <h4 class="my-threads-sub">Open</h4>}
       {open.map(one)}
       {done.length > 0 && (showDone ? done.map(one) : <button class="gen-row" onClick={() => setShowDone(true)}>{done.length} resolved or outdated. Show</button>)}
     </div>
+  );
+}
+
+// A draft's lines: the diff up to its line, as a thread's (ThreadCode) shows them.
+function DraftCode({ d, files }: { d: Draft; files: PRFile[] }) {
+  const patch = files.find((f) => f.filename === d.path)?.patch;
+  if (!patch || d.line == null) return null;
+  const lines = parsePatch(patch).flatMap((h) => h.lines);
+  const at = lines.findIndex((l) => (d.side === 'LEFT' ? l.old === d.line && l.kind !== '+' : l.new === d.line && l.kind !== '-'));
+  if (at < 0) return null;
+  const span = d.startLine ? d.line - d.startLine + 1 : 1;
+  return (
+    <pre class="inbox-code">
+      {lines.slice(Math.max(0, at + 1 - Math.min(12, Math.max(4, span))), at + 1).map((l) => (
+        <div class={l.kind === '+' ? 'a' : l.kind === '-' ? 'd' : ''}>{l.kind + l.text}</div>
+      ))}
+    </pre>
   );
 }
 

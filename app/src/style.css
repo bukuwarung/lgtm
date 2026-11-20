@@ -1613,6 +1613,7 @@ html.threads-hidden .file .thread:not(.awaiting), html.threads-hidden .file .set
 main.only-mine > :not(.my-threads) { display: none; } /* just them: not the description, conversation or banners */
 .my-threads h3 { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; }
 .my-threads h3 button { margin-left: auto; font-weight: normal; }
+.my-threads-sub { margin: 4px 0 10px; font-size: calc(12px * var(--ts)); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .my-thread { margin: 0 0 18px; display: grid; gap: 6px; }
 .my-thread-at { justify-self: start; font: calc(12px * var(--cs)) var(--mono); }
 .my-thread > .thread { margin: 0; }
