@@ -620,7 +620,7 @@ export async function swapReviewer(repo: string, n: number, away: string, skip: 
 // focus: review mode (main.tsx), where the index starts hidden and a review always moves on.
 // practice: review mode's practice run, where finishing a review only moves on (github.ts refuses every write).
 // toReview: the list has it as waiting for my review (undefined until the list is in).
-export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onReviewed, flash, focus, practice }: { repo: string; n: number; toReview?: boolean; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void; flash?: Notice | null; focus?: boolean; practice?: boolean }) {
+export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onReviewed, flash, focus, practice }: { repo: string; n: number; toReview?: boolean; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void | Promise<unknown>; flash?: Notice | null; focus?: boolean; practice?: boolean }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
@@ -1304,7 +1304,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     (next.length ? storage.set(key, s) : storage.remove(key)).catch((e) => setError(e.message));
   }
 
-  async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean) {
+  // step: what it's doing now, for the button (submitting, Slack, opening the next one).
+  async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void = () => {}) {
     if (practice) return onSubmitted(event), onReviewed(null), true;
     // GitHub won't take a comment or a change request with nothing in it. A comment with nothing new (my comments
     // already posted one by one) has nothing to send: it's done, move on. A change request needs to say what.
@@ -1352,6 +1353,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     onSubmitted(event);
     let result: Notice | null = null;
     if (notify && slackTo?.length) {
+      step('Messaging on Slack…');
       // The review is in; a Slack failure is reported, not thrown.
       try {
         const text = slackText(pr, repo, n, event, body, drafts.length ? drafts.map((d) => d.path) : me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).map((t) => t.path) : []);
@@ -1377,10 +1379,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     }
     if (result && !result.ok) reportError(result.text); // the review is in; Slack failed
     if (next || focus) {
-      onReviewed(result);
+      step(`Opening the next ${pageTerm().PR}…`);
+      await onReviewed(result);
       return true;
     }
     setNotice(result);
+    step('Loading the threads…');
     const [t, c] = await Promise.all([getThreads(repo, n), getConversation(repo, n)]);
     setThreads(t);
     setConversation(c);
@@ -2452,7 +2456,7 @@ type SubmitProps = {
   slackTo: string[] | null;
   threaded: string[];
   slackNote: string;
-  onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean) => Promise<boolean>;
+  onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void) => Promise<boolean>;
   repo: string;
   mentions: string[];
   authored: boolean; // my own PR: GitHub only takes comments there
@@ -2490,7 +2494,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
   const [body, setBody] = useState('');
   const [event, setEvent] = useState<ReviewEvent>('COMMENT');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(''); // what submitting is doing now
   const [err, setErr] = useState('');
   const labels: Record<ReviewEvent, string> = { COMMENT: 'Comment', APPROVE: 'Approve', REQUEST_CHANGES: 'Request changes' };
   // Before you submit: can Slack reach each of them? Someone is reached through your mapping, a thread with them on this
@@ -2538,10 +2542,10 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   };
 
   async function go() {
-    setBusy(true);
+    setBusy('Submitting…');
     setErr('');
     try {
-      if (await onSubmit(event, body, notify, next && !authored)) {
+      if (await onSubmit(event, body, notify, next && !authored, setBusy)) {
         setOpen(false);
         setBody('');
         kept.current = null;
@@ -2551,13 +2555,13 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
       setErr(e.message);
       reportError(`The review wasn't submitted: ${e.message}`);
     }
-    setBusy(false);
+    setBusy('');
   }
 
   return (
     <div class="submit review-submit">
       <button class="primary" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" />
+        {busy && !open ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : <>{authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" /></>}
       </button>
       {open && (
         <div class="panel">
@@ -2626,8 +2630,8 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
               </>
             )}
           </div>
-          <button class="primary" disabled={busy} onClick={go}>
-            {busy ? 'Submitting…' : authored ? 'Comment' : 'Submit review'}
+          <button class="primary" disabled={!!busy} onClick={go}>
+            {busy ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : authored ? 'Comment' : 'Submit review'}
           </button>
           {err && <p class="error">{err}</p>}
         </div>

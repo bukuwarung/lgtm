@@ -1019,6 +1019,8 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .nav-refresh > span { display: inline-block; }
 .nav-refresh.refreshing > span { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Working on it (Submit review): a ring that turns, before what it's doing. */
+.btn-spin { display: inline-block; width: .85em; height: .85em; margin-right: 6px; vertical-align: -.1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
 /* The account (top bar): its avatar, and the accounts to switch to. */
 .account { position: relative; display: inline-flex; }
 .top .account-btn, .account-btn { position: relative; width: 29px; min-width: 29px; height: 29px; padding: 0; border: 0; border-radius: 50%; background: none; box-shadow: none; line-height: 0; display: grid; place-items: center; }
