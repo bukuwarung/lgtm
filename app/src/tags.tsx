@@ -4,6 +4,7 @@ import { AGENTS, type AgentId } from './agents.ts';
 import { OCTICONS } from './octicons.ts';
 import { ago, copyText, useStoredFlag, faceOf, shownName } from './platform.ts';
 import { useState } from 'preact/hooks';
+import type { Thread } from './github.ts';
 
 // An Octicon, in the text's colour; `slash` strikes it through (no person, no test change).
 export function Octicon({ name, size = 12, slash, class: cls }: { name: string; size?: number; slash?: boolean; class?: string }) {
@@ -159,3 +160,19 @@ export function Fold({ k, initial = true, class: cls, id, children }: { k: strin
 export const Updating = () => (
   <span class="updating" role="status"><span class="sk-dot" /> updating…</span>
 );
+
+// The lines a review thread is on: the end of the diff its first comment was written on (as GitHub's thread shows),
+// the commented lines and a few above them. The inbox's, and the PR page's Your threads.
+export function ThreadCode({ t }: { t: Thread }) {
+  const hunk = t.hunk?.nodes[0]?.diffHunk;
+  if (!hunk || t.subjectType === 'FILE') return null; // on a whole file: no lines to show
+  const lines = hunk.split('\n').filter((l) => !l.startsWith('@@'));
+  const span = t.line && t.startLine ? t.line - t.startLine + 1 : 1;
+  return (
+    <pre class="inbox-code">
+      {lines.slice(-Math.min(12, Math.max(4, span))).map((l) => (
+        <div class={l[0] === '+' ? 'a' : l[0] === '-' ? 'd' : ''}>{l || ' '}</div>
+      ))}
+    </pre>
+  );
+}

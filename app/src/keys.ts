@@ -23,6 +23,7 @@ export const ACTIONS = [
   ['docCode', 'Jump between the specs (Markdown) and the code', 'g'],
   ['usages', 'Where the function or class under the mouse is used', 'u'],
   ['threads', 'Hide / show the review threads in the diff (ones waiting on you stay)', 't'],
+  ['myThreads', 'Your threads on their own, each with its code and what changed since', 'y'],
   ['finish', words('Open Finish review (Comment, on your own PRs)'), 'f'],
   ['approve', words('Open Finish review with Approve picked'), 'A'],
   ['browse', words('Browse: switch to a team, repository or person'), 'B'],

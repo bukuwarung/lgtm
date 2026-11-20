@@ -4,7 +4,7 @@ import { isLab, awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, ge
 import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel, term } from './platform.ts';
 import { syncLabTodo } from './gitlab.ts';
 import { PageSkeleton } from './history.tsx';
-import { Tg, Who, Time, Retry, Updating } from './tags.tsx';
+import { Tg, Who, Time, Retry, Updating, ThreadCode } from './tags.tsx';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
 const T = term();
@@ -168,7 +168,7 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
           {t.comments.nodes.length > 1 && ` · ${t.comments.nodes.length} comments`}
         </small>
       </div>
-      <Code t={t} />
+      <ThreadCode t={t} />
       {t.comments.nodes.length > 1 && (
         <details class="inbox-earlier">
           <summary>{t.comments.nodes.length - 1} earlier comment{t.comments.nodes.length > 2 ? 's' : ''}</summary>
@@ -209,21 +209,6 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
   );
 }
 
-// The lines the thread is on: the end of the diff its first comment was written on (as GitHub's thread shows), the
-// commented lines and a few above them.
-function Code({ t }: { t: Thread }) {
-  const hunk = t.hunk?.nodes[0]?.diffHunk;
-  if (!hunk || t.subjectType === 'FILE') return null; // on a whole file: no lines to show
-  const lines = hunk.split('\n').filter((l) => !l.startsWith('@@'));
-  const span = t.line && t.startLine ? t.line - t.startLine + 1 : 1;
-  return (
-    <pre class="inbox-code">
-      {lines.slice(-Math.min(12, Math.max(4, span))).map((l) => (
-        <div class={l[0] === '+' ? 'a' : l[0] === '-' ? 'd' : ''}>{l || ' '}</div>
-      ))}
-    </pre>
-  );
-}
 
 // A PR conversation comment mentioning me: a reply goes on the conversation; Done as a thread's.
 function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: Item; current: boolean; onPick: () => void; onDone: Done }) {

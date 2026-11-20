@@ -1735,6 +1735,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   useEffect(() => {
     if (!items || !settled) return;
     const waiting = toReview(items, showDrafts);
+    // A review request answered (here, on GitHub, from anywhere) or no longer asked: its bell entry goes with it.
+    const due = new Set(waiting.map((i) => `${i.repo}#${i.number}`));
+    dropNotices((n) => (n.what === 'Review requested' || n.what === 'Your comments were resolved') && !due.has(n.pr));
     // The badge also counts PRs whose Claude Code session is waiting for you, and (Settings) the inbox: threads and
     // mentions waiting on your reply, as the inbox button counts them.
     const inbox = badgeInbox ? repliesWaiting(items) : 0;

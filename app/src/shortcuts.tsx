@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
+import { readBindings } from './keys.ts';
 import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
@@ -560,6 +561,7 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
         {myConv + drafts.length + tiers.mine.length > 0 && (
           <Fold k="ix-yours" class="ix-ckgroup">
             <summary><Octicon name="person" /> {myConv + drafts.length + tiers.mine.length} yours</summary>
+            {tiers.mine.length > 0 && <Entry label={<><Octicon name="comment-discussion" /> Your threads on their own</>} meta={readBindings(localStorage.getItem('shortcuts') ?? '{}').myThreads || undefined} onClick={() => dispatchEvent(new CustomEvent('lgtm:act', { detail: 'myThreads' }))} />}
             {tiers.mine.filter(waitsOnMe).map((t) => threadEntry(t))}
             {conversation.map((c, i) => !c.bot && c.author === me && !replaced.has(c.id) && convEntry(c, i))}
             {drafts.map((d) => (

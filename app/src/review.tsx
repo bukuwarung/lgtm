@@ -23,7 +23,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
 import { MergeBox, mergeOnceApproved } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
+import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
+import { dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -659,6 +659,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [saved, setSaved] = useState<Saved>({ sha: '', drafts: [] });
   const [target, setTarget] = useState<Target | null>(null);
   const [showGenerated, setShowGenerated] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(false); // Your threads (y): my threads on their own, in place of the diff
   const [showNoDiff, setShowNoDiff] = useState(false);
   const [showWsOnly, setShowWsOnly] = useState(false);
   const [showImportsOnly, setShowImportsOnly] = useState(false);
@@ -1372,6 +1373,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       }
       if (event === 'APPROVE') void markDoneOnSlack(k, pr.user.login);
       noteReadSaved(k, trimmedLines);
+      dropNotices((x) => x.pr === k && (x.what === 'Review requested' || x.what === 'Your comments were resolved')); // the bell's: answered
       onSubmitted(event);
       const said: Notice[] = [];
       if (merge && event === 'APPROVE') {
@@ -1876,6 +1878,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       help: () => setHelp(!help),
       skip: () => dispatchEvent(new Event('lgtm:skip')), // review mode (main.tsx) moves on
       docCode: () => dispatchEvent(new Event('lgtm:doc-code')), // DocCodeJump
+      myThreads: () => (setOnlyMine((v) => !v), scrollTo({ top: 0 })),
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
       agents: () => dispatchEvent(new Event('lgtm:agents-menu')), // the PR bar's Agents (AgentsMenu)
@@ -2040,7 +2043,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <ScrollMarks files={shown} />
         <DocCodeJump files={shown} />
         <HoldPlace />
-        <main>
+        <main class={onlyMine ? 'only-mine' : undefined}>
           {pr.merged ? (
             <p class="pr-state merged">
               <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <CopyCode>{pr.base.ref}</CopyCode>{pr.merged_at && <> <Time at={pr.merged_at} /></>}.
@@ -2401,6 +2404,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 check={check}
                 onRecheck={() => setCheckTry((k) => k + 1)}
                 onResolveAll={resolveAddressed}
+                onFocus={() => (setOnlyMine(true), scrollTo({ top: 0 }))}
               />}
               {since ? (
                 <>
@@ -2461,6 +2465,10 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             />
           )}
           <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} />
+          {onlyMine ? (
+            <MyThreads threads={threads} ctx={ctx} close={(t) => (setOnlyMine(false), t && setTimeout(() => jumpTo('t-' + t.id, 'f-' + t.path), 50))} />
+          ) : (
+          <>
           {inOrder.map(section)}
           {generated.length > 0 &&
             (genOpen ? generated.map(section) : (
@@ -2492,6 +2500,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 {importOnly.length} file{importOnly.length > 1 ? 's' : ''} with only import changes hidden. Show
               </button>
             ))}
+          </>
+          )}
         </main>
       </div>
     </div>
@@ -4840,7 +4850,45 @@ function agentCheck(c: ThreadCheck | null, again: () => void, whose = 'your', re
   );
 }
 
-function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; newCommits: number | null; sinceComment: Map<string, SinceComment>; onCommits: () => void; check: ThreadCheck | null; onRecheck: () => void; onResolveAll: () => void }) {
+// Your threads (y), on their own in place of the diff: the ones I started or replied in, each with the lines it's on and
+// what changed under it since, to go through on a re-review. Waiting on me first; resolved and outdated ones folded.
+// The open ones stay where they are while I go through them (resolving one doesn't move it); Esc goes back.
+function MyThreads({ threads, ctx, close }: { threads: Thread[]; ctx: Ctx; close: (t?: Thread) => void }) {
+  const mine = threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === ctx.me && c.state !== 'PENDING'));
+  const settled = (t: Thread) => t.isResolved || t.isOutdated;
+  const waits = (t: Thread) => awaitsMe(t, ctx.me, ctx.pr.user.login === ctx.me);
+  const [first] = useState(() => new Set(mine.filter((t) => !settled(t)).map((t) => t.id)));
+  const open = mine.filter((t) => first.has(t.id)).sort((a, b) => +waits(b) - +waits(a));
+  const done = mine.filter((t) => !first.has(t.id));
+  const [showDone, setShowDone] = useState(!open.length);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && !(e.target as Element).closest('input, textarea, [contenteditable], dialog') && close();
+    addEventListener('keydown', esc);
+    return () => removeEventListener('keydown', esc);
+  }, []);
+  const one = (t: Thread) => (
+    <section class="my-thread" key={t.id}>
+      <button class="link my-thread-at" title="Show it in the diff" onClick={() => close(t)}>
+        <FileName path={t.path} />{t.line ? `:${t.line}` : ''}
+      </button>
+      <ThreadCode t={t} />
+      <ThreadView t={t} ctx={ctx} />
+    </section>
+  );
+  return (
+    <div class="my-threads">
+      <h3>
+        Your threads <span class="note">{open.length} open{done.length ? `, ${done.length} resolved or outdated` : ''}</span>
+        <button onClick={() => close()}>Back to the diff <kbd>Esc</kbd></button>
+      </h3>
+      {!mine.length && <p class="note">You haven't commented on its code yet.</p>}
+      {open.map(one)}
+      {done.length > 0 && (showDone ? done.map(one) : <button class="gen-row" onClick={() => setShowDone(true)}>{done.length} resolved or outdated. Show</button>)}
+    </div>
+  );
+}
+
+function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; newCommits: number | null; sinceComment: Map<string, SinceComment>; onCommits: () => void; check: ThreadCheck | null; onRecheck: () => void; onResolveAll: () => void; onFocus: () => void }) {
   const mine = p.me ? p.threads.filter((t) => t.comments.nodes.some((c) => c.author?.login === p.me)) : [];
   const replied = mine.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login !== p.me && c.createdAt > p.lastReviewAt));
   const changed = mine.filter((t) => p.sinceComment.get(t.id)?.kind === 'changed');
@@ -4852,6 +4900,7 @@ function SinceSummary(p: { me: string; threads: Thread[]; lastReviewAt: string; 
     replied.length ? <button class="link" onClick={() => go(replied[0])}>{n(replied.length, 'thread')} with new replies</button> : null,
     changed.length ? <button class="link" onClick={() => go(changed[0])}>code changed under {n(changed.length, 'thread')} of yours</button> : null,
     resolved.length ? <span>{resolved.length} of your {n(mine.length, 'thread')} resolved</span> : null,
+    mine.length - resolved.length > 0 ? <button class="link" title="Your threads on their own, each with its code and what changed since (y)" onClick={p.onFocus}>go through your threads</button> : null,
     agentCheck(p.check, p.onRecheck, 'your', {
       n: p.threads.filter((t) => !t.isResolved && t.viewerCanResolve && p.check?.state === 'done' && p.check.verdicts[t.id]?.addressed).length,
       run: p.onResolveAll,
