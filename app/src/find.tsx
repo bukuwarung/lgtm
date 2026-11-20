@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { useStoredValue } from './platform.ts';
 
 // ⌘F in the app: the macOS web view has no find bar of its own. Matches are marked with the CSS Custom Highlight API
 // (no changes to the page); Enter / ⇧Enter move between them, Esc closes. The review page renders every file on ⌘F,
@@ -32,6 +33,20 @@ export function FindBar() {
   const [hits, setHits] = useState<StaticRange[]>([]);
   const [i, setI] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  // Searches that found something, newest first (the last 10, this account's): offered under the box as you type.
+  const [recentRaw, setRecent] = useStoredValue('findRecent', '[]');
+  const recent: string[] = (() => {
+    try {
+      return JSON.parse(recentRaw);
+    } catch {
+      return [];
+    }
+  })();
+  const remember = () => {
+    const k = q.trim();
+    if (k.length >= 2 && hits.length && recent[0] !== k) setRecent(JSON.stringify([k, ...recent.filter((x) => x !== k)].slice(0, 10)));
+  };
+  const close = () => (remember(), setOpen(false));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -81,20 +96,25 @@ export function FindBar() {
         value={q}
         placeholder="Find in this page"
         aria-label="Find in this page"
+        list="find-recent"
         onInput={(e) => setQ(e.currentTarget.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
+            remember();
             step(e.shiftKey ? -1 : 1);
           } else if (e.key === 'Escape') {
-            setOpen(false);
+            close();
           }
         }}
       />
+      <datalist id="find-recent">
+        {recent.map((k) => <option value={k} />)}
+      </datalist>
       <span class="find-count">{q ? (hits.length ? `${i + 1}/${hits.length}` : 'No matches') : ''}</span>
       <button title="Previous (⇧↵)" onClick={() => step(-1)} disabled={!hits.length}>↑</button>
       <button title="Next (↵)" onClick={() => step(1)} disabled={!hits.length}>↓</button>
-      <button title="Close (Esc)" onClick={() => setOpen(false)}>✕</button>
+      <button title="Close (Esc)" onClick={close}>✕</button>
     </div>
   );
 }
