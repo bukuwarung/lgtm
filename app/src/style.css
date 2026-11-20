@@ -1642,3 +1642,4 @@ main.only-mine > :not(.my-threads) { display: none; } /* just them: not the desc
 .gist-lead { white-space: pre-wrap; background: var(--soft); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 12px; }
 .gist .file .snippet { border: 0; border-radius: 0; }
 .gist-hunk { font: 12px var(--mono, monospace); color: var(--muted); background: var(--soft); padding: 4px 10px; border-top: 1px solid var(--border); }
+.gist .file-h { top: var(--nav); } /* no review bar here */
