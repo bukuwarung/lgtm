@@ -100,6 +100,7 @@ export type QueueItem = {
   qa?: { replies: string[]; status: 'signed' | 'issue' | null }; // my PR's QA request on Slack (platform.ts qaThreads)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
+  myPending?: number; // comments in my pending review on GitHub, not sent yet (only mine are visible)
   viaTeam?: string[]; // asked of me only through teams (these, the PR's requested teams): no one by name
   reviewedBy?: string[]; // people who've reviewed it (their latest reviews; GitHub)
   noReviewers: boolean;
@@ -396,6 +397,7 @@ const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft review
   headRefName headRefOid baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login} ... on Team{slug}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
+  myPending:reviews(states:PENDING,first:1){nodes{comments{totalCount}}}
   latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
 // PRs read by id, 15 a query side by side. GitHub charges a query for what it could return (a search of up to 100 PRs
 // with all of this: 32 points for the PR list however few it holds), so finding PRs by id first and reading just
@@ -486,6 +488,7 @@ const toItem = (p: any): QueueItem => (p.author?.__typename === 'Bot' && p.autho
       canAutoMerge: !!p.viewerCanEnableAutoMerge,
       queue: p.mergeQueueEntry ?? null,
       waitingSince: [p.createdAt, p.timelineItems?.nodes[0]?.createdAt].filter(Boolean).sort().at(-1),
+      myPending: p.myPending?.nodes[0]?.comments.totalCount ?? 0,
       pendingReviewers: (p.reviewRequests?.nodes ?? []).map((r: any) => r.requestedReviewer?.login).filter(Boolean),
       reviewedBy: (p.latestReviews?.nodes ?? []).filter((r: any) => r.author?.__typename === 'User').map((r: any) => r.author.login),
       changesBy: (p.latestOpinionatedReviews?.nodes ?? [])
@@ -860,6 +863,33 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
 // People to ask for a review of my PR, least busy first: whoever reviewed this repo's recent PRs (they know the code),
 // else the PR list's team. Busy: open PRs in the org that already ask them, by name, for a review.
 export type ReviewerPick = { login: string; load: number; why: string; knows?: number; busy?: string }; // knows: share of the changed code they wrote; busy: their status message, set to busy on GitHub/GitLab
+// "Fixed in abc1234" (my PR, a thread waiting on me): the commits written after the comment (authored after it, so a
+// rebase doesn't count) that changed the lines under it. Lines still there: git blame at the head says who last wrote
+// them. Lines gone (outdated): the file's commit since, when there's just one. GitHub only; kept per head.
+export type Fix = { oid: string; headline: string };
+const fixesSeen = new Map<string, Promise<Fix[]>>();
+export function fixedIn(repo: string, head: string, path: string, lines: [number, number] | null, since: string): Promise<Fix[]> {
+  if (isLab(repo)) return Promise.resolve([]);
+  const k = JSON.stringify([repo, head, path, lines, since]);
+  if (!fixesSeen.has(k)) fixesSeen.set(k, (async () => {
+    const [o, r] = repo.split('/');
+    const c = 'oid messageHeadline authoredDate';
+    const d = await graphql(
+      lines
+        ? `query($o:String!,$r:String!,$h:String!,$p:String!){repository(owner:$o,name:$r){object(expression:$h){...on Commit{blame(path:$p){ranges{startingLine endingLine commit{${c}}}}}}}}`
+        : `query($o:String!,$r:String!,$h:String!,$p:String!){repository(owner:$o,name:$r){object(expression:$h){...on Commit{history(first:5,path:$p){nodes{${c}}}}}}}`,
+      { o, r, h: head, p: path },
+    );
+    const at = d.repository.object;
+    const commits: { oid: string; messageHeadline: string; authoredDate: string }[] = lines
+      ? at.blame.ranges.filter((x: any) => x.endingLine >= lines[0] && x.startingLine <= lines[1]).map((x: any) => x.commit)
+      : at.history.nodes;
+    const after = [...new Map(commits.filter((x) => x.authoredDate > since).map((x) => [x.oid, { oid: x.oid, headline: x.messageHeadline }])).values()];
+    return lines || after.length === 1 ? after.slice(0, 3) : [];
+  })().catch(() => []));
+  return fixesSeen.get(k)!;
+}
+
 // Who wrote the code a PR changes (expertise.ts): git blame at the base commit for its 5 most-changed files, one query.
 export async function whoWrote(repo: string, base: string, files: { filename: string; status: string; patch?: string; additions: number; deletions: number }[]): Promise<Knows[]> {
   const [owner, name] = repo.split('/');

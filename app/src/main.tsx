@@ -1675,9 +1675,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   }, []);
   const unsent = (i: QueueItem) => {
     try {
-      return JSON.parse(localStorage.getItem(own(`drafts:${i.repo}#${i.number}`)) ?? 'null')?.drafts.length ?? 0;
+      return (JSON.parse(localStorage.getItem(own(`drafts:${i.repo}#${i.number}`)) ?? 'null')?.drafts.length ?? 0) + (i.myPending ?? 0); // here, and in my pending review
     } catch {
-      return 0;
+      return i.myPending ?? 0;
     }
   };
   const [again, setAgain] = useState(0); // a pill's action asks for the list again

@@ -54,16 +54,20 @@ const threads2 = [
 ];
 
 const sent = []; // the mutations, by name
+let pendingCount = -1; // my pending review's comments (-1: none): a line comment goes into it as it's written
 function graphql(body) {
   const { query = '', variables = {} } = JSON.parse(body || '{}');
   const m = query.match(/mutation[^{]*\{\s*(\w+)/);
   if (m) {
     sent.push(m[1]);
+    if (m[1] === 'addPullRequestReview') pendingCount = 0;
+    if (m[1] === 'addPullRequestReviewThread' && pendingCount >= 0) pendingCount++;
+    if (m[1] === 'submitPullRequestReview') pendingCount = -1;
     return { data: { addPullRequestReview: { pullRequestReview: { id: 'R1' } }, addPullRequestReviewThread: { thread: { id: 'T1' } }, submitPullRequestReview: { clientMutationId: null } } };
   }
   if (query.includes('review-requested:@me')) return { data: { viewer: { login: 'tester' }, requested: { nodes: later ? [node, laterNode] : [node] }, reviewed: { nodes: [] }, authored: { nodes: [mineNode] }, assigned: { nodes: [] }, mentioned: { nodes: [] } } };
   if (/p0:node/.test(query)) return { data: Object.fromEntries(Object.entries(variables).map(([k, id]) => [k.replace('i', 'p'), { reviewThreads: { nodes: id === 'PR_2' ? threads2.map((t) => ({ ...t, starter: { nodes: t.comments.nodes } })) : [] } }])) };
-  const prOf = (n) => ({ reviewThreads: n === 2 ? { ...empty, nodes: threads2 } : empty, reviews: { nodes: [] }, pending: { nodes: [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty });
+  const prOf = (n) => ({ reviewThreads: n === 2 ? { ...empty, nodes: threads2 } : empty, reviews: { nodes: [] }, pending: { nodes: pendingCount >= 0 ? [{ id: 'R1', comments: { totalCount: pendingCount } }] : [] }, files: empty, commits: { nodes: [{ commit: { statusCheckRollup: null } }] }, timelineItems: empty });
   // PRs asked together (a PR's parts, the inbox's threads; the bell's PRs that left the list: #3 closed, any other open).
   if (/p0:repository/.test(query)) return { data: Object.fromEntries(Object.keys(variables).filter((k) => k[0] === 'n').map((k) => ['p' + k.slice(1), { pullRequest: { ...prOf(variables[k]), state: variables[k] === 3 ? 'CLOSED' : 'OPEN' } }])) };
   if (query.includes('is:merged')) return { data: { a: { nodes: [] }, r: { nodes: [] } } };
@@ -238,6 +242,7 @@ try {
     await sleep(100);
     await key('Enter', { metaKey: true });
     await until('the reply sent', `document.querySelector('.inbox .note')?.textContent.startsWith('1 mention')`, 5000);
+    for (let i = 0; i < 25 && !sent.includes('reply'); i++) await sleep(200); // it leaves the list at once, then goes
     if (!sent.includes('reply')) throw new Error("the reply didn't go out");
   });
   await step('e marks the mention done', async () => {

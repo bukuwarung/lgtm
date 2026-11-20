@@ -276,8 +276,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ix-icon-btn.failed { color: var(--pill-bad); }
 .ix-log { margin: 2px 8px 8px 14px; padding: 6px 8px; max-height: 320px; overflow: auto; background: var(--soft); border-radius: 4px; font: calc(11px * var(--ts))/1.4 var(--mono); white-space: pre; }
 /* Jump targets land below the sticky bars, and flash briefly. */
-.file { scroll-margin-top: calc(var(--nav) + var(--bar)); }
-.thread, .draft, .comment { scroll-margin-top: calc(var(--nav) + var(--bar) + 48px); }
+.file { scroll-margin-top: calc(var(--nav) + var(--bar) + var(--pills, 0px)); }
+.thread, .draft, .comment { scroll-margin-top: calc(var(--nav) + var(--bar) + var(--pills, 0px) + 48px); }
 /* Lit for a moment, then fading, so the eye finds it: a block gets a ring and a tint, a diff row its cells tinted (a
    row can't draw a ring), a whole file its header lit. */
 @keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px var(--accent); background-color: color-mix(in srgb, var(--accent) 14%, transparent); } to { box-shadow: 0 0 0 3px transparent; background-color: transparent; } }
@@ -359,7 +359,7 @@ main { padding: 16px; }
 .gen-row { width: 100%; padding: 10px; border-style: dashed; color: var(--muted); }
 
 .file { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 6px; content-visibility: auto; contain-intrinsic-size: auto 400px; }
-.file-h { position: sticky; top: calc(var(--nav) + var(--bar)); z-index: 2; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--soft); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; }
+.file-h { position: sticky; top: calc(var(--nav) + var(--bar) + var(--pills, 0px)); z-index: 2; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--soft); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; }
 .file-h a.file-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; color: var(--fg); text-decoration: none; }
 .file-h a.file-name:hover b { text-decoration: underline; }
 .file-name b { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 calc(13px * var(--ts)) var(--mono); }
@@ -658,7 +658,8 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .bar h1 a { color: inherit; }
 .bar h1 a:hover { color: var(--accent); }
 .bar h1 .pr-num { color: var(--muted); font-weight: 400; }
-.pr-status { margin-bottom: 10px; }
+/* The PR's pills stay in view under the bar (their height is --pills, review.tsx). */
+.pr-status { position: sticky; top: calc(var(--nav) + var(--bar)); z-index: 3; margin: 0 0 10px; padding: 6px 0; background: var(--bg); }
 .pr-state { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 10px 14px; border-radius: 6px; border: 1px solid; }
 .pr-state .octicon { flex: none; }
 .pr-state.merged { --c: var(--c-merged); color: var(--c); border-color: color-mix(in srgb, var(--c) 45%, transparent); background: color-mix(in srgb, var(--c) 10%, var(--bg)); }
@@ -985,7 +986,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .md-theme .md-thumb.rich h3 { margin: 0 0 .3em; font-size: 1.5em; }
 .md-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; font-size: calc(13px * var(--ts)); }
 /* Rendered docs: a section's ¶ (copy a link), shown on hover; a jump to a section clears the bars. */
-[data-slug] { scroll-margin-top: calc(var(--nav) + var(--bar) + 16px); }
+[data-slug] { scroll-margin-top: calc(var(--nav) + var(--bar) + var(--pills, 0px) + 16px); }
 .hd-link { margin-left: .4em; padding: 0 .3em; border: 0; background: none; color: var(--muted); font: 400 .7em var(--sans); opacity: 0; vertical-align: middle; cursor: pointer; }
 :is(h1, h2, h3, h4, h5, h6):hover > .hd-link, .hd-link:focus-visible { opacity: 1; }
 /* Marks along the right edge (ScrollMarks): the page's whole length mapped onto the space below the bars. */
