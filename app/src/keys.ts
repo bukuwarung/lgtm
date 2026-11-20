@@ -24,6 +24,7 @@ export const ACTIONS = [
   ['usages', 'Where the function or class under the mouse is used', 'u'],
   ['threads', 'Hide / show the review threads in the diff (ones waiting on you stay)', 't'],
   ['finish', words('Open Finish review (Comment, on your own PRs)'), 'f'],
+  ['approve', words('Open Finish review with Approve picked'), 'A'],
   ['browse', words('Browse: switch to a team, repository or person'), 'B'],
   ['prActions', words('PR actions: close, reopen, convert to draft'), 'X'],
   ['askQa', words('Ask QA on Slack (your PR, from the ⋯ menu)'), 'q'],

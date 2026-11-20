@@ -100,6 +100,7 @@ export type QueueItem = {
   qa?: { replies: string[]; status: 'signed' | 'issue' | null }; // my PR's QA request on Slack (platform.ts qaThreads)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   pendingReviewers: string[]; // people (not teams) whose review is requested
+  viaTeam?: string[]; // asked of me only through teams (these, the PR's requested teams): no one by name
   reviewedBy?: string[]; // people who've reviewed it (their latest reviews; GitHub)
   noReviewers: boolean;
   mentioned?: boolean; // someone @-mentions me in it (shown, when that's all, until I open it after its latest activity) // nobody asked (people or teams) and no person has reviewed: bots don't count
@@ -393,7 +394,7 @@ const QUEUE = `query{viewer{login}
 const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login avatarUrl} assignees(first:5){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} recent:commits(last:20){nodes{commit{authoredDate parents{totalCount}}}} repository{nameWithOwner}
   headRefName headRefOid baseRefName headRepository{nameWithOwner} createdAt
-  reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
+  reviewRequests(first:20){nodes{requestedReviewer{... on User{login} ... on Team{slug}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
   latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
 // PRs read by id, 15 a query side by side. GitHub charges a query for what it could return (a search of up to 100 PRs
@@ -416,6 +417,7 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
     .map((p): QueueItem => ({
       ...toItem(p),
       requested: requested.has(p.id),
+      viaTeam: ((t) => (requested.has(p.id) && t.length && !p.reviewRequests.nodes.some((r: any) => r.requestedReviewer?.login === me) ? t : undefined))(p.reviewRequests.nodes.map((r: any) => r.requestedReviewer?.slug).filter(Boolean)),
       // A comment-only review (a reply, say) after an approval doesn't undo it on GitHub, so my approval or change
       // request wins over a later plain comment.
       myState:
@@ -945,6 +947,17 @@ export async function suggestReviewers(repo: string, skip: Set<string>, team: st
 
 export const requestReview = (repo: string, n: number, login: string) =>
   isLab(repo) ? lab.setLabReviewer(repo, n, login, true) : json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'POST', body: JSON.stringify({ reviewers: [login] }) });
+// A review asked of my team, taken: asked of me by name, and dropped from the teams I'm in, so the rest of them stop
+// seeing it as waiting on them. Back: what it did.
+export async function takeReview(repo: string, n: number, teams: string[]): Promise<string> {
+  const me = await getViewer(repo);
+  await requestReview(repo, n, me);
+  if (isLab(repo) || !teams.length) return `Asked of you on ${site(repo)}`;
+  const mine = await getMyTeams();
+  const drop = teams.filter((t) => mine.includes(`${repo.split('/')[0]}/${t}`));
+  if (drop.length) await json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'DELETE', body: JSON.stringify({ reviewers: [], team_reviewers: drop }) });
+  return drop.length ? `Yours now: ${drop.map((t) => '@' + t).join(', ')} no longer asked` : `Asked of you on ${site(repo)}`;
+}
 export const unrequestReview = (repo: string, n: number, login: string) =>
   isLab(repo) ? lab.setLabReviewer(repo, n, login, false) : json(`/repos/${repo}/pulls/${n}/requested_reviewers`, { method: 'DELETE', body: JSON.stringify({ reviewers: [login] }) });
 
@@ -1730,6 +1743,22 @@ export async function getMergeState(repo: string, n: number): Promise<MergeState
   };
 }
 
+// Approve and merge: what to do once my approval is in. merge; auto (only checks left: auto-merge); wait (GitHub hasn't
+// counted the approval yet); else why it won't merge.
+export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeStateStatus' | 'reviewDecision' | 'viewerCanEnableAutoMerge' | 'autoMergeRequest' | 'mergeable' | 'reasons'>): 'merge' | 'auto' | 'wait' | string {
+  if (s.holds.length) return `it's marked not to merge (${s.holds.join(', ')})`;
+  if (s.isDraft) return "it's a draft";
+  if (s.mergeStateStatus === 'UNKNOWN' || (s.reviewDecision === 'REVIEW_REQUIRED' && s.mergeStateStatus === 'BLOCKED')) return 'wait';
+  if (['CLEAN', 'HAS_HOOKS'].includes(s.mergeStateStatus)) return 'merge';
+  if (s.mergeStateStatus === 'BLOCKED' && s.reviewDecision === 'APPROVED' && s.viewerCanEnableAutoMerge && !s.autoMergeRequest) return 'auto';
+  if (s.mergeable === 'CONFLICTING' || s.mergeStateStatus === 'DIRTY') return 'it conflicts with its base branch';
+  if (s.mergeStateStatus === 'BEHIND') return "it's behind its base branch";
+  if (s.mergeStateStatus === 'UNSTABLE') return 'some checks are failing';
+  if (s.reviewDecision === 'CHANGES_REQUESTED') return 'someone requested changes';
+  if (s.autoMergeRequest) return 'auto-merge was already on';
+  return s.reasons?.map((r) => r.text.toLowerCase()).join(', ') || "it can't merge yet";
+}
+
 // expectedHeadOid: refuse if commits were pushed after the state I looked at.
 export const mergePR = (s: MergeState, method: MergeMethod, title: string, body: string, auto: boolean) =>
   isLabId(s.id) ? lab.mergeLab(s, method, title, body, auto) : graphql(
@@ -1852,14 +1881,15 @@ export async function unnamedGroup(repo: string, n: number, pr: Pick<PR, 'reques
 // restore: closed, its branch deleted, and you may push here: the branch can be made again at its last commit, then reopened.
 // updateBranch: behind its base and you may bring it up to date (GitHub merges the base in; GitLab rebases: `rebase`).
 // label: may add and remove its labels (triage and up; GitLab's update right).
-export type PrRights = { close: boolean; reopen: boolean; restore: boolean; updateBranch: boolean; rebase: boolean; label: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string; headSha: string };
+// merge: may merge it (write and up; GitLab's own say).
+export type PrRights = { merge: boolean; close: boolean; reopen: boolean; restore: boolean; updateBranch: boolean; rebase: boolean; label: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string; headSha: string };
 export async function prRights(repo: string, n: number): Promise<PrRights> {
   if (isLab(repo)) return lab.labPrRights(repo, n);
   const [o, r] = repo.split('/');
   const d = (await graphql(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){viewerPermission pullRequest(number:$n){viewerCanClose viewerCanReopen viewerCanUpdate viewerCanUpdateBranch isCrossRepository headRefName headRefOid headRef{id}}}}`, { o, r, n })).repository;
   const p = d?.pullRequest;
   const push = ['WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission);
-  return { close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, restore: !!p?.viewerCanReopen && !p.headRef && !p.isCrossRepository && push, updateBranch: !!p?.viewerCanUpdateBranch, rebase: false, label: ['TRIAGE', 'WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission), update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '', headSha: p?.headRefOid ?? '' };
+  return { merge: push, close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, restore: !!p?.viewerCanReopen && !p.headRef && !p.isCrossRepository && push, updateBranch: !!p?.viewerCanUpdateBranch, rebase: false, label: ['TRIAGE', 'WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission), update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '', headSha: p?.headRefOid ?? '' };
 }
 // Its branch again, at the commit the PR last had (both forges keep it), so it can be reopened.
 export const restoreBranch = (repo: string, r: PrRights) =>

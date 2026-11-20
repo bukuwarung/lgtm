@@ -49,6 +49,7 @@ const ICONS: Record<string, string> = {
   conflict: 'alert',
   draft: 'git-pull-request-draft',
   assigned: 'person',
+  people: 'people',
   merge: 'git-merge',
   behind: 'arrow-down',
   pushed: 'repo-push',

@@ -15,13 +15,13 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase } from './github.ts';
+  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
 import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
-import { MergeBox } from './merge.tsx';
+import { MergeBox, mergeOnceApproved } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
 import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
@@ -128,6 +128,8 @@ const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>)
 const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
 type Notice = { text: string; ok: boolean };
+// Reviews on their way to GitHub after you moved on (submit): opening one again meanwhile waits for it, not sending twice.
+const sending = new Map<string, Promise<unknown>>();
 // onReviewed: the review is in and the user chose to move on (with the Slack result, if any, to show next).
 
 // On my own PR (Settings → Slack → "A button to ask QA"): the QA request, filled in from the PR and yours to edit, then
@@ -620,7 +622,7 @@ export async function swapReviewer(repo: string, n: number, away: string, skip: 
 // focus: review mode (main.tsx), where the index starts hidden and a review always moves on.
 // practice: review mode's practice run, where finishing a review only moves on (github.ts refuses every write).
 // toReview: the list has it as waiting for my review (undefined until the list is in).
-export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onReviewed, flash, focus, practice }: { repo: string; n: number; toReview?: boolean; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null) => void | Promise<unknown>; flash?: Notice | null; focus?: boolean; practice?: boolean }) {
+export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onReviewed, flash, focus, practice }: { repo: string; n: number; toReview?: boolean; onOpened: () => void; onSubmitted: (event?: ReviewEvent) => void; onReviewed: (notice: Notice | null, event?: ReviewEvent) => void | Promise<unknown>; flash?: Notice | null; focus?: boolean; practice?: boolean }) {
   const [data, setData] = useState<{ pr: PR; headRepo: string; files: File[]; rules: ReturnType<typeof parseGeneratedRules> } | null>(null);
   const [stack, setStack] = useState<StackLayer[]>([]);
   // "Changes since my last review": the commit I last reviewed, and that comparison once loaded.
@@ -902,6 +904,16 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const keys = useRef<(e: KeyboardEvent, named?: Action) => void>(() => {});
   const [bindings] = useBindings();
   const key = `drafts:${repo}#${n}`;
+  // A review of it still on its way (sent as you moved on): Finish review waits for it, then the page reloads.
+  const [inFlight, setInFlight] = useState(() => sending.has(`${repo}#${n}`));
+  useEffect(() => {
+    const p = sending.get(`${repo}#${n}`);
+    if (!p) return;
+    let live = true;
+    const done = () => live && (setInFlight(false), dispatchEvent(new Event('lgtm:refresh')));
+    p.then(done, done);
+    return () => void (live = false);
+  }, []);
 
   // Checks are secondary: a failure here shouldn't block the review.
   const [checksErr, setChecksErr] = useState('');
@@ -1304,9 +1316,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     (next.length ? storage.set(key, s) : storage.remove(key)).catch((e) => setError(e.message));
   }
 
-  // step: what it's doing now, for the button (submitting, Slack, opening the next one).
-  async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void = () => {}) {
-    if (practice) return onSubmitted(event), onReviewed(null), true;
+  // step: what it's doing now, for the button. merge: an approval, then merged (or auto-merge) once it may be.
+  // Moving on (the next PR, review mode): the next one opens at once and the review goes in the background; a failure
+  // says so, with a way back to it, its comments and summary as they were (they're cleared once it's in).
+  async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void = () => {}, merge = false): Promise<boolean | 'sending'> {
+    if (practice) return onSubmitted(event), onReviewed(null, event), true;
     // GitHub won't take a comment or a change request with nothing in it. A comment with nothing new (my comments
     // already posted one by one) has nothing to send: it's done, move on. A change request needs to say what.
     if (event === 'REQUEST_CHANGES' && !body.trim() && !drafts.length && !pending?.count) {
@@ -1316,79 +1330,101 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (event !== 'APPROVE' && !body.trim() && !drafts.length && !pending?.count) {
       noteReadSaved(`${repo}#${n}`, trimmedLines);
       onSubmitted(event);
-      if (next || focus) onReviewed(null);
+      if (next || focus) onReviewed(null, event);
       else setNotice({ ok: true, text: `Your comments are already on ${site(repo)}: nothing more to send.` });
       return true;
     }
-    const now = await getPR(repo, n);
-    const head = now.head.sha;
-    let sha = drafts.length ? saved.sha : head;
+    // Comments written on an older commit: new commits move them with their lines, and only ones whose lines changed
+    // need asking about, here, before anything goes.
+    let sha = '';
     let send = drafts;
-    if (sha !== head) {
-      // New commits since the drafts: they move with their lines; only ones whose lines changed need asking about.
-      const { moved, stuck } = await moveDrafts(repo, n, drafts, sha, pr, now);
-      if (!stuck) (send = moved), (sha = head);
-      else if (!(await ask(`New commits changed the lines under ${stuck === drafts.length ? (stuck === 1 ? 'your comment' : `your ${stuck} comments`) : `${stuck} of your ${drafts.length} comments`}. Submit ${drafts.length === 1 ? 'it' : 'them all'} on the older commit, where ${drafts.length === 1 ? 'it was' : 'they were'} written?`, 'Submit'))) return false;
-    }
-    await submitReview(pr.node_id, sha, event, body, send, pending?.id).catch((e) => {
-      // Comments that made it into the review on GitHub are there now: a retry sends only the rest.
-      if (e.sent?.length) saveDrafts(drafts.filter((d) => !e.sent.includes(d.id))), setPending((p) => p && { ...p, count: p.count + e.sent.length });
-      throw e;
-    });
-    setPending(null);
-    // A Claude Code session or Codex conversation sent this PR here: offer to send it the outcome (a message stays up
-    // past moving on).
-    const from = linkedSession(repo, n);
-    if (from) {
-      const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
-      dispatchEvent(
-        new CustomEvent('lgtm:toast', {
-          detail: { text: `This ${pageTerm().PR} has a ${from.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'}.`, action: ['Send it your review', () => void backToSession(from.id, text, from.agent).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
-        }),
-      );
-    }
-    saveDrafts([]);
-    if (event === 'APPROVE') void markDoneOnSlack(`${repo}#${n}`, pr.user.login);
-    noteReadSaved(`${repo}#${n}`, trimmedLines);
-    onSubmitted(event);
-    let result: Notice | null = null;
-    if (notify && slackTo?.length) {
-      step('Messaging on Slack…');
-      // The review is in; a Slack failure is reported, not thrown.
-      try {
-        const text = slackText(pr, repo, n, event, body, drafts.length ? drafts.map((d) => d.path) : me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).map((t) => t.path) : []);
-        // Asked about it on Slack (Settings → Slack): the answer replies there, tagging who asked; the others by DM.
-        const asked = await askFor(repo, n).catch(() => null);
-        let there = '';
-        if (asked) {
-          await slackReply(asked.channel, asked.thread, `<@${asked.user}> ${text}`);
-          there = `Answered in the thread where ${asked.login ? '@' + asked.login : asked.name ?? 'they'} asked on Slack.`;
-        }
-        const rest = asked?.login ? slackTo.filter((l) => l !== asked.login) : slackTo;
-        const results = rest.length ? await notifySlack(await slackRecipients(repo, rest), text, `${repo}#${n}`) : [];
-        slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads)); // a first message starts a thread
-        const failed = results.filter((r) => !r.ok);
-        const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : '') + (r.at ? ' (at 9 am their time)' : ''));
-        result = {
-          ok: !failed.length,
-          text: [there, sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${slackWhy(r)}`)].filter(Boolean).join(' '),
-        };
-      } catch (e: any) {
-        result = { ok: false, text: `Review submitted, but Slack failed: ${e.message}` };
+    if (drafts.length) {
+      step('Checking for new commits…');
+      const now = await getPR(repo, n);
+      sha = saved.sha;
+      if (sha !== now.head.sha) {
+        const { moved, stuck } = await moveDrafts(repo, n, drafts, sha, pr, now);
+        if (!stuck) (send = moved), (sha = now.head.sha);
+        else if (!(await ask(`New commits changed the lines under ${stuck === drafts.length ? (stuck === 1 ? 'your comment' : `your ${stuck} comments`) : `${stuck} of your ${drafts.length} comments`}. Submit ${drafts.length === 1 ? 'it' : 'them all'} on the older commit, where ${drafts.length === 1 ? 'it was' : 'they were'} written?`, 'Submit'))) return false;
       }
     }
-    if (result && !result.ok) reportError(result.text); // the review is in; Slack failed
-    if (next || focus) {
-      step(`Opening the next ${pageTerm().PR}…`);
-      await onReviewed(result);
+    const k = `${repo}#${n}`;
+    const job = (async (): Promise<Notice | null> => {
+      step('Submitting…');
+      if (!sha) sha = (await getPR(repo, n)).head.sha;
+      await submitReview(pr.node_id, sha, event, body, send, pending?.id).catch((e) => {
+        // Comments that made it into the review on GitHub are there now: a retry sends only the rest.
+        if (e.sent?.length) saveDrafts(drafts.filter((d) => !e.sent.includes(d.id))), setPending((p) => p && { ...p, count: p.count + e.sent.length });
+        throw e;
+      });
+      setPending(null);
+      saveDrafts([]);
+      void storage.remove(`summary:${k}`);
+      // A Claude Code session or Codex conversation sent this PR here: offer to send it the outcome.
+      const from = linkedSession(repo, n);
+      if (from) {
+        const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
+        dispatchEvent(
+          new CustomEvent('lgtm:toast', {
+            detail: { text: `${k} has a ${from.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'}.`, action: ['Send it your review', () => void backToSession(from.id, text, from.agent).then((note) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note } })))] },
+          }),
+        );
+      }
+      if (event === 'APPROVE') void markDoneOnSlack(k, pr.user.login);
+      noteReadSaved(k, trimmedLines);
+      onSubmitted(event);
+      const said: Notice[] = [];
+      if (merge && event === 'APPROVE') {
+        step('Merging…');
+        said.push(await mergeOnceApproved(repo, n).catch((e) => ({ ok: false, text: `Approved, but it didn't merge: ${e.message}` })));
+      }
+      if (notify && slackTo?.length) {
+        step('Messaging on Slack…');
+        // The review is in; a Slack failure is reported, not thrown.
+        try {
+          const text = slackText(pr, repo, n, event, body, drafts.length ? drafts.map((d) => d.path) : me ? allThreads.filter((t) => !t.isResolved && t.comments.nodes.some((c) => c.author?.login === me)).map((t) => t.path) : []);
+          // Asked about it on Slack (Settings → Slack): the answer replies there, tagging who asked; the others by DM.
+          const asked = await askFor(repo, n).catch(() => null);
+          let there = '';
+          if (asked) {
+            await slackReply(asked.channel, asked.thread, `<@${asked.user}> ${text}`);
+            there = `Answered in the thread where ${asked.login ? '@' + asked.login : asked.name ?? 'they'} asked on Slack.`;
+          }
+          const rest = asked?.login ? slackTo.filter((l) => l !== asked.login) : slackTo;
+          const results = rest.length ? await notifySlack(await slackRecipients(repo, rest), text, k) : [];
+          slackStatus(k).then((s) => setSlackThreads(s.threads)); // a first message starts a thread
+          const failed = results.filter((r) => !r.ok);
+          const sent = results.filter((r) => r.ok).map((r) => '@' + r.login + (r.threaded ? ' (in the existing thread)' : '') + (r.at ? ' (at 9 am their time)' : ''));
+          said.push({
+            ok: !failed.length,
+            text: [there, sent.length && `Messaged ${sent.join(', ')} on Slack.`, ...failed.map((r) => `Couldn't message @${r.login}: ${slackWhy(r)}`)].filter(Boolean).join(' '),
+          });
+        } catch (e: any) {
+          said.push({ ok: false, text: `Review submitted, but Slack failed: ${e.message}` });
+        }
+      }
+      for (const s of said) if (!s.ok) reportError(s.text); // the review is in; Slack or the merge didn't go
+      return said.length ? { ok: said.every((s) => s.ok), text: said.map((s) => s.text).filter(Boolean).join(' ') } : null;
+    })();
+    if (!(next || focus)) {
+      setNotice(await job);
+      step('Loading the threads…');
+      const [t, c] = await Promise.all([getThreads(repo, n), getConversation(repo, n)]);
+      setThreads(t);
+      setConversation(c);
       return true;
     }
-    setNotice(result);
-    step('Loading the threads…');
-    const [t, c] = await Promise.all([getThreads(repo, n), getConversation(repo, n)]);
-    setThreads(t);
-    setConversation(c);
-    return true;
+    sending.set(k, job);
+    job.then(
+      (r) => r?.ok && r.text && dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${k}: ${r.text}` } })),
+      (e) => {
+        reportError(`Your review of ${k} didn't go: ${e.message}`);
+        dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Your review of ${k} didn't go: ${e.message}. Its comments and summary are as you left them.`, action: ['Back to it', () => (location.hash = `/${repo}/pull/${n}`)], ms: 120_000 } }));
+      },
+    ).finally(() => sending.delete(k));
+    step(`Opening the next ${pageTerm().PR}…`);
+    await onReviewed(null, event);
+    return 'sending';
   }
 
   const mainLang = majorityLanguage(data.files.filter((f) => !f.generated).map((f) => f.filename));
@@ -1497,13 +1533,27 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       saveDrafts(drafts.filter((d) => d.id !== id));
       if (gone) offerUndo('Comment deleted', () => setSaved((s) => (s.drafts.some((d) => d.id === id) ? s : (void storage.set(key, { ...s, drafts: [...s.drafts, gone] }), { ...s, drafts: [...s.drafts, gone] }))));
     },
-    reply: async (t, body) => {
-      await reply(repo, n, t.comments.nodes[0].databaseId, body);
-      setThreads(await getThreads(repo, n));
+    // A reply shows at once (marked sending) and goes in the background; if it fails it's taken out again (the thread
+    // gets its text back).
+    reply: (t, body) => {
+      const esc = body.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]!);
+      const temp: GhComment = { databaseId: -Date.now(), url: '', body, bodyText: body, bodyHTML: `<p style="white-space: pre-wrap">${esc}</p>`, createdAt: new Date().toISOString(), author: me ? { login: me } : null, state: 'SENDING' };
+      const put = (f: (c: GhComment[]) => GhComment[]) => setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, comments: { nodes: f(x.comments.nodes) } } : x)));
+      put((c) => [...c, temp]);
+      return reply(repo, n, t.comments.nodes[0].databaseId, body).then(
+        () => void getThreads(repo, n).then(setThreads, () => {}),
+        (e) => {
+          put((c) => c.filter((x) => x !== temp));
+          throw e;
+        },
+      );
     },
+    // Resolved (or not) at once, then on the site; put back if that fails.
     resolve: async (t, resolve) => {
-      await resolveThread(t.id, resolve);
-      setThreads(await getThreads(repo, n));
+      const flip = (on: boolean) => setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, isResolved: on, viewerCanUnresolve: on || x.viewerCanUnresolve, viewerCanResolve: !on || x.viewerCanResolve } : x)));
+      flip(resolve);
+      await resolveThread(t.id, resolve).catch((e) => (flip(!resolve), Promise.reject(e)));
+      void getThreads(repo, n).then(setThreads, () => {});
       if (resolve) offerUndo('Thread resolved', () => resolveThread(t.id, false).then(async () => setThreads(await getThreads(repo, n)), (e) => setError(`Couldn't unresolve it: ${e.message}`)));
     },
     // As GitHub's "Add single comment": a one-comment review on the commit on show; then its thread appears.
@@ -1805,6 +1855,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       index: toggleIndex,
       whitespace: toggleWs,
       finish: () => dispatchEvent(new Event('lgtm:finish')), // SubmitPanel opens, its summary box focused
+      approve: () => dispatchEvent(new CustomEvent('lgtm:finish', { detail: { event: 'APPROVE' } })), // …with Approve picked
       // The next or previous PR as the list shows it (its tab, groups and order), from the one open.
       browse: () => dispatchEvent(new Event('lgtm:browse')), // main.tsx: the Browse tab, its switcher open
       prActions: () => dispatchEvent(new Event('lgtm:pr-acts')), // StateMenu opens
@@ -1892,7 +1943,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               slackWith={new Set(slackThreads.map((t) => t.login))}
               reRequest={!!me && pr.user.login === me ? reRequest : undefined}
               replace={!!me && pr.user.login === me ? replaceReviewer : undefined}
-              addMe={!!me && pr.user.login !== me ? () => requestReview(repo, n, me).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
+              addMe={!!me && pr.user.login !== me ? () => takeReview(repo, n, (pr.requested_teams ?? []).map((t) => t.slug)).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
               me={me}
               modules={view === 'all' ? shownModules : undefined}
               steps={readingOrder ? steps : undefined}
@@ -1982,7 +2033,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
             {(askQa || (rights && (rights.close || rights.reopen || rights.restore || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
+            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit} canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -2456,7 +2507,9 @@ type SubmitProps = {
   slackTo: string[] | null;
   threaded: string[];
   slackNote: string;
-  onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void) => Promise<boolean>;
+  onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void, merge: boolean) => Promise<boolean | 'sending'>;
+  canMerge?: boolean; // I may merge it, and it's open and ready: approving can merge it too
+  inFlight?: boolean; // a review of it is still on its way (sent as you moved on)
   repo: string;
   mentions: string[];
   authored: boolean; // my own PR: GitHub only takes comments there
@@ -2487,11 +2540,14 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 const slackWhy = (r: { login: string; error?: string }) =>
   /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
 
-function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0 }: SubmitProps) {
+function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, inFlight = false }: SubmitProps) {
   const [open, setOpen] = useState(false);
   useDismiss(open, () => setOpen(false), '.review-submit');
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
+  const [mergeIt, toggleMergeIt] = useStoredFlag('mergeOnApprove', false);
+  const merging = canMerge && mergeIt && !authored;
+  const want = useRef<ReviewEvent | null>(null); // the verdict asked for (A: Approve), picked as it opens
   const [body, setBody] = useState('');
   const [event, setEvent] = useState<ReviewEvent>('COMMENT');
   const [busy, setBusy] = useState(''); // what submitting is doing now
@@ -2513,7 +2569,8 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   useEffect(() => {
     // detail.append: text for the summary, after what's there (an agent's answer, from Ask).
     const show = (e: Event) => {
-      const add = (e as CustomEvent<{ append?: string } | null>).detail?.append;
+      const { append: add, event: v } = (e as CustomEvent<{ append?: string; event?: ReviewEvent } | null>).detail ?? {};
+      if (v) want.current = v;
       if (add) setBody((b) => (b.trim() ? `${b.trimEnd()}\n\n${add}` : add));
       setOpen(true);
       setTimeout(() => document.querySelector<HTMLTextAreaElement>('.panel textarea')?.focus());
@@ -2529,7 +2586,13 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
     void storage.get<{ body: string; event: ReviewEvent }>(saveAs).then((k) => k && ((kept.current = k), setBody(k.body), setEvent(k.event)));
   }, [saveAs]);
   const keep = (b: string, e: ReviewEvent) => void (b.trim() && b !== mySummary && b !== APPROVE_NOTE ? storage.set(saveAs, { body: b, event: e }) : storage.remove(saveAs));
-  useEffect(() => void (open && !kept.current && setEvent(authored ? 'COMMENT' : defaultEvent(count, myOpenThreads))), [open, authored]);
+  useEffect(() => {
+    if (!open) return;
+    const w = want.current;
+    want.current = null;
+    if (w && !authored) pick(w);
+    else if (!kept.current) setEvent(authored ? 'COMMENT' : defaultEvent(count, myOpenThreads));
+  }, [open, authored]);
   // Approving with pending comments: say so, unless I've written my own summary.
   // Some verdicts start their summary: approving with comments pending says so; a change request, what my comments ask.
   const pick = (v: ReviewEvent) => {
@@ -2545,11 +2608,12 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
     setBusy('Submitting…');
     setErr('');
     try {
-      if (await onSubmit(event, body, notify, next && !authored, setBusy)) {
+      const done = await onSubmit(event, body, notify, next && !authored, setBusy, merging && event === 'APPROVE');
+      if (done) {
         setOpen(false);
         setBody('');
         kept.current = null;
-        void storage.remove(saveAs);
+        if (done === true) void storage.remove(saveAs); // still sending: cleared once it's in
       }
     } catch (e: any) {
       setErr(e.message);
@@ -2560,8 +2624,8 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
 
   return (
     <div class="submit review-submit">
-      <button class="primary" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {busy && !open ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : <>{authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" /></>}
+      <button class="primary" aria-expanded={open} disabled={inFlight} onClick={() => setOpen(!open)}>
+        {inFlight ? <><span class="btn-spin" aria-hidden="true" />Sending your review…</> : busy && !open ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : <>{authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" /></>}
       </button>
       {open && (
         <div class="panel">
@@ -2583,6 +2647,11 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
           {slackTo && slackTo.length > 0 && (
             <label>
               <input type="checkbox" checked={notify} onChange={toggleNotify} /> Message {slackTo.map((l) => '@' + l).join(', ')} on Slack
+            </label>
+          )}
+          {canMerge && !authored && event === 'APPROVE' && (
+            <label title="Once your approval is in: merged the repo's usual way if nothing else is in the way, or auto-merge while only checks are left. Failing checks, a do-not-merge sign or another review still needed: not merged, and it says why">
+              <input type="checkbox" checked={mergeIt} onChange={toggleMergeIt} /> Then merge it, or turn on auto-merge while checks run
             </label>
           )}
           {!authored && (
@@ -2620,7 +2689,9 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
                 Sends {authored ? 'a comment' : { COMMENT: 'a comment', APPROVE: 'an approval', REQUEST_CHANGES: 'a change request' }[event]}
                 {body.trim() ? ' with your summary' : event === 'REQUEST_CHANGES' ? ' with a summary of your comments' : ''}
                 {count > 0 && `, and ${count} line comment${count > 1 ? 's' : ''}`}
+                {merging && event === 'APPROVE' && '; then merges it if it may'}
                 {notify && slackTo && slackTo.length > 0 && `; messages ${slackTo.map((l) => '@' + l).join(', ')} on Slack`}.
+                {next && !authored && ' The next PR opens at once; this goes on in the background.'}
                 {lineComments.length > 0 && (
                   <span class="sends-list">
                     {lineComments.slice(0, 6).map((d) => `${base(d.path)}${d.line ? ':' + d.line : ''}`).join(' · ')}
@@ -4517,7 +4588,6 @@ const foldedAsBot = (t: Thread, waiting: boolean) =>
   t.comments.nodes.every((c) => c.author?.__typename === 'Bot') || (!waiting && t.comments.nodes[0]?.state !== 'PENDING' && agentSays(t.comments.nodes[0]?.body));
 function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const [body, setBody] = useState('');
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const first = t.comments.nodes[0];
   const waiting = !!ctx.me && awaitsMe(t, ctx.me, ctx.pr.user.login === ctx.me);
@@ -4530,20 +4600,14 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const others = !!ctx.me && ctx.pr.user.login !== ctx.me && !t.comments.nodes.some((c) => c.author?.login === ctx.me);
   const verdict = ctx.checked[t.id];
 
-  async function act(f: () => Promise<void>) {
-    setBusy(true);
-    setErr('');
-    try {
-      await f();
-    } catch (e: any) {
-      setErr(e.message);
-    }
-    setBusy(false);
-  }
-  const send = () => act(async () => {
-    await ctx.reply(t, body);
+  // Sent in the background (it shows at once); a failure gives the text back.
+  const send = () => {
+    const b = body;
     setBody('');
-  });
+    setErr('');
+    ctx.reply(t, b).catch((e: Error) => (setBody((cur) => (cur.trim() ? cur : b)), setErr(`Couldn't send it: ${e.message}`)));
+  };
+  const flip = (on: boolean) => (setErr(''), ctx.resolve(t, on).catch((e: Error) => setErr(e.message)));
 
   // A 🤖 finding posted again: one line pointing at the first, until shown.
   if (again && !showAgain && first?.state !== 'PENDING')
@@ -4572,7 +4636,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       {!t.isResolved && verdict && ctx.checkBy && (
         <p class={`t-verdict ${verdict.addressed ? 'v-done' : 'v-open'}`}>
           <AgentMark id={ctx.checkBy} /> {verdict.addressed ? 'Addressed' : 'Not addressed yet'}: {verdict.why}
-          {verdict.addressed && t.viewerCanResolve && <> <button class="link" disabled={busy} onClick={() => act(() => ctx.resolve(t, true))}>Resolve</button></>}
+          {verdict.addressed && t.viewerCanResolve && <> <button class="link" onClick={() => flip(true)}>Resolve</button></>}
         </p>
       )}
       <ThenNow s={ctx.sinceComment.get(t.id)} />
@@ -4580,6 +4644,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId} data-url={c.url} data-src={c.body ?? undefined}>
           <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)} title={`@${c.author?.login ?? 'ghost'}`}>{shownName(c.author?.login ?? 'ghost', ctx.repo)}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
+          {c.state === 'SENDING' && <span class="badge"> · sending…</span>}
           <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
           {c.state === 'PENDING' && c.id ? (
             <PendingComment c={c} ctx={ctx} path={t.path} t={t} />
@@ -4591,15 +4656,15 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       ))}
       {first?.state !== 'PENDING' && (
         <>
-        <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && !busy && send()} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder="Reply… (⌘↵ to send)" />
+        <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && send()} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder="Reply… (⌘↵ to send)" />
         <div class="row">
           {body.trim() && (
-            <button disabled={busy} onClick={send}>
+            <button onClick={send}>
               Reply
             </button>
           )}
           {(t.isResolved ? t.viewerCanUnresolve : t.viewerCanResolve) && (
-            <button disabled={busy} onClick={() => act(() => ctx.resolve(t, !t.isResolved))}>
+            <button onClick={() => flip(!t.isResolved)}>
               {t.isResolved ? 'Unresolve' : 'Resolve thread'}
             </button>
           )}

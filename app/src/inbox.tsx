@@ -23,9 +23,12 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   const [me, setMe] = useState('');
   const [list, setList] = useState<Waiting[] | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set()); // replied to or resolved here
+  // Back: puts it on the list again (what it was for didn't go).
   const hide = (id: string, what?: string, undo?: () => unknown) => {
+    const back = () => setDone((s) => new Set([...s].filter((x) => x !== id)));
     setDone((s) => new Set(s).add(id));
-    if (what && undo) offerUndo(what, () => (undo(), setDone((s) => new Set([...s].filter((x) => x !== id)))));
+    if (what && undo) offerUndo(what, () => (undo(), back()));
+    return back;
   };
   const [cur, setCur] = useState(0); // the thread the keys act on, in page order
   const asked = (items ?? []).filter((i) => (i.thread?.awaiting ?? 0) > 0);
@@ -130,12 +133,14 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
 }
 
 // Off the list: with what happened and how to take it back when it can be (an Undo toast), else just gone (a reply sent).
-type Done = (what?: string, undo?: () => unknown) => void;
+// Back: on the list again.
+type Done = (what?: string, undo?: () => unknown) => () => void;
+// A reply that didn't go, kept for its thread as it comes back on the list.
+const unsentReplies = new Map<string, string>();
 const FAILED: Record<string, string> = { reply: 'send the reply', resolve: 'resolve it', commit: 'commit the suggestion' };
 
 function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Thread; names: Map<string, string>; item: Item; me: string; current: boolean; onPick: () => void; onDone: Done }) {
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState('');
+  const [text, setText] = useState(() => unsentReplies.get(t.id) ?? '');
   const last = t.comments.nodes[t.comments.nodes.length - 1];
   const where = `${names.get(t.path) ?? t.path}${t.line ? `:${t.line}` : ''}`;
   // On my own open PR, the last word a current suggested change: committed to the branch, the thread resolved (as the
@@ -147,11 +152,12 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
     await resolveThread(t.id, true).catch(() => {});
     dispatchEvent(new Event('lgtm:list-refresh'));
   };
+  // Off the list at once, done in the background; if it fails it's back on the list (a reply with its text) and says so.
   const act = (what: string, run: () => Promise<unknown>, undo?: () => unknown) => {
-    setBusy(what);
-    run().then(() => onDone(undo && 'Thread resolved', undo), (e) => (setBusy(''), reportError(`Couldn't ${FAILED[what]}: ${e.message}`)));
+    const back = onDone(undo && 'Thread resolved', undo);
+    run().then(() => unsentReplies.delete(t.id), (e) => (back(), reportError(`Couldn't ${FAILED[what]}: ${e.message}`)));
   };
-  const send = () => text.trim() && !busy && act('reply', () => reply(item.repo, item.number, t.comments.nodes[0].databaseId, text.trim()));
+  const send = () => text.trim() && (unsentReplies.set(t.id, text.trim()), act('reply', () => reply(item.repo, item.number, t.comments.nodes[0].databaseId, text.trim())));
   return (
     <div class={current ? 'inbox-thread cur' : 'inbox-thread'} onPointerDown={onPick} onFocusIn={onPick}>
       <div class="inbox-where">
@@ -178,26 +184,25 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
       <textarea rows={2} placeholder={`Reply to ${last?.author?.login === me ? 'this thread' : `@${last?.author?.login ?? 'them'}`}`} value={text}
         onInput={(e) => setText(e.currentTarget.value)}
         onKeyDown={(e) => (e.key === 'Escape' ? e.currentTarget.blur() : e.key === 'Enter' && (e.metaKey || e.ctrlKey) && (e.preventDefault(), send()))}
-        disabled={!!busy}
       />
       <div class="row">
         {/* Done: off the list without a reply or a resolve, until someone writes again (kept on this machine). */}
         <button
-          disabled={!!busy || !last}
+          disabled={!last}
           data-k="e"
           title={`Take it off your list without replying; it comes back if someone writes again. Nothing changes on ${T.site}.`}
           onClick={() => (markReplyDone(t.id, last!.databaseId), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(t.id), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}
         >
           Done
         </button>
-        {t.viewerCanResolve && <button disabled={!!busy} data-k="x" onClick={() => act('resolve', () => resolveThread(t.id, true), () => resolveThread(t.id, false).catch((e) => reportError(`Couldn't unresolve it: ${e.message}`)))}>{busy === 'resolve' ? 'Resolving…' : 'Resolve'}</button>}
+        {t.viewerCanResolve && <button data-k="x" onClick={() => act('resolve', () => resolveThread(t.id, true), () => resolveThread(t.id, false).catch((e) => reportError(`Couldn't unresolve it: ${e.message}`)))}>Resolve</button>}
         {sug && (
-          <button disabled={!!busy} data-k="c" title={`Commit @${last!.author?.login}'s suggestion to the branch and resolve the thread (c)`} onClick={() => act('commit', commit)}>
-            {busy === 'commit' ? 'Committing…' : 'Commit suggestion'}
+          <button data-k="c" title={`Commit @${last!.author?.login}'s suggestion to the branch and resolve the thread (c)`} onClick={() => act('commit', commit)}>
+            Commit suggestion
           </button>
         )}
-        <button class="primary" disabled={!!busy || !text.trim()} title="Send (⌘↵)" onClick={send}>
-          {busy === 'reply' ? 'Sending…' : 'Reply'}
+        <button class="primary" disabled={!text.trim()} title="Send (⌘↵)" onClick={send}>
+          Reply
         </button>
       </div>
     </div>
@@ -222,16 +227,17 @@ function Code({ t }: { t: Thread }) {
 
 // A PR conversation comment mentioning me: a reply goes on the conversation; Done as a thread's.
 function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: Item; current: boolean; onPick: () => void; onDone: Done }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => unsentReplies.get(c.id!) ?? '');
   // A GitLab mention's to-do follows Done (Settings → Inbox), and its Undo.
   const [todoSync] = useStoredFlag('gitlabTodoSync', true);
   const todo = todoSync && isLab(item.repo);
   const sync = (done: boolean) => todo && void syncLabTodo(c, done).catch((e) => reportError(`Couldn't ${done ? 'mark' : 'restore'} the GitLab to-do: ${e.message}`));
-  const [busy, setBusy] = useState(false);
+  // Off the list at once, sent in the background; back with its text if it doesn't go.
   const send = () => {
-    if (!text.trim() || busy) return;
-    setBusy(true);
-    commentOnPR(item.repo, item.number, text.trim()).then(onDone, (e) => (setBusy(false), reportError(`Couldn't send the reply: ${e.message}`)));
+    if (!text.trim()) return;
+    unsentReplies.set(c.id!, text.trim());
+    const back = onDone();
+    commentOnPR(item.repo, item.number, text.trim()).then(() => unsentReplies.delete(c.id!), (e) => (back(), reportError(`Couldn't send the reply: ${e.message}`)));
   };
   return (
     <div class={current ? 'inbox-thread cur' : 'inbox-thread'} onPointerDown={onPick} onFocusIn={onPick}>
@@ -247,14 +253,13 @@ function InboxMention({ c, item, current, onPick, onDone }: { c: Comment; item: 
         value={text}
         onInput={(e) => setText(e.currentTarget.value)}
         onKeyDown={(e) => (e.key === 'Escape' ? e.currentTarget.blur() : e.key === 'Enter' && (e.metaKey || e.ctrlKey) && (e.preventDefault(), send()))}
-        disabled={busy}
       />
       <div class="row">
-        <button disabled={busy} data-k="e" title={todo ? 'Take it off your list without replying; its GitLab to-do is marked done too.' : `Take it off your list without replying. Nothing changes on ${T.site}.`} onClick={() => (markReplyDone(c.id!, c.databaseId), sync(true), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(c.id!), sync(false), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}>
+        <button data-k="e" title={todo ? 'Take it off your list without replying; its GitLab to-do is marked done too.' : `Take it off your list without replying. Nothing changes on ${T.site}.`} onClick={() => (markReplyDone(c.id!, c.databaseId), sync(true), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')), onDone('Marked done', () => (unmarkReplyDone(c.id!), sync(false), forgetThreadStatus(item.id), dispatchEvent(new Event('lgtm:list-refresh')))))}>
           Done
         </button>
-        <button class="primary" disabled={busy || !text.trim()} title="Send (⌘↵)" onClick={send}>
-          {busy ? 'Sending…' : 'Reply'}
+        <button class="primary" disabled={!text.trim()} title="Send (⌘↵)" onClick={send}>
+          Reply
         </button>
       </div>
     </div>

@@ -3,7 +3,7 @@ import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview, closedOnSlack, WHY_CLOSE, askText } from './platform.ts';
-import { closeWithReason, deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranchAndWait, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { afterApproval, closeWithReason, deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranchAndWait, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -29,6 +29,20 @@ export function blockers(s: MergeState, checks: Check[] | null): string[] {
   return s.mergeStateStatus === 'BLOCKED' && !out.length ? ['Blocked by branch rules'] : out;
 }
 
+// Approve and merge (the Finish review panel): once my approval is in, merge it the repo's usual way if nothing else is
+// in the way; while only checks are left (or GitHub hasn't counted the approval yet), auto-merge. Failing checks, a
+// "do not merge" sign or another review still needed: not merged, and says why. GitHub takes a moment to count a new
+// approval, so it looks again a few times.
+export async function mergeOnceApproved(repo: string, n: number, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<{ ok: boolean; text: string }> {
+  let s = await getMergeState(repo, n);
+  for (let i = 0; i < 5 && afterApproval(s) === 'wait'; i++) await wait(1500), (s = await getMergeState(repo, n));
+  const next = afterApproval(s);
+  const m = s.methods[0];
+  if (next === 'merge' || next === 'auto') await mergePR(s, m, s.message[m].title, s.message[m].body, next === 'auto');
+  return next === 'merge' ? { ok: true, text: `Approved and merged (${VERB[m].toLowerCase()}).` }
+    : next === 'auto' ? { ok: true, text: 'Approved; auto-merge is on: it merges once its checks pass.' }
+    : { ok: false, text: `Approved, not merged: ${next !== 'wait' ? next : s.reviewDecision === 'REVIEW_REQUIRED' ? 'it needs another approval' : `${site(repo)} hasn't worked out yet whether it can merge`}.` };
+}
 export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) => !s.isDraft && ['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus);
 
 // Merge status and controls, on my own PRs: a button in the PR's bar (named for the merge, green when it can go) opening

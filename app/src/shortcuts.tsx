@@ -196,17 +196,18 @@ function SlackAsk({ login, ask }: { login: string; ask: (login: string) => Promi
 }
 
 // On someone else's PR I'm not reviewing yet: request my own review, so it's on GitHub and in my queue.
-function AddMe({ add }: { add: () => Promise<unknown> }) {
+// teams: the PR asks teams (maybe mine): taking it asks me by name and drops the ones I'm in.
+function AddMe({ add, teams = [] }: { add: () => Promise<unknown>; teams?: string[] }) {
   const [state, setState] = useState<'' | 'adding' | string>('');
   return (
     <button
       class="ix-item ix-add-me"
       disabled={state === 'adding'}
-      title={state && state !== 'adding' ? state : `Request your own review on this ${pageTerm().PR}`}
+      title={state && state !== 'adding' ? state : teams.length ? `Ask yourself to review it by name, and take it off ${teams.map((t) => '@' + t).join(', ')} where you're in it, so the rest of the team stops waiting on it` : `Request your own review on this ${pageTerm().PR}`}
       onClick={() => (setState('adding'), add().then(() => setState(''), (e) => setState(`Couldn't add you: ${e.message}`)))}
     >
       <span class="ix-label">
-        <Icon name="person" /> {state === 'adding' ? 'Adding you…' : state ? "Couldn't add you · retry" : 'Add me as a reviewer'}
+        <Icon name="person" /> {state === 'adding' ? (teams.length ? 'Taking it…' : 'Adding you…') : state ? "Couldn't add you · retry" : teams.length ? `Take it from ${teams.map((t) => '@' + t).join(', ')}` : 'Add me as a reviewer'}
       </span>
     </button>
   );
@@ -549,7 +550,7 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
             </>
           ))}
         {!ask && !reviewers.size && <p class="note ix-pad">Nobody yet.</p>}
-        {addMe && !reviewers.has(me) && <AddMe add={addMe} />}
+        {addMe && !reviewers.has(me) && <AddMe add={addMe} teams={(pr.requested_teams ?? []).map((t) => t.slug)} />}
       </Section>
 
       {(canLabel || !!pr.labels?.length) && <Labels repo={repo} n={pr.number} labels={pr.labels ?? []} canEdit={canLabel} />}

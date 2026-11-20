@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
-import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef } from '../src/github.ts';
+import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef, afterApproval } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, uniqueNames, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -1539,4 +1539,16 @@ test('teamLabel: the org left out unless another team listed has the same name',
   assert.equal(teamLabel('acme/android', ['acme/android', 'other/android']), 'acme/android');
   assert.equal(teamLabel('acme/android'), 'acme/android');
   assert.equal(teamLabel('gitlab.co/grp/sub', ['gitlab.co/grp/sub', 'gitlab.co/grp/two']), 'sub');
+});
+
+test('approve and merge: merges when clear, auto-merge when only checks are left, else says why', () => {
+  const s = { holds: [] as string[], isDraft: false, mergeStateStatus: 'CLEAN', reviewDecision: 'APPROVED', viewerCanEnableAutoMerge: true, autoMergeRequest: null, mergeable: 'MERGEABLE' } as any;
+  assert.equal(afterApproval(s), 'merge');
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED' }), 'auto');
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED', reviewDecision: 'REVIEW_REQUIRED' }), 'wait'); // not counted yet, or another approval needed
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'UNKNOWN' }), 'wait');
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'UNSTABLE' }), 'some checks are failing');
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'DIRTY', mergeable: 'CONFLICTING' }), 'it conflicts with its base branch');
+  assert.match(afterApproval({ ...s, holds: ['the “wip” label'] }), /marked not to merge/);
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED', viewerCanEnableAutoMerge: false }), "it can't merge yet");
 });

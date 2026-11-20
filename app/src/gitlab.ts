@@ -487,9 +487,9 @@ export const changeLabBase = (repo: string, n: number, base: string) => (forget(
 export const reopenLab = (repo: string, n: number) => send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', { state_event: 'reopen' });
 // What you may do to an MR (github.ts prRights): GitLab's update right covers closing, reopening and drafts.
 export async function labPrRights(repo: string, n: number) {
-  const m = await getMR(repo, n, 'state sourceBranch sourceBranchExists sourceProjectId targetProjectId diffHeadSha detailedMergeStatus userPermissions{updateMergeRequest pushToSourceBranch}');
+  const m = await getMR(repo, n, 'state sourceBranch sourceBranchExists sourceProjectId targetProjectId diffHeadSha detailedMergeStatus userPermissions{updateMergeRequest pushToSourceBranch canMerge}');
   const update = !!m.userPermissions?.updateMergeRequest;
-  return { close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, restore: update && m.state === 'closed' && !m.sourceBranchExists && m.sourceProjectId === m.targetProjectId && !!m.diffHeadSha, label: update, updateBranch: m.state === 'opened' && !!m.userPermissions?.pushToSourceBranch && m.detailedMergeStatus === 'NEED_REBASE', rebase: true, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string, headSha: (m.diffHeadSha ?? '') as string };
+  return { merge: !!m.userPermissions?.canMerge, close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, restore: update && m.state === 'closed' && !m.sourceBranchExists && m.sourceProjectId === m.targetProjectId && !!m.diffHeadSha, label: update, updateBranch: m.state === 'opened' && !!m.userPermissions?.pushToSourceBranch && m.detailedMergeStatus === 'NEED_REBASE', rebase: true, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string, headSha: (m.diffHeadSha ?? '') as string };
 }
 export const markLabReady = (id: string) => {
   const { repo, n } = mrOf(id);

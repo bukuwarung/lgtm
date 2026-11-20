@@ -3,7 +3,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview } from './github.ts';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
@@ -894,7 +894,7 @@ function App() {
               setAnsweredTick((t) => t + 1);
               setTimeout(() => setQueueVersion((v) => v + 1), 60_000);
             }}
-            onReviewed={(notice) => moveOn(r, 'done', notice)}
+            onReviewed={(notice, event) => (event && (lastEvent.current = event), moveOn(r, 'done', notice))}
             focus={!!rm}
             practice={rm?.practice}
             flash={flash?.route === route ? flash : null}
@@ -1898,6 +1898,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             run={() => swapReviewer(i.repo, i.number, r, [i.author, ...i.assignees, ...i.pendingReviewers, ...(i.reviewedBy ?? []), ...i.changesBy, ...readBots()], { title: i.title, url: prWebUrl(i.repo, i.number), author: i.author }).then((x) => x.said)}
           />
         ))}
+        {kind === REVIEWING && i.viaTeam && !i.slackAsk && (
+          <QuickPill icon="people" tone="" idle={`via ${i.viaTeam.map((t) => '@' + t).join(', ')}`} action="Take it" busy="taking…" done="yours" title={`Asked of ${i.viaTeam.length > 1 ? 'teams' : 'a team'} you're in, not of you by name. Take it asks you by name and takes it off your team, so the rest of them stop waiting on it`} run={() => takeReview(i.repo, i.number, i.viaTeam!)} />
+        )}
         {i.slackAsk && (
           <QuickPill icon="comment-discussion" tone="" idle={`asked on Slack by ${i.slackAsk.by}`} action={`Add me as reviewer on ${site(i.repo)}`} busy="adding…" done="you're a reviewer" title={`${i.slackAsk.by} asked you on Slack; ${site(i.repo)} doesn't ask you yet`}
             run={() => getViewer(i.repo).then((me) => requestReview(i.repo, i.number, me))} />
