@@ -1661,3 +1661,4 @@ input[type=checkbox]:disabled { cursor: not-allowed; opacity: .5; }
 .md input[type=checkbox]:disabled { cursor: default; opacity: 1; } /* a task list's box: read-only, not unavailable */
 @media (prefers-reduced-motion: no-preference) { input[type=checkbox]::before { transition: scale .12s ease; } }
 @media (forced-colors: active) { input[type=checkbox]::before { background: CanvasText; } }
+.demo-side .pr-status { position: static; } /* a preview's pills: in place, not pinned like the PR page's bar */
