@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
+import { composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -431,6 +431,7 @@ function BaseDialog({ repo, n, base, head, onClose }: { repo: string; n: number;
         aria-label="Find a branch"
         onInput={(e) => setQ(e.currentTarget.value)}
         onKeyDown={(e) => {
+          if (composing(e)) return;
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') (e.preventDefault(), setAt((a) => (list?.length ? (a + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length : 0)));
           else if (e.key === 'Enter' && list?.[at] && !busy) (e.preventDefault(), pick(list[at]));
         }}
@@ -475,6 +476,15 @@ function StateMenu({ askQa, rights, ...p }: { rights: PrRights | null; draft: bo
 
 function PillMenu({ cls = '', label, head, children }: { cls?: string; label: ComponentChildren; head: string; children: ComponentChildren }) {
   const ref = useRef<HTMLDetailsElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  // Opened near the window's right edge: it opens leftward, from the pill's right end, so none of it is cut off.
+  // ponytail: CSS anchor positioning (position-try-fallbacks: flip-inline) does this once Safari 27 is the norm.
+  const fit = () => {
+    const p = pop.current;
+    if (!p || !ref.current?.open) return;
+    p.style.left = p.style.right = '';
+    if (p.getBoundingClientRect().right > innerWidth - 8) (p.style.left = 'auto'), (p.style.right = '0');
+  };
   useEffect(() => {
     const away = (e: Event) => ref.current?.open && !ref.current.contains(e.target as Node) && (ref.current.open = false);
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && ref.current?.open && (ref.current.open = false);
@@ -486,12 +496,12 @@ function PillMenu({ cls = '', label, head, children }: { cls?: string; label: Co
     <details
       class="pill-menu"
       ref={ref}
-      onToggle={() => ref.current?.open && document.querySelectorAll<HTMLDetailsElement>('.pill-menu[open]').forEach((d) => d !== ref.current && (d.open = false))}
+      onToggle={() => ref.current?.open && (fit(), document.querySelectorAll<HTMLDetailsElement>('.pill-menu[open]').forEach((d) => d !== ref.current && (d.open = false)))}
     >
       <summary class={`pill ${cls}`}>
         {label} <span class="caret" aria-hidden="true" />
       </summary>
-      <div class="pill-pop" onClick={(e) => (e.target as Element).closest('a, button') && ref.current && (ref.current.open = false)}>
+      <div class="pill-pop" ref={pop} onClick={(e) => (e.target as Element).closest('a, button') && ref.current && (ref.current.open = false)}>
         <p class="pill-head">{head}</p>
         {children}
       </div>
@@ -5620,6 +5630,7 @@ function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: stri
             value={q}
             onInput={(e) => setQ(e.currentTarget.value)}
             onKeyDown={(e) => {
+              if (composing(e)) return;
               if (e.key === 'Enter' && !e.shiftKey) (e.preventDefault(), void ask());
               else if (e.key === 'Escape') setPanel(null);
             }}

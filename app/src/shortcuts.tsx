@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { readBindings } from './keys.ts';
-import { reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
+import { composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
@@ -108,7 +108,7 @@ function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels:
       {canEdit && (
         <details class="ix-ckgroup" onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && !all && repoLabels(repo).then(setAll, (x) => setErr(x.message))}>
           <summary>+ Add a label</summary>
-          <input class="label-find" type="search" placeholder="Find a label…" aria-label="Find a label" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && left[0] && (setQ(''), flip(left[0], true))} />
+          <input class="label-find" type="search" placeholder="Find a label…" aria-label="Find a label" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => !composing(e) && e.key === 'Enter' && left[0] && (setQ(''), flip(left[0], true))} />
           {all == null ? <p class="note ix-pad">Loading…</p> : left.slice(0, 30).map((l) => (
             <button class="ix-item" title={l.description || undefined} onClick={() => (setQ(''), flip(l, true))}>
               <span class="ix-label"><span class="label-dot" style={chip(l)} /> {l.name}</span>

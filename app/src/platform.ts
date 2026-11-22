@@ -1287,6 +1287,11 @@ export function askText(text: string, yes: string, placeholder: string, check?: 
   return new Promise((done) => d.addEventListener('close', () => (done(d.returnValue === 'y' ? { text: input.value.trim(), checked: box.checked } : null), d.remove())));
 }
 
+// A key pressed while an input method (Japanese, Chinese, Korean…) is composing: its Enter confirms a character, its
+// arrows pick one, so a box's own Enter or arrow handling must leave it alone. keyCode 229: Safari (the app's WebKit)
+// clears isComposing before the confirming Enter's keydown reaches the page.
+export const composing = (e: KeyboardEvent) => e.isComposing || e.keyCode === 229;
+
 export function recordError(text: string) {
   errors.push(`${new Date().toISOString().slice(0, 19)} ${text.slice(0, 300)}`);
   if (errors.length > 50) errors.shift();

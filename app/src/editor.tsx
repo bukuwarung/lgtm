@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getEmojis, renderGfm } from './github.ts';
 import { renderMermaid } from './mermaid.ts';
-import { own, recentPRs, useSavedReplies } from './platform.ts';
+import { composing, own, recentPRs, useSavedReplies } from './platform.ts';
 import { isLab } from './github.ts';
 import { AGENTS, type AgentId } from './agents.ts';
 import { AgentMark } from './tags.tsx';
@@ -151,6 +151,7 @@ export function Editor(p: Props) {
   };
 
   function onKeyDown(e: KeyboardEvent) {
+    if (composing(e)) return;
     const mod = e.metaKey || e.ctrlKey;
     if (ac) {
       const n = ac.items.length;

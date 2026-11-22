@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis } from './github.ts';
-import { getSlackEmoji } from './platform.ts';
+import { composing, getSlackEmoji } from './platform.ts';
 import { slackParts } from './slackmsg.ts';
 
 // Slack emoji, to draw and suggest: the workspace's custom ones (aliases followed), then GitHub's standard set, whose
@@ -56,7 +56,7 @@ export function EmojiTextarea({ value, onInput, names, emoji, rows = 3, label, b
         onClick={look}
         onBlur={() => setTimeout(() => setQ(null), 150)}
         onKeyDown={(e) => {
-          if (!matches.length) return;
+          if (!matches.length || composing(e)) return;
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             setActive((a) => (a + (e.key === 'ArrowDown' ? 1 : matches.length - 1)) % matches.length);

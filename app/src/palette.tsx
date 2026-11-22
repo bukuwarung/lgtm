@@ -3,7 +3,7 @@ import { gistId, numRef, prWebUrl } from './github.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
-import { faceOf, recentPRs, repoLabel, term, useRecentPRs } from './platform.ts';
+import { composing, faceOf, recentPRs, repoLabel, term, useRecentPRs } from './platform.ts';
 import { Octicon } from './tags.tsx';
 import { ACTIONS, keyLabel, readBindings } from './keys.ts';
 
@@ -131,6 +131,7 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
         onBlur={() => setTimeout(() => (setList(null), setQ((v) => (v === url ? '' : v))), 150)}
         onInput={(e) => (setQ(e.currentTarget.value), setSel(0), list || open())}
         onKeyDown={(e) => {
+          if (composing(e)) return;
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             setSel((s) => (s + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % Math.max(shown.length, 1));
