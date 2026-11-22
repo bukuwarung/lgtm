@@ -89,7 +89,8 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 - An index: reviewers; the conversation (comments, reviews and review threads together, what waits on your reply first); checks (failed-job logs, and whether `main` fails them too, or a required one that never ran); and files, following your scroll, with what's hidden behind a row. Big PRs can get a review plan (a switch). It can start hidden on PRs waiting for your review, and sections stay folded as you leave them.
 - A merged, closed or draft PR says so at the top; a review of a merged or closed one is a comment.
 - In the conversation, bot comments wait behind one line, each review lists its comments on the code, and a reviewer's earlier verdict folds under their latest.
-- Reactions (`+` for 👍), hiding comments as off-topic, outdated or resolved, and dismissing a review, from a comment's ⋯ (GitHub). Tick the description's task list, and edit it if you may.
+- Reactions (`+` for 👍); from a comment's ⋯, edit (`E`) or delete your own, hide one as off-topic, outdated or resolved, or dismiss a review (hiding and dismissing on GitHub). Tick the description's task list, and edit it if you may.
+- New comments and replies show up while the PR is open, no reload.
 - Labels, assignees, milestone, your notifications and the conversation lock in the index.
 - Other PRs for the same Jira ticket, in any of your repos, under the ticket.
 - A link to a PR, a comment or a file of this PR, in anything people wrote, opens here; Jira keys link to the ticket; links that leave lgtm end in ↗.

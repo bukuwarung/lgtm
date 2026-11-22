@@ -13,13 +13,13 @@ import { addedLines, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relo
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, getBuildRoots, getHead, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
   ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc, toggleTask } from './markdown.ts';
-import { CommentMenu, ReactPick, Reactions, loadSocial, menuUnderMouse, reactUnderMouse, useSocial } from './social.tsx';
+import { CommentMenu, ReactPick, Reactions, editUnderMouse, loadSocial, menuUnderMouse, reactUnderMouse, useSocial } from './social.tsx';
 import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
 import { MergeBox, mergeOnceApproved } from './merge.tsx';
@@ -646,18 +646,27 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [lastReviewAt, setLastReviewAt] = useState(''); // when I submitted it
   const [newCommits, setNewCommits] = useState<number | null>(null); // since that review
   // Commits pushed while the PR is open: looked for each minute (not while lgtm is in the background, and at once on
-  // coming back), then offered as a reload.
+  // coming back), then offered as a reload. Anything else new on it (a comment, a reply, a review): its conversation and
+  // threads loaded again in place.
   const [pushed, setPushed] = useState<number | null>(null);
   const shownHead = data?.pr.head.sha;
+  const lastActive = useRef('');
   useEffect(() => {
     setPushed(null);
+    lastActive.current = '';
     if (!shownHead) return;
     const look = () =>
       !document.hidden &&
-      getHead(repo, n).then(
-        (head) => void (head !== shownHead && getCompare(repo, shownHead, head).then((c) => setPushed(c.commits || 1), () => setPushed(1))),
+      getActivity(repo, n).then(
+        ({ head, updated }) => {
+          const was = lastActive.current;
+          lastActive.current = updated;
+          if (head !== shownHead) return void getCompare(repo, shownHead, head).then((c) => setPushed(c.commits || 1), () => setPushed(1));
+          if (was && updated !== was) dispatchEvent(new CustomEvent('lgtm:reload-talk', { detail: { tell: true } }));
+        },
         () => {},
       );
+    void look(); // when it last changed, to compare with
     const t = setInterval(look, 60_000);
     addEventListener('visibilitychange', look);
     return () => (clearInterval(t), removeEventListener('visibilitychange', look));
@@ -1147,8 +1156,27 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     rememberPeople([pr.user.login, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => !c.bot).map((c) => c.author)].map((l) => personKey(repo, l)));
   }, [data, conversation]);
 
+  // The conversation and threads loaded again in place (a comment edited or deleted; something new on the PR, said in a
+  // toast when it's someone else's). Not while a reply of mine is still sending: it'd drop from view.
+  useEffect(() => {
+    const again = (e: Event) => {
+      const tell = !!(e as CustomEvent<{ tell?: boolean }>).detail?.tell;
+      if (threadsNow.current.some((t) => t.comments.nodes.some((c) => c.state === 'SENDING'))) return;
+      void Promise.all([getThreads(repo, n), getConversation(repo, n)]).then(([t, c]) => {
+        const seen = new Set([...threadsNow.current.flatMap((x) => x.comments.nodes.map((y) => y.url)), ...convNow.current.map((x) => x.id)]);
+        const fresh = [...t.flatMap((x) => x.comments.nodes.filter((y) => !seen.has(y.url)).map((y) => y.author?.login ?? 'ghost')), ...c.filter((x) => !seen.has(x.id)).map((x) => x.author)].filter((w) => w !== me);
+        setThreads(t), setConversation(c);
+        if (tell && fresh.length) dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `New from ${[...new Set(fresh)].map((w) => '@' + w).join(', ')}`, ms: 4000 } }));
+      }, () => {});
+    };
+    addEventListener('lgtm:reload-talk', again);
+    return () => removeEventListener('lgtm:reload-talk', again);
+  }, [repo, n, me]);
+  const threadsNow = useRef(threads), convNow = useRef(conversation);
+  threadsNow.current = threads;
+  convNow.current = conversation;
   // Reactions and hidden comments for the PR, its conversation and its threads (social.tsx), once each is in.
-  useEffect(() => void (data && loadSocial(repo, [data.pr.node_id, ...conversation.map((c) => c.node), ...threads.flatMap((t) => t.comments.nodes.map((c) => c.id))])), [data?.pr.node_id, conversation, threads]);
+  useEffect(() => void (data && loadSocial(repo, n, data.pr.node_id, [data.pr.node_id, ...conversation.map((c) => c.node), ...threads.flatMap((t) => t.comments.nodes.map((c) => c.id))])), [data?.pr.node_id, conversation, threads]);
   const sinceBase = fromSha ?? lastReviewed;
   useEffect(() => void (data && getPushPoints(repo, n).then(setPoints, () => setPoints([]))), [repo, n, data?.pr.head.sha]); // once the PR (its head) is here, not before too
   useEffect(() => {
@@ -2012,6 +2040,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       docCode: () => dispatchEvent(new Event('lgtm:doc-code')), // DocCodeJump
       myThreads: () => (setOnlyMine((v) => !v), scrollTo({ top: 0 })),
       react: () => void (reactUnderMouse() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Point at a comment to react to it', ms: 2500 } }))),
+      editComment: () => void (editUnderMouse() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Point at a comment of yours to edit it', ms: 2500 } }))),
       commentMenu: () => void (menuUnderMouse() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Point at a comment to hide, unhide or dismiss it', ms: 2500 } }))),
       assign: () => details('assign'),
       milestone: () => details('milestone'),
@@ -4835,6 +4864,8 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const others = !!ctx.me && ctx.pr.user.login !== ctx.me && !t.comments.nodes.some((c) => c.author?.login === ctx.me);
   const verdict = ctx.checked[t.id];
   const social = useSocial();
+  const [editingC, setEditingC] = useState<number | null>(null);
+  const delC = (id: string) => void deletePosted(id, 'thread').then(() => dispatchEvent(new Event('lgtm:reload-talk')), (e: Error) => setErr(`Couldn't delete it: ${e.message}`));
 
   // Sent in the background (it shows at once); a failure gives the text back.
   const send = () => {
@@ -4897,9 +4928,11 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           {c.state === 'SENDING' && <span class="badge"> · sending…</span>}
           <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
-          {c.state !== 'PENDING' && <><ReactPick id={c.id} /><CommentMenu id={c.id} /></>}
+          {c.state !== 'PENDING' && <><ReactPick id={c.id} /><CommentMenu id={c.id} onEdit={c.body != null ? () => setEditingC(c.databaseId) : undefined} onDelete={c.id ? () => delC(c.id!) : undefined} /></>}
           {c.state === 'PENDING' && c.id ? (
             <PendingComment c={c} ctx={ctx} path={t.path} t={t} />
+          ) : editingC === c.databaseId && c.id ? (
+            <EditPosted body={c.body ?? ''} repo={ctx.repo} mentions={ctx.mentions} save={(b) => editPosted(c.id!, 'thread', b)} onDone={() => setEditingC(null)} />
           ) : social(c.id)?.hidden ? (
             <details class="hidden-comment">
               <summary><small class="hidden-why">Hidden as {social(c.id)!.hidden}</small></summary>
@@ -5768,6 +5801,33 @@ function CopyLink({ url }: { url: string }) {
 }
 
 // My PR's title and description, edited here with the comment editor (preview, emoji, mentions); saved to GitHub.
+// A comment of mine already sent, edited in place: saved on the site, then the conversation and threads load again.
+function EditPosted({ body, repo, mentions, save, onDone }: { body: string; repo: string; mentions: string[]; save: (b: string) => Promise<unknown>; onDone: () => void }) {
+  const [text, setText] = useState(body);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const go = () => {
+    if (!text.trim() || busy) return;
+    if (text === body) return onDone(); // nothing changed
+    setBusy(true);
+    setErr('');
+    save(text).then(
+      () => (onDone(), dispatchEvent(new Event('lgtm:reload-talk'))),
+      (e) => (setErr(e.message), setBusy(false)),
+    );
+  };
+  return (
+    <div class="edit-posted">
+      <Editor value={text} onInput={setText} onSubmit={go} onCancel={onDone} repo={repo} mentions={mentions} rows={5} autoFocus placeholder="⌘↵ to save · Esc to cancel" />
+      <div class="row">
+        <button class="primary" disabled={busy || !text.trim()} onClick={go}>{busy ? 'Saving…' : 'Save'}</button>
+        <button disabled={busy} onClick={onDone}>Cancel</button>
+        {err && <span class="error">{err}</span>}
+      </div>
+    </div>
+  );
+}
+
 function EditDescription({ pr, repo, mentions, onDone }: { pr: PR; repo: string; mentions: string[]; onDone: () => void }) {
   const [title, setTitle] = useState(pr.title);
   const [body, setBody] = useState(pr.body ?? '');
@@ -5897,6 +5957,8 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
   // A bot's PR leads with the human it's assigned to, not the bot.
   const lead = (pr.user.type === 'Bot' && pr.assignees[0]) || pr.user;
   const social = useSocial();
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const del = (c: ConversationItem) => void deletePosted(c.node!, 'comment').then(() => dispatchEvent(new Event('lgtm:reload-talk')), (e) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Couldn't delete it: ${e.message}`, ms: 4000 } })));
   return (
     <details class="conversation" id="conversation" open={!folded}>
       <summary>
@@ -5969,12 +6031,21 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
             {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}
             <ReactPick id={c.node} />
-            <CommentMenu id={c.node} review={canDismiss && (c.state === 'APPROVED' || c.state === 'CHANGES_REQUESTED') ? { who: c.author } : undefined} />
+            <CommentMenu
+              id={c.node}
+              review={canDismiss && (c.state === 'APPROVED' || c.state === 'CHANGES_REQUESTED') ? { who: c.author } : undefined}
+              onEdit={c.body || c.id.startsWith('c') ? () => setEditingItem(c.id) : undefined}
+              onDelete={c.id.startsWith('c') ? () => del(c) : undefined}
+            />
           </>
         );
         const body = (
           <>
-            {c.html && <div class="md" data-lang={lang ?? ''} ref={(el) => void (el && highlightBlocks(el, lang))} dangerouslySetInnerHTML={{ __html: c.html }} />}
+            {editingItem === c.id ? (
+              <EditPosted body={c.body ?? ''} repo={repo} mentions={mentions} save={(b) => editPosted(c.node!, c.id.startsWith('c') ? 'comment' : 'review', b)} onDone={() => setEditingItem(null)} />
+            ) : (
+              c.html && <div class="md" data-lang={lang ?? ''} ref={(el) => void (el && highlightBlocks(el, lang))} dangerouslySetInnerHTML={{ __html: c.html }} />
+            )}
             <Reactions id={c.node} />
             <ReviewThreads review={c} threads={threads} reveal={reveal} />
           </>

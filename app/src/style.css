@@ -1700,3 +1700,4 @@ input[type=checkbox]:disabled { cursor: not-allowed; opacity: .5; }
 /* The index's Details: assignees, milestone, notifications, lock. */
 .ix-subh { margin: 6px 14px 2px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .person-chip img { width: 14px; height: 14px; border-radius: 50%; margin-right: 2px; }
+.edit-posted { margin: 6px 0; } .edit-posted .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }

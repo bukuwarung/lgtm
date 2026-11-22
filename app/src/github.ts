@@ -109,7 +109,7 @@ export type QueueItem = {
   headSha?: string; // the head commit
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
-export type ConversationItem = { id: string; node?: string; author: string; avatar?: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
+export type ConversationItem = { id: string; node?: string; body?: string; author: string; avatar?: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
 
 // A PR's and a file's web addresses, and the site's name: github.com, or the GitLab the repo is on.
 export const site = (repo: string) => (isLab(repo) ? 'GitLab' : 'GitHub');
@@ -871,10 +871,10 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
     prReviews(repo, n),
   ]);
   return [
-    ...comments.map((c) => ({ id: 'c' + c.id, node: c.node_id, author: c.user?.login ?? 'ghost', avatar: c.user?.avatar_url, html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' || (agentsAsBots() && agentSays(c.body)) })),
+    ...comments.map((c) => ({ id: 'c' + c.id, node: c.node_id, body: c.body ?? '', author: c.user?.login ?? 'ghost', avatar: c.user?.avatar_url, html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' || (agentsAsBots() && agentSays(c.body)) })),
     ...reviews
       .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
-      .map((r) => ({ id: 'r' + r.id, node: r.node_id, author: r.user?.login ?? 'ghost', avatar: r.user?.avatar_url, html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot', commit: r.commit_id })),
+      .map((r) => ({ id: 'r' + r.id, node: r.node_id, body: r.body ?? '', author: r.user?.login ?? 'ghost', avatar: r.user?.avatar_url, html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot', commit: r.commit_id })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 }
 
@@ -2220,12 +2220,14 @@ export async function getGist(id: string): Promise<Gist> {
 
 // Reactions and hiding on a PR, its comments and reviews (GitHub only), by node ID: each one's emoji with mine among
 // them, whether I may react, and whether it's hidden (minimized) and I may hide or unhide it.
-export type Social = { canReact: boolean; groups: { content: string; mine: boolean; n: number }[]; hidden: string | null; canHide: boolean; canUnhide: boolean };
+export type Social = { canReact: boolean; groups: { content: string; mine: boolean; n: number }[]; hidden: string | null; canHide: boolean; canUnhide: boolean; canEdit: boolean; canDelete: boolean; target?: string }; // target: where a reaction goes, when not the ID itself (a GitLab MR)
+// The page's: GitHub's by node ID, GitLab's from the MR's discussions (gitlab.ts getLabSocial).
+export const getPageSocial = (repo: string, n: number, prNode: string, ids: string[]) => (isLab(repo) ? lab.getLabSocial(repo, n, prNode) : getSocial(ids));
 export async function getSocial(ids: string[]): Promise<Map<string, Social>> {
   const out = new Map<string, Social>();
   for (let i = 0; i < ids.length; i += 100) {
     const r = await graphqlFull(
-      `query($ids:[ID!]!){nodes(ids:$ids){id ...on Reactable{viewerCanReact reactionGroups{content viewerHasReacted reactors{totalCount}}} ...on Minimizable{isMinimized minimizedReason viewerCanMinimize viewerCanUnminimize}}}`,
+      `query($ids:[ID!]!){nodes(ids:$ids){id ...on Reactable{viewerCanReact reactionGroups{content viewerHasReacted reactors{totalCount}}} ...on Minimizable{isMinimized minimizedReason viewerCanMinimize viewerCanUnminimize} ...on Updatable{viewerCanUpdate} ...on Deletable{viewerCanDelete}}}`,
       { ids: ids.slice(i, i + 100) },
     );
     for (const x of r.data?.nodes ?? [])
@@ -2236,12 +2238,14 @@ export async function getSocial(ids: string[]): Promise<Map<string, Social>> {
           hidden: x.isMinimized ? String(x.minimizedReason || 'hidden').toLowerCase().replace(/_/g, '-') : null,
           canHide: !!x.viewerCanMinimize,
           canUnhide: !!x.viewerCanUnminimize,
+          canEdit: !!x.viewerCanUpdate,
+          canDelete: !!x.viewerCanDelete,
         });
   }
   return out;
 }
 export const setReaction = (id: string, content: string, on: boolean) =>
-  graphql(`mutation($id:ID!,$c:ReactionContent!){${on ? 'addReaction' : 'removeReaction'}(input:{subjectId:$id,content:$c}){clientMutationId}}`, { id, c: content });
+  isLabId(id) ? lab.setLabReaction(id, content, on) : graphql(`mutation($id:ID!,$c:ReactionContent!){${on ? 'addReaction' : 'removeReaction'}(input:{subjectId:$id,content:$c}){clientMutationId}}`, { id, c: content });
 // Hidden as one of GitHub's reasons (OFF_TOPIC, OUTDATED, RESOLVED, DUPLICATE, SPAM, ABUSE, LOW_QUALITY), or shown again (null).
 export const hideComment = (id: string, reason: string | null) =>
   reason
@@ -2288,3 +2292,25 @@ export const setLocked = (repo: string, n: number, on: boolean, reason?: string)
   isLab(repo) ? lab.setLabLocked(repo, n, on) : issueCall(repo, n, '/lock', on ? 'PUT' : 'DELETE', on && reason ? { lock_reason: reason } : undefined);
 export const setSubscribed = (repo: string, n: number, prNode: string, on: boolean) =>
   isLab(repo) ? lab.setLabSubscribed(repo, n, on) : graphql(`mutation($id:ID!,$s:SubscriptionState!){updateSubscription(input:{subscribableId:$id,state:$s}){clientMutationId}}`, { id: prNode, s: on ? 'SUBSCRIBED' : 'UNSUBSCRIBED' });
+
+// A comment of mine (or a review's text) changed after it was sent, or deleted (a review can't be): GitHub's by node
+// ID, GitLab's notes by theirs.
+export type Posted = 'comment' | 'review' | 'thread';
+export const editPosted = (id: string, kind: Posted, body: string) =>
+  isLabId(id)
+    ? lab.editLabNote(id, body)
+    : graphql(
+        kind === 'comment' ? `mutation($id:ID!,$b:String!){updateIssueComment(input:{id:$id,body:$b}){clientMutationId}}`
+        : kind === 'review' ? `mutation($id:ID!,$b:String!){updatePullRequestReview(input:{pullRequestReviewId:$id,body:$b}){clientMutationId}}`
+        : `mutation($id:ID!,$b:String!){updatePullRequestReviewComment(input:{pullRequestReviewCommentId:$id,body:$b}){clientMutationId}}`,
+        { id, b: body },
+      );
+export const deletePosted = (id: string, kind: Exclude<Posted, 'review'>) =>
+  isLabId(id) ? lab.deleteLabNote(id) : graphql(kind === 'comment' ? `mutation($id:ID!){deleteIssueComment(input:{id:$id}){clientMutationId}}` : `mutation($id:ID!){deletePullRequestReviewComment(input:{id:$id}){clientMutationId}}`, { id });
+// The PR's head and when anything on it last changed (a comment, a review, a push), for the open page to notice.
+export const getActivity = async (repo: string, n: number): Promise<{ head: string; updated: string }> => {
+  if (isLab(repo)) return lab.getLabActivity(repo, n);
+  const [owner, name] = repo.split('/');
+  const p = (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){headRefOid updatedAt}}}`, { owner, name, n })).repository.pullRequest;
+  return { head: p.headRefOid, updated: p.updatedAt };
+};

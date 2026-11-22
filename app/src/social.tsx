@@ -1,7 +1,7 @@
 // Reactions on a PR, its comments and reviews, and hiding comments or dismissing reviews, as GitHub's page has them
 // (GitHub only: lgtm.getSocial). Loaded in one ask for the page (loadSocial), kept here, and drawn where each one is.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { dismissReview, getSocial, hideComment, isLab, setReaction, type Social } from './github.ts';
+import { dismissReview, getPageSocial, hideComment, isLab, setReaction, type Social } from './github.ts';
 import { ask, askText } from './platform.ts';
 import { Octicon } from './tags.tsx';
 
@@ -13,11 +13,10 @@ const changed = () => dispatchEvent(new Event('lgtm:social'));
 const toast = (text: string) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, ms: 4000 } }));
 const put = (id: string, s: Social) => ((store = new Map(store).set(id, s)), changed());
 
-// The page's PR, comments and reviews, by node ID (local ones, still sending, have none).
-export function loadSocial(repo: string, ids: (string | undefined)[]) {
-  if (isLab(repo)) return;
+// The page's PR, comments and reviews, by node ID (local ones, still sending, have none); GitLab's from the MR.
+export function loadSocial(repo: string, n: number, prNode: string, ids: (string | undefined)[]) {
   const list = [...new Set(ids.filter((x): x is string => !!x && /^[\w=+/-]{8,}$/.test(x)))];
-  if (list.length) void getSocial(list).then((m) => ((store = new Map([...store, ...m])), changed()), () => {});
+  if (list.length || isLab(repo)) void getPageSocial(repo, n, prNode, list).then((m) => ((store = new Map([...store, ...m])), changed()), () => {});
 }
 export function useSocial() {
   const [, tick] = useState(0);
@@ -37,7 +36,7 @@ export function react(id: string, content: string) {
   const on = !g?.mine;
   const groups = g ? s.groups.map((x) => (x === g ? { ...x, mine: on, n: x.n + (on ? 1 : -1) } : x)) : [...s.groups, { content, mine: true, n: 1 }];
   put(id, { ...s, groups });
-  setReaction(id, content, on).catch((e) => (put(id, s), toast(`Couldn't react: ${e.message}`)));
+  setReaction(s.target ?? id, content, on).catch((e) => (put(id, s), toast(`Couldn't react: ${e.message}`)));
 }
 async function hide(id: string, reason: string | null) {
   const s = store.get(id);
@@ -84,16 +83,20 @@ export function ReactPick({ id }: { id?: string }) {
 }
 
 // ⋯ on a comment or review: hide it (with GitHub's reasons) or show it again, and dismiss a review that counts.
-export function CommentMenu({ id, review }: { id?: string; review?: { who: string } }) {
+// onEdit, onDelete: where the comment can be (its own page's editor; deleting asks first).
+export function CommentMenu({ id, review, onEdit, onDelete }: { id?: string; review?: { who: string }; onEdit?: () => void; onDelete?: () => void }) {
   const of = useSocial();
   const s = of(id);
   const ref = useRef<HTMLDetailsElement>(null);
-  if (!id || !s || !(s.canHide || (s.hidden && s.canUnhide) || review)) return null;
+  const edit = !!s?.canEdit && !!onEdit, del = !!s?.canDelete && !!onDelete;
+  if (!id || !s || !(s.canHide || (s.hidden && s.canUnhide) || review || edit || del)) return null;
   const close = () => ref.current && (ref.current.open = false);
   return (
     <details class="comment-menu" ref={ref} data-comment-menu>
       <summary class="copy-link" title="More" aria-label="More"><Octicon name="kebab-horizontal" /></summary>
       <div class="account-menu" role="menu">
+        {edit && <button role="menuitem" data-edit onClick={() => (close(), onEdit!())}>Edit</button>}
+        {del && <button role="menuitem" onClick={async () => (close(), (await ask('Delete this comment? It can’t be undone.', 'Delete', true)) && onDelete!())}>Delete…</button>}
         {review && <button role="menuitem" onClick={() => (close(), void dismiss(id, review.who))}>Dismiss review…</button>}
         {s.hidden && s.canUnhide && <button role="menuitem" onClick={() => (close(), void hide(id, null))}>Unhide</button>}
         {!s.hidden && s.canHide && (
@@ -129,3 +132,9 @@ export const menuUnderMouse = () => {
 const OPEN = '.react-pick[open], .comment-menu[open]';
 addEventListener('pointerdown', (e) => document.querySelectorAll<HTMLDetailsElement>(OPEN).forEach((d) => !d.contains(e.target as Node) && (d.open = false)));
 addEventListener('keydown', (e) => e.key === 'Escape' && document.querySelectorAll<HTMLDetailsElement>(OPEN).forEach((d) => (d.open = false)));
+// E: edit the comment under the mouse, when it's one I may.
+export const editUnderMouse = () => {
+  const b = underMouse()?.querySelector<HTMLButtonElement>('[data-comment-menu] [data-edit]');
+  b?.click();
+  return !!b;
+};

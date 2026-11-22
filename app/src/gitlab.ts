@@ -7,7 +7,7 @@
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
 import { collapseReviews, setOffline, revertOf } from './github.ts';
 import { kept, fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
-import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview } from './github.ts';
+import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview, Social } from './github.ts';
 
 export const isLab = (repo: string) => repo.slice(0, repo.indexOf('/')).includes('.');
 export const isLabId = (id: string) => id.startsWith('gl:');
@@ -248,11 +248,11 @@ export async function getLabFiles(repo: string, n: number): Promise<PRFile[]> {
 
 // The MR's discussions, once per load: threads on the code, and the conversation (comments, and verdicts from
 // GitLab's own notes: "approved this merge request", "requested changes").
-const DISCUSSIONS = `query($p:ID!,$i:String!,$after:String){project(fullPath:$p){mergeRequest(iid:$i){diffHeadSha discussions(first:100,after:$after){pageInfo{hasNextPage endCursor}
-  nodes{id resolved resolvable userPermissions{resolveNote} truncatedDiffLines{text} notes{nodes{id body bodyHtml system url createdAt author{username avatarUrl bot}
+const DISCUSSIONS = `query($p:ID!,$i:String!,$after:String){project(fullPath:$p){mergeRequest(iid:$i){id diffHeadSha awardEmoji{nodes{name user{username}}} discussions(first:100,after:$after){pageInfo{hasNextPage endCursor}
+  nodes{id resolved resolvable userPermissions{resolveNote} truncatedDiffLines{text} notes{nodes{id body bodyHtml system url createdAt author{username avatarUrl bot} awardEmoji{nodes{name user{username}}} userPermissions{adminNote awardEmoji}
     position{filePath oldPath newPath oldLine newLine positionType diffRefs{headSha}}}}}}}}}`;
 const noteDiscussion = new Map<number, string>(); // note id → its discussion's id, for replies
-const seen = new Map<string, { at: number; p: Promise<{ head: string; nodes: any[] }> }>();
+const seen = new Map<string, { at: number; p: Promise<{ head: string; nodes: any[]; mr: { id: string; awards: any[] } }> }>();
 const forget = (repo: string, n: number) => seen.delete(`${repo}!${n}`);
 function discussions(repo: string, n: number) {
   const k = `${repo}!${n}`;
@@ -262,16 +262,18 @@ function discussions(repo: string, n: number) {
   const p = (async () => {
     const nodes: any[] = [];
     let head = '';
+    let mr: { id: string; awards: any[] } = { id: '', awards: [] };
     for (let after: string | null = null; ; ) {
       const m: any = (await gql(host, DISCUSSIONS, { p: path, i: String(n), after })).project?.mergeRequest;
       if (!m) throw new Error(`GitLab 404: no merge request !${n} in ${path}`);
       head = m.diffHeadSha;
+      mr = { id: m.id, awards: m.awardEmoji?.nodes ?? [] };
       nodes.push(...m.discussions.nodes);
       if (!m.discussions.pageInfo.hasNextPage) break;
       after = m.discussions.pageInfo.endCursor;
     }
     for (const d of nodes) for (const x of d.notes.nodes) noteDiscussion.set(num(x.id), d.id.slice(d.id.lastIndexOf('/') + 1));
-    return { head, nodes };
+    return { head, nodes, mr };
   })();
   seen.set(k, { at: Date.now(), p });
   p.catch(() => seen.delete(k));
@@ -354,7 +356,7 @@ export async function getLabConversation(repo: string, n: number): Promise<Conve
         return v ? [{ id: 'r' + num(x.id), ...who, html: '', at: x.createdAt, url: x.url, state: v, bot: isBot(x.author) }] : [];
       }
       const to = x.replyTo ? `<p class="note">↪ In reply to <a href="${esc(x.replyTo.url)}">@${esc(x.replyTo.author?.username ?? 'ghost')}</a></p>` : '';
-      return [{ id: 'c' + num(x.id), ...who, html: to + absHtml(host, x.bodyHtml), at: x.createdAt, url: x.url, bot: isBot(x.author) || (agents && agentSays(x.body)) }];
+      return [{ id: 'c' + num(x.id), node: gid(host, x.id), body: x.body, ...who, html: to + absHtml(host, x.bodyHtml), at: x.createdAt, url: x.url, bot: isBot(x.author) || (agents && agentSays(x.body)) }];
     })
     .sort((a, b) => a.at.localeCompare(b.at));
 }
@@ -1329,3 +1331,32 @@ export const setLabSubscribed = (repo: string, n: number, on: boolean) =>
   lab(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}/${on ? 'subscribe' : 'unsubscribe'}`, { method: 'POST' }).catch((e) => {
     if (!/GitLab 304/.test(e.message)) throw e; // 304: already so
   });
+
+// Emoji on the MR and its notes (github.ts Social), from the discussions lgtm loads anyway: GitHub's eight reactions,
+// by GitLab's names for them; whether I may react, and edit or delete each note.
+const AWARD: Record<string, string> = { THUMBS_UP: 'thumbsup', THUMBS_DOWN: 'thumbsdown', LAUGH: 'laughing', HOORAY: 'tada', CONFUSED: 'confused', HEART: 'heart', ROCKET: 'rocket', EYES: 'eyes' };
+const awardGroups = (awards: any[], me: string | null) =>
+  Object.entries(AWARD)
+    .map(([content, name]) => {
+      const of = awards.filter((a) => a.name === name);
+      return { content, n: of.length, mine: !!me && of.some((a) => a.user?.username === me) };
+    })
+    .filter((g) => g.n);
+export async function getLabSocial(repo: string, n: number, prNode: string): Promise<Map<string, Social>> {
+  const { host } = split(repo);
+  const [{ nodes, mr }, me] = await Promise.all([discussions(repo, n), labMe(host).then((u) => u.login, () => null)]);
+  const out = new Map<string, Social>();
+  const none = { hidden: null, canHide: false, canUnhide: false };
+  out.set(prNode, { ...none, canReact: !!me, groups: awardGroups(mr.awards, me), canEdit: false, canDelete: false, target: gid(host, mr.id) });
+  for (const d of nodes)
+    for (const x of d.notes.nodes)
+      if (!x.system) out.set(gid(host, x.id), { ...none, canReact: !!x.userPermissions?.awardEmoji, groups: awardGroups(x.awardEmoji?.nodes ?? [], me), canEdit: !!x.userPermissions?.adminNote, canDelete: !!x.userPermissions?.adminNote });
+  return out;
+}
+export const setLabReaction = (id: string, content: string, on: boolean) =>
+  mutate(unId(id).host, `mutation($id:AwardableID!,$n:String!){${on ? 'awardEmojiAdd' : 'awardEmojiRemove'}(input:{awardableId:$id,name:$n}){errors}}`, { id: unId(id).rest, n: AWARD[content] });
+// The MR's head and when anything on it last changed (a note touches it), for the open page to notice.
+export const getLabActivity = async (repo: string, n: number) => {
+  const m = await getMR(repo, n, 'diffHeadSha updatedAt');
+  return { head: m.diffHeadSha as string, updated: m.updatedAt as string };
+};
