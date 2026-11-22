@@ -1,18 +1,17 @@
 // A smoke test of the built app (dist/), run before a release and in CI: the PR list, a PR, a line comment, Finish
 // review and Submit; the inbox (a thread's code, its keys, Done, a reply, a mention) and the bell (a closed PR's entry dropped, a new review request
-// listed and dismissed); in headless Chrome, with every GitHub request answered here from made-up data (nothing reaches GitHub; writes
-// are only recorded). It fails on an uncaught error, on confirm()/alert()/prompt() (the Mac app's web view answers
-// them without asking: submit once stopped silently that way), and when the review's mutations don't go out.
-// Needs Google Chrome; like scripts/demos.mjs it talks to it over the DevTools protocol, nothing to install.
+// listed and dismissed); then layout the way the Mac app draws it (icon buttons centred, checkboxes lgtm's own, previews'
+// pills in place). In WebKit, the Mac app's engine (Playwright's build: npx playwright-core install webkit), with every
+// GitHub request answered here from made-up data (nothing reaches GitHub; writes are only recorded). It fails on an
+// uncaught error, on confirm()/alert()/prompt() (the Mac app's web view answers them without asking: submit once
+// stopped silently that way), and when the review's mutations don't go out.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { webkit } from 'playwright-core';
 
 const PORT = Number(process.env.SMOKE_PORT ?? 4599);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const CHROME = process.env.CHROME ?? (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'google-chrome');
 const APP = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -84,7 +83,7 @@ function graphql(body) {
   return { data: null, errors: [{ message: 'smoke: no fixture' }] };
 }
 function rest(path, request) {
-  if (path === '/repos/acme/shop/pulls/2/requested_reviewers') return sent.push(`${request.method} ${JSON.parse(request.postData).reviewers}`), [200, {}];
+  if (path === '/repos/acme/shop/pulls/2/requested_reviewers') return sent.push(`${request.method()} ${JSON.parse(request.postData()).reviewers}`), [200, {}];
   if (path === '/user') return [200, { login: 'tester' }];
   if (path === '/repos/acme/shop/contents/.github/CODEOWNERS') return [200, '*  @rina\nsrc/  @bayu @dewi @fajar\n'];
   if (path === '/repos/acme/shop/pulls/2/comments/21/replies') return sent.push('reply'), [201, { id: 99 }];
@@ -103,62 +102,36 @@ function local(path) {
   return [200, {}];
 }
 
-// --- Chrome ---
+// --- WebKit ---
 const server = spawn(process.execPath, ['bin/lgtm.mjs'], { cwd: APP, env: { ...process.env, LGTM_PORT: String(PORT), LGTM_NO_OPEN: '1' }, stdio: 'ignore' });
-const profile = mkdtempSync(join(tmpdir(), 'lgtm-smoke-'));
-// CI runners (GitHub's Linux machines) run Chrome without its sandbox.
-const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=9334', `--user-data-dir=${profile}`, '--window-size=1400,900', ...(process.env.CI ? ['--no-sandbox'] : []), 'about:blank'], { stdio: 'ignore' });
 const problems = [];
 const asked = []; // the requests answered here, for a failure's report
 let failed = false;
+const browser = await webkit.launch();
 try {
-  let target;
-  for (let i = 0; i < 150 && !target; i++) { // up to 30s: a cold Chrome on a CI runner can take over 10
-    await sleep(200);
-    target = await fetch('http://127.0.0.1:9334/json/list').then((r) => r.json()).then((l) => l.find((t) => t.type === 'page')).catch(() => null);
-  }
-  if (!target) throw new Error("Chrome didn't start");
-  const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((r) => ws.addEventListener('open', r, { once: true }));
-  let id = 0;
-  const pending = new Map();
-  const send = (method, params = {}) => new Promise((r) => (pending.set(++id, r), ws.send(JSON.stringify({ id, method, params }))));
-  ws.addEventListener('message', async (e) => {
-    const m = JSON.parse(e.data);
-    if (pending.has(m.id)) return pending.get(m.id)(m.result), pending.delete(m.id);
-    if (m.method === 'Runtime.exceptionThrown') problems.push(`Uncaught: ${m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text}`);
-    if (m.method === 'Fetch.requestPaused') {
-      const { requestId, request } = m.params;
-      const u = new URL(request.url);
-      let answer = null;
-      // CORS preflight for GitHub's API: allowed, with the headers the page sends.
-      if (request.method === 'OPTIONS' && u.hostname === 'api.github.com')
-        return send('Fetch.fulfillRequest', { requestId, responseCode: 204, responseHeaders: [{ name: 'Access-Control-Allow-Origin', value: '*' }, { name: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, PATCH, DELETE' }, { name: 'Access-Control-Allow-Headers', value: 'Authorization, Content-Type, Accept, X-GitHub-Api-Version, If-None-Match' }] });
-      if (u.hostname === 'api.github.com') answer = u.pathname === '/graphql' ? [200, graphql(request.postData)] : rest(u.pathname, request);
-      else if (u.hostname.endsWith('github.com') || u.hostname.endsWith('githubusercontent.com')) answer = [404, ''];
-      else if (u.origin === ORIGIN && !/\.\w+$/.test(u.pathname) && u.pathname !== '/') answer = local(u.pathname);
-      if (!answer) return send('Fetch.continueRequest', { requestId });
-      asked.push(`${answer[0]} ${request.method} ${u.pathname}${u.pathname === '/graphql' ? ' ' + (JSON.parse(request.postData || '{}').query ?? '').replace(/\s+/g, ' ').slice(0, 60) : ''}`);
-      const [status, body] = answer;
-      const text = typeof body === 'string' ? body : JSON.stringify(body);
-      send('Fetch.fulfillRequest', { requestId, responseCode: status, responseHeaders: [{ name: 'Content-Type', value: typeof body === 'string' ? 'text/plain' : 'application/json' }, { name: 'Access-Control-Allow-Origin', value: '*' }], body: Buffer.from(text).toString('base64') });
-    }
+  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  page.on('pageerror', (e) => problems.push(`Uncaught: ${e.message}`));
+  await page.route('**/*', (route) => {
+    const request = route.request();
+    const u = new URL(request.url());
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept, X-GitHub-Api-Version, If-None-Match' };
+    if (request.method() === 'OPTIONS' && u.hostname === 'api.github.com') return route.fulfill({ status: 204, headers: cors });
+    let answer = null;
+    if (u.hostname === 'api.github.com') answer = u.pathname === '/graphql' ? [200, graphql(request.postData())] : rest(u.pathname, request);
+    else if (u.hostname.endsWith('github.com') || u.hostname.endsWith('githubusercontent.com')) answer = [404, ''];
+    else if (u.origin === ORIGIN && !/\.\w+$/.test(u.pathname) && u.pathname !== '/') answer = local(u.pathname);
+    else if (u.origin !== ORIGIN) answer = [404, '']; // fonts and pictures from elsewhere: nothing leaves this machine
+    if (!answer) return route.continue();
+    asked.push(`${answer[0]} ${request.method()} ${u.pathname}${u.pathname === '/graphql' ? ' ' + (JSON.parse(request.postData() || '{}').query ?? '').replace(/\s+/g, ' ').slice(0, 60) : ''}`);
+    const [status, body] = answer;
+    return route.fulfill({ status, headers: { ...cors, 'Content-Type': typeof body === 'string' ? 'text/plain' : 'application/json' }, body: typeof body === 'string' ? body : JSON.stringify(body) });
   });
-  await send('Runtime.enable');
-  await send('Page.enable');
-  await send('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
   // The Mac app's web view answers these without asking: none may be used.
-  await send('Page.addScriptToEvaluateOnNewDocument', {
-    source: `for (const f of ['confirm', 'alert', 'prompt']) window[f] = () => { throw new Error(f + '() used: the Mac app answers it without asking') };
+  await page.addInitScript(`for (const f of ['confirm', 'alert', 'prompt']) window[f] = () => { throw new Error(f + '() used: the Mac app answers it without asking') };
       localStorage.setItem('seenVersion', '999.0.0'); localStorage.setItem('setupSeen', '1'); // no first-run dialogs
       // On the bell from before: acme/shop#3, closed since (closedPRs drops it).
-      if (!sessionStorage.getItem('seeded')) sessionStorage.setItem('seeded', '1'), localStorage.setItem('lastLogin', 'tester'), localStorage.setItem('@tester/notices', JSON.stringify([{ id: 'n3', what: 'Approved', title: 'Old change', pr: 'acme/shop#3', at: Date.now() - 86400000 }]));`,
-  });
-  const evaluate = async (expression) => {
-    const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-    if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
-    return r.result.value;
-  };
+      if (!sessionStorage.getItem('seeded')) sessionStorage.setItem('seeded', '1'), localStorage.setItem('lastLogin', 'tester'), localStorage.setItem('@tester/notices', JSON.stringify([{ id: 'n3', what: 'Approved', title: 'Old change', pr: 'acme/shop#3', at: Date.now() - 86400000 }]));`);
+  const evaluate = (expression) => page.evaluate(expression);
   const until = async (what, expression, ms = 15000) => {
     for (const end = Date.now() + ms; Date.now() < end; await sleep(200)) if (await evaluate(expression)) return;
     throw new Error(`Timed out: ${what}`);
@@ -178,7 +151,7 @@ try {
 
   for (let i = 0; i < 50 && !(await fetch(ORIGIN + '/lgtm').then((r) => r.ok).catch(() => false)); i++) await sleep(200);
   console.log(`Smoke test of the built app (${ORIGIN}), GitHub made up:`);
-  await send('Page.navigate', { url: ORIGIN + '/#/' });
+  await page.goto(ORIGIN + '/#/');
   await step('the PR list shows the PR', () => until('the list', `[...document.querySelectorAll('.pr-item')].some((a) => a.textContent.includes('Retry failed payments'))`));
   await step("the bell drops a closed PR's entry", () => until('the entry gone', `localStorage.getItem('@tester/notices') === '[]'`));
   await step('a PR opens with its diff, docs first', async () => {
@@ -268,14 +241,34 @@ try {
     for (const end = Date.now() + 5000; !(sent.includes('POST fajar') && sent.includes('DELETE bayu')); await sleep(200)) if (Date.now() > end) throw new Error(`Timed out: fajar asked, bayu taken off (sent: ${sent.join(', ')})`);
     await until('the pill says so', `[...document.querySelectorAll('.pill-drop .p-ok')].some((b) => b.textContent.includes('asked someone else') && b.title === 'Asked @fajar instead of @bayu.')`, 2000);
   });
+  // What only WebKit shows: an icon on the text baseline sits low there; macOS's own checkboxes are tiny and grey out
+  // with the window; a preview's pills pinned like the PR page's bar slid over its code.
+  await step('layout in WebKit: icon buttons centred, checkboxes lgtm\'s own, previews\' pills in place', async () => {
+    await evaluate(`location.hash = '/acme/shop/pull/1'`);
+    await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
+    const icons = (where) => evaluate(`[...document.querySelectorAll('button, summary, a')].filter((b) => b.querySelector('svg') && !b.textContent.trim() && b.offsetParent && !b.classList.contains('account-btn')).flatMap((b) => {
+      const r = b.getBoundingClientRect(), i = b.querySelector('svg').getBoundingClientRect();
+      const d = Math.max(Math.abs(i.top + i.height / 2 - r.top - r.height / 2), Math.abs(i.left + i.width / 2 - r.left - r.width / 2));
+      return r.width && i.width && d > 1 ? [${JSON.stringify(where)} + ': ' + (b.getAttribute('aria-label') || b.title || b.className) + ' ' + d.toFixed(1) + 'px off'] : [];
+    })`);
+    const off = await icons('the PR');
+    await evaluate(`location.hash = '/settings'`);
+    await until('Settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`);
+    off.push(...(await icons('Settings')));
+    if (off.length) throw new Error(`icons off centre: ${off.join('; ')}`);
+    // Previews are miniatures: only their look is checked. Under 13px: WebKit's small control font, not the page's.
+    const boxes = await evaluate(`[...document.querySelectorAll('.page.settings input[type=checkbox]')].filter((c) => c.offsetParent && (getComputedStyle(c).appearance !== 'none' || (!c.closest('.demo-side') && c.getBoundingClientRect().width < 13))).map((c) => getComputedStyle(c).appearance + ' ' + c.getBoundingClientRect().width.toFixed(1) + 'px in ' + c.closest('[class]')?.className)`);
+    if (boxes.length) throw new Error(`${boxes.length} checkboxes drawn by macOS or under 13px (${[...new Set(boxes)].slice(0, 6).join(', ')})`);
+    const pinned = await evaluate(`[...document.querySelectorAll('.demo-side .pr-status')].filter((p) => getComputedStyle(p).position !== 'static').length`);
+    if (pinned) throw new Error(`${pinned} previews' pills pinned over their code`);
+  });
 } catch (e) {
   failed = true;
   if (!/^Timed out|wasn't sent|error bar/.test(e.message)) console.log(`  ✗ ${e.message}`);
 } finally {
-  chrome.kill();
+  await browser.close();
   server.kill();
   await sleep(300);
-  rmSync(profile, { recursive: true, force: true });
 }
 for (const p of problems) console.log(`  ✗ ${p}`);
 if (failed || problems.length) {

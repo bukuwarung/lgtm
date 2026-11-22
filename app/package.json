@@ -57,6 +57,7 @@
   },
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",
+    "playwright-core": "1.65.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.7"
   },

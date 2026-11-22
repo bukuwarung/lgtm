@@ -1,5 +1,5 @@
 # On every push to main and every PR: the web app's typecheck, unit tests, build and smoke test (the built app end to
-# end in headless Chrome, on made-up GitHub data; app/scripts/smoke.mjs). The Mac app's Rust build is left to
+# end in WebKit, the Mac app's engine, on made-up GitHub data; app/scripts/smoke.mjs). The Mac app's Rust build is left to
 # scripts/release.sh, which runs all of this too.
 name: CI
 on:
@@ -23,6 +23,7 @@ jobs:
       - run: npx tsc --noEmit -p .
       - run: npm test
       - run: npm run build
+      - run: npx playwright-core install --with-deps webkit # the smoke test's browser, and the libraries it needs on Linux
       - run: npm run smoke
         env:
           # lgtm starts only with a gh login; the smoke test answers GitHub itself, so a made-up token does.

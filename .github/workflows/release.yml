@@ -41,7 +41,7 @@ jobs:
         working-directory: app
         env:
           GH_TOKEN: not-a-real-token # the smoke test answers GitHub itself
-        run: npm run smoke
+        run: npx playwright-core install webkit && npm run smoke
       - name: Sign
         env:
           LGTM_SIGNING_P12: ${{ secrets.LGTM_SIGNING_P12 }}
