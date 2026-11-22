@@ -1094,7 +1094,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 @keyframes sk-sweep { from { background-position: 100% 0; } to { background-position: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
 /* A status pill that opens the list behind it (PillMenu). */
-.pill-menu { position: relative; display: inline-block; }
+.pill-menu { position: relative; display: inline-flex; align-items: center; } /* not inline-block: its line box sat the pill low, more so in WebKit */
 .pill-menu > summary { list-style: none; cursor: pointer; }
 .pill-menu > summary::-webkit-details-marker { display: none; }
 .pill-menu > summary:hover, .pill-menu[open] > summary { filter: brightness(1.15); border-color: currentColor; }

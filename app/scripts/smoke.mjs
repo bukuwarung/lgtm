@@ -252,6 +252,9 @@ try {
       return r.width && i.width && d > 1 ? [${JSON.stringify(where)} + ': ' + (b.getAttribute('aria-label') || b.title || b.className) + ' ' + d.toFixed(1) + 'px off'] : [];
     })`);
     const off = await icons('the PR');
+    // A dropdown pill (its <details>) as tall as its pill, not sitting low on a text line.
+    const low = await evaluate(`[...document.querySelectorAll('details.pill-menu')].filter((d) => d.offsetParent && Math.abs(d.getBoundingClientRect().height - d.querySelector('summary').getBoundingClientRect().height) > 1).length`);
+    if (low) throw new Error(`${low} dropdown pills sit low in their row`);
     // What drops from the title bar (Finish review here; the merge box, Agents, ⋯) draws over the pinned pill bar.
     await evaluate(`[...document.querySelectorAll('.bar button')].find((b) => b.textContent.trim().startsWith('Finish review')).click()`);
     await until('the Finish review panel', `!!document.querySelector('.bar .panel')`, 3000);
