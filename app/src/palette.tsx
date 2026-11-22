@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { gistId, numRef, prWebUrl } from './github.ts';
+import { gistId, numRef, prWebUrl, pushedNow } from './github.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
@@ -22,6 +22,8 @@ function entries(queue: QueueItem[]): Entry[] {
     sub: `${repoLabel(r.repo)}#${r.n} · ${r.author}`,
     run: () => (location.hash = `/${r.repo}/pull/${r.n}`),
   }));
+  // Pushed branches with no PR yet (main.tsx PushedBranches): open one from here.
+  const pushed = pushedNow.map((p) => ({ kind: `New ${term(p.repo).PR}`, label: p.branch, sub: `${repoLabel(p.repo)} · into ${p.base}`, run: () => dispatchEvent(new CustomEvent('lgtm:new-pr', { detail: p })) }));
   const seen = new Set(recentPRs().map((r) => `${r.repo}#${r.n}`));
   const prs = queue.filter((i) => !seen.has(`${i.repo}#${i.number}`)).map((i) => ({
     kind: `${T.PR}`,
@@ -50,7 +52,7 @@ function entries(queue: QueueItem[]): Entry[] {
     sub: keys[a] ? keyLabel(keys[a]) : '',
     run: () => dispatchEvent(onPR ? new CustomEvent('lgtm:act', { detail: a }) : new Event('lgtm:browse')),
   }));
-  return [...recent.slice(0, 8), ...files, ...index, ...recent.slice(8), ...prs, ...actions]; // the latest few first, as a browser's box has them
+  return [...pushed, ...recent.slice(0, 8), ...files, ...index, ...recent.slice(8), ...prs, ...actions]; // the latest few first, as a browser's box has them
 }
 
 // Every word of the query, in any order, somewhere in the entry.

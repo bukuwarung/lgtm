@@ -7,7 +7,7 @@
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
 import { collapseReviews, setOffline, revertOf } from './github.ts';
 import { kept, fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
-import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview, Social } from './github.ts';
+import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview, Social, Pushed } from './github.ts';
 
 export const isLab = (repo: string) => repo.slice(0, repo.indexOf('/')).includes('.');
 export const isLabId = (id: string) => id.startsWith('gl:');
@@ -1360,3 +1360,47 @@ export const getLabActivity = async (repo: string, n: number) => {
   const m = await getMR(repo, n, 'diffHeadSha updatedAt');
   return { head: m.diffHeadSha as string, updated: m.updatedAt as string };
 };
+
+// My pushes of the last three days on a GitLab, newest first, each a branch still ahead of its project's default one
+// with no open MR and none for its newest commit (github.ts getPushedBranches).
+export async function getLabPushed(host: string): Promise<Pushed[]> {
+  const after = new Date(Date.now() - 4 * 86_400_000).toISOString().slice(0, 10);
+  const events: any[] = await json(host, `/events?action=pushed&after=${after}&per_page=100`);
+  const latest = new Map<string, { project: number; branch: string; at: string }>();
+  for (const e of events) {
+    const d = e.push_data;
+    if (d?.ref_type !== 'branch' || !d.ref || d.action === 'removed' || Date.parse(e.created_at) < Date.now() - 3 * 86_400_000) continue;
+    const k = `${e.project_id}:${d.ref}`;
+    if (!latest.has(k)) latest.set(k, { project: e.project_id, branch: d.ref, at: e.created_at });
+  }
+  const found = await Promise.all([...latest.values()].slice(0, 6).map(async (c): Promise<Pushed | null> => {
+    try {
+      const p = await json(host, `/projects/${c.project}`);
+      if (!p.default_branch || p.default_branch === c.branch) return null;
+      const b = encodeURIComponent(c.branch);
+      const [branch, mrs, cmp] = await Promise.all([
+        json(host, `/projects/${c.project}/repository/branches/${b}`),
+        json(host, `/projects/${c.project}/merge_requests?source_branch=${b}&per_page=5`),
+        json(host, `/projects/${c.project}/repository/compare?from=${encodeURIComponent(p.default_branch)}&to=${b}&straight=false`),
+      ]);
+      const sha = branch?.commit?.id;
+      if (!sha || !cmp?.commits?.length || (mrs as any[]).some((m) => m.state === 'opened' || m.sha === sha)) return null;
+      const [headline, ...rest] = String(branch.commit.message ?? '').split('\n');
+      return { repo: `${host}/${p.path_with_namespace}`, branch: c.branch, base: p.default_branch, sha, at: c.at, headline, body: rest.join('\n').trim(), commits: cmp.commits.length };
+    } catch {
+      return null; // gone, or out of reach
+    }
+  }));
+  return found.filter((x): x is Pushed => !!x);
+}
+export async function getLabTemplate(repo: string, base: string) {
+  for (const p of ['.gitlab/merge_request_templates/Default.md', '.gitlab/merge_request_templates/default.md']) {
+    const t = await getLabRaw(repo, p, base).catch(() => null);
+    if (t != null) return t;
+  }
+  return null;
+}
+export async function createLabMR(repo: string, f: { head: string; base: string; title: string; body: string; draft: boolean }): Promise<number> {
+  const m = await send(split(repo).host, `/projects/${pid(repo)}/merge_requests`, 'POST', { source_branch: f.head, target_branch: f.base, title: f.draft ? `Draft: ${f.title}` : f.title, description: f.body });
+  return m.iid;
+}

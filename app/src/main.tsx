@@ -3,7 +3,8 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview } from './github.ts';
+import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
+import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
@@ -11,7 +12,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ask, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -163,6 +164,94 @@ function ReviewLog({ log }: { log: { repo: string; n: number; title: string; how
       ))}
       <button class="link" onClick={copy}>{copied ? 'Copied' : 'Copy as text'}</button>
     </div>
+  );
+}
+
+// Branches I pushed lately with no PR yet (github.ts getPushedBranches), above Your PRs, as GitHub's banner: Open a PR
+// (the form, NewPR), or × to leave one be until its next push. They're offered in ⌘K too (palette.tsx).
+const pushedKey = (p: Pushed) => `${p.repo}:${p.branch}:${p.sha}`;
+const anA = (word: string) => (/^[AEFHILMNORSX][A-Z]/.test(word) ? 'Open an' : 'Open a'); // an MR, a PR
+function PushedBranches() {
+  const [list, setList] = useState<Pushed[]>(pushedNow);
+  const [hidden, setHidden] = useStoredValue('pushedHidden', '[]');
+  const off = new Set<string>(JSON.parse(hidden || '[]'));
+  useEffect(() => {
+    const load = () => getPushedBranches().then(setList, () => {});
+    void load();
+    addEventListener('lgtm:pushed', load); // a PR opened from one
+    return () => removeEventListener('lgtm:pushed', load);
+  }, [viewAs()]);
+  const shown = list.filter((p) => !off.has(pushedKey(p)));
+  if (!shown.length) return null;
+  return (
+    <div class="pushed" role="list" aria-label="Pushed branches without a PR">
+      {shown.map((p) => (
+        <div class="pushed-row" role="listitem">
+          <b class="pushed-branch"><Octicon name="git-branch" /> {p.branch}</b>
+          <span class="pushed-meta">
+            <small>{repoLabel(p.repo)} · pushed <Time at={p.at} /></small>
+            <button class="primary" onClick={() => dispatchEvent(new CustomEvent('lgtm:new-pr', { detail: p }))}>{anA(term(p.repo).PR)} {term(p.repo).PR}…</button>
+            <button class="icon-btn" title="Hide it until its next push" aria-label={`Hide ${p.branch}`} onClick={() => setHidden(JSON.stringify([...off, pushedKey(p)].slice(-50)))}>
+              <Octicon name="x" />
+            </button>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Open a PR from a pushed branch: its title (the commit's, for one commit; else the branch's name), the repo's PR
+// template (else the one commit's message), the base, and draft or not. ⌘↵ opens it; it then shows, its reviewers to
+// pick there.
+function NewPR() {
+  const [p, setP] = useState<Pushed | null>(null);
+  const box = useRef<HTMLDialogElement>(null);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [base, setBase] = useState('');
+  const [draft, setDraft] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    const open = (e: Event) => {
+      const x = (e as CustomEvent<Pushed>).detail;
+      setP(x), setErr(''), setBusy(false), setDraft(false), setBase(x.base);
+      setTitle(x.commits === 1 && x.headline ? x.headline : x.branch.replace(/^[\w-]+\//, '').replace(/[-_]+/g, ' ').replace(/^./, (c) => c.toUpperCase()));
+      setBody(x.commits === 1 ? x.body : '');
+      void prTemplate(x.repo, x.base).then((t) => t != null && setBody((b) => (b.trim() ? `${b}\n\n${t}` : t)), () => {});
+    };
+    addEventListener('lgtm:new-pr', open);
+    return () => removeEventListener('lgtm:new-pr', open);
+  }, []);
+  useEffect(() => void (p && !box.current?.open && (box.current?.showModal(), closeOnBackdrop(box.current))), [p]);
+  if (!p) return null;
+  const t = term(p.repo);
+  const go = () => {
+    if (!title.trim() || !base.trim() || busy) return;
+    setBusy(true);
+    setErr('');
+    createPR(p.repo, { head: p.branch, base: base.trim(), title: title.trim(), body, draft }).then(
+      (n) => (box.current?.close(), dispatchEvent(new Event('lgtm:pushed')), dispatchEvent(new Event('lgtm:list-refresh')), (location.hash = `/${p.repo}/pull/${n}`)),
+      (e) => (setErr(e.message), setBusy(false)),
+    );
+  };
+  return (
+    <dialog ref={box} class="ask new-pr" aria-label={`${anA(t.PR)} ${t.PR}`} onClose={() => setP(null)}>
+      <p>
+        <b>{anA(t.PR)} {t.PR}</b> from <code>{p.branch}</code> <small>· {repoLabel(p.repo)} · {p.commits} commit{p.commits === 1 ? '' : 's'}</small>
+      </p>
+      <label class="new-pr-into">Into <input value={base} onInput={(e) => setBase(e.currentTarget.value)} aria-label="Base branch" /></label>
+      <input class="new-pr-title" value={title} onInput={(e) => setTitle(e.currentTarget.value)} aria-label="Title" placeholder="Title" autoFocus />
+      <Editor value={body} onInput={setBody} onSubmit={go} onCancel={() => box.current?.close()} repo={p.repo} mentions={[]} rows={12} placeholder={`Describe the change · ⌘↵ to open the ${t.PR}`} />
+      <div class="row">
+        <label><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.currentTarget.checked)} /> Draft</label>
+        <span class="spacer" />
+        <button disabled={busy} onClick={() => box.current?.close()}>Cancel</button>
+        <button class="primary" disabled={busy || !title.trim() || !base.trim()} onClick={go} title="⌘↵">{busy ? 'Opening…' : draft ? `${anA('draft')} draft ${t.PR}` : `Open the ${t.PR}`}</button>
+      </div>
+      {err && <p class="warn">{err}</p>}
+    </dialog>
   );
 }
 
@@ -815,6 +904,7 @@ function App() {
         {/* Back and forward beside the search box, as a browser has them by its address bar. */}
         <span class="nav-go">
           <HistoryNav backTo={backTo} />
+          <NewPR />
           <CommandBar
             queue={() => queue.current}
             parse={parseRoute}
@@ -2090,6 +2180,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         !err && <ListSkeleton tabs />
       ) : (
         <>
+          {tab === 'mine' && <PushedBranches />}
           {tab === 'mine' && section(MINE, shown.filter((i) => i.mine))}
           {tab === 'reviewing' && section(REVIEWING, shown.filter(listed))}
           {tab === 'team' && (

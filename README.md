@@ -92,6 +92,7 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 - Reactions (`+` for 👍); from a comment's ⋯, edit (`E`) or delete your own, hide one as off-topic, outdated or resolved, or dismiss a review (hiding and dismissing on GitHub). Tick the description's task list, and edit it if you may.
 - New comments and replies show up while the PR is open, no reload.
 - Labels, assignees, milestone, your notifications and the conversation lock in the index.
+- Branches you pushed in the last three days with no PR yet wait above Your PRs (and in ⌘K): open one with its title, the repo's template, the base and draft or not.
 - Other PRs for the same Jira ticket, in any of your repos, under the ticket.
 - A link to a PR, a comment or a file of this PR, in anything people wrote, opens here; Jira keys link to the ticket; links that leave lgtm end in ↗.
 - Files and repos by their short names, with as many parent folders (or the owner) as it takes to tell them apart.

@@ -313,7 +313,7 @@ async function graphqlFull(query: string, variables: Record<string, unknown>): P
   if (r.errors?.some((e: GqlError) => e.type === 'RATE_LIMITED') && (limited.get('graphql')?.until ?? 0) > Date.now()) throw limitError('graphql');
   // Logged, but not what lgtm expects and handles: a bot or app asked for as a user (it comes back empty), and a scope
   // gh's login lacks (lookups go without it; Settings → Accounts names it).
-  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Could not resolve to a User with the login/.test(e.message));
+  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Could not resolve to a User with the login|^Could not resolve head ref/.test(e.message)); // a pushed branch since deleted (getPushedBranches)
   if (real?.length) recordError(`GitHub GraphQL: ${real[0].message}`);
   return r;
 }
@@ -2314,3 +2314,49 @@ export const getActivity = async (repo: string, n: number): Promise<{ head: stri
   const p = (await graphql(`query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){headRefOid updatedAt}}}`, { owner, name, n })).repository.pullRequest;
   return { head: p.headRefOid, updated: p.updatedAt };
 };
+
+// Branches I pushed lately with no PR yet, as GitHub's "Compare & pull request" banner: my pushes of the last three
+// days, newest first, each still ahead of its repo's default branch, with no open PR and none for its newest commit.
+// Viewing a GitLab account: its pushes there (gitlab.ts).
+export type Pushed = { repo: string; branch: string; base: string; sha: string; at: string; headline: string; body: string; commits: number };
+export let pushedNow: Pushed[] = []; // the latest found, for ⌘K (palette.tsx)
+export const getPushedBranches = () => findPushed().then((l) => (pushedNow = l));
+async function findPushed(): Promise<Pushed[]> {
+  if (viewAs()) return lab.getLabPushed(viewAs());
+  const me = await getGitHubViewer();
+  const events: any[] = await json(`/users/${me}/events?per_page=100`);
+  const latest = new Map<string, { repo: string; branch: string; at: string }>();
+  for (const e of events) {
+    if (Date.parse(e.created_at) < Date.now() - 3 * DAY) break; // newest first
+    const branch = e.type === 'PushEvent' ? String(e.payload?.ref ?? '').replace(/^refs\/heads\//, '') : e.type === 'CreateEvent' && e.payload?.ref_type === 'branch' ? e.payload.ref : '';
+    const k = `${e.repo?.name}:${branch}`;
+    if (branch && e.repo?.name && !latest.has(k)) latest.set(k, { repo: e.repo.name, branch, at: e.created_at });
+  }
+  const list = [...latest.values()].slice(0, 10);
+  if (!list.length) return [];
+  const q = list.map((c, k) => {
+    const [o, r] = c.repo.split('/');
+    return `b${k}:repository(owner:${JSON.stringify(o)},name:${JSON.stringify(r)}){defaultBranchRef{name compare(headRef:${JSON.stringify(c.branch)}){aheadBy}}
+      ref(qualifiedName:${JSON.stringify('refs/heads/' + c.branch)}){target{oid ...on Commit{messageHeadline messageBody}} associatedPullRequests(first:5,orderBy:{field:CREATED_AT,direction:DESC}){nodes{state headRefOid}}}}`;
+  });
+  const d = await graphql(`query PushedBranches{${q.join(' ')}}`, {}, true); // a repo gone or out of reach: just that one missing
+  return list.flatMap((c, k): Pushed[] => {
+    const { ref, defaultBranchRef: base } = d?.[`b${k}`] ?? {};
+    if (!ref || !base || base.name === c.branch || !(base.compare?.aheadBy > 0)) return [];
+    if (ref.associatedPullRequests.nodes.some((p: any) => p.state === 'OPEN' || p.headRefOid === ref.target.oid)) return [];
+    return [{ repo: c.repo, branch: c.branch, base: base.name, sha: ref.target.oid, at: c.at, headline: ref.target.messageHeadline ?? '', body: ref.target.messageBody ?? '', commits: base.compare.aheadBy }];
+  });
+}
+// The repo's PR template on the base branch (GitHub's usual places; GitLab's Default template), or null.
+export async function prTemplate(repo: string, base: string): Promise<string | null> {
+  if (isLab(repo)) return lab.getLabTemplate(repo, base);
+  const [o, r] = repo.split('/');
+  const paths = ['.github/pull_request_template.md', '.github/PULL_REQUEST_TEMPLATE.md', 'pull_request_template.md', 'PULL_REQUEST_TEMPLATE.md', 'docs/pull_request_template.md', 'docs/PULL_REQUEST_TEMPLATE.md'];
+  const d = await graphql(`query($o:String!,$r:String!){repository(owner:$o,name:$r){${paths.map((p, k) => `t${k}:object(expression:${JSON.stringify(`${base}:${p}`)}){...on Blob{text}}`).join(' ')}}}`, { o, r });
+  return paths.map((_, k) => d.repository[`t${k}`]?.text).find((t) => typeof t === 'string') ?? null;
+}
+// A PR opened from a branch: its number.
+export async function createPR(repo: string, f: { head: string; base: string; title: string; body: string; draft: boolean }): Promise<number> {
+  if (isLab(repo)) return lab.createLabMR(repo, f);
+  return (await json(`/repos/${repo}/pulls`, { method: 'POST', body: JSON.stringify(f) })).number;
+}
