@@ -1247,7 +1247,9 @@ const errors: string[] = (() => {
 })();
 // Something the user did failed (a review, a merge, a Slack message): main.tsx shows it in a red bar under the title
 // bar until dismissed, review mode too.
-export const reportError = (text: string) => (recordError(`shown: ${text}`), dispatchEvent(new CustomEvent('lgtm:error', { detail: text })));
+// at: the PR it's about (its route), when that may not be the one on show (a review sent in the background): the bar
+// names it and opens it.
+export const reportError = (text: string, at?: { route: string; name: string }) => (recordError(`shown: ${at ? at.name + ': ' : ''}${text}`), dispatchEvent(new CustomEvent('lgtm:error', { detail: { text, at } })));
 
 // confirm() in the Mac app's web view says no without asking (wry doesn't show it), so lgtm asks in its own dialog.
 export function ask(text: string, yes = 'OK'): Promise<boolean> {

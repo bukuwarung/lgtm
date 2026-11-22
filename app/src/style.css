@@ -1670,3 +1670,8 @@ input[type=checkbox]:disabled { cursor: not-allowed; opacity: .5; }
 .bar :is(button, summary):has(> svg) { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-block-size: calc(1lh + 8px); }
 .bar :is(button, summary) > svg { display: block; flex: none; }
 .bar .bar-index { min-inline-size: calc(1lh + 8px); padding: 0; }
+/* Icon-only buttons elsewhere, centred the same way: a comment's copy-link and session buttons, the refresh button, a
+   saved reply's remove. */
+.copy-link, .set-replies button:has(> svg:only-child) { display: inline-flex; align-items: center; justify-content: center; }
+.nav-refresh > span { display: grid; place-items: center; }
+:is(.copy-link, .set-replies button, .nav-refresh > span) > svg { display: block; }

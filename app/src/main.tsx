@@ -653,12 +653,12 @@ function App() {
   const routeRef = useRef(route);
   routeRef.current = route;
   const [backTo, setBackTo] = useState('');
-  const [failure, setFailure] = useState(''); // platform.ts reportError
+  const [failure, setFailure] = useState<{ text: string; at?: { route: string; name: string } } | null>(null); // platform.ts reportError
   const [queueItems, setQueueItems] = useState<QueueItem[] | null>(null); // the list's, for the start page
   const replies = repliesWaiting(queueItems ?? []); // threads and mentions waiting on my reply, for the inbox button
   const [, setPrTab] = useStoredValue('prTab', 'reviewing');
   useEffect(() => {
-    const show = (e: Event) => setFailure((e as CustomEvent<string>).detail);
+    const show = (e: Event) => setFailure((e as CustomEvent<{ text: string; at?: { route: string; name: string } }>).detail);
     addEventListener('lgtm:error', show);
     return () => removeEventListener('lgtm:error', show);
   }, []);
@@ -855,8 +855,12 @@ function App() {
       </nav>
       {failure && (
         <div class="fail-bar" role="alert">
-          <Octicon name="alert" /> <span>{failure}</span>
-          <button class="icon-btn" title="Dismiss" aria-label="Dismiss" onClick={() => setFailure('')}><Octicon name="x" /></button>
+          <Octicon name="alert" />{' '}
+          <span>
+            {failure.at && <><a href={'#' + failure.at.route} onClick={() => setFailure(null)}>{failure.at.name}</a>: </>}
+            {failure.text}
+          </span>
+          <button class="icon-btn" title="Dismiss" aria-label="Dismiss" onClick={() => setFailure(null)}><Octicon name="x" /></button>
         </div>
       )}
       <OfflineBar />

@@ -3,7 +3,7 @@ import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview, closedOnSlack, WHY_CLOSE, askText } from './platform.ts';
-import { afterApproval, closeWithReason, deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranchAndWait, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { afterApproval, CANT_MERGE_YET, getChecks, closeWithReason, deleteBranch, disableAutoMerge, getMergeState, markReady, mergePR, neverRan, requiredChecks, updateBranchAndWait, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -36,7 +36,12 @@ export function blockers(s: MergeState, checks: Check[] | null): string[] {
 export async function mergeOnceApproved(repo: string, n: number, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<{ ok: boolean; text: string }> {
   let s = await getMergeState(repo, n);
   for (let i = 0; i < 5 && afterApproval(s) === 'wait'; i++) await wait(1500), (s = await getMergeState(repo, n));
-  const next = afterApproval(s);
+  let next = afterApproval(s);
+  // Blocked for no reason GitHub names (checks still to pass where auto-merge isn't allowed, say): the checks' word.
+  if (next === CANT_MERGE_YET) {
+    const why = blockers(s, await getChecks(repo, n).catch(() => null)).join(', ').toLowerCase();
+    next = s.mergeStateStatus === 'BLOCKED' && !s.viewerCanEnableAutoMerge ? `${why}, and auto-merge isn't available here` : why;
+  }
   const m = s.methods[0];
   if (next === 'merge' || next === 'auto') await mergePR(s, m, s.message[m].title, s.message[m].body, next === 'auto');
   return next === 'merge' ? { ok: true, text: `Approved and merged (${VERB[m].toLowerCase()}).` }

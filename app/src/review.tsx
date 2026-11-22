@@ -1461,7 +1461,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           said.push({ ok: false, text: `Review submitted, but Slack failed: ${e.message}` });
         }
       }
-      for (const s of said) if (!s.ok) reportError(s.text); // the review is in; Slack or the merge didn't go
+      for (const s of said) if (!s.ok) reportError(s.text, { route: `/${repo}/pull/${n}`, name: `${repoLabel(repo)}${numRef(repo, n)}` }); // the review is in; Slack or the merge didn't go; named, as you may be on the next PR by now
       return said.length ? { ok: said.every((s) => s.ok), text: said.map((s) => s.text).filter(Boolean).join(' ') } : null;
     })();
     if (!(next || focus)) {

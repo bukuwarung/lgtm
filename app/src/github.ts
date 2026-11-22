@@ -311,7 +311,10 @@ async function graphqlFull(query: string, variables: Record<string, unknown>): P
     delete r.data?.rateLimit;
   }
   if (r.errors?.some((e: GqlError) => e.type === 'RATE_LIMITED') && (limited.get('graphql')?.until ?? 0) > Date.now()) throw limitError('graphql');
-  if (r.errors?.length) recordError(`GitHub GraphQL: ${r.errors[0].message}`);
+  // Logged, but not what lgtm expects and handles: a bot or app asked for as a user (it comes back empty), and a scope
+  // gh's login lacks (lookups go without it; Settings → Accounts names it).
+  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Could not resolve to a User with the login/.test(e.message));
+  if (real?.length) recordError(`GitHub GraphQL: ${real[0].message}`);
   return r;
 }
 async function graphql<T = any>(query: string, variables: Record<string, unknown>, partial = false): Promise<T> {
@@ -635,6 +638,7 @@ const busyOf = (d: any, logins: string[]): Busy =>
 // account), its private noreply ones left out.
 export async function commitEmails(org: string, login: string): Promise<string[]> {
   const res = await gh(`/search/commits?q=${encodeURIComponent(`author:${login} org:${org}`)}&per_page=5`);
+  if (res.status === 422) return []; // not a user (an app or bot): GitHub won't search its commits
   const items: { commit: { author?: { email?: string } } }[] = (await (await ok(res)).json()).items ?? [];
   return [...new Set(items.map((c) => c.commit.author?.email ?? ''))].filter((e) => e && !e.endsWith('noreply.github.com'));
 }
@@ -1787,6 +1791,7 @@ export async function getMergeState(repo: string, n: number): Promise<MergeState
   };
 }
 
+export const CANT_MERGE_YET = "it can't merge yet";
 // Approve and merge: what to do once my approval is in. merge; auto (only checks left: auto-merge); wait (GitHub hasn't
 // counted the approval yet); else why it won't merge.
 export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeStateStatus' | 'reviewDecision' | 'viewerCanEnableAutoMerge' | 'autoMergeRequest' | 'mergeable' | 'reasons'>): 'merge' | 'auto' | 'wait' | string {
@@ -1800,7 +1805,7 @@ export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeSt
   if (s.mergeStateStatus === 'UNSTABLE') return 'some checks are failing';
   if (s.reviewDecision === 'CHANGES_REQUESTED') return 'someone requested changes';
   if (s.autoMergeRequest) return 'auto-merge was already on';
-  return s.reasons?.map((r) => r.text.toLowerCase()).join(', ') || "it can't merge yet";
+  return s.reasons?.map((r) => r.text.toLowerCase()).join(', ') || CANT_MERGE_YET;
 }
 
 // expectedHeadOid: refuse if commits were pushed after the state I looked at.
