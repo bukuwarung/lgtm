@@ -105,14 +105,24 @@ function Picker({ placeholder, load, onPick, onClose, empty }: { placeholder: st
   const [items, setItems] = useState<PickItem[] | null>(null);
   const [err, setErr] = useState('');
   const box = useRef<HTMLInputElement>(null);
-  useEffect(() => void box.current?.focus(), []);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => void box.current?.focus({ preventScroll: true }), []); // not sideways: the index only scrolls down
+  // A click anywhere outside its section closes it (and an empty section hides again).
+  useEffect(() => {
+    const away = (e: PointerEvent) => {
+      const sec = root.current?.closest('details');
+      if (sec && !sec.contains(e.target as Node)) onClose();
+    };
+    addEventListener('pointerdown', away);
+    return () => removeEventListener('pointerdown', away);
+  }, []);
   useEffect(() => {
     let live = true;
     const t = setTimeout(() => load(q.trim()).then((l) => live && setItems(l), (e) => live && setErr(e.message)), q ? 200 : 0);
     return () => ((live = false), clearTimeout(t));
   }, [q]);
   return (
-    <div class="ix-pick">
+    <div class="ix-pick" ref={root}>
       <input
         ref={box}
         class="label-find"
@@ -143,8 +153,8 @@ const toPick = (id: string) => {
   openSec(document.querySelector<HTMLDetailsElement>('#' + id));
   setTimeout(() => {
     const box = document.querySelector<HTMLInputElement>(`#${id} .ix-pick input`);
-    box?.scrollIntoView({ block: 'nearest' });
-    box?.focus();
+    box?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    box?.focus({ preventScroll: true });
   }, 50);
 };
 
