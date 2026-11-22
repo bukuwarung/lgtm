@@ -3,11 +3,11 @@ import { hint, readBindings } from './keys.ts';
 import { ask, composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
-import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
+import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold, Time } from './tags.tsx';
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { repoLabels, setLabel, type Label, getPrMeta, getAssignable, getMilestones, setAssignees, setMilestone, setSubscribed, setLocked, type PrMeta, type Milestone, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { repoLabels, setLabel, type Label, getPrMeta, getAssignable, getMilestones, setAssignees, setMilestone, setSubscribed, setLocked, type PrMeta, type Milestone, type PushPoint, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -628,7 +628,9 @@ type IndexProps = {
   viewed: Set<string>;
   counts: Counts;
   me: string;
-  commits?: number; // the PR's commits, for the top row's button (review.tsx's commits pill)
+  commits?: PushPoint[]; // the PR's commits, oldest first: the top row's button lists them in a section
+  atCommit?: string | null; // the one on its own (review.tsx toSha), if any
+  onCommit?: (sha: string | null) => void; // show one on its own, or (null) all changes
   ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
   modules?: Map<string, string>; // each file's Gradle module (files.ts gradleModules), when grouping by them
   steps?: PlanStep[]; // the reading order's steps (files.ts reviewPlan), when the files are in it
@@ -643,7 +645,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ commits = 0, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ commits = [], atCommit, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -741,14 +743,32 @@ export function ShortcutIndex({ commits = 0, canLabel = false, checksErr, hidden
     !meta.assignees.length && ['assign', 'person', 'Assign someone', keys.assign],
     !meta.milestone && ['milestone', 'milestone', 'Set a milestone', keys.milestone],
   ].filter(Boolean) as [string, string, string, string][]);
+  // The commits section: the top row's button shows it (open, in sight); it stays while one is on its own.
+  const [commitsOn, setCommitsOn] = useState(false);
+  const many = commits.length > 1;
+  const listCommits = many && (commitsOn || !!atCommit);
+  useEffect(() => {
+    const sec = commitsOn && document.querySelector<HTMLDetailsElement>('#ix-commits');
+    if (sec) (sec.open = true), sec.scrollIntoView({ block: 'nearest' });
+  }, [commitsOn]);
   return (
     <div class="index">
-      {(commits > 1 || adds.length > 0) && (
+      {(many || adds.length > 0) && (
         <div class="ix-top">
-          {commits > 1 && <HeadBtn icon="git-commit" label={`${commits} commits: one on its own${hint(keys.prevCommit)}${hint(keys.nextCommit)}`} run={() => dispatchEvent(new Event('lgtm:commits'))} />}
-          {commits > 1 && adds.length > 0 && <span class="ix-head-sep" />}
+          {many && <HeadBtn icon="git-commit" on={listCommits} label={`${commits.length} commits: one on its own${hint(keys.prevCommit)}${hint(keys.nextCommit)}`} run={() => setCommitsOn(!listCommits)} />}
+          {many && adds.length > 0 && <span class="ix-head-sep" />}
           {adds.map(([what, icon, label, key]) => <HeadBtn icon={icon} label={`${label}${hint(key)}`} run={() => dispatchEvent(new CustomEvent('lgtm:details', { detail: what }))} />)}
         </div>
+      )}
+      {listCommits && (
+        <Section id="ix-commits" title="Commits" count={commits.length}>
+          {atCommit && <Entry label="All changes" onClick={() => onCommit?.(null)} />}
+          {commits.map((c) => (
+            <button class="ix-item" aria-current={c.sha === atCommit || undefined} onClick={() => onCommit?.(c.sha)} title={`${c.sha}\n${c.label}`}>
+              <span class="ix-label"><code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
+            </button>
+          ))}
+        </Section>
       )}
       {!(hideEmpty && !reviewers.size && !ask && !(addMe && !reviewers.has(me))) && <Section id="ix-reviewers" title="Reviewers" count={reviewers.size}>
         {[...reviewers].map(([who, r]) => (

@@ -85,13 +85,13 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 - Files in reading order: specs and docs, build and config, models, the implementation (each test right below its class), other tests, then resources. Drag the steps into your own order; the index groups files by step, or as folders.
 - Files grouped by module, with code changed but no test.
 - Re-reviews show only what changed since your last one, and your threads say whether their lines moved.
-- Each commit on its own (`<` `>` step through them), read-only: its message and its files, nothing else.
+- Each commit on its own, from the Commits section the index's top-row button shows (`<` `>` step through them), read-only: its message and its files, nothing else.
 - An index: reviewers; the conversation (comments, reviews and review threads together, what waits on your reply first); checks (failed-job logs, and whether `main` fails them too, or a required one that never ran); and files, following your scroll, with what's hidden behind a row. Big PRs can get a review plan (a switch). It can start hidden on PRs waiting for your review, and sections stay folded as you leave them.
 - A merged, closed or draft PR says so at the top; a review of a merged or closed one is a comment.
 - In the conversation, bot comments wait behind one line, each review lists its comments on the code, and a reviewer's earlier verdict folds under their latest.
 - Reactions (`+` for 👍); from a comment's ⋯, edit (`E`) or delete your own, hide one as off-topic, outdated or resolved, or dismiss a review (hiding and dismissing on GitHub). Tick the description's task list, and edit it if you may.
 - New comments and replies show up while the PR is open, no reload.
-- Labels, assignees and milestone in the index, each with a + on its header; the Conversation header has the bell (your notifications) and the lock. Empty sections are left out (a switch); icons at the top of the index add them, and open each commit on its own.
+- Labels, assignees and milestone in the index, each with a + on its header; the Conversation header has the bell (your notifications) and the lock. Empty sections are left out (a switch); icons at the top of the index add them; the first one there lists the commits.
 - Branches you pushed in the last three days with no PR yet wait above Your PRs (and in ⌘K): open one with its title, the repo's template, the base and draft or not.
 - Other PRs for the same Jira ticket, in any of your repos, under the ticket.
 - A link to a PR, a comment or a file of this PR, in anything people wrote, opens here; Jira keys link to the ticket; links that leave lgtm end in ↗.
