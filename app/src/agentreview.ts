@@ -24,6 +24,7 @@ export type AgentRun = {
   asked?: string; // the review request it answered (QueueItem.waitingSince): only a new one runs it again
   since?: string; // a re-review: the commit it read the changes from (the last run's)
   findings?: number;
+  found?: number; // while it runs: the findings written so far
   posted?: 'pending' | 'comment';
   error?: string;
 };
@@ -142,8 +143,14 @@ function pump() {
     const { day, asked, since } = all()[i.id] ?? {};
     const base = { version: v, day, manual, by, asked, since };
     active++;
-    set(i.id, { ...base, state: 'running', at: Date.now() });
-    review(i)
+    const at = Date.now();
+    let found = 0;
+    set(i.id, { ...base, state: 'running', at });
+    // Its answer as it's written: the findings so far, counted by their titles.
+    review(i, (t) => {
+      const n = t.match(/"title"\s*:/g)?.length ?? 0;
+      if (n !== found) set(i.id, { ...base, state: 'running', at, found: (found = n) });
+    })
       .then((r) => {
         set(i.id, { ...base, state: 'done', at: Date.now(), ...r });
         notifyAgentDone(`${by} reviewed it`, `${ref(i)}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}` : 'nothing found'}`, `/${i.repo}/pull/${i.number}`);
@@ -163,7 +170,7 @@ const say = (text: string) => (dispatchEvent(new CustomEvent('lgtm:toast', { det
 type Finding = { path: string; line?: number; start_line?: number; side?: 'RIGHT' | 'LEFT'; severity?: string; title: string; body: string; fix?: string };
 const SKIP = /(^|\/)([\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.(min\.js|map|svg|png|jpe?g|gif|webp|pdf|zip|jar)$/i;
 
-async function review(i: Target & { agent: AgentId; since?: string }): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
+async function review(i: Target & { agent: AgentId; since?: string }, onText?: (soFar: string) => void): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
   const { pr, files, threads } = await loadPR(i.repo, i.number);
   // A re-review reads the changes since the last run, in the PR's files; after a rebase (no shared history), all of it.
   // ponytail: a merge of the base branch in those commits shows its changes to the PR's files too.
@@ -218,7 +225,7 @@ async function review(i: Target & { agent: AgentId; since?: string }): Promise<P
     `The diff, each line numbered (R: the new file, L: the old):\n${shown.map((f) => numbered(f)).join('\n\n')}`.slice(0, 200_000),
     texts.join('\n\n'),
   ].filter(Boolean).join('\n\n');
-  const answer = await runAgent(prompt, i.agent);
+  const answer = await runAgent(prompt, i.agent, onText);
   const json = answer.slice(answer.indexOf('{'), answer.lastIndexOf('}') + 1);
   let parsed: { summary?: string; findings?: Finding[] };
   try {

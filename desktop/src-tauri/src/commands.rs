@@ -1,6 +1,6 @@
 // The local server's routes (app/bin/lgtm.mjs) as app commands: same CLIs, same inputs, same validation, same
 // results. Keep the two in step when either changes.
-use crate::cli::{last_line, parse_json, plain, run, run_env, SECONDS_30};
+use crate::cli::{last_line, parse_json, plain, run, run_env, run_lines, SECONDS_30};
 use crate::config;
 use regex::Regex;
 use serde::Deserialize;
@@ -1149,9 +1149,9 @@ pub async fn clipboard_pr() -> Option<String> {
 }
 
 /// Ask Claude: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
-/// agentText()).
+/// agentText()). `on_text`: each piece of Claude's answer as it's written (Codex's comes whole, at the end).
 #[tauri::command]
-pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>) -> Result<String, String> {
+pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>, on_text: tauri::ipc::Channel<String>) -> Result<String, String> {
     if input.is_empty() || input.len() > 800_000 {
         return Err("Bad request for Claude".into());
     }
@@ -1164,25 +1164,38 @@ pub async fn agent_text(input: String, model: Option<String>, effort: Option<Str
     if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !["low", "medium", "high", "xhigh", "max"].contains(&e)) {
         return Err("Bad request for Claude".into());
     }
-    let mut args = vec!["-p", "--tools", "", "--no-session-persistence", "--output-format", "text"];
+    let mut args = vec!["-p", "--tools", "", "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages"];
     if let Some(m) = model.as_deref() {
         args.extend(["--model", m]);
     }
     if let Some(e) = effort.as_deref() {
         args.extend(["--effort", e]);
     }
-    let out = run("claude", &args, Some(&input), std::time::Duration::from_secs(300));
+    let (mut text, mut result) = (String::new(), Value::Null);
+    let out = run_lines("claude", &args, &input, std::time::Duration::from_secs(300), |line| {
+        let Ok(e) = serde_json::from_str::<Value>(line) else { return };
+        if e["type"] == "stream_event" && e["event"]["delta"]["type"] == "text_delta" {
+            let d = e["event"]["delta"]["text"].as_str().unwrap_or("");
+            text.push_str(d);
+            let _ = on_text.send(d.to_string());
+        } else if e["type"] == "result" {
+            result = e;
+        }
+    });
     if out.missing {
         return Err("Claude Code isn't installed (see claude.com/code), or not on the PATH".into());
     }
-    if !out.ok {
-        let last = last_line(&plain(if out.stderr.trim().is_empty() { &out.stdout } else { &out.stderr }));
+    if !out.ok || result["is_error"] == true {
+        let mut last = last_line(&plain(&out.stderr));
+        if last.is_empty() {
+            last = last_line(result["result"].as_str().unwrap_or("Claude Code stopped"));
+        }
         if re(r"(?i)authenticat|log ?in|oauth|unauthori[sz]ed").is_match(&last) {
             return Err("Claude Code isn't signed in: run `claude` in Terminal and sign in (/login), then try again".into());
         }
         return Err(last);
     }
-    Ok(out.stdout.trim().to_string())
+    Ok(result["result"].as_str().map(String::from).unwrap_or(text).trim().to_string())
 }
 
 /// The coding agents' CLIs installed (Settings → Coding agents): each one's --version, or null. The server's detectAgents().

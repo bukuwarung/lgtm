@@ -112,14 +112,36 @@ export function useAgents() {
   return { on: enabledAgents(), detected: known };
 }
 
-// A prompt through an agent's CLI, its model and effort as Settings has them: the answer's text.
-export async function runAgent(input: string, id: AgentId): Promise<string> {
+// A prompt through an agent's CLI, its model and effort as Settings has them: the answer's text. `onText`: the answer so
+// far, each time more of it is written (Claude Code's; Codex's comes whole).
+export async function runAgent(input: string, id: AgentId, onText?: (soFar: string) => void): Promise<string> {
   await detectAgents();
   const model = agentModel(id) || undefined, agent = id;
   const effort = effortsOf(id, model ?? '').includes(agentEffort(id)) ? agentEffort(id) : undefined; // one the model takes
-  if (isDesktop) return command<string>('agent_text', { input, model, effort, agent });
-  const res = await fetch('/agent-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent }) });
-  const d = await res.json().catch(() => ({ error: res.statusText }));
-  if (!res.ok) throw new Error(d.error ?? `${AGENTS[id].name} failed`);
-  return d.text;
+  let soFar = '', over = false;
+  const more = (d: string) => !over && onText?.((soFar += d)); // a piece arriving after the answer is in: dropped
+  try {
+    if (isDesktop) {
+      const { Channel } = await import('@tauri-apps/api/core');
+      const onPiece = new Channel<string>(more);
+      return await command<string>('agent_text', { input, model, effort, agent, onText: onPiece });
+    }
+    // A line of JSON per piece ({d}), then the answer ({text}) or why not ({error}): lgtm.mjs /agent-text.
+    const res = await fetch('/agent-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent }) });
+    if (!res.ok || !res.body) throw new Error(res.statusText || `${AGENTS[id].name} failed`);
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = '', end: { text?: string; error?: string } = {};
+    for (let r = await reader.read(); !r.done; r = await reader.read()) {
+      buf += r.value;
+      for (let n; (n = buf.indexOf('\n')) >= 0; buf = buf.slice(n + 1)) {
+        const m = JSON.parse(buf.slice(0, n));
+        if (typeof m.d === 'string') more(m.d);
+        else end = m;
+      }
+    }
+    if (typeof end.text !== 'string') throw new Error(end.error ?? `${AGENTS[id].name} failed`);
+    return end.text;
+  } finally {
+    over = true;
+  }
 }

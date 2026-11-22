@@ -1,6 +1,6 @@
 // Running the CLIs lgtm borrows sign-ins from (gh, slackcli, acli): an argument vector (never a shell), optional stdin,
 // and a timeout so a hung CLI can't hang the app.
-use std::io::Write;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -53,6 +53,41 @@ pub fn run_env(program: &str, args: &[&str], input: Option<&str>, timeout: Durat
             Out { ok: false, missing: false, stdout: String::new(), stderr: format!("{program} took too long and was stopped") }
         }
     }
+}
+
+/// As run, with stdout handed over a line at a time as the program writes it (stdout comes back empty).
+pub fn run_lines(program: &str, args: &[&str], input: &str, timeout: Duration, mut on_line: impl FnMut(&str)) -> Out {
+    let mut child = match Command::new(program).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+        Ok(c) => c,
+        Err(e) => return Out { ok: false, missing: e.kind() == std::io::ErrorKind::NotFound, stdout: String::new(), stderr: e.to_string() },
+    };
+    let (mut stdin, stdout, mut stderr) = (child.stdin.take().unwrap(), child.stdout.take().unwrap(), child.stderr.take().unwrap());
+    let text = input.to_string();
+    std::thread::spawn(move || stdin.write_all(text.as_bytes())); // a big prompt can't block reading its answer
+    let errs = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = stderr.read_to_string(&mut s);
+        s
+    });
+    // Stopped once it takes too long: reading ends when its stdout closes.
+    let (pid, (tx, rx)) = (child.id(), mpsc::channel::<()>());
+    let late = std::thread::spawn(move || {
+        let late = rx.recv_timeout(timeout) == Err(mpsc::RecvTimeoutError::Timeout);
+        if late {
+            let _ = Command::new("kill").arg(pid.to_string()).status();
+        }
+        late
+    });
+    for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+        on_line(&line);
+    }
+    let status = child.wait();
+    drop(tx);
+    let stderr = errs.join().unwrap_or_default();
+    if late.join().unwrap_or(false) {
+        return Out { ok: false, missing: false, stdout: String::new(), stderr: format!("{program} took too long and was stopped") };
+    }
+    Out { ok: status.is_ok_and(|s| s.success()), missing: false, stdout: String::new(), stderr }
 }
 
 pub const SECONDS_30: Duration = Duration::from_secs(30);

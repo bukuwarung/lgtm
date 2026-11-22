@@ -1526,7 +1526,7 @@ function AgentPill({ i }: { i: QueueItem }) {
   if (!r) return null;
   const mark = agentIdOf(r.by) ?? '🤖';
   if (r.state === 'queued' || r.state === 'running')
-    return <span class="pill p-agent" title={r.state === 'queued' ? 'Waiting for its turn: two at a time' : `${r.by ?? 'The agent'} is reviewing it; you'll find its findings on it`}><Tg i={mark} t={r.state === 'queued' ? 'queued' : 'reviewing…'} /></span>;
+    return <span class="pill p-agent" title={r.state === 'queued' ? 'Waiting for its turn: two at a time' : `${r.by ?? 'The agent'} is reviewing it; you'll find its findings on it`}><Tg i={mark} t={r.state === 'queued' ? 'queued' : r.found ? `reviewing… ${r.found} found` : 'reviewing…'} /></span>;
   if (r.state === 'limited')
     return <span class="pill p-warn" title={`Today's ${agentLimit()} agent reviews are used up: this one waits for tomorrow (Settings → Coding agents), or ask for it from the ${T.PR}'s Agents menu`}><Tg i={mark} t="limit reached" /></span>;
   if (r.state === 'failed')

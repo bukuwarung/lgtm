@@ -5510,6 +5510,8 @@ function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: stri
   // The conversation so far: each question with its answer; a follow-up sends the earlier ones along (the CLI keeps
   // no session).
   const [turns, setTurns] = useState<Turn[]>([]);
+  // The question under way and its answer as it's written, until the answer is in.
+  const [live, setLive] = useState<{ k: string; q: string; text: string } | null>(null);
   const keyOf = (p: Panel) => `${repo}#${pr.number}@${pr.head.sha}:${p.ci ? `ci:${p.ci.check}` : p.path ? `sel:${p.path}:${hashOf(p.text)}` : 'pr'}`;
   const asking = useRef(new Set<string>()); // conversations with a question under way
   const shown = useRef(''); // the conversation on show, so one finishing after it's closed is kept, not shown
@@ -5567,6 +5569,14 @@ function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: stri
     asking.current.add(k);
     setBusy(true);
     setError('');
+    setLive({ k, q: asked, text: '' });
+    if (shown.current === k) setQ('');
+    // More of the answer: shown, and followed down unless you've scrolled up to read.
+    const onText = (text: string) => {
+      setLive((l) => (l?.k === k ? { ...l, text } : l));
+      const p = panelRef.current;
+      if (p && shown.current === k && p.scrollHeight - p.scrollTop - p.clientHeight < 80) requestAnimationFrame(() => (p.scrollTop = p.scrollHeight));
+    };
     // ponytail: the earlier answers go along whole; a long conversation is cut to its last 6 turns.
     const question = turns.length
       ? `Earlier in this conversation (oldest first):\n\n${turns.slice(-6).map((t) => `Q: ${t.q}\nA: ${t.text}`).join('\n\n')}\n\nTheir follow-up question: ${asked}`
@@ -5580,20 +5590,21 @@ function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: stri
         const source = f?.status === 'removed' ? null : await getRaw(headRepo, panel.path, pr.head.sha).catch(() => null);
         prompt = askPrompt(pr, panel.path, f?.patch, source, panel.text, question);
       }
-      const text = await runAgent(prompt, who);
+      const text = await runAgent(prompt, who, onText);
       const html = await renderGfm(text, repo); // GitHub sanitizes the HTML
       const all = [...turns, { q: asked, text, html, by: who }];
       keepConvo(keyOf(panel), all, panel);
       if (shown.current === keyOf(panel)) {
         // still on show (else it's kept for when it's opened again)
         setTurns(all);
-        setQ('');
         requestAnimationFrame(() => panelRef.current?.scrollTo({ top: panelRef.current.scrollHeight, behavior: 'smooth' }));
       }
       if (panel.ci && !turns.length) notifyAgentDone(`${AGENTS[who].name}: why ${panel.ci.check} failed`, text.replace(/[`*_>#]/g, '').split('\n').find((l) => l.trim())?.slice(0, 160) ?? '', `/${repo}/pull/${pr.number}`);
     } catch (e: any) {
       setError(e.message);
+      if (shown.current === k) setQ((q) => q || asked); // to ask again
     }
+    setLive((l) => (l?.k === k ? null : l));
     asking.current.delete(k);
     setBusy(asking.current.size > 0);
   }
@@ -5652,6 +5663,12 @@ function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: stri
               </div>
             );
           })}
+          {live?.k === keyOf(panel) && (
+            <div class="ask-turn">
+              <p class="ask-q">{live.q}</p>
+              {live.text && <div class="md ask-answer ask-live">{live.text}</div>}
+            </div>
+          )}
           <textarea
             rows={2}
             autoFocus

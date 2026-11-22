@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // lgtm: serve the review UI on 127.0.0.1 and hand it the GitHub CLI's token.
 // Usage: lgtm [https://github.com/owner/repo/pull/123]
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile, mkdtemp, rm } from 'node:fs/promises';
@@ -628,24 +628,43 @@ function jobLog(repo, job, user) {
 // `model` (an alias such as opus, or a full name) and `effort` (low … max): Settings → Claude Code → Prompts; none,
 // Claude Code's own.
 const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'], CODEX_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
-// `agent`: Claude Code (claude), or Codex (codex).
-function agentText(input, model, effort, agent) {
+// `agent`: Claude Code (claude), or Codex (codex). `onDelta`: each piece of Claude's answer as it's written (Codex's
+// comes whole, at the end).
+function agentText(input, model, effort, agent, onDelta) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
   if (agent === 'codex') return codexText(input, model, effort);
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !EFFORTS.includes(effort))) return Promise.reject(new Error('Bad request for Claude'));
   return new Promise((resolve, reject) => {
-    const child = execFile(
-      'claude',
-      ['-p', '--tools', '', '--no-session-persistence', '--output-format', 'text', ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])],
-      { cwd: homedir(), maxBuffer: 1 << 24, timeout: 300000 },
-      (err, stdout, stderr) => {
-        if (err?.code === 'ENOENT') return reject(new Error('Claude Code isn\'t installed (see claude.com/code), or not on the PATH'));
-        const last = (stderr || stdout).trim().split('\n').pop() || err?.message;
-        if (err && /authenticat|log ?in|oauth|unauthori[sz]ed/i.test(last ?? '')) return reject(new Error("Claude Code isn't signed in: run `claude` in Terminal and sign in (/login), then try again"));
-        if (err) return reject(new Error(last));
-        resolve(stdout.trim());
-      },
-    );
+    const args = ['-p', '--tools', '', '--no-session-persistence', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])];
+    const child = spawn('claude', args, { cwd: homedir() });
+    let text = '', result = null, err = '', buf = '', late = false;
+    const timer = setTimeout(() => ((late = true), child.kill()), 300000);
+    child.stdout.setEncoding('utf8').on('data', (d) => {
+      buf += d;
+      for (let n; (n = buf.indexOf('\n')) >= 0; buf = buf.slice(n + 1)) {
+        let e;
+        try {
+          e = JSON.parse(buf.slice(0, n));
+        } catch {
+          continue;
+        }
+        if (e.type === 'stream_event' && e.event?.delta?.type === 'text_delta') (text += e.event.delta.text), onDelta?.(e.event.delta.text);
+        else if (e.type === 'result') result = e;
+      }
+    });
+    child.stderr.setEncoding('utf8').on('data', (d) => (err = (err + d).slice(-8000)));
+    child.stdin.on('error', () => {}); // it quit before reading it all: its exit says why
+    child.on('error', (e) => (clearTimeout(timer), reject(e.code === 'ENOENT' ? new Error("Claude Code isn't installed (see claude.com/code), or not on the PATH") : e)));
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (late) return reject(new Error('Claude Code took too long and was stopped'));
+      if (code || result?.is_error) {
+        const last = err.trim().split('\n').pop() || String(result?.result ?? '').trim().split('\n').pop() || `Claude Code stopped (${code})`;
+        if (/authenticat|log ?in|oauth|unauthori[sz]ed/i.test(last)) return reject(new Error("Claude Code isn't signed in: run `claude` in Terminal and sign in (/login), then try again"));
+        return reject(new Error(last));
+      }
+      resolve(String(result?.result ?? text).trim());
+    });
     child.stdin.end(input);
   });
 }
@@ -909,9 +928,13 @@ const server = createServer(async (req, res) => {
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
   if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
+    // A line of JSON per piece of the answer ({d}), then the whole of it ({text}) or why not ({error}).
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
+    const say = (m) => res.write(JSON.stringify(m) + '\n');
     return readJson(req)
-      .then((b) => agentText(b?.input, b?.model, b?.effort, b?.agent))
-      .then((text) => json(res, 200, { text }), (e) => json(res, 500, { error: e.message }));
+      .then((b) => agentText(b?.input, b?.model, b?.effort, b?.agent, (d) => say({ d })))
+      .then((text) => say({ text }), (e) => say({ error: e.message }))
+      .finally(() => res.end());
   }
   if (path === '/job-log') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams;
