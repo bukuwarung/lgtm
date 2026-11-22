@@ -89,6 +89,7 @@ type Ctx = {
   specRefs: Map<string, SpecRef[]>; // where the specs name each changed file
   secrets: Map<string, Map<number, string>>; // added lines that look like a secret, per file: line → what (secrets.ts)
   hardcoded: Map<string, Map<number, string>>; // added UI text written in code, not strings.xml: line → the text (hardcoded.ts)
+  flagged: Map<string, Map<number, { bad: boolean; why: string }>>; // other line findings (switched off, protections, focused tests, raw HTML, @Transactional): line → its colour and reason
 };
 type SinceComment = { kind: 'same' | 'gone' | 'unknown' } | { kind: 'changed'; lines: Line[] };
 type Saved = { sha: string; drafts: Draft[] };
@@ -1570,6 +1571,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     specRefs: refs,
     secrets: secrets.byPath,
     hardcoded: texts.byPath,
+    flagged: (() => {
+      // Each line finding's mark on its line, in its pill's colour (red: protections, focused tests and debugger).
+      const m = new Map<string, Map<number, { bad: boolean; why: string }>>();
+      const put = (path: string, line: number, bad: boolean, why: string) => (m.get(path) ?? m.set(path, new Map()).get(path)!).set(line, { bad, why });
+      for (const u of unsafe) put(u.path, u.line, true, `${u.what}: ${u.why}`);
+      for (const f of focusHits) put(f.path, f.line, true, f.what === 'debugger' ? 'A debugger left in: it stops the app in anyone\u2019s dev tools' : `${f.what}: CI runs only this test`);
+      for (const x of supp) put(x.path, x.line, false, `${x.what}: ${x.ci ? 'a CI step let off' : x.test ? 'a test switched off' : 'a check silenced'}`);
+      for (const h of html) put(h.path, h.line, false, `${h.what}: an XSS hole if any of it comes from users`);
+      for (const t of txs) put(t.path, t.line, false, '@Transactional on a private method: Spring never sees the call, so no transaction');
+      return m;
+    })(),
     untested: noTests,
     modules: undefined, // set below, once the shown files are known
     sinceComment,
@@ -3736,6 +3748,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   const mv = ctx.moved.get(path);
   const secretAt = ctx.secrets.get(path);
   const textAt = ctx.hardcoded.get(path);
+  const flagAt = ctx.flagged.get(path);
   // Kotlin/Java import blocks fold to one row (opened by click, or by a comment on one of their lines).
   const [foldImports] = useStoredFlag('foldImports', true);
   const folds = useMemo(() => (foldImports && importSyntax(path) ? importFolds(hunks, importSyntax(path)!) : []), [hunks, foldImports]);
@@ -3980,7 +3993,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : '')} data-k={`${hi}-${li}`} onContextMenu={(e) => void lineMenu(e, side, num)} title={l.kind !== '+' ? undefined : secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : undefined}>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : l.kind !== '-' && flagAt?.has(l.new!) ? (flagAt.get(l.new!)!.bad ? ' flag-bad' : ' flag-warn') : '')} data-k={`${hi}-${li}`} onContextMenu={(e) => void lineMenu(e, side, num)} title={l.kind === '-' ? undefined : l.kind === '+' && secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : l.kind === '+' && textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : flagAt?.get(l.new!)?.why}>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />
