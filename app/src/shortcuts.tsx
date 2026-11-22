@@ -632,6 +632,8 @@ type IndexProps = {
   atCommit?: string | null; // the last one on show on its own (review.tsx toSha), if any
   fromCommit?: string | null; // the first one on show (a run of them, shift-clicked), else atCommit
   readCommits?: Set<string>; // the ones I've opened
+  newFrom?: number; // the first commit pushed since my last review (-1: none)
+  onNew?: () => void; // show those together
   onCommit?: (sha: string | null, shift?: boolean) => void; // show one on its own (shift: from fromCommit to it), or (null) all changes
   ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
   modules?: Map<string, string>; // each file's Gradle module (files.ts gradleModules), when grouping by them
@@ -647,7 +649,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits, newFrom = -1, onNew, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -765,10 +767,11 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
       )}
       {listCommits && (
         <Section id="ix-commits" title="Commits" count={commits.length}>
+          {newFrom >= 0 && <Entry label={<><Octicon name="history" /> {commits.length - newFrom} new since your last review, together{hint(keys.newCommits)}</>} onClick={() => onNew?.()} />}
           {unread > 0 && unread < commits.length && <p class="note ix-pad">{unread} not opened yet: Next{hint(keys.nextCommit)} goes to them.</p>}
           {atCommit && <Entry label="All changes" onClick={() => onCommit?.(null)} />}
           {commits.map((c, i) => (
-            <button class={readCommits?.has(c.sha) ? 'ix-item ix-commit read' : 'ix-item ix-commit'} aria-current={(i >= onShow[0] && i <= onShow[1]) || undefined} onClick={(e) => onCommit?.(c.sha, e.shiftKey)} title={`${c.sha}\n${c.label}${readCommits?.has(c.sha) ? '\nOpened' : ''}\nShift-click: from the commit on show to this one`}>
+            <button class={`ix-item ix-commit${readCommits?.has(c.sha) ? ' read' : ''}${newFrom >= 0 && i >= newFrom ? ' new' : ''}`} aria-current={(i >= onShow[0] && i <= onShow[1]) || undefined} onClick={(e) => onCommit?.(c.sha, e.shiftKey)} title={`${c.sha}\n${c.label}${readCommits?.has(c.sha) ? '\nOpened' : ''}\nShift-click: from the commit on show to this one`}>
               <span class="ix-label"><Octicon name={readCommits?.has(c.sha) ? 'check' : 'git-commit'} /> <code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
             </button>
           ))}

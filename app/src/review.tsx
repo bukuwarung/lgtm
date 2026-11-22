@@ -13,7 +13,7 @@ import { addedLines, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relo
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, prCommits, revertCommit, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
   ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -1206,7 +1206,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const showSince = (sha: string | null) => (setFromSha(sha), setToSha(null), setSinceData(null), setSince(true));
   // One commit on its own (GitHub's Commits tab), or a run of them (shift-click in the index's Commits): what they
   // changed. fromSha is the first one's parent; comments go on the same lines in all changes (commitTarget).
-  const commits = useMemo(() => (points ?? []).filter((p) => !p.force).toReversed().toSorted((a, b) => a.at.localeCompare(b.at)), [points]); // oldest first; a rebase gives them one time, so then in the PR's order
+  const commits = useMemo(() => prCommits(points ?? []), [points]);
   const firstSha = toSha && fromSha?.endsWith('^') ? fromSha.slice(0, -1) : toSha;
   const ci = (sha: string | null) => commits.findIndex((c) => c.sha === sha);
   // The commits I've opened, on this machine: ticked in the index, and Next skips them.
@@ -1248,6 +1248,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     showCommit(commits[next]?.sha ?? null);
   };
   const commitView = since && !!toSha;
+  const newFrom = lastReviewed && ci(lastReviewed) >= 0 && ci(lastReviewed) < commits.length - 1 ? ci(lastReviewed) + 1 : -1; // the first commit pushed since my last review
   const commitTarget = async (t: Target | null) => {
     const no = (text: string) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, ms: 4000 } }));
     if (!t || t.editId || !data || !toSha) return setTarget(t);
@@ -1449,6 +1450,21 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   if (error) return <p class="error page">{error} <Retry onClick={() => (setError(''), dispatchEvent(new Event('lgtm:refresh')))} /></p>;
   if (!data) return <PRSkeleton pr={early} />;
   const { pr, headRepo } = data;
+  // The commit on show, undone on the branch (your PR, or one you may push to), after asking.
+  const canRevert = commitView && firstSha === toSha && pr.state === 'open' && !!rights?.update;
+  const revertShown = async () => {
+    const c = commits[ci(toSha)];
+    if (!canRevert || !c) return;
+    if (!(await ask(`Revert ${c.sha.slice(0, 7)} "${c.label}" on ${pr.head.ref}? A new commit undoes it.`, 'Revert'))) return;
+    try {
+      await revertCommit(headRepo, pr.head.ref, pr.head.sha, c.sha, c.label);
+      setNotice({ ok: true, text: `Reverted ${c.sha.slice(0, 7)} on ${pr.head.ref}.` });
+      showCommit(null);
+      dispatchEvent(new Event('lgtm:refresh'));
+    } catch (e) {
+      setNotice({ ok: false, text: `Couldn't revert it: ${(e as Error).message}` });
+    }
+  };
   const files = since && sinceData ? sinceData.files : data.files;
   const { drafts } = saved;
 
@@ -2093,6 +2109,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       lock: () => details('lock'),
       prevCommit: () => stepCommit(-1),
       nextCommit: () => stepCommit(1),
+      newCommits: () => newFrom >= 0 && showCommit(commits[newFrom].sha, commits.at(-1)!.sha),
+      revertCommit: () => void revertShown(),
       ownFiles: () => ownSome && (setOnlyOwned((v) => !v), scrollTo({ top: 0 })),
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
@@ -2146,6 +2164,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               fromCommit={commitView ? firstSha : null}
               readCommits={readCommits}
               onCommit={pickCommit}
+              newFrom={newFrom}
+              onNew={() => newFrom >= 0 && showCommit(commits[newFrom].sha, commits.at(-1)!.sha)}
               canLabel={!!rights?.label}
               checksErr={checksErr}
               hidden={hiddenRows}
@@ -2664,6 +2684,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   </span>
                   <button disabled={firstSha === commits[0]?.sha} onClick={() => stepCommit(-1)} title={`Previous commit${hint(bindings.prevCommit)}`}>‹ Previous</button>
                   <button disabled={toSha === commits.at(-1)?.sha} onClick={() => stepCommit(1)} title={`Next commit${hint(bindings.nextCommit)}`}>Next ›</button>
+                  {canRevert && <button onClick={revertShown} title={`Revert this commit on ${pr.head.ref} (asks first)${hint(bindings.revertCommit)}`}>Revert…</button>}
                   <button onClick={() => showCommit(null)}>Show all changes</button>
                 </>
               ) : since ? (

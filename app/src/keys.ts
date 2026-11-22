@@ -26,6 +26,8 @@ export const ACTIONS = [
   ['myThreads', 'Your threads on their own, each with its code and what changed since', 'y'],
   ['prevCommit', 'Previous commit on its own (from all changes: the last one)', '<'],
   ['nextCommit', 'Next commit on its own (from all changes: the first; after the last, all changes again)', '>'],
+  ['newCommits', 'The commits pushed since your last review, together', 'C'],
+  ['revertCommit', words('Revert the commit on show on its own (your PR; asks first)'), 'Z'],
   ['react', 'React 👍 to the comment under the mouse (again: take it back)', '+'],
   ['editComment', 'Edit your comment under the mouse', 'E'],
   ['commentMenu', 'The comment under the mouse: edit, delete, hide or dismiss it', 'H'],

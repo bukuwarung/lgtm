@@ -1086,6 +1086,9 @@ export async function getStatus(repo: string, n: number): Promise<{ reviewDecisi
 // Points in a PR's history to show changes after: each of its commits, and each force-push (from what was there
 // before it), newest first.
 export type PushPoint = { sha: string; label: string; at: string; force?: boolean };
+// A PR's commits, oldest first (its push points but the force-pushes); a rebase gives them one time, so then in the
+// PR's own order.
+export const prCommits = (points: PushPoint[]) => points.filter((p) => !p.force).toReversed().toSorted((a, b) => a.at.localeCompare(b.at));
 export async function getPushPoints(repo: string, n: number): Promise<PushPoint[]> {
   if (isLab(repo)) return lab.getLabPushPoints(repo, n);
   const [owner, name] = repo.split('/');
@@ -1284,6 +1287,37 @@ export async function commitSuggestions(headRepo: string, branch: string, head: 
       },
     },
   );
+}
+
+// A commit undone on the PR's branch, as `git revert` (one new commit, signed by GitHub). Refused when a file it
+// changed has changed after it (that takes a merge: revert it locally) or is binary (only text goes through here).
+export async function revertCommit(headRepo: string, branch: string, head: string, sha: string, headline: string) {
+  if (isLab(headRepo)) return void (await lab.revertLabCommit(headRepo, branch, sha));
+  const [c, since] = await Promise.all([json(`/repos/${headRepo}/commits/${sha}`), getCompare(headRepo, sha, head)]);
+  const files: PRFile[] = c.files ?? [];
+  const parent: string | undefined = c.parents?.[0]?.sha;
+  if (!parent || c.parents.length > 1) throw new Error('a merge commit (or the first one): revert it locally');
+  const paths = (f: PRFile) => [f.filename, f.previous_filename ?? ''].filter(Boolean);
+  const later = new Set(since.files.flatMap(paths));
+  const clash = files.flatMap(paths).filter((x) => later.has(x));
+  if (clash.length) throw new Error(`${clash[0]}${clash.length > 1 ? ` and ${clash.length - 1} more` : ''} changed after it: revert it locally`);
+  const bin = files.find((f) => !f.patch && f.additions + f.deletions > 0);
+  if (bin) throw new Error(`${bin.filename} is binary (or too big to show): revert it locally`);
+  const deletions = files.filter((f) => f.status === 'added' || f.status === 'renamed' || f.status === 'copied').map((f) => ({ path: f.filename }));
+  const back = files.filter((f) => f.status !== 'added' && f.status !== 'copied').map((f) => f.previous_filename ?? f.filename);
+  const additions = await Promise.all(back.map(async (path) => {
+    const text = await getRaw(headRepo, path, parent);
+    if (text == null) throw new Error(`${path} isn't there before it`);
+    return { path, contents: btoa(Array.from(new TextEncoder().encode(text), (b) => String.fromCharCode(b)).join('')) };
+  }));
+  await graphql(`mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}`, {
+    input: {
+      branch: { repositoryNameWithOwner: headRepo, branchName: branch },
+      expectedHeadOid: head,
+      fileChanges: { additions, deletions },
+      message: { headline: `Revert "${headline}"`, body: `This reverts commit ${sha}.` },
+    },
+  });
 }
 
 // A short-lived, signed link to a file at a commit, for <img>: unlike the raw bytes it resolves Git LFS files to the

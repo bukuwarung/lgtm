@@ -790,6 +790,9 @@ export async function revertLab(repo: string, n: number, why = ''): Promise<numb
   return made.iid;
 }
 
+// A commit undone on the MR's branch: GitLab's own revert (it refuses one that no longer applies).
+export const revertLabCommit = (repo: string, branch: string, sha: string) => send(split(repo).host, `/projects/${pid(repo)}/repository/commits/${sha}/revert`, 'POST', { branch });
+
 export const closeLab = (repo: string, n: number) => send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', { state_event: 'close' });
 
 // MRs whose description mentions reverting this one (github.ts revertedBy reads their "Reverts !n" line).
