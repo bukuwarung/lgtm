@@ -1022,7 +1022,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           if (c) await loadLanguages(repo, c.v.files.map((f) => f.filename));
           if (!c || fresh || Date.now() - c.at < RECENT) return;
           setStale(c.at);
-          show(c.v);
+          // Not its review in progress: that one may have been sent or discarded since (it showed "1 review in
+          // progress" until the fresh copy came, on every open). GitHub's word comes with the fresh copy.
+          show({ ...c.v, pending: null });
         });
       else setStale(Date.now()); // the page as it is stays, marked as updating
       let pr: PR;
@@ -1030,7 +1032,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       const recent = await cached;
       const reuse = !!recent && Date.now() - recent.at < RECENT && !recent.v.paused;
       try {
-        if (reuse) extras((loaded = recent!.v).pr);
+        if (reuse) extras((loaded = { ...recent!.v, pending: await getPendingReview(repo, n).catch(() => null) }).pr); // the review in progress asked fresh: one small ask
         else
           loaded = await loadPR(repo, n, (p) => {
             if (!shownHead) setEarly(p); // nothing shown yet: its title and description, while the files load
