@@ -18,7 +18,8 @@ import {
   ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
-import { isMarkdown, md, onDocClick, renderChunks, tidyDoc } from './markdown.ts';
+import { isMarkdown, md, onDocClick, renderChunks, tidyDoc, toggleTask } from './markdown.ts';
+import { CommentMenu, ReactPick, Reactions, loadSocial, menuUnderMouse, reactUnderMouse, useSocial } from './social.tsx';
 import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
 import { MergeBox, mergeOnceApproved } from './merge.tsx';
@@ -665,6 +666,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [sinceComment, setSinceComment] = useState<Map<string, SinceComment>>(new Map());
   const [since, setSince] = useState(false);
   const [fromSha, setFromSha] = useState<string | null>(null); // a point picked in "Changes since…" (else my last review)
+  const [toSha, setToSha] = useState<string | null>(null); // one commit on its own (the commits pill): fromSha is its parent
   const [points, setPoints] = useState<PushPoint[] | null>(null);
   const [sinceData, setSinceData] = useState<{ status: string; files: File[] } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -1145,11 +1147,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     rememberPeople([pr.user.login, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => !c.bot).map((c) => c.author)].map((l) => personKey(repo, l)));
   }, [data, conversation]);
 
+  // Reactions and hidden comments for the PR, its conversation and its threads (social.tsx), once each is in.
+  useEffect(() => void (data && loadSocial(repo, [data.pr.node_id, ...conversation.map((c) => c.node), ...threads.flatMap((t) => t.comments.nodes.map((c) => c.id))])), [data?.pr.node_id, conversation, threads]);
   const sinceBase = fromSha ?? lastReviewed;
   useEffect(() => void (data && getPushPoints(repo, n).then(setPoints, () => setPoints([]))), [repo, n, data?.pr.head.sha]); // once the PR (its head) is here, not before too
   useEffect(() => {
     if (!since || !sinceBase || !data || sinceData) return;
-    getCompare(repo, sinceBase, data.pr.head.sha).then(
+    getCompare(repo, sinceBase, toSha ?? data.pr.head.sha).then(
       // After a rebase the comparison also carries the base branch's changes; keep only files this PR touches.
       (d) => {
         // GitHub lists at most 300 files per comparison. After a rebase onto lots of base-branch work those can all be
@@ -1161,16 +1165,28 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           return;
         }
         const inPR = new Set(data.files.map((f) => f.filename));
-        setSinceData({ status: d.status, files: prepare(d.files.filter((f) => inPR.has(f.filename)), data.rules) });
+        setSinceData({ status: d.status, files: prepare(toSha ? d.files : d.files.filter((f) => inPR.has(f.filename)), data.rules) }); // a commit: all it changed
       },
       (e) => {
         setSince(false);
-        setNotice({ ok: false, text: `Couldn't load changes since ${fromSha ? 'then' : 'your last review'}: ${e.message}` });
+        setNotice({ ok: false, text: toSha ? `Couldn't load that commit: ${e.message}` : `Couldn't load changes since ${fromSha ? 'then' : 'your last review'}: ${e.message}` });
+        setToSha(null), setFromSha(null);
       },
     );
-  }, [since, sinceBase, data]);
+  }, [since, sinceBase, toSha, data]);
   // Changes since a picked point: the diff narrows to them, as after a review.
-  const showSince = (sha: string | null) => (setFromSha(sha), setSinceData(null), setSince(true));
+  const showSince = (sha: string | null) => (setFromSha(sha), setToSha(null), setSinceData(null), setSince(true));
+  // One commit on its own (GitHub's Commits tab): what it changed, read-only (its lines aren't the PR's head).
+  const commits = useMemo(() => (points ?? []).filter((p) => !p.force).toSorted((a, b) => a.at.localeCompare(b.at)), [points]); // oldest first
+  const showCommit = (sha: string | null) => (sha ? (setFromSha(`${sha}^`), setToSha(sha), setSinceData(null), setSince(true)) : (setSince(false), setFromSha(null), setToSha(null), setSinceData(null)), scrollTo({ top: 0 }));
+  // The commit before or after the one on show; from all changes, the first (or last); past either end, all changes.
+  const stepCommit = (by: 1 | -1) => {
+    if (commits.length < 2) return;
+    const at = commits.findIndex((c) => c.sha === toSha);
+    const next = at < 0 ? (by > 0 ? 0 : commits.length - 1) : at + by;
+    showCommit(commits[next]?.sha ?? null);
+  };
+  const commitView = since && !!toSha;
 
   // My open threads against the code now: a compare from the commit each thread was written on to the head (one per
   // commit, kept), then whether the commented lines changed. Rewritten history (force-push) can't be mapped.
@@ -1286,7 +1302,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     addEventListener('lgtm:link', on);
     return () => removeEventListener('lgtm:link', on);
   }, [repo, n, data, hiddenThreads]);
-  const shownThreads = (since && sinceData ? allThreads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : allThreads).filter((t) => !hiddenThreads || !settled(t));
+  const shownThreads = commitView ? [] : (since && sinceData ? allThreads.filter((t) => t.diffSide === 'RIGHT' || t.line == null) : allThreads).filter((t) => !hiddenThreads || !settled(t));
   const byPath = useMemo(() => Map.groupBy(shownThreads, (t) => t.path), [shownThreads]);
   useEffect(() => {
     const main = document.querySelector('main');
@@ -1598,7 +1614,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     pr,
     headRepo,
     target,
-    setTarget,
+    // One commit on its own is read-only: its lines aren't the head's, where comments go.
+    setTarget: commitView ? (t) => (t && !t.editId ? dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'This is one commit on its own: comment on all changes', ms: 3000 } })) : setTarget(t)) : setTarget,
     // A finding's comment, drafted: the form opens on its line (or the file) with the text in, to edit or send.
     suggest: (path, line, body, side = 'RIGHT') => {
       setTarget({ path, side, line, body });
@@ -1863,7 +1880,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       file={f}
       ctx={ctx}
       threads={byPath.get(f.filename) ?? []}
-      drafts={drafts.filter((d) => d.path === f.filename)}
+      drafts={commitView ? [] : drafts.filter((d) => d.path === f.filename)}
       viewed={viewed.has(f.filename)}
       collapsed={viewed.has(f.filename) && !expanded.has(f.filename)}
       changed={changedSinceVisit.has(f.filename)}
@@ -1956,6 +1973,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       file.scrollIntoView();
       if (again) setTimeout(() => jumpChange(dir, false), 250); // once it has drawn, its first change
     };
+    // The index's Details (shortcuts.tsx): shown first if it's hidden, then asked to open a picker or flip a switch.
+    const details = (what: string) => (showIndex || toggleIndex(), setTimeout(() => dispatchEvent(new CustomEvent('lgtm:details', { detail: what })), showIndex ? 0 : 150));
     const act: Record<Action, () => void> = {
       usages: () => {}, // symbolnav.tsx, which knows the name under the mouse
       nextFile: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
@@ -1992,6 +2011,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       skip: () => dispatchEvent(new Event('lgtm:skip')), // review mode (main.tsx) moves on
       docCode: () => dispatchEvent(new Event('lgtm:doc-code')), // DocCodeJump
       myThreads: () => (setOnlyMine((v) => !v), scrollTo({ top: 0 })),
+      react: () => void (reactUnderMouse() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Point at a comment to react to it', ms: 2500 } }))),
+      commentMenu: () => void (menuUnderMouse() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Point at a comment to hide, unhide or dismiss it', ms: 2500 } }))),
+      assign: () => details('assign'),
+      milestone: () => details('milestone'),
+      subscribe: () => details('subscribe'),
+      lock: () => details('lock'),
+      prevCommit: () => stepCommit(-1),
+      nextCommit: () => stepCommit(1),
       ownFiles: () => ownSome && (setOnlyOwned((v) => !v), scrollTo({ top: 0 })),
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
@@ -2503,6 +2530,16 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 <Tg i="ws" t="whitespace ignored" />
               </button>
             )}
+            {/* Each commit on its own, as GitHub's Commits tab. */}
+            {commits.length > 1 && (
+              <PillMenu cls={toSha ? 'on' : ''} label={<Tg i="commit" t={`${commits.length} commits`} />} head={`One commit on its own${hint(bindings.prevCommit)}${hint(bindings.nextCommit)}:`}>
+                {commits.map((c) => (
+                  <button aria-current={c.sha === toSha || undefined} onClick={() => showCommit(c.sha)} title={c.sha}>
+                    <code>{c.sha.slice(0, 7)}</code> <b>{c.label}</b> <small><Time at={c.at} /></small>
+                  </button>
+                ))}
+              </PillMenu>
+            )}
             {/* On a re-review (or while showing changes since a point): the push to show changes after. */}
             {points && points.length > 1 && (lastReviewed || since) && (
               <PillMenu label={<Tg i="history" t="changes since…" />} head="Show only what changed after:">
@@ -2545,7 +2582,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 onResolveAll={resolveAddressed}
                 onFocus={() => (setOnlyMine(true), scrollTo({ top: 0 }))}
               />}
-              {since ? (
+              {commitView ? (
+                <>
+                  <span class="since-state">
+                    Commit {commits.findIndex((c) => c.sha === toSha) + 1} of {commits.length}: <CopyCode text={toSha!}>{toSha!.slice(0, 7)}</CopyCode> <b>{commits.find((c) => c.sha === toSha)?.label}</b>
+                    {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'} · read-only` : ' · loading…'}
+                  </span>
+                  <button disabled={toSha === commits[0]?.sha} onClick={() => stepCommit(-1)} title={`Previous commit${hint(bindings.prevCommit)}`}>‹ Previous</button>
+                  <button disabled={toSha === commits.at(-1)?.sha} onClick={() => stepCommit(1)} title={`Next commit${hint(bindings.nextCommit)}`}>Next ›</button>
+                  <button onClick={() => showCommit(null)}>Show all changes</button>
+                </>
+              ) : since ? (
                 <>
                   <span class="since-state">
                     {fromSha ? `Showing only the changes after ${points?.find((p) => p.sha === fromSha)?.label ?? 'that point'} ` : 'Showing only those changes '}
@@ -2554,7 +2601,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                     {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
                     {sinceData && !sinceData.files.length && <b> · none of this {pageTerm().PRs_} files changed (only a rebase)</b>}
                   </span>
-                  <button onClick={() => (setSince(false), setFromSha(null), setSinceData(null))}>Show all changes</button>
+                  <button onClick={() => showCommit(null)}>Show all changes</button>
                 </>
               ) : (
                 <button onClick={() => setSince(true)}>Show only those changes</button>
@@ -2603,7 +2650,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               repoSearch={(name) => (isLab(repo) ? `https://${repo.split('/')[0]}/${repo.slice(repo.indexOf('/') + 1)}/-/search?scope=blobs&search=${encodeURIComponent(name)}` : `https://github.com/search?type=code&q=${encodeURIComponent(`repo:${repo} ${name}`)}`)}
             />
           )}
-          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} />
+          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} canEdit={!!me && (pr.user.login === me || !!rights?.update)} canDismiss={!isLab(repo) && !!rights?.merge} />
           {onlyMine ? (
             <MyThreads threads={threads} drafts={drafts} files={data.files} ctx={ctx} close={(t) => (setOnlyMine(false), t && setTimeout(() => jumpTo(('comments' in t ? 't-' : 'd-') + t.id, 'f-' + t.path), 50))} />
           ) : (
@@ -4787,6 +4834,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   // On someone else's PR, other people's threads start folded too: mine (and ones waiting on me) stay open.
   const others = !!ctx.me && ctx.pr.user.login !== ctx.me && !t.comments.nodes.some((c) => c.author?.login === ctx.me);
   const verdict = ctx.checked[t.id];
+  const social = useSocial();
 
   // Sent in the background (it shows at once); a failure gives the text back.
   const send = () => {
@@ -4844,16 +4892,23 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       )}
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
-        <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId} data-url={c.url} data-src={c.body ?? undefined}>
+        <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId} data-url={c.url} data-src={c.body ?? undefined} data-social={c.id}>
           <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)} title={`@${c.author?.login ?? 'ghost'}`}>{shownName(c.author?.login ?? 'ghost', ctx.repo)}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           {c.state === 'SENDING' && <span class="badge"> · sending…</span>}
           <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
+          {c.state !== 'PENDING' && <><ReactPick id={c.id} /><CommentMenu id={c.id} /></>}
           {c.state === 'PENDING' && c.id ? (
             <PendingComment c={c} ctx={ctx} path={t.path} t={t} />
+          ) : social(c.id)?.hidden ? (
+            <details class="hidden-comment">
+              <summary><small class="hidden-why">Hidden as {social(c.id)!.hidden}</small></summary>
+              <div class="md" data-lang={ctx.langFor(t.path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(t.path), languageFor(t.path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+            </details>
           ) : (
             <div class="md" data-lang={ctx.langFor(t.path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(t.path), languageFor(t.path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
           )}
+          {c.state !== 'PENDING' && <Reactions id={c.id} />}
           <SuggestionActions t={t} c={c} ctx={ctx} />
         </div>
       ))}
@@ -5809,7 +5864,7 @@ function ShotCompare({ p }: { p: ShotPair }) {
 }
 
 // folded: review mode starts with it closed, the diff first.
-function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads, reveal }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean; ix: CodeIndex; threads: Thread[]; reveal: () => void }) {
+function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads, reveal, canEdit, canDismiss }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean; ix: CodeIndex; threads: Thread[]; reveal: () => void; canEdit: boolean; canDismiss: boolean }) {
   const [editing, setEditing] = useState(false);
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const [mdStyle] = useMdStyle();
@@ -5820,18 +5875,34 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
     tidyDoc(desc.current);
     linkSpecRefs(desc.current, ix); // links to the code too, as specs have
     setTimeout(() => setShots(shotPairs(desc.current)), 300); // once its images are signed
-  }, [pr.body_html, ix]);
+    // Its task list ticked and unticked here, as on GitHub, by whoever may edit it.
+    const boxes = [...(desc.current?.querySelectorAll<HTMLInputElement>('input.task-list-item-checkbox') ?? [])];
+    if (!canEdit) return;
+    boxes.forEach((b, k) => {
+      b.disabled = false;
+      b.onchange = () => {
+        const body = toggleTask(pr.body ?? '', k, b.checked);
+        if (body == null) return void (b.checked = !b.checked);
+        boxes.forEach((x) => (x.disabled = true));
+        updatePR(repo, pr.number, { title: pr.title, body }).then(
+          () => dispatchEvent(new Event('lgtm:refresh')),
+          (e) => ((b.checked = !b.checked), boxes.forEach((x) => (x.disabled = false)), dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Couldn't save it: ${e.message}`, ms: 4000 } }))),
+        );
+      };
+    });
+  }, [pr.body_html, ix, canEdit]);
   const peek = useRefPeek(ix);
   const earlier = useMemo(() => earlierVerdicts(items), [items]);
   const replaced = new Set([...earlier.values()].flat());
   // A bot's PR leads with the human it's assigned to, not the bot.
   const lead = (pr.user.type === 'Bot' && pr.assignees[0]) || pr.user;
+  const social = useSocial();
   return (
     <details class="conversation" id="conversation" open={!folded}>
       <summary>
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
-      <div class="comment" id="pr-description">
+      <div class="comment" id="pr-description" data-social={pr.node_id}>
         <Avatar login={lead.login} src={lead === pr.user ? pr.user.avatar_url : undefined} /> <b class="person-link" title={lead === pr.user ? undefined : `Assigned; opened by ${pr.user.login}`} onClick={toPerson(lead.login, repo)}>{lead.login}</b>
         {pr.assignees.filter((a) => a.login !== pr.user.login && a !== lead).map((a, k) => (
           <span key={a.login} class="assigned-to">
@@ -5840,7 +5911,8 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
           </span>
         ))}{' '}
         <CopyLink url={pr.html_url} />
-        {me === pr.user.login && !editing && (
+        <ReactPick id={pr.node_id} />
+        {(canEdit || me === pr.user.login) && !editing && (
           <button class="icon-btn" title="Edit the title and description" aria-label="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />
           </button>
@@ -5855,6 +5927,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         ) : (
           <p class="note">No description.</p>
         )}
+        {!editing && <Reactions id={pr.node_id} />}
         {!editing && shots.length > 0 && (
           <div class="shots">
             <p class="shots-h">Screenshots, before and after</p>
@@ -5865,7 +5938,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
       {(() => {
         // Plain approvals (no text, no comments on the code) one after another: one line, "Approved by budi, rina and ana".
         const reviewThreads = (c: ConversationItem) => threads.filter((t) => t.comments.nodes.some((x) => x.pullRequestReview?.databaseId === Number(c.id.slice(1))));
-        const bare = (c: ConversationItem) => c.state === 'APPROVED' && !c.html?.trim() && !earlier.has(c.id) && !reviewThreads(c).length;
+        const bare = (c: ConversationItem) => c.state === 'APPROVED' && !c.html?.trim() && !earlier.has(c.id) && !reviewThreads(c).length && !canDismiss; // one I may dismiss keeps its own line, for its ⋯
         const units: (ConversationItem | ConversationItem[])[] = [];
         for (const c of items) {
           if ((c.bot && foldBots) || replaced.has(c.id)) continue; // bots below, behind one line; earlier verdicts under the later one
@@ -5895,14 +5968,26 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
             {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}
+            <ReactPick id={c.node} />
+            <CommentMenu id={c.node} review={canDismiss && (c.state === 'APPROVED' || c.state === 'CHANGES_REQUESTED') ? { who: c.author } : undefined} />
           </>
         );
         const body = (
           <>
             {c.html && <div class="md" data-lang={lang ?? ''} ref={(el) => void (el && highlightBlocks(el, lang))} dangerouslySetInnerHTML={{ __html: c.html }} />}
+            <Reactions id={c.node} />
             <ReviewThreads review={c} threads={threads} reveal={reveal} />
           </>
         );
+        // Hidden on GitHub (off-topic, outdated…): folded to its first line, as GitHub shows it.
+        const hidden = social(c.node)?.hidden;
+        if (hidden)
+          return (
+            <details class="comment hidden-comment" key={c.id} id={'cv-' + c.id} data-url={c.url} data-social={c.node}>
+              <summary>{head} <small class="hidden-why">hidden as {hidden}</small></summary>
+              {body}
+            </details>
+          );
         const earlierOnes = earlier.get(c.id)?.map((id) => {
               const e = items.find((x) => x.id === id)!;
               const n = threads.filter((t) => t.comments.nodes.some((x) => x.pullRequestReview?.databaseId === Number(id.slice(1)))).length;
@@ -5922,7 +6007,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         const own = reviewThreads(c);
         if (c.html?.trim() && own.length && own.every((t) => t.isResolved || t.isOutdated))
           return (
-            <details class="comment done-review" key={c.id} id={'cv-' + c.id} data-url={c.url}>
+            <details class="comment done-review" key={c.id} id={'cv-' + c.id} data-url={c.url} data-social={c.node}>
               <summary>
                 {head} <span class="bot-excerpt">{botExcerpt(c.html)}</span>
                 <small> · {own.length} thread{own.length === 1 ? '' : 's'}, all resolved or outdated</small>
@@ -5932,7 +6017,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             </details>
           );
         return (
-          <div class="comment" key={c.id} id={'cv-' + c.id} data-url={c.url}>
+          <div class="comment" key={c.id} id={'cv-' + c.id} data-url={c.url} data-social={c.node}>
             {head}
             {body}
             {earlierOnes}

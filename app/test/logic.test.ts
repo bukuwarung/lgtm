@@ -8,7 +8,7 @@ import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, uniqueNames,
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, rainbow, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
 import { setEmojiMap } from '../src/emoji.ts';
-import { isMarkdown, md, renderChunks } from '../src/markdown.ts';
+import { isMarkdown, md, renderChunks, toggleTask } from '../src/markdown.ts';
 import { findStacks } from '../src/stacks.ts';
 
 const patch = [
@@ -1565,4 +1565,12 @@ test('splitPatch: a commit message, then each file of a git or plain diff', asyn
   assert.deepEqual(p.files.map((f) => [f.path, f.status, f.additions, f.deletions]), [['x.kt', 'modified', 1, 1], ['n.md', 'added', 1, 0]]);
   const u = splitPatch('--- a.txt\t2024\n+++ a.txt\t2024\n@@ -1 +1 @@\n-x\n+y\n--- b.txt\n+++ b.txt\n@@ -1 +1 @@\n-p\n+q\n');
   assert.deepEqual(u.files.map((f) => [f.path, f.additions]), [['a.txt', 1], ['b.txt', 1]]);
+});
+
+test('toggleTask ticks the nth box, skipping code fences', () => {
+  const t = '- [ ] one\n```\n- [ ] not a task\n```\n> * [x] two\n1. [ ] three';
+  assert.equal(toggleTask(t, 0, true), t.replace('- [ ] one', '- [x] one'));
+  assert.equal(toggleTask(t, 1, false), t.replace('> * [x] two', '> * [ ] two'));
+  assert.equal(toggleTask(t, 2, true), t.replace('1. [ ] three', '1. [x] three'));
+  assert.equal(toggleTask(t, 3, true), null);
 });

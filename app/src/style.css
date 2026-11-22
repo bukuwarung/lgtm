@@ -1676,3 +1676,27 @@ input[type=checkbox]:disabled { cursor: not-allowed; opacity: .5; }
 .copy-link, .set-replies button:has(> svg:only-child) { display: inline-flex; align-items: center; justify-content: center; }
 .nav-refresh > span { display: grid; place-items: center; }
 :is(.copy-link, .set-replies button, .nav-refresh > span) > svg { display: block; }
+
+/* Reactions (social.tsx): the emoji left on a comment, mine marked, and a smiley to pick one. */
+.reactions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.reaction { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; font-size: calc(12px * var(--ts)); line-height: 1; border: 1px solid var(--border); border-radius: 999px; background: none; color: var(--fg); cursor: pointer; }
+.reaction:hover:not(:disabled) { background: var(--soft); }
+.reaction.mine { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.reaction:disabled { cursor: default; }
+.react-pick { position: relative; display: inline-flex; vertical-align: middle; }
+.react-pick > summary { list-style: none; display: inline-flex; align-items: center; }
+.react-pick > summary::-webkit-details-marker { display: none; }
+.react-menu { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; display: flex; gap: 2px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
+.react-menu button { width: 32px; height: 32px; padding: 0; font-size: 16px; border: 0; border-radius: 6px; background: none; cursor: pointer; }
+.react-menu button:hover, .react-menu button[aria-pressed='true'] { background: var(--soft); }
+/* ⋯ on a comment: hide, unhide, dismiss. */
+.comment-menu { position: relative; display: inline-flex; vertical-align: middle; }
+.comment-menu > summary { list-style: none; display: inline-flex; align-items: center; }
+.comment-menu > summary::-webkit-details-marker { display: none; }
+.comment-menu .account-menu { left: 0; right: auto; min-width: 180px; }
+.menu-h { margin: 4px 8px 2px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+.hidden-comment > summary { cursor: pointer; }
+.hidden-why { color: var(--muted); font-style: italic; }
+/* The index's Details: assignees, milestone, notifications, lock. */
+.ix-subh { margin: 6px 14px 2px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+.person-chip img { width: 14px; height: 14px; border-radius: 50%; margin-right: 2px; }

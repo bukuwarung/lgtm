@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
-import { readBindings } from './keys.ts';
-import { composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { hint, readBindings } from './keys.ts';
+import { ask, composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold } from './tags.tsx';
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { repoLabels, setLabel, type Label, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { repoLabels, setLabel, type Label, getPrMeta, getAssignable, getMilestones, setAssignees, setMilestone, setSubscribed, setLocked, type PrMeta, type Milestone, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -129,6 +129,130 @@ function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels:
           ))}
           {all != null && !left.length && <p class="note ix-pad">{q ? 'No label matches.' : 'Every label is on.'}</p>}
         </details>
+      )}
+      {err && <p class="warn ix-pad">{err}</p>}
+    </Section>
+  );
+}
+
+// The PR's assignees and milestone (× takes one off, + adds; typing narrows the list), whether I'm subscribed to its
+// notifications, and whether its conversation is locked. Its shortcuts (lgtm:details) open the pickers or flip the
+// switches.
+function Details({ repo, n, prNode, canEdit }: { repo: string; n: number; prNode: string; canEdit: boolean }) {
+  const [meta, setMeta] = useState<PrMeta | null>(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('');
+  const [people, setPeople] = useState<{ login: string; name?: string }[] | null>(null);
+  const [miles, setMiles] = useState<Milestone[] | null>(null);
+  const [q, setQ] = useState('');
+  const [mq, setMq] = useState('');
+  const pick = useRef<HTMLDetailsElement>(null);
+  const mpick = useRef<HTMLDetailsElement>(null);
+  const load = () => getPrMeta(repo, n).then(setMeta, (e) => setErr(e.message));
+  useEffect(() => void load(), [repo, n]);
+  useEffect(() => {
+    if (!pick.current?.open) return;
+    let live = true;
+    const t = setTimeout(() => getAssignable(repo, q.trim()).then((l) => live && setPeople(l), (e) => live && setErr(e.message)), q ? 250 : 0);
+    return () => ((live = false), clearTimeout(t));
+  }, [q, people == null]);
+  // A change shown at once, undone if it fails.
+  const change = (what: string, next: PrMeta, run: () => Promise<unknown>, said?: string) => {
+    if (!meta || busy) return;
+    const was = meta;
+    setErr(''), setBusy(what), setMeta(next);
+    run().then(
+      () => (setBusy(''), said && dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: said, ms: 2500 } })), what === 'assign' && dispatchEvent(new Event('lgtm:refresh'))),
+      (e) => (setBusy(''), setMeta(was), setErr(e.message)),
+    );
+  };
+  const assign = (list: string[]) => meta && change('assign', { ...meta, assignees: list }, () => setAssignees(repo, n, meta.assignees, list));
+  const mile = (m: Milestone | null) => meta && change('milestone', { ...meta, milestone: m }, () => setMilestone(repo, n, m?.id ?? null));
+  const subscribe = () => meta && meta.subscribed != null && change('subscribe', { ...meta, subscribed: !meta.subscribed }, () => setSubscribed(repo, n, prNode, !meta.subscribed), meta.subscribed ? `Unsubscribed: no notifications about this ${pageTerm().PR} unless you're mentioned` : `Subscribed to this ${pageTerm().PR}'s notifications`);
+  const lock = async () => {
+    if (!meta || !canEdit) return;
+    if (!meta.locked && !(await ask(`Lock the conversation? Only people with write access can comment until it's unlocked.`, 'Lock'))) return;
+    change('lock', { ...meta, locked: !meta.locked }, () => setLocked(repo, n, !meta.locked), meta.locked ? 'Conversation unlocked' : 'Conversation locked');
+  };
+  const openPick = (d: HTMLDetailsElement | null) => {
+    if (!d) return;
+    const sec = d.closest<HTMLDetailsElement>('details.ix-sec');
+    if (sec) sec.open = true;
+    d.open = true;
+    d.scrollIntoView({ block: 'nearest' });
+    setTimeout(() => d.querySelector('input')?.focus(), 0);
+  };
+  useEffect(() => {
+    const on = (e: Event) => {
+      const what = (e as CustomEvent<string>).detail;
+      if (what === 'assign' && canEdit) openPick(pick.current);
+      else if (what === 'milestone' && canEdit) openPick(mpick.current);
+      else if (what === 'subscribe') subscribe();
+      else if (what === 'lock') void lock();
+    };
+    addEventListener('lgtm:details', on);
+    return () => removeEventListener('lgtm:details', on);
+  });
+  if (!meta) return err ? <p class="warn ix-pad">{err}</p> : null;
+  const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
+  const leftPeople = (people ?? []).filter((u) => !meta.assignees.includes(u.login));
+  const leftMiles = (miles ?? []).filter((m) => m.id !== meta.milestone?.id && (!mq || m.title.toLowerCase().includes(mq.toLowerCase())));
+  return (
+    <Section id="ix-details" title="Details" count={meta.assignees.length + (meta.milestone ? 1 : 0)}>
+      <p class="ix-subh">Assignees</p>
+      <div class="ix-labels">
+        {meta.assignees.map((l) => (
+          <span class="label-chip person-chip" title={`@${l}`}>
+            <img src={faceOf(l)} alt="" /> {l}
+            {canEdit && <button class="label-x" aria-label={`Unassign ${l}`} title={`Unassign ${l}`} onClick={() => assign(meta.assignees.filter((x) => x !== l))}>×</button>}
+          </span>
+        ))}
+        {!meta.assignees.length && <span class="note">Nobody.</span>}
+      </div>
+      {canEdit && (
+        <details class="ix-ckgroup" ref={pick} onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && people == null && setPeople([])}>
+          <summary title={hint(keys.assign).trim() || undefined}>+ Assign someone</summary>
+          <input class="label-find" type="search" placeholder="Find someone…" aria-label="Find someone to assign" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => !composing(e) && e.key === 'Enter' && leftPeople[0] && (setQ(''), assign([...meta.assignees, leftPeople[0].login]))} />
+          {leftPeople.slice(0, 20).map((u) => (
+            <button class="ix-item ix-person" onClick={() => (setQ(''), assign([...meta.assignees, u.login]))}>
+              <span class="ix-label"><img src={faceOf(u.login)} alt="" /> {u.login}{u.name && <small> {u.name}</small>}</span>
+            </button>
+          ))}
+          {people != null && !leftPeople.length && <p class="note ix-pad">{q ? 'Nobody matches.' : 'Loading…'}</p>}
+        </details>
+      )}
+      <p class="ix-subh">Milestone</p>
+      <div class="ix-labels">
+        {meta.milestone ? (
+          <span class="label-chip" title={meta.milestone.due ? `Due ${new Date(meta.milestone.due).toLocaleDateString()}` : meta.milestone.title}>
+            <Octicon name="milestone" /> {meta.milestone.title}
+            {canEdit && <button class="label-x" aria-label="Remove the milestone" title="Remove the milestone" onClick={() => mile(null)}>×</button>}
+          </span>
+        ) : <span class="note">None.</span>}
+      </div>
+      {canEdit && (
+        <details class="ix-ckgroup" ref={mpick} onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && !miles && getMilestones(repo).then(setMiles, (x) => setErr(x.message))}>
+          <summary title={hint(keys.milestone).trim() || undefined}>{meta.milestone ? 'Change the milestone' : '+ Set a milestone'}</summary>
+          <input class="label-find" type="search" placeholder="Find a milestone…" aria-label="Find a milestone" value={mq} onInput={(e) => setMq(e.currentTarget.value)} onKeyDown={(e) => !composing(e) && e.key === 'Enter' && leftMiles[0] && (setMq(''), mile(leftMiles[0]), mpick.current && (mpick.current.open = false))} />
+          {miles == null ? <p class="note ix-pad">Loading…</p> : leftMiles.slice(0, 30).map((m) => (
+            <button class="ix-item" onClick={() => (setMq(''), mile(m), mpick.current && (mpick.current.open = false))}>
+              <span class="ix-label"><Octicon name="milestone" /> {m.title}{m.due && <small> · due {new Date(m.due).toLocaleDateString()}</small>}</span>
+            </button>
+          ))}
+          {miles != null && !leftMiles.length && <p class="note ix-pad">{mq ? 'No milestone matches.' : 'No open milestones.'}</p>}
+        </details>
+      )}
+      {meta.subscribed != null && (
+        <button class="ix-item" disabled={busy === 'subscribe'} onClick={subscribe} title={`${meta.subscribed ? 'Stop' : 'Get'} notifications about every comment and push${hint(keys.subscribe)}`}>
+          <span class="ix-label"><Octicon name={meta.subscribed ? 'bell' : 'bell-slash'} /> {meta.subscribed ? 'Subscribed' : 'Not subscribed'}</span>
+          <span class="ix-meta">{meta.subscribed ? 'Unsubscribe' : 'Subscribe'}</span>
+        </button>
+      )}
+      {(canEdit || meta.locked) && (
+        <button class="ix-item" disabled={!canEdit || busy === 'lock'} onClick={() => void lock()} title={canEdit ? `${meta.locked ? 'Let everyone comment again' : 'Only people with write access can comment'}${hint(keys.lock)}` : 'Only people with write access can comment'}>
+          <span class="ix-label"><Octicon name={meta.locked ? 'lock' : 'unlock'} /> {meta.locked ? 'Conversation locked' : 'Conversation open'}</span>
+          {canEdit && <span class="ix-meta">{meta.locked ? 'Unlock' : 'Lock'}</span>}
+        </button>
       )}
       {err && <p class="warn ix-pad">{err}</p>}
     </Section>
@@ -569,6 +693,7 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
       </Section>
 
       {(canLabel || !!pr.labels?.length) && <Labels repo={repo} n={pr.number} labels={pr.labels ?? []} canEdit={canLabel} />}
+      <Details repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} />
 
       <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />

@@ -109,7 +109,7 @@ export type QueueItem = {
   headSha?: string; // the head commit
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
-export type ConversationItem = { id: string; author: string; avatar?: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
+export type ConversationItem = { id: string; node?: string; author: string; avatar?: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
 
 // A PR's and a file's web addresses, and the site's name: github.com, or the GitLab the repo is on.
 export const site = (repo: string) => (isLab(repo) ? 'GitLab' : 'GitHub');
@@ -871,10 +871,10 @@ export async function getConversation(repo: string, n: number): Promise<Conversa
     prReviews(repo, n),
   ]);
   return [
-    ...comments.map((c) => ({ id: 'c' + c.id, author: c.user?.login ?? 'ghost', avatar: c.user?.avatar_url, html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' || (agentsAsBots() && agentSays(c.body)) })),
+    ...comments.map((c) => ({ id: 'c' + c.id, node: c.node_id, author: c.user?.login ?? 'ghost', avatar: c.user?.avatar_url, html: c.body_html ?? '', at: c.created_at, url: c.html_url, bot: c.user?.type === 'Bot' || (agentsAsBots() && agentSays(c.body)) })),
     ...reviews
       .filter((r) => r.state !== 'PENDING' && (r.body || r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
-      .map((r) => ({ id: 'r' + r.id, author: r.user?.login ?? 'ghost', avatar: r.user?.avatar_url, html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot', commit: r.commit_id })),
+      .map((r) => ({ id: 'r' + r.id, node: r.node_id, author: r.user?.login ?? 'ghost', avatar: r.user?.avatar_url, html: r.body_html ?? '', at: r.submitted_at, url: r.html_url, state: r.state, bot: r.user?.type === 'Bot', commit: r.commit_id })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 }
 
@@ -2217,3 +2217,74 @@ export async function getGist(id: string): Promise<Gist> {
   await Promise.all(Object.values(g.files).filter((f) => f.truncated).map(async (f) => (f.content = await fetch(f.raw_url).then((r) => r.text()))));
   return g;
 }
+
+// Reactions and hiding on a PR, its comments and reviews (GitHub only), by node ID: each one's emoji with mine among
+// them, whether I may react, and whether it's hidden (minimized) and I may hide or unhide it.
+export type Social = { canReact: boolean; groups: { content: string; mine: boolean; n: number }[]; hidden: string | null; canHide: boolean; canUnhide: boolean };
+export async function getSocial(ids: string[]): Promise<Map<string, Social>> {
+  const out = new Map<string, Social>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const r = await graphqlFull(
+      `query($ids:[ID!]!){nodes(ids:$ids){id ...on Reactable{viewerCanReact reactionGroups{content viewerHasReacted reactors{totalCount}}} ...on Minimizable{isMinimized minimizedReason viewerCanMinimize viewerCanUnminimize}}}`,
+      { ids: ids.slice(i, i + 100) },
+    );
+    for (const x of r.data?.nodes ?? [])
+      if (x?.id)
+        out.set(x.id, {
+          canReact: !!x.viewerCanReact,
+          groups: (x.reactionGroups ?? []).map((g: any) => ({ content: g.content, mine: !!g.viewerHasReacted, n: g.reactors?.totalCount ?? 0 })),
+          hidden: x.isMinimized ? String(x.minimizedReason || 'hidden').toLowerCase().replace(/_/g, '-') : null,
+          canHide: !!x.viewerCanMinimize,
+          canUnhide: !!x.viewerCanUnminimize,
+        });
+  }
+  return out;
+}
+export const setReaction = (id: string, content: string, on: boolean) =>
+  graphql(`mutation($id:ID!,$c:ReactionContent!){${on ? 'addReaction' : 'removeReaction'}(input:{subjectId:$id,content:$c}){clientMutationId}}`, { id, c: content });
+// Hidden as one of GitHub's reasons (OFF_TOPIC, OUTDATED, RESOLVED, DUPLICATE, SPAM, ABUSE, LOW_QUALITY), or shown again (null).
+export const hideComment = (id: string, reason: string | null) =>
+  reason
+    ? graphql(`mutation($id:ID!,$r:ReportedContentClassifiers!){minimizeComment(input:{subjectId:$id,classifier:$r}){clientMutationId}}`, { id, r: reason })
+    : graphql(`mutation($id:ID!){unminimizeComment(input:{subjectId:$id}){clientMutationId}}`, { id });
+// An approval or change request dismissed, with why: it stops counting toward merging.
+export const dismissReview = (id: string, message: string) =>
+  graphql(`mutation($id:ID!,$m:String!){dismissPullRequestReview(input:{pullRequestReviewId:$id,message:$m}){clientMutationId}}`, { id, m: message });
+
+// A PR's labels, assignees, milestone, whether its conversation is locked, and whether I'm subscribed (null: I can't
+// be); the choices for each; and changing them. GitLab's MRs have the same (gitlab.ts).
+export type Milestone = { id: number; title: string; due?: string | null }; // id: GitHub's milestone number, GitLab's id
+export type PrMeta = { labels: Label[]; assignees: string[]; milestone: Milestone | null; locked: boolean; subscribed: boolean | null };
+export async function getPrMeta(repo: string, n: number): Promise<PrMeta> {
+  if (isLab(repo)) return lab.getLabMeta(repo, n);
+  const [o, r] = repo.split('/');
+  const p = (await graphql(
+    `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){locked viewerCanSubscribe viewerSubscription labels(first:100){nodes{name color description}} assignees(first:50){nodes{login}} milestone{number title dueOn}}}}`,
+    { o, r, n },
+  )).repository.pullRequest;
+  return {
+    labels: p.labels.nodes.map((l: any) => ({ name: l.name, color: l.color, description: l.description ?? undefined })),
+    assignees: p.assignees.nodes.map((a: any) => a.login),
+    milestone: p.milestone ? { id: p.milestone.number, title: p.milestone.title, due: p.milestone.dueOn } : null,
+    locked: !!p.locked,
+    subscribed: p.viewerCanSubscribe ? p.viewerSubscription === 'SUBSCRIBED' : null,
+  };
+}
+export const getMilestones = async (repo: string): Promise<Milestone[]> =>
+  isLab(repo) ? lab.getLabMilestones(repo) : (await paginate<any>(`/repos/${repo}/milestones?state=open&per_page=100`)).map((m) => ({ id: m.number, title: m.title, due: m.due_on }));
+// Who may be assigned, matching what's typed (GitHub lists them all; GitLab searches its members).
+export const getAssignable = async (repo: string, q: string): Promise<{ login: string; name?: string }[]> =>
+  isLab(repo) ? lab.getLabAssignable(repo, q) : (await paginate<any>(`/repos/${repo}/assignees?per_page=100`)).map((u) => ({ login: u.login })).filter((u) => u.login.toLowerCase().includes(q.toLowerCase()));
+const issueCall = async (repo: string, n: number, path: string, method: string, body?: unknown) =>
+  void (await ok(await gh(`/repos/${repo}/issues/${n}${path}`, { method, ...(body ? { body: JSON.stringify(body) } : {}) })));
+export const setMilestone = (repo: string, n: number, id: number | null) => (isLab(repo) ? lab.setLabMilestone(repo, n, id) : issueCall(repo, n, '', 'PATCH', { milestone: id }));
+export const setAssignees = (repo: string, n: number, was: string[], now: string[]) => {
+  if (isLab(repo)) return lab.setLabAssignees(repo, n, now);
+  const add = now.filter((l) => !was.includes(l)), drop = was.filter((l) => !now.includes(l));
+  return Promise.all([add.length && issueCall(repo, n, '/assignees', 'POST', { assignees: add }), drop.length && issueCall(repo, n, '/assignees', 'DELETE', { assignees: drop })]);
+};
+// Locked: only people with write access can comment (GitHub's reasons: off-topic, too heated, resolved, spam).
+export const setLocked = (repo: string, n: number, on: boolean, reason?: string) =>
+  isLab(repo) ? lab.setLabLocked(repo, n, on) : issueCall(repo, n, '/lock', on ? 'PUT' : 'DELETE', on && reason ? { lock_reason: reason } : undefined);
+export const setSubscribed = (repo: string, n: number, prNode: string, on: boolean) =>
+  isLab(repo) ? lab.setLabSubscribed(repo, n, on) : graphql(`mutation($id:ID!,$s:SubscriptionState!){updateSubscription(input:{subscribableId:$id,state:$s}){clientMutationId}}`, { id: prNode, s: on ? 'SUBSCRIBED' : 'UNSUBSCRIBED' });

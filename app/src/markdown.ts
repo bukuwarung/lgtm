@@ -208,3 +208,19 @@ export function onDocClick(e: MouseEvent, root: HTMLElement | null, linkTo?: (sl
   // ponytail: a heading inside a folded section isn't in the page, so its link does nothing; unfold it if missed.
   root.querySelector(`[data-slug="${CSS.escape(slug)}"]`)?.scrollIntoView({ block: 'start' });
 }
+
+// The nth task-list box ("- [ ]") of Markdown ticked or unticked, counting as GitHub renders them: list items, quoted
+// ones too, not inside code fences. Null when there's no nth box.
+export function toggleTask(text: string, nth: number, done: boolean): string | null {
+  let fence = '', k = 0;
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const f = lines[i].match(/^\s*(?:>\s*)*(`{3,}|~{3,})/)?.[1];
+    if (f && (!fence || (f[0] === fence[0] && f.length >= fence.length))) fence = fence ? '' : f;
+    else if (!fence) {
+      const m = lines[i].match(/^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+\[)[ xX](\])/);
+      if (m && k++ === nth) return (lines[i] = m[1] + (done ? 'x' : ' ') + m[2] + lines[i].slice(m[0].length)), lines.join('\n');
+    }
+  }
+  return null;
+}

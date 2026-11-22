@@ -59,6 +59,7 @@ const ICONS: Record<string, string> = {
   mention: 'mention',
   ws: 'eye/',
   history: 'history',
+  commit: 'git-commit',
   aging: 'hourglass',
   auto: 'git-merge',
   queue: 'git-merge-queue',

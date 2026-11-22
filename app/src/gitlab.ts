@@ -1302,3 +1302,30 @@ export async function getLabPerson(key: string, days = 30): Promise<Person> {
     reviews: reviews.sort((a, b) => b.at.localeCompare(a.at)),
   };
 }
+
+// An MR's labels, assignees, milestone, lock and my subscription (github.ts getPrMeta), and the choices for each.
+export async function getLabMeta(repo: string, n: number) {
+  const m = await json(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}?with_labels_details=true`);
+  return {
+    labels: (m.labels ?? []).map((l: any) => ({ name: l.name, color: (l.color ?? '#888').replace('#', ''), description: l.description ?? undefined })),
+    assignees: (m.assignees ?? []).map((a: any) => a.username as string),
+    milestone: m.milestone ? { id: m.milestone.id as number, title: m.milestone.title as string, due: m.milestone.due_date ?? null } : null,
+    locked: !!m.discussion_locked,
+    subscribed: typeof m.subscribed === 'boolean' ? m.subscribed : null,
+  };
+}
+export const getLabMilestones = async (repo: string) =>
+  (await pages<any>(split(repo).host, `/projects/${pid(repo)}/milestones?state=active&per_page=100`)).map((m) => ({ id: m.id as number, title: m.title as string, due: m.due_date ?? null }));
+export const getLabAssignable = async (repo: string, q: string) =>
+  (await json(split(repo).host, `/projects/${pid(repo)}/members/all?per_page=50&query=${encodeURIComponent(q)}`)).filter((u: any) => u.state === 'active').map((u: any) => ({ login: u.username as string, name: u.name as string, id: u.id as number }));
+const mrPut = (repo: string, n: number, body: unknown) => send(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}`, 'PUT', body);
+export const setLabMilestone = (repo: string, n: number, id: number | null) => mrPut(repo, n, { milestone_id: id ?? 0 });
+export const setLabLocked = (repo: string, n: number, on: boolean) => mrPut(repo, n, { discussion_locked: on });
+export async function setLabAssignees(repo: string, n: number, logins: string[]) {
+  const ids = await Promise.all(logins.map(async (l) => (await json(split(repo).host, `/users?username=${encodeURIComponent(l)}`))[0]?.id as number | undefined));
+  return mrPut(repo, n, { assignee_ids: ids.filter((x) => x != null) });
+}
+export const setLabSubscribed = (repo: string, n: number, on: boolean) =>
+  lab(split(repo).host, `/projects/${pid(repo)}/merge_requests/${n}/${on ? 'subscribe' : 'unsubscribe'}`, { method: 'POST' }).catch((e) => {
+    if (!/GitLab 304/.test(e.message)) throw e; // 304: already so
+  });
