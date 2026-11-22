@@ -567,13 +567,13 @@ export async function labTree(repo: string, sha: string): Promise<{ path: string
   return [await first.json(), ...rest].flat().map((e: any) => ({ path: e.path, type: e.type === 'blob' ? 'blob' : 'tree' }));
 }
 // Files changed between two commits; "diverged" when base isn't an ancestor of head (the MR was rebased).
-export async function getLabCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[]; commits: number }> {
+export async function getLabCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[]; commits: number; message?: string }> {
   const { host } = split(repo);
   const [d, mb] = await Promise.all([
     json(host, `/projects/${pid(repo)}/repository/compare?from=${base}&to=${head}&straight=false`),
     json(host, `/projects/${pid(repo)}/repository/merge_base?refs[]=${base}&refs[]=${head}`).catch(() => null),
   ]);
-  return { status: mb?.id === base ? 'ahead' : 'diverged', files: (d.diffs ?? []).map((x: any) => fileOf(repo, head, x)), commits: d.commits?.length ?? 0 };
+  return { status: mb?.id === base ? 'ahead' : 'diverged', files: (d.diffs ?? []).map((x: any) => fileOf(repo, head, x)), commits: d.commits?.length ?? 0, message: d.commits?.at(-1)?.message };
 }
 // The MR's history to show changes after: each commit, and what each push replaced when it rewrote them (a rebase or
 // force-push: a version whose head isn't among the commits now), newest first.

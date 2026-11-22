@@ -677,7 +677,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [fromSha, setFromSha] = useState<string | null>(null); // a point picked in "Changes since…" (else my last review)
   const [toSha, setToSha] = useState<string | null>(null); // one commit on its own (the commits pill): fromSha is its parent
   const [points, setPoints] = useState<PushPoint[] | null>(null);
-  const [sinceData, setSinceData] = useState<{ status: string; files: File[] } | null>(null);
+  const [sinceData, setSinceData] = useState<{ status: string; files: File[]; body?: string } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [pending, setPending] = useState<PendingReview | null>(null); // my review in progress on GitHub
   const pendingNow = pending; // as this render has it (submit's own copy may be fresher)
@@ -1193,7 +1193,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           return;
         }
         const inPR = new Set(data.files.map((f) => f.filename));
-        setSinceData({ status: d.status, files: prepare(toSha ? d.files : d.files.filter((f) => inPR.has(f.filename)), data.rules) }); // a commit: all it changed
+        setSinceData({ status: d.status, files: prepare(toSha ? d.files : d.files.filter((f) => inPR.has(f.filename)), data.rules), body: toSha ? d.message?.split('\n').slice(1).join('\n').trim() : undefined }); // a commit: all it changed, and its message under the headline
       },
       (e) => {
         setSince(false);
@@ -2609,7 +2609,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <button class="primary" onClick={() => (setPushed(null), dispatchEvent(new Event('lgtm:refresh')))}>Reload</button>
             </p>
           )}
-          {!!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} check={check} onRecheck={() => setCheckTry((k) => k + 1)} />}
+          {!commitView && !!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} check={check} onRecheck={() => setCheckTry((k) => k + 1)} />}
           {(lastReviewed || fromSha) && (
             <div class={since ? 'since on' : 'since'}>
               {lastReviewed && !fromSha && <SinceSummary
@@ -2629,6 +2629,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   <span class="since-state">
                     Commit {commits.findIndex((c) => c.sha === toSha) + 1} of {commits.length}: <CopyCode text={toSha!}>{toSha!.slice(0, 7)}</CopyCode> <b>{commits.find((c) => c.sha === toSha)?.label}</b>
                     {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'} · read-only` : ' · loading…'}
+                    {sinceData?.body && <span class="commit-body">{sinceData.body}</span>}
                   </span>
                   <button disabled={toSha === commits[0]?.sha} onClick={() => stepCommit(-1)} title={`Previous commit${hint(bindings.prevCommit)}`}>‹ Previous</button>
                   <button disabled={toSha === commits.at(-1)?.sha} onClick={() => stepCommit(1)} title={`Next commit${hint(bindings.nextCommit)}`}>Next ›</button>
@@ -2650,16 +2651,18 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               )}
             </div>
           )}
-          {paused && (
+          {paused && !commitView && (
             <p class="warn">
               Review threads aren't shown: {paused.replace(/: lgtm waits until then$/, '')}. The diff, description and conversation are here; reload after that for the threads.
             </p>
           )}
-          {drafts.length > 0 && saved.sha !== pr.head.sha && (
+          {!commitView && drafts.length > 0 && saved.sha !== pr.head.sha && (
             <p class="warn">New commits were pushed since you started this review. Your comments move to them with their lines when you submit; you'll be asked about any whose lines changed.</p>
           )}
-          {plan && <ReviewPlan plan={plan} viewed={viewed} />}
-          {pending && (
+          {/* One commit on its own: just it, its message and its files; the PR's description, conversation, ticket and
+              review state wait for all changes. */}
+          {plan && !commitView && <ReviewPlan plan={plan} viewed={viewed} />}
+          {pending && !commitView && (
             <p class="warn">
               You have a review in progress on {site(repo)} ({pending.count} comment{pending.count === 1 ? '' : 's'}): Finish review sends it, with your comments here.{' '}
               <button
@@ -2678,8 +2681,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </button>
             </p>
           )}
-          {jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
-          <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />
+          {!commitView && jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
+          {!commitView && <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />}
           <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} onComment={(path, line, body) => ctx.suggest(path, line && ctx.suggestion({ path, side: 'RIGHT', line }) != null ? line : undefined, body)} />
           {commentPeek.node}
           {symPeek.node}
@@ -2692,8 +2695,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               repoSearch={(name) => (isLab(repo) ? `https://${repo.split('/')[0]}/${repo.slice(repo.indexOf('/') + 1)}/-/search?scope=blobs&search=${encodeURIComponent(name)}` : `https://github.com/search?type=code&q=${encodeURIComponent(`repo:${repo} ${name}`)}`)}
             />
           )}
-          <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} canEdit={!!me && (pr.user.login === me || !!rights?.update)} canDismiss={!isLab(repo) && !!rights?.merge} />
-          {onlyMine ? (
+          {!commitView && <Conversation pr={pr} items={conv} lang={mainLang} repo={repo} me={me} mentions={ctx.mentions} folded={focus} ix={codeIx} threads={threads} reveal={() => hiddenThreads && setShowSettled()} canEdit={!!me && (pr.user.login === me || !!rights?.update)} canDismiss={!isLab(repo) && !!rights?.merge} />}
+          {onlyMine && !commitView ? (
             <MyThreads threads={threads} drafts={drafts} files={data.files} ctx={ctx} close={(t) => (setOnlyMine(false), t && setTimeout(() => jumpTo(('comments' in t ? 't-' : 'd-') + t.id, 'f-' + t.path), 50))} />
           ) : (
           <>

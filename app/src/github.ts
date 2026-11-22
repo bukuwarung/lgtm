@@ -1616,10 +1616,11 @@ export async function getMyLastReview(repo: string, n: number): Promise<{ sha: s
 
 // Files changed between two commits. status 'diverged' means `base` isn't an ancestor (the PR was rebased).
 // commits: how many head has that base doesn't.
-export async function getCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[]; commits: number }> {
+// message: the head commit's, whole.
+export async function getCompare(repo: string, base: string, head: string): Promise<{ status: string; files: PRFile[]; commits: number; message?: string }> {
   if (isLab(repo)) return lab.getLabCompare(repo, base, head);
   const d = await json(`/repos/${repo}/compare/${base}...${head}`);
-  return { status: d.status, files: d.files ?? [], commits: d.ahead_by ?? 0 };
+  return { status: d.status, files: d.files ?? [], commits: d.ahead_by ?? 0, message: d.commits?.at(-1)?.commit?.message };
 }
 
 // GitHub's emoji shortcodes (name → image URL), kept a month; without gh's sign-in, asked anonymously (the

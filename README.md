@@ -85,7 +85,7 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 - Files in reading order: specs and docs, build and config, models, the implementation (each test right below its class), other tests, then resources. Drag the steps into your own order; the index groups files by step, or as folders.
 - Files grouped by module, with code changed but no test.
 - Re-reviews show only what changed since your last one, and your threads say whether their lines moved.
-- Each commit on its own (`<` `>` step through them), read-only.
+- Each commit on its own (`<` `>` step through them), read-only: its message and its files, nothing else.
 - An index: reviewers; the conversation (comments, reviews and review threads together, what waits on your reply first); checks (failed-job logs, and whether `main` fails them too, or a required one that never ran); and files, following your scroll, with what's hidden behind a row. Big PRs can get a review plan (a switch). It can start hidden on PRs waiting for your review, and sections stay folded as you leave them.
 - A merged, closed or draft PR says so at the top; a review of a merged or closed one is a comment.
 - In the conversation, bot comments wait behind one line, each review lists its comments on the code, and a reviewer's earlier verdict folds under their latest.
