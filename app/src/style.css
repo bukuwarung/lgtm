@@ -343,7 +343,7 @@ kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: va
   .dim, .tree-row.dim, .bots-hidden > summary, details.comment.bot > summary { opacity: 1 !important; }
   :focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 1px; }
 }
-.bar { position: sticky; top: var(--nav); z-index: 3; height: var(--bar); display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.bar { position: sticky; top: var(--nav); z-index: 4; /* above the pinned pill bar (3): its merge box and menus drop over it */ height: var(--bar); display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
 .bar h1 { flex: 1; margin: 0; font-size: calc(15px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .submit { position: relative; }
 .panel { position: absolute; right: 0; top: calc(100% + 6px); width: 420px; display: grid; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }

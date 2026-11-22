@@ -252,6 +252,16 @@ try {
       return r.width && i.width && d > 1 ? [${JSON.stringify(where)} + ': ' + (b.getAttribute('aria-label') || b.title || b.className) + ' ' + d.toFixed(1) + 'px off'] : [];
     })`);
     const off = await icons('the PR');
+    // What drops from the title bar (Finish review here; the merge box, Agents, ⋯) draws over the pinned pill bar.
+    await evaluate(`[...document.querySelectorAll('.bar button')].find((b) => b.textContent.trim().startsWith('Finish review')).click()`);
+    await until('the Finish review panel', `!!document.querySelector('.bar .panel')`, 3000);
+    const under = await evaluate(`(() => {
+      const p = document.querySelector('.bar .panel').getBoundingClientRect(), s = document.querySelector('.pr-status').getBoundingClientRect();
+      const y = (Math.max(p.top, s.top) + Math.min(p.bottom, s.bottom)) / 2;
+      return p.top < s.bottom && p.bottom > s.top && [p.left + 12, (p.left + p.right) / 2, p.right - 12].some((x) => !document.elementFromPoint(x, y)?.closest('.bar .panel'));
+    })()`);
+    if (under) throw new Error('the Finish review panel is under the pinned pill bar');
+    await evaluate(`[...document.querySelectorAll('.bar button')].find((b) => b.textContent.trim().startsWith('Finish review')).click()`);
     await evaluate(`location.hash = '/settings'`);
     await until('Settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`);
     off.push(...(await icons('Settings')));
