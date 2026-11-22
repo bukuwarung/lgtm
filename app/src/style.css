@@ -1665,3 +1665,8 @@ input[type=checkbox]:disabled { cursor: not-allowed; opacity: .5; }
 /* Other line findings (switched off, protections, focused tests, raw HTML, @Transactional): a bar in their pill's colour, the reason on hover. */
 .diff tr.ln.flag-bad td.code { box-shadow: inset 3px 0 0 var(--c-bad); }
 .diff tr.ln.flag-warn td.code { box-shadow: inset 3px 0 0 var(--c-mark); }
+/* The PR's title bar: icons centred in their buttons (inline, they sat on the text baseline, low in WebKit), icon-only
+   buttons square. */
+.bar :is(button, summary):has(> svg) { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-block-size: calc(1lh + 8px); }
+.bar :is(button, summary) > svg { display: block; flex: none; }
+.bar .bar-index { min-inline-size: calc(1lh + 8px); padding: 0; }
