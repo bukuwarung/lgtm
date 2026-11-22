@@ -10,7 +10,7 @@ export const ACTIONS = [
   ['nextChange', 'Next change (across files)', 'd'],
   ['prevChange', 'Previous change', 'D'],
   ['viewed', 'Mark the current file viewed', 'v'],
-  ['whitespace', 'Ignore whitespace on/off', 'w'],
+  ['whitespace', words('Ignore whitespace on/off, on this PR'), 'w'],
   ['comment', 'Comment on the line under the mouse (or at the top of the view)', ' '],
   ['fileComment', 'Comment on the current file', 'c'],
   ['stackPrev', words('Previous PR in the stack'), '['],

@@ -791,7 +791,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     return () => removeEventListener('lgtm:help', open);
   }, []);
   const [status, setStatus] = useState<Awaited<ReturnType<typeof getStatus>> | null>(null);
-  const [ignoreWs, toggleWs] = useStoredFlag('ignoreWs', true);
+  // Settings → Diff sets the default; the pill, w, help and "less to read" switch it for this PR only (they used to
+  // flip the setting itself, so one stray w or click turned it off everywhere).
+  const [wsPref] = useStoredFlag('ignoreWs', true);
+  const [wsHere, setWsHere] = useState<boolean | null>(null);
+  const ignoreWs = wsHere ?? wsPref;
+  const toggleWs = () => setWsHere(!ignoreWs);
   const [changedSinceVisit, setChangedSinceVisit] = useState<Set<string>>(new Set());
   const resumeAt = useRef<Visit['at']>(null);
   const visitKey = `visit:${repo}#${n}`;
