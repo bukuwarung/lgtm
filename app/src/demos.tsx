@@ -1327,6 +1327,28 @@ Object.assign(DEMOS, {
       </div>
     ),
   },
+  hideEmptyIndex: {
+    title: 'Hide empty sections in the index',
+    off: (
+      <div class="demo-index">
+        <b>Labels 0</b>
+        <div class="demo-idx"><small>None.</small></div>
+        <b>Assignees 0</b>
+        <div class="demo-idx"><small>Nobody.</small></div>
+        <b>Milestone 0</b>
+        <div class="demo-idx"><small>None.</small></div>
+        <b>Conversation 2</b>
+        <div class="demo-idx">OrderNotifier.kt:41 <small>you</small></div>
+      </div>
+    ),
+    on: (
+      <div class="demo-index">
+        <div class="demo-idx"><small>+ Add a label, an assignee, a milestone</small></div>
+        <b>Conversation 2</b>
+        <div class="demo-idx">OrderNotifier.kt:41 <small>you</small></div>
+      </div>
+    ),
+  },
   ticketOpen: { title: 'The Jira ticket, expanded', off: TICKET(false), on: TICKET(true) },
   jiraOnMerge: { title: 'Move the Jira ticket when you merge', off: MERGE(false), on: MERGE(true) },
   slackNotify: { title: 'Message on Slack after a review', off: SUBMIT(false), on: SUBMIT(true) },

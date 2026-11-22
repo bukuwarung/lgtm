@@ -149,7 +149,7 @@ const toPick = (id: string) => {
 };
 
 // The PR's labels: × takes one off, the header's + puts one of the repo's on (when you may).
-function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels: Label[]; canEdit: boolean }) {
+function Labels({ repo, n, labels, canEdit, onDone }: { repo: string; n: number; labels: Label[]; canEdit: boolean; onDone?: () => void }) {
   const [on, setOn] = useState(labels);
   useEffect(() => setOn(labels), [labels.map((l) => l.name).join('\n')]);
   const [adding, setAdding] = useState(false);
@@ -163,6 +163,7 @@ function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels:
     );
   };
   const chip = (l: Label) => ({ '--lc': l.color ? '#' + l.color : 'var(--muted)' }) as preact.JSX.CSSProperties;
+  useDetailsKey('label', () => canEdit && (setAdding(true), toPick('ix-labels')));
   return (
     <Section id="ix-labels" title="Labels" count={on.length} extra={canEdit && <HeadBtn icon="plus" label="Add a label" on={adding} run={(sec) => (openSec(sec), setAdding((a) => !a))} />}>
       {adding && (
@@ -174,7 +175,7 @@ function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels:
             const l = (await repoLabels(repo)).find((x) => x.name === name);
             if (l) flip(l, true);
           }}
-          onClose={() => setAdding(false)}
+          onClose={() => (setAdding(false), onDone?.())}
         />
       )}
       <div class="ix-labels">
@@ -215,6 +216,14 @@ function usePrMeta(repo: string, n: number) {
   };
   return [meta, change] as const;
 }
+const anA = (word: string) => (/^[aeiou]/.test(word) ? 'an' : 'a');
+// The labels section while it's hidden empty (Settings → Reviewing): shown once a label is being added.
+function LabelsOnAsk({ repo, n, canEdit }: { repo: string; n: number; canEdit: boolean }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => setShown(false), [repo, n]);
+  useDetailsKey('label', () => !shown && (setShown(true), setTimeout(() => dispatchEvent(new CustomEvent('lgtm:details', { detail: 'label' })), 30)));
+  return shown ? <Labels repo={repo} n={n} labels={[]} canEdit={canEdit} onDone={() => setShown(false)} /> : null;
+}
 // The index's shortcuts for these (review.tsx: G, M, S, O), each to its section.
 function useDetailsKey(what: string, run: () => void) {
   useEffect(() => {
@@ -224,12 +233,12 @@ function useDetailsKey(what: string, run: () => void) {
   });
 }
 
-function Assignees({ repo, n, canEdit }: { repo: string; n: number; canEdit: boolean }) {
+function Assignees({ repo, n, canEdit, hideEmpty }: { repo: string; n: number; canEdit: boolean; hideEmpty: boolean }) {
   const [meta, change] = usePrMeta(repo, n);
   const [adding, setAdding] = useState(false);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
   useDetailsKey('assign', () => canEdit && (setAdding(true), toPick('ix-assignees')));
-  if (!meta) return null;
+  if (!meta || (hideEmpty && !meta.assignees.length && !adding)) return null;
   const set = (list: string[]) => change({ ...meta, assignees: list }, () => setAssignees(repo, n, meta.assignees, list));
   return (
     <Section id="ix-assignees" title="Assignees" count={meta.assignees.length} extra={canEdit && <HeadBtn icon="plus" label={`Assign someone${hint(keys.assign)}`} on={adding} run={(s) => (openSec(s), setAdding((a) => !a))} />}>
@@ -255,12 +264,12 @@ function Assignees({ repo, n, canEdit }: { repo: string; n: number; canEdit: boo
   );
 }
 
-function MilestoneSec({ repo, n, canEdit }: { repo: string; n: number; canEdit: boolean }) {
+function MilestoneSec({ repo, n, canEdit, hideEmpty }: { repo: string; n: number; canEdit: boolean; hideEmpty: boolean }) {
   const [meta, change] = usePrMeta(repo, n);
   const [picking, setPicking] = useState(false);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
   useDetailsKey('milestone', () => canEdit && (setPicking(true), toPick('ix-milestone')));
-  if (!meta || (!canEdit && !meta.milestone)) return null;
+  if (!meta || (!meta.milestone && (!canEdit || (hideEmpty && !picking)))) return null;
   const set = (m: Milestone | null) => change({ ...meta, milestone: m }, () => setMilestone(repo, n, m?.id ?? null));
   let all: Milestone[] = [];
   return (
@@ -708,9 +717,20 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
   // Their Slack statuses: one waited on who's away (sick, vacation, leave) says so, and on my PR can be swapped.
   const presence = usePresence([...reviewers.keys()].filter((w) => !w.startsWith('team ')), repo);
 
+  // Settings → Reviewing: sections with nothing in them left out (labels, assignees, milestone, checks, reviewers with
+  // no one to ask), with one row to add a label, an assignee or a milestone (shortcuts.tsx useDetailsKey opens it).
+  const [hideEmpty] = useStoredFlag('hideEmptyIndex', true);
+  const [meta] = usePrMeta(repo, pr.number);
+  const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
+  const adds = !hideEmpty || !canLabel || !meta ? [] : ([
+    !pr.labels?.length && ['label', 'label', ''],
+    !meta.assignees.length && ['assign', 'assignee', keys.assign],
+    !meta.milestone && ['milestone', 'milestone', keys.milestone],
+  ].filter(Boolean) as [string, string, string][]);
+  const add = (what: string) => (dispatchEvent(new CustomEvent('lgtm:details', { detail: what })));
   return (
     <div class="index">
-      <Section id="ix-reviewers" title="Reviewers" count={reviewers.size}>
+      {!(hideEmpty && !reviewers.size && !ask && !(addMe && !reviewers.has(me))) && <Section id="ix-reviewers" title="Reviewers" count={reviewers.size}>
         {[...reviewers].map(([who, r]) => (
           <div class="ix-check">
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
@@ -740,11 +760,22 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
           ))}
         {!ask && !reviewers.size && <p class="note ix-pad">Nobody yet.</p>}
         {addMe && !reviewers.has(me) && <AddMe add={addMe} teams={(pr.requested_teams ?? []).map((t) => t.slug)} />}
-      </Section>
+      </Section>}
 
-      {(canLabel || !!pr.labels?.length) && <Labels repo={repo} n={pr.number} labels={pr.labels ?? []} canEdit={canLabel} />}
-      <Assignees repo={repo} n={pr.number} canEdit={canLabel} />
-      <MilestoneSec repo={repo} n={pr.number} canEdit={canLabel} />
+      {(!!pr.labels?.length || (canLabel && !hideEmpty)) && <Labels repo={repo} n={pr.number} labels={pr.labels ?? []} canEdit={canLabel} />}
+      {hideEmpty && canLabel && !pr.labels?.length && <LabelsOnAsk repo={repo} n={pr.number} canEdit={canLabel} />}
+      <Assignees repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
+      <MilestoneSec repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
+      {adds.length > 0 && (
+        <p class="ix-add-row">
+          <Octicon name="plus" /> Add
+          {adds.map(([what, word, key], k) => (
+            <>
+              {k ? ',' : ''} <button class="link" title={key ? `Add ${anA(word)} ${word}${hint(key)}` : undefined} onClick={() => add(what)}>{anA(word)} {word}</button>
+            </>
+          ))}
+        </p>
+      )}
 
       <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} />}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
@@ -807,6 +838,7 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
         )}
       </Section>
 
+      {!(hideEmpty && checks?.length === 0 && !checksErr) && (
       <Section
         title="Checks"
         count={checks?.length ?? 0}
@@ -851,6 +883,7 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
           </>
         )}
       </Section>
+      )}
 
       <Section
         title="Files"

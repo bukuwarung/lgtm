@@ -496,6 +496,7 @@ export function Settings() {
         <h3>Reviewing</h3>
         <Flag k="showIndex" initial={true} label={`Show the ${T.PR} index beside the diff`} hint={also(keys.index)}  demo />
         <Flag k="hideIndexToReview" initial={true} label={`Hide the index on ${T.PRs} waiting for your review`} hint={keys.index ? `${keyLabel(keys.index)} shows it.` : undefined} demo />
+        <Flag k="hideEmptyIndex" initial={true} label="Hide empty sections in the index" hint="Labels, assignees, milestone, checks; one row adds them." demo />
         <Flag k="ignoreWs" initial={true} label="Ignore whitespace-only changes" hint={keys.whitespace ? `${keyLabel(keys.whitespace)} switches it on one ${T.PR}.` : undefined} demo />
         <Flag k="sinceFirst" initial={false} label="On a re-review, show only what changed since your last review" demo />
         <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Off: by path. Drag the steps to reorder them." demo>

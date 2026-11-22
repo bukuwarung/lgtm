@@ -1723,3 +1723,5 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .new-pr-title { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px 8px; font: inherit; font-size: calc(14px * var(--ts)); }
 .new-pr .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .new-pr .row .spacer { flex: 1; }
+.ix-add-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; padding: 2px 14px; font-size: calc(12px * var(--ts)); color: var(--muted); }
+.ix-add-row .link { font-size: inherit; }
