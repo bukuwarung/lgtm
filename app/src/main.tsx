@@ -11,7 +11,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { ask, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
 import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -837,7 +837,21 @@ function App() {
           </span>
         )}
         {update && (
-          <a href="#/settings" class="nav-btn nav-update" title={`lgtm ${update} is out: see Settings`}>
+          // The app updates itself from here (Homebrew), after asking; the browser version (from source) shows how.
+          <a
+            href="#/settings"
+            class="nav-btn nav-update"
+            title={isDesktop ? `lgtm ${update} is out: click to update` : `lgtm ${update} is out: how to update, in Settings`}
+            onClick={(e) => {
+              if (!isDesktop) return void setTimeout(() => document.querySelector('.set-version')?.scrollIntoView({ block: 'center' }), 300);
+              e.preventDefault();
+              void ask(`Update lgtm to ${update}? It restarts when it's done.`, 'Update').then((ok) => {
+                if (!ok) return;
+                dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Updating to lgtm ${update}… it restarts when it's done.`, ms: 60000 } }));
+                selfUpdate().catch((err) => reportError(`Couldn't update: ${err.message ?? err}`));
+              });
+            }}
+          >
             ⬆ {update}
           </a>
         )}
