@@ -256,6 +256,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ix-item { display: grid; gap: 1px; width: 100%; padding: 3px 8px 3px 14px; border: 0; border-radius: 0; background: none; text-align: left; font-size: calc(12px * var(--ts)); color: var(--fg); text-decoration: none; }
 .ix-item:hover { background: var(--soft); text-decoration: none; }
 .ix-item.dim { opacity: .6; }
+.ix-commit { user-select: none; } /* shift-click picks a run of commits, not text */
+.ix-commit svg { color: var(--muted); }
+.ix-commit.read svg { color: var(--accent); }
 .ix-label, .ix-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ix-meta, .ix-sub { color: var(--muted); font-weight: 400; }
 .ix-sub { font-size: calc(11px * var(--ts)); }
@@ -1723,7 +1726,6 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .new-pr-title { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px 8px; font: inherit; font-size: calc(14px * var(--ts)); }
 .new-pr .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .new-pr .row .spacer { flex: 1; }
-.ix-head-sep { width: 1px; margin: 4px 2px; background: var(--border); }
 .ix-top { display: flex; align-items: center; gap: 2px; padding: 4px 6px 2px; }
 .index input.label-find { width: calc(100% - 28px); } /* over the global input width (100%), which with its margins ran past the index */
 .commit-body { display: block; margin-top: 4px; white-space: pre-wrap; font-weight: 400; color: var(--muted); }

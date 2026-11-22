@@ -629,8 +629,10 @@ type IndexProps = {
   counts: Counts;
   me: string;
   commits?: PushPoint[]; // the PR's commits, oldest first: the top row's button lists them in a section
-  atCommit?: string | null; // the one on its own (review.tsx toSha), if any
-  onCommit?: (sha: string | null) => void; // show one on its own, or (null) all changes
+  atCommit?: string | null; // the last one on show on its own (review.tsx toSha), if any
+  fromCommit?: string | null; // the first one on show (a run of them, shift-clicked), else atCommit
+  readCommits?: Set<string>; // the ones I've opened
+  onCommit?: (sha: string | null, shift?: boolean) => void; // show one on its own (shift: from fromCommit to it), or (null) all changes
   ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
   modules?: Map<string, string>; // each file's Gradle module (files.ts gradleModules), when grouping by them
   steps?: PlanStep[]; // the reading order's steps (files.ts reviewPlan), when the files are in it
@@ -645,7 +647,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ commits = [], atCommit, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -747,6 +749,8 @@ export function ShortcutIndex({ commits = [], atCommit, onCommit, canLabel = fal
   const [commitsOn, setCommitsOn] = useState(false);
   const many = commits.length > 1;
   const listCommits = many && (commitsOn || !!atCommit);
+  const onShow = [commits.findIndex((c) => c.sha === (fromCommit ?? atCommit)), commits.findIndex((c) => c.sha === atCommit)];
+  const unread = commits.filter((c) => !readCommits?.has(c.sha)).length;
   useEffect(() => {
     const sec = commitsOn && document.querySelector<HTMLDetailsElement>('#ix-commits');
     if (sec) (sec.open = true), sec.scrollIntoView({ block: 'nearest' });
@@ -755,17 +759,17 @@ export function ShortcutIndex({ commits = [], atCommit, onCommit, canLabel = fal
     <div class="index">
       {(many || adds.length > 0) && (
         <div class="ix-top">
-          {many && <HeadBtn icon="git-commit" on={listCommits} label={`${commits.length} commits: one on its own${hint(keys.prevCommit)}${hint(keys.nextCommit)}`} run={() => setCommitsOn(!listCommits)} />}
-          {many && adds.length > 0 && <span class="ix-head-sep" />}
+          {many && <HeadBtn icon="git-commit" on={listCommits} label={`${commits.length} commits${unread && unread < commits.length ? `, ${unread} not opened yet` : ''}: one on its own${hint(keys.prevCommit)}${hint(keys.nextCommit)}, shift-click for a run of them`} run={() => setCommitsOn(!listCommits)} />}
           {adds.map(([what, icon, label, key]) => <HeadBtn icon={icon} label={`${label}${hint(key)}`} run={() => dispatchEvent(new CustomEvent('lgtm:details', { detail: what }))} />)}
         </div>
       )}
       {listCommits && (
         <Section id="ix-commits" title="Commits" count={commits.length}>
+          {unread > 0 && unread < commits.length && <p class="note ix-pad">{unread} not opened yet: Next{hint(keys.nextCommit)} goes to them.</p>}
           {atCommit && <Entry label="All changes" onClick={() => onCommit?.(null)} />}
-          {commits.map((c) => (
-            <button class="ix-item" aria-current={c.sha === atCommit || undefined} onClick={() => onCommit?.(c.sha)} title={`${c.sha}\n${c.label}`}>
-              <span class="ix-label"><code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
+          {commits.map((c, i) => (
+            <button class={readCommits?.has(c.sha) ? 'ix-item ix-commit read' : 'ix-item ix-commit'} aria-current={(i >= onShow[0] && i <= onShow[1]) || undefined} onClick={(e) => onCommit?.(c.sha, e.shiftKey)} title={`${c.sha}\n${c.label}${readCommits?.has(c.sha) ? '\nOpened' : ''}\nShift-click: from the commit on show to this one`}>
+              <span class="ix-label"><Octicon name={readCommits?.has(c.sha) ? 'check' : 'git-commit'} /> <code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
             </button>
           ))}
         </Section>

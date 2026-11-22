@@ -49,7 +49,7 @@ import { OnBase, below, firstBox, jumpTo, noteJump, ModuleIcon, FileIcon, Shortc
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
 // atEnd = a file-level comment started from the file's footer, so its form opens there.
-type Target = { path: string; side: Side; line?: number; startLine?: number; editId?: string; body?: string; atEnd?: boolean };
+type Target = { path: string; side: Side; line?: number; startLine?: number; editId?: string; body?: string; atEnd?: boolean; at?: { line: number; startLine?: number } }; // at: where a comment on a commit's lines goes in all changes
 type Ctx = {
   pr: PR;
   headRepo: string;
@@ -1193,7 +1193,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           return;
         }
         const inPR = new Set(data.files.map((f) => f.filename));
-        setSinceData({ status: d.status, files: prepare(toSha ? d.files : d.files.filter((f) => inPR.has(f.filename)), data.rules), body: toSha ? d.message?.split('\n').slice(1).join('\n').trim() : undefined }); // a commit: all it changed, and its message under the headline
+        setSinceData({ status: d.status, files: prepare(toSha ? d.files : d.files.filter((f) => inPR.has(f.filename)), data.rules), body: toSha && fromSha === `${toSha}^` ? d.message?.split('\n').slice(1).join('\n').trim() : undefined }); // commits: all they changed; one, its message under the headline
       },
       (e) => {
         setSince(false);
@@ -1204,17 +1204,62 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   }, [since, sinceBase, toSha, data]);
   // Changes since a picked point: the diff narrows to them, as after a review.
   const showSince = (sha: string | null) => (setFromSha(sha), setToSha(null), setSinceData(null), setSince(true));
-  // One commit on its own (GitHub's Commits tab): what it changed, read-only (its lines aren't the PR's head).
-  const commits = useMemo(() => (points ?? []).filter((p) => !p.force).toSorted((a, b) => a.at.localeCompare(b.at)), [points]); // oldest first
-  const showCommit = (sha: string | null) => (sha ? (setFromSha(`${sha}^`), setToSha(sha), setSinceData(null), setSince(true)) : (setSince(false), setFromSha(null), setToSha(null), setSinceData(null)), scrollTo({ top: 0 }));
-  // The commit before or after the one on show; from all changes, the first (or last); past either end, all changes.
+  // One commit on its own (GitHub's Commits tab), or a run of them (shift-click in the index's Commits): what they
+  // changed. fromSha is the first one's parent; comments go on the same lines in all changes (commitTarget).
+  const commits = useMemo(() => (points ?? []).filter((p) => !p.force).toReversed().toSorted((a, b) => a.at.localeCompare(b.at)), [points]); // oldest first; a rebase gives them one time, so then in the PR's order
+  const firstSha = toSha && fromSha?.endsWith('^') ? fromSha.slice(0, -1) : toSha;
+  const ci = (sha: string | null) => commits.findIndex((c) => c.sha === sha);
+  // The commits I've opened, on this machine: ticked in the index, and Next skips them.
+  const readKey = `commitsRead:${repo}#${n}`;
+  const [readTick, setReadTick] = useState(0);
+  const readCommits = useMemo(() => {
+    try {
+      return new Set<string>(JSON.parse(localStorage.getItem(readKey) ?? '[]'));
+    } catch {
+      return new Set<string>();
+    }
+  }, [readKey, readTick]);
+  const showCommit = (sha: string | null, last = sha) => {
+    if (sha && last) {
+      try {
+        localStorage.setItem(readKey, JSON.stringify([...new Set([...readCommits, ...commits.slice(ci(sha), ci(last) + 1).map((c) => c.sha)])]));
+      } catch {
+        // not remembered
+      }
+      setReadTick((k) => k + 1);
+      setFromSha(`${sha}^`), setToSha(last), setSinceData(null), setSince(true);
+    } else setSince(false), setFromSha(null), setToSha(null), setSinceData(null);
+    scrollTo({ top: 0 });
+  };
+  // Shift: from the first commit on show to this one (either way round).
+  const pickCommit = (sha: string | null, shift = false) => {
+    if (!sha || !shift || !firstSha) return showCommit(sha);
+    const [a, b] = [ci(firstSha), ci(sha)].sort((x, y) => x - y);
+    showCommit(commits[a].sha, commits[b].sha);
+  };
+  // The commit before the ones on show, or the next one I haven't opened (else just the next); from all changes, the
+  // first unopened one (or the last, going back); past either end, all changes.
   const stepCommit = (by: 1 | -1) => {
     if (commits.length < 2) return;
-    const at = commits.findIndex((c) => c.sha === toSha);
-    const next = at < 0 ? (by > 0 ? 0 : commits.length - 1) : at + by;
+    const a = ci(firstSha), b = ci(toSha);
+    let next = by < 0 ? (b < 0 ? commits.length - 1 : a - 1) : b + 1;
+    const unread = by > 0 ? commits.findIndex((c, i) => i >= next && !readCommits.has(c.sha)) : -1;
+    if (unread >= 0) next = unread;
     showCommit(commits[next]?.sha ?? null);
   };
   const commitView = since && !!toSha;
+  const commitTarget = async (t: Target | null) => {
+    const no = (text: string) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, ms: 4000 } }));
+    if (!t || t.editId || !data || !toSha) return setTarget(t);
+    const f = data.files.find((x) => x.filename === t.path);
+    if (!f) return no(`${t.path.split('/').pop()} has no changes in all changes now: nothing to comment on there`);
+    if (!t.line) return setTarget(t); // on the file
+    if (t.side === 'LEFT') return no('Comment on removed lines in all changes');
+    const [a, b] = await Promise.all([getRaw(data.headRepo, t.path, toSha), getRaw(data.headRepo, t.path, data.pr.head.sha)].map((p) => p.catch(() => null)));
+    const at = a != null && b != null && relocate(a.split('\n'), b.split('\n'), parsePatch(f.patch ?? ''), t.startLine ?? t.line, t.line);
+    if (!at) return no('That line changed after this commit, or isn\'t in the diff now: comment on it in all changes');
+    setTarget({ ...t, at });
+  };
 
   // My open threads against the code now: a compare from the commit each thread was written on to the head (one per
   // commit, kept), then whether the commented lines changed. Rewritten history (force-push) can't be mapped.
@@ -1642,8 +1687,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     pr,
     headRepo,
     target,
-    // One commit on its own is read-only: its lines aren't the head's, where comments go.
-    setTarget: commitView ? (t) => (t && !t.editId ? dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'This is one commit on its own: comment on all changes', ms: 3000 } })) : setTarget(t)) : setTarget,
+    // On commits on their own, a comment goes on the same lines in all changes, while they're still there unchanged.
+    setTarget: commitView ? (t) => void commitTarget(t) : setTarget,
     // A finding's comment, drafted: the form opens on its line (or the file) with the text in, to edit or send.
     suggest: (path, line, body, side = 'RIGHT') => {
       setTarget({ path, side, line, body });
@@ -2097,8 +2142,10 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           <div class="side-scroll">
             <ShortcutIndex
               commits={commits}
-              atCommit={toSha}
-              onCommit={showCommit}
+              atCommit={commitView ? toSha : null}
+              fromCommit={commitView ? firstSha : null}
+              readCommits={readCommits}
+              onCommit={pickCommit}
               canLabel={!!rights?.label}
               checksErr={checksErr}
               hidden={hiddenRows}
@@ -2607,11 +2654,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               {commitView ? (
                 <>
                   <span class="since-state">
-                    Commit {commits.findIndex((c) => c.sha === toSha) + 1} of {commits.length}: <CopyCode text={toSha!}>{toSha!.slice(0, 7)}</CopyCode> <b>{commits.find((c) => c.sha === toSha)?.label}</b>
-                    {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'} · read-only` : ' · loading…'}
+                    {firstSha === toSha ? (
+                      <>Commit {ci(toSha) + 1} of {commits.length}: <CopyCode text={toSha!}>{toSha!.slice(0, 7)}</CopyCode> <b>{commits[ci(toSha)]?.label}</b></>
+                    ) : (
+                      <>Commits {ci(firstSha) + 1}–{ci(toSha) + 1} of {commits.length}: <CopyCode text={firstSha!}>{firstSha!.slice(0, 7)}</CopyCode> … <CopyCode text={toSha!}>{toSha!.slice(0, 7)}</CopyCode></>
+                    )}
+                    {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
                     {sinceData?.body && <span class="commit-body">{sinceData.body}</span>}
                   </span>
-                  <button disabled={toSha === commits[0]?.sha} onClick={() => stepCommit(-1)} title={`Previous commit${hint(bindings.prevCommit)}`}>‹ Previous</button>
+                  <button disabled={firstSha === commits[0]?.sha} onClick={() => stepCommit(-1)} title={`Previous commit${hint(bindings.prevCommit)}`}>‹ Previous</button>
                   <button disabled={toSha === commits.at(-1)?.sha} onClick={() => stepCommit(1)} title={`Next commit${hint(bindings.nextCommit)}`}>Next ›</button>
                   <button onClick={() => showCommit(null)}>Show all changes</button>
                 </>
@@ -5259,14 +5310,17 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
     const lines = ctx.suggestion(target) ?? '';
     const f = ctx.files.find((x) => x.filename === target.path);
     const source = await getRaw(ctx.headRepo, target.path, ctx.pr.head.sha).catch(() => null);
-    const out = (await runAgent(fixPrompt(ctx.pr, target.path, target.startLine ?? target.line!, target.line!, lines, source, f?.patch, comment), agent))
+    const on = target.at ?? target; // the head's lines
+    const out = (await runAgent(fixPrompt(ctx.pr, target.path, on.startLine ?? on.line!, on.line!, lines, source, f?.patch, comment), agent))
       .replace(/^\s*```[\w-]*\n?|\n?```\s*$/g, '').replace(/^\n+|\s+$/g, '');
     return reindent(out, lines);
   };
 
   function save(post = now && !target.editId) {
     if (!body.trim() || posting === 'posting') return;
-    const { editId, body: _b, atEnd: _e, ...rest } = target;
+    const { editId, body: _b, atEnd: _e, at, ...was } = target;
+    const rest = at ? { ...was, line: at.line, startLine: at.startLine } : was; // from a commit on its own: its line in all changes
+    if (at) dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `On line ${at.line} in all changes` } }));
     if (editId) ctx.updateDraft(editId, { ...rest, body });
     else if (post) {
       setPosting('posting');
@@ -5277,7 +5331,7 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
 
   return (
     <div class="draft-form">
-      <div class="badge">{where(target)}</div>
+      <div class="badge">{where(target)}{target.at && ` · goes on line ${target.at.line} in all changes`}</div>
       <Editor
         value={body}
         onInput={setBody}
