@@ -1697,8 +1697,14 @@ input[type=checkbox]:disabled { cursor: not-allowed; opacity: .5; }
 .menu-h { margin: 4px 8px 2px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .hidden-comment > summary { cursor: pointer; }
 .hidden-why { color: var(--muted); font-style: italic; }
-/* The index's Details: assignees, milestone, notifications, lock. */
-.ix-subh { margin: 6px 14px 2px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+/* Index section headers' buttons (+, the bell, the lock): pushed right, quiet until hovered or on. */
+.ix-head-acts { display: inline-flex; gap: 2px; margin-left: auto; }
+.ix-head-btn { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+.ix-sec > summary > .ix-head-btn { margin-left: auto; }
+.ix-head-btn:hover { background: var(--soft); color: var(--fg); }
+.ix-head-btn.on { color: var(--accent); }
+.ix-pick { margin: 0 0 6px; }
+.ix-face { width: 16px; height: 16px; margin-right: 5px; border-radius: 50%; vertical-align: -3px; }
 .person-chip img { width: 14px; height: 14px; border-radius: 50%; margin-right: 2px; }
 .edit-posted { margin: 6px 0; } .edit-posted .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 

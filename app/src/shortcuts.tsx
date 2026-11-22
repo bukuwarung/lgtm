@@ -90,12 +90,69 @@ const base = fileLabel; // a file's name as shown: unique among the PR's (files.
 // A review's verdict: its tag icon (tags.tsx) and words.
 const VERDICT: Record<string, [string, string]> = { APPROVED: ['approved', 'approved'], CHANGES_REQUESTED: ['changes', 'changes requested'], COMMENTED: ['reply', 'reviewed'], DISMISSED: ['', 'dismissed'] };
 
-// The PR's labels: × takes one off, + Add puts one of the repo's on (when you may); typing narrows the list.
+// A button in a section's header (+ to add, the bell, the lock): it acts without folding the section.
+function HeadBtn({ icon, label, on, run }: { icon: string; label: string; on?: boolean; run: (sec: HTMLDetailsElement | null) => void }) {
+  return (
+    <button class={on ? 'ix-head-btn on' : 'ix-head-btn'} title={label} aria-label={label} aria-pressed={on} onClick={(e) => (e.preventDefault(), e.stopPropagation(), run(e.currentTarget.closest('details')))}>
+      <Octicon name={icon} />
+    </button>
+  );
+}
+// The list a header's + opens: typing narrows it (each list says how), ↵ picks the first, Esc closes.
+type PickItem = { key: string; label: ComponentChildren; title?: string };
+function Picker({ placeholder, load, onPick, onClose, empty }: { placeholder: string; load: (q: string) => Promise<PickItem[]>; onPick: (key: string) => void; onClose: () => void; empty: string }) {
+  const [q, setQ] = useState('');
+  const [items, setItems] = useState<PickItem[] | null>(null);
+  const [err, setErr] = useState('');
+  const box = useRef<HTMLInputElement>(null);
+  useEffect(() => void box.current?.focus(), []);
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(() => load(q.trim()).then((l) => live && setItems(l), (e) => live && setErr(e.message)), q ? 200 : 0);
+    return () => ((live = false), clearTimeout(t));
+  }, [q]);
+  return (
+    <div class="ix-pick">
+      <input
+        ref={box}
+        class="label-find"
+        type="search"
+        placeholder={placeholder}
+        aria-label={placeholder}
+        value={q}
+        onInput={(e) => setQ(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (composing(e)) return;
+          if (e.key === 'Escape') (e.preventDefault(), e.stopPropagation(), onClose());
+          else if (e.key === 'Enter' && items?.[0]) (e.preventDefault(), onPick(items[0].key));
+        }}
+      />
+      {err ? <p class="warn ix-pad">{err}</p> : items == null ? <p class="note ix-pad">Loading…</p> : !items.length ? <p class="note ix-pad">{empty}</p> : items.slice(0, 30).map((i) => (
+        <button class="ix-item" title={i.title} onClick={() => onPick(i.key)}>
+          <span class="ix-label">{i.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+const has = (q: string, ...s: (string | undefined)[]) => !q || s.some((x) => x?.toLowerCase().includes(q.toLowerCase()));
+// Opens a section (folded or not) and its picker.
+const openSec = (sec: HTMLDetailsElement | null) => sec && (sec.open = true);
+// A shortcut to a section's picker: open, in view, its search box focused (it may be open already).
+const toPick = (id: string) => {
+  openSec(document.querySelector<HTMLDetailsElement>('#' + id));
+  setTimeout(() => {
+    const box = document.querySelector<HTMLInputElement>(`#${id} .ix-pick input`);
+    box?.scrollIntoView({ block: 'nearest' });
+    box?.focus();
+  }, 50);
+};
+
+// The PR's labels: × takes one off, the header's + puts one of the repo's on (when you may).
 function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels: Label[]; canEdit: boolean }) {
   const [on, setOn] = useState(labels);
   useEffect(() => setOn(labels), [labels.map((l) => l.name).join('\n')]);
-  const [all, setAll] = useState<Label[] | null>(null);
-  const [q, setQ] = useState('');
+  const [adding, setAdding] = useState(false);
   const [err, setErr] = useState('');
   const flip = (l: Label, add: boolean) => {
     setErr('');
@@ -106,9 +163,20 @@ function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels:
     );
   };
   const chip = (l: Label) => ({ '--lc': l.color ? '#' + l.color : 'var(--muted)' }) as preact.JSX.CSSProperties;
-  const left = (all ?? []).filter((l) => !on.some((x) => x.name === l.name) && (!q || l.name.toLowerCase().includes(q.toLowerCase())));
   return (
-    <Section id="ix-labels" title="Labels" count={on.length}>
+    <Section id="ix-labels" title="Labels" count={on.length} extra={canEdit && <HeadBtn icon="plus" label="Add a label" on={adding} run={(sec) => (openSec(sec), setAdding((a) => !a))} />}>
+      {adding && (
+        <Picker
+          placeholder="Find a label…"
+          empty="No label to add."
+          load={async (q) => (await repoLabels(repo)).filter((l) => !on.some((x) => x.name === l.name) && has(q, l.name)).map((l) => ({ key: l.name, title: l.description || undefined, label: <><span class="label-dot" style={chip(l)} /> {l.name}</> }))}
+          onPick={async (name) => {
+            const l = (await repoLabels(repo)).find((x) => x.name === name);
+            if (l) flip(l, true);
+          }}
+          onClose={() => setAdding(false)}
+        />
+      )}
       <div class="ix-labels">
         {on.map((l) => (
           <span class="label-chip" style={chip(l)} title={l.description || l.name}>
@@ -118,144 +186,126 @@ function Labels({ repo, n, labels, canEdit }: { repo: string; n: number; labels:
         ))}
         {!on.length && <span class="note">None.</span>}
       </div>
-      {canEdit && (
-        <details class="ix-ckgroup" onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && !all && repoLabels(repo).then(setAll, (x) => setErr(x.message))}>
-          <summary>+ Add a label</summary>
-          <input class="label-find" type="search" placeholder="Find a label…" aria-label="Find a label" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => !composing(e) && e.key === 'Enter' && left[0] && (setQ(''), flip(left[0], true))} />
-          {all == null ? <p class="note ix-pad">Loading…</p> : left.slice(0, 30).map((l) => (
-            <button class="ix-item" title={l.description || undefined} onClick={() => (setQ(''), flip(l, true))}>
-              <span class="ix-label"><span class="label-dot" style={chip(l)} /> {l.name}</span>
-            </button>
-          ))}
-          {all != null && !left.length && <p class="note ix-pad">{q ? 'No label matches.' : 'Every label is on.'}</p>}
-        </details>
-      )}
       {err && <p class="warn ix-pad">{err}</p>}
     </Section>
   );
 }
 
-// The PR's assignees and milestone (× takes one off, + adds; typing narrows the list), whether I'm subscribed to its
-// notifications, and whether its conversation is locked. Its shortcuts (lgtm:details) open the pickers or flip the
-// switches.
-function Details({ repo, n, prNode, canEdit }: { repo: string; n: number; prNode: string; canEdit: boolean }) {
-  const [meta, setMeta] = useState<PrMeta | null>(null);
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState('');
-  const [people, setPeople] = useState<{ login: string; name?: string }[] | null>(null);
-  const [miles, setMiles] = useState<Milestone[] | null>(null);
-  const [q, setQ] = useState('');
-  const [mq, setMq] = useState('');
-  const pick = useRef<HTMLDetailsElement>(null);
-  const mpick = useRef<HTMLDetailsElement>(null);
-  const load = () => getPrMeta(repo, n).then(setMeta, (e) => setErr(e.message));
-  useEffect(() => void load(), [repo, n]);
+// The PR's assignees, milestone, my subscription and its lock (github.ts getPrMeta), shared by the sections that show
+// them; a change shows at once and goes back if it fails.
+const metas = new Map<string, PrMeta>();
+function usePrMeta(repo: string, n: number) {
+  const k = `${repo}#${n}`;
+  const [, tick] = useState(0);
   useEffect(() => {
-    if (!pick.current?.open) return;
-    let live = true;
-    const t = setTimeout(() => getAssignable(repo, q.trim()).then((l) => live && setPeople(l), (e) => live && setErr(e.message)), q ? 250 : 0);
-    return () => ((live = false), clearTimeout(t));
-  }, [q, people == null]);
-  // A change shown at once, undone if it fails.
-  const change = (what: string, next: PrMeta, run: () => Promise<unknown>, said?: string) => {
-    if (!meta || busy) return;
+    const t = () => tick((x) => x + 1);
+    addEventListener('lgtm:prmeta', t);
+    if (!metas.has(k)) getPrMeta(repo, n).then((m) => (metas.set(k, m), t()), () => {});
+    return () => removeEventListener('lgtm:prmeta', t);
+  }, [k]);
+  const meta = metas.get(k) ?? null;
+  const change = (next: PrMeta, run: () => Promise<unknown>, said?: string) => {
+    if (!meta) return;
     const was = meta;
-    setErr(''), setBusy(what), setMeta(next);
+    metas.set(k, next), dispatchEvent(new Event('lgtm:prmeta'));
     run().then(
-      () => (setBusy(''), said && dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: said, ms: 2500 } })), what === 'assign' && dispatchEvent(new Event('lgtm:refresh'))),
-      (e) => (setBusy(''), setMeta(was), setErr(e.message)),
+      () => said && dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: said, ms: 2500 } })),
+      (e) => (metas.set(k, was), dispatchEvent(new Event('lgtm:prmeta')), dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Couldn't change it: ${e.message}`, ms: 5000 } }))),
     );
   };
-  const assign = (list: string[]) => meta && change('assign', { ...meta, assignees: list }, () => setAssignees(repo, n, meta.assignees, list));
-  const mile = (m: Milestone | null) => meta && change('milestone', { ...meta, milestone: m }, () => setMilestone(repo, n, m?.id ?? null));
-  const subscribe = () => meta && meta.subscribed != null && change('subscribe', { ...meta, subscribed: !meta.subscribed }, () => setSubscribed(repo, n, prNode, !meta.subscribed), meta.subscribed ? `Unsubscribed: no notifications about this ${pageTerm().PR} unless you're mentioned` : `Subscribed to this ${pageTerm().PR}'s notifications`);
-  const lock = async () => {
-    if (!meta || !canEdit) return;
-    if (!meta.locked && !(await ask(`Lock the conversation? Only people with write access can comment until it's unlocked.`, 'Lock'))) return;
-    change('lock', { ...meta, locked: !meta.locked }, () => setLocked(repo, n, !meta.locked), meta.locked ? 'Conversation unlocked' : 'Conversation locked');
-  };
-  const openPick = (d: HTMLDetailsElement | null) => {
-    if (!d) return;
-    const sec = d.closest<HTMLDetailsElement>('details.ix-sec');
-    if (sec) sec.open = true;
-    d.open = true;
-    d.scrollIntoView({ block: 'nearest' });
-    setTimeout(() => d.querySelector('input')?.focus(), 0);
-  };
+  return [meta, change] as const;
+}
+// The index's shortcuts for these (review.tsx: G, M, S, O), each to its section.
+function useDetailsKey(what: string, run: () => void) {
   useEffect(() => {
-    const on = (e: Event) => {
-      const what = (e as CustomEvent<string>).detail;
-      if (what === 'assign' && canEdit) openPick(pick.current);
-      else if (what === 'milestone' && canEdit) openPick(mpick.current);
-      else if (what === 'subscribe') subscribe();
-      else if (what === 'lock') void lock();
-    };
+    const on = (e: Event) => (e as CustomEvent<string>).detail === what && run();
     addEventListener('lgtm:details', on);
     return () => removeEventListener('lgtm:details', on);
   });
-  if (!meta) return err ? <p class="warn ix-pad">{err}</p> : null;
+}
+
+function Assignees({ repo, n, canEdit }: { repo: string; n: number; canEdit: boolean }) {
+  const [meta, change] = usePrMeta(repo, n);
+  const [adding, setAdding] = useState(false);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
-  const leftPeople = (people ?? []).filter((u) => !meta.assignees.includes(u.login));
-  const leftMiles = (miles ?? []).filter((m) => m.id !== meta.milestone?.id && (!mq || m.title.toLowerCase().includes(mq.toLowerCase())));
+  useDetailsKey('assign', () => canEdit && (setAdding(true), toPick('ix-assignees')));
+  if (!meta) return null;
+  const set = (list: string[]) => change({ ...meta, assignees: list }, () => setAssignees(repo, n, meta.assignees, list));
   return (
-    <Section id="ix-details" title="Details" count={meta.assignees.length + (meta.milestone ? 1 : 0)}>
-      <p class="ix-subh">Assignees</p>
+    <Section id="ix-assignees" title="Assignees" count={meta.assignees.length} extra={canEdit && <HeadBtn icon="plus" label={`Assign someone${hint(keys.assign)}`} on={adding} run={(s) => (openSec(s), setAdding((a) => !a))} />}>
+      {adding && (
+        <Picker
+          placeholder="Find someone…"
+          empty="Nobody matches."
+          load={async (q) => (await getAssignable(repo, q)).filter((u) => !meta.assignees.includes(u.login)).map((u) => ({ key: u.login, label: <><img class="ix-face" src={faceOf(u.login)} alt="" /> {u.login}{u.name && <small> {u.name}</small>}</> }))}
+          onPick={(login) => set([...(metas.get(`${repo}#${n}`)?.assignees ?? meta.assignees), login])}
+          onClose={() => setAdding(false)}
+        />
+      )}
       <div class="ix-labels">
         {meta.assignees.map((l) => (
           <span class="label-chip person-chip" title={`@${l}`}>
             <img src={faceOf(l)} alt="" /> {l}
-            {canEdit && <button class="label-x" aria-label={`Unassign ${l}`} title={`Unassign ${l}`} onClick={() => assign(meta.assignees.filter((x) => x !== l))}>×</button>}
+            {canEdit && <button class="label-x" aria-label={`Unassign ${l}`} title={`Unassign ${l}`} onClick={() => set(meta.assignees.filter((x) => x !== l))}>×</button>}
           </span>
         ))}
         {!meta.assignees.length && <span class="note">Nobody.</span>}
       </div>
-      {canEdit && (
-        <details class="ix-ckgroup" ref={pick} onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && people == null && setPeople([])}>
-          <summary title={hint(keys.assign).trim() || undefined}>+ Assign someone</summary>
-          <input class="label-find" type="search" placeholder="Find someone…" aria-label="Find someone to assign" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => !composing(e) && e.key === 'Enter' && leftPeople[0] && (setQ(''), assign([...meta.assignees, leftPeople[0].login]))} />
-          {leftPeople.slice(0, 20).map((u) => (
-            <button class="ix-item ix-person" onClick={() => (setQ(''), assign([...meta.assignees, u.login]))}>
-              <span class="ix-label"><img src={faceOf(u.login)} alt="" /> {u.login}{u.name && <small> {u.name}</small>}</span>
-            </button>
-          ))}
-          {people != null && !leftPeople.length && <p class="note ix-pad">{q ? 'Nobody matches.' : 'Loading…'}</p>}
-        </details>
+    </Section>
+  );
+}
+
+function MilestoneSec({ repo, n, canEdit }: { repo: string; n: number; canEdit: boolean }) {
+  const [meta, change] = usePrMeta(repo, n);
+  const [picking, setPicking] = useState(false);
+  const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
+  useDetailsKey('milestone', () => canEdit && (setPicking(true), toPick('ix-milestone')));
+  if (!meta || (!canEdit && !meta.milestone)) return null;
+  const set = (m: Milestone | null) => change({ ...meta, milestone: m }, () => setMilestone(repo, n, m?.id ?? null));
+  let all: Milestone[] = [];
+  return (
+    <Section id="ix-milestone" title="Milestone" count={meta.milestone ? 1 : 0} extra={canEdit && <HeadBtn icon={meta.milestone ? 'pencil' : 'plus'} label={`${meta.milestone ? 'Change the' : 'Set a'} milestone${hint(keys.milestone)}`} on={picking} run={(s) => (openSec(s), setPicking((p) => !p))} />}>
+      {picking && (
+        <Picker
+          placeholder="Find a milestone…"
+          empty="No open milestones."
+          load={async (q) => ((all = await getMilestones(repo)), all.filter((m) => m.id !== meta.milestone?.id && has(q, m.title)).map((m) => ({ key: String(m.id), label: <><Octicon name="milestone" /> {m.title}{m.due && <small> · due {new Date(m.due).toLocaleDateString()}</small>}</> })))}
+          onPick={(id) => (set(all.find((m) => String(m.id) === id) ?? null), setPicking(false))}
+          onClose={() => setPicking(false)}
+        />
       )}
-      <p class="ix-subh">Milestone</p>
       <div class="ix-labels">
         {meta.milestone ? (
           <span class="label-chip" title={meta.milestone.due ? `Due ${new Date(meta.milestone.due).toLocaleDateString()}` : meta.milestone.title}>
             <Octicon name="milestone" /> {meta.milestone.title}
-            {canEdit && <button class="label-x" aria-label="Remove the milestone" title="Remove the milestone" onClick={() => mile(null)}>×</button>}
+            {canEdit && <button class="label-x" aria-label="Remove the milestone" title="Remove the milestone" onClick={() => set(null)}>×</button>}
           </span>
         ) : <span class="note">None.</span>}
       </div>
-      {canEdit && (
-        <details class="ix-ckgroup" ref={mpick} onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && !miles && getMilestones(repo).then(setMiles, (x) => setErr(x.message))}>
-          <summary title={hint(keys.milestone).trim() || undefined}>{meta.milestone ? 'Change the milestone' : '+ Set a milestone'}</summary>
-          <input class="label-find" type="search" placeholder="Find a milestone…" aria-label="Find a milestone" value={mq} onInput={(e) => setMq(e.currentTarget.value)} onKeyDown={(e) => !composing(e) && e.key === 'Enter' && leftMiles[0] && (setMq(''), mile(leftMiles[0]), mpick.current && (mpick.current.open = false))} />
-          {miles == null ? <p class="note ix-pad">Loading…</p> : leftMiles.slice(0, 30).map((m) => (
-            <button class="ix-item" onClick={() => (setMq(''), mile(m), mpick.current && (mpick.current.open = false))}>
-              <span class="ix-label"><Octicon name="milestone" /> {m.title}{m.due && <small> · due {new Date(m.due).toLocaleDateString()}</small>}</span>
-            </button>
-          ))}
-          {miles != null && !leftMiles.length && <p class="note ix-pad">{mq ? 'No milestone matches.' : 'No open milestones.'}</p>}
-        </details>
-      )}
-      {meta.subscribed != null && (
-        <button class="ix-item" disabled={busy === 'subscribe'} onClick={subscribe} title={`${meta.subscribed ? 'Stop' : 'Get'} notifications about every comment and push${hint(keys.subscribe)}`}>
-          <span class="ix-label"><Octicon name={meta.subscribed ? 'bell' : 'bell-slash'} /> {meta.subscribed ? 'Subscribed' : 'Not subscribed'}</span>
-          <span class="ix-meta">{meta.subscribed ? 'Unsubscribe' : 'Subscribe'}</span>
-        </button>
-      )}
-      {(canEdit || meta.locked) && (
-        <button class="ix-item" disabled={!canEdit || busy === 'lock'} onClick={() => void lock()} title={canEdit ? `${meta.locked ? 'Let everyone comment again' : 'Only people with write access can comment'}${hint(keys.lock)}` : 'Only people with write access can comment'}>
-          <span class="ix-label"><Octicon name={meta.locked ? 'lock' : 'unlock'} /> {meta.locked ? 'Conversation locked' : 'Conversation open'}</span>
-          {canEdit && <span class="ix-meta">{meta.locked ? 'Unlock' : 'Lock'}</span>}
-        </button>
-      )}
-      {err && <p class="warn ix-pad">{err}</p>}
     </Section>
+  );
+}
+
+// The Conversation section's header: my notifications (the bell) and the lock, each a click to flip.
+function ConvToggles({ repo, n, prNode, canEdit }: { repo: string; n: number; prNode: string; canEdit: boolean }) {
+  const [meta, change] = usePrMeta(repo, n);
+  const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
+  const T = pageTerm();
+  const subscribe = () => meta && meta.subscribed != null && change({ ...meta, subscribed: !meta.subscribed }, () => setSubscribed(repo, n, prNode, !meta.subscribed), meta.subscribed ? `Unsubscribed: no notifications about this ${T.PR} unless you're mentioned` : `Subscribed to this ${T.PR}'s notifications`);
+  const lock = async () => {
+    if (!meta || !canEdit) return;
+    if (!meta.locked && !(await ask(`Lock the conversation? Only people with write access can comment until it's unlocked.`, 'Lock'))) return;
+    change({ ...meta, locked: !meta.locked }, () => setLocked(repo, n, !meta.locked), meta.locked ? 'Conversation unlocked' : 'Conversation locked');
+  };
+  useDetailsKey('subscribe', subscribe);
+  useDetailsKey('lock', () => void lock());
+  if (!meta) return null;
+  return (
+    <span class="ix-head-acts">
+      {meta.locked && !canEdit && <span class="ix-head-btn" title="Locked: only people with write access can comment"><Octicon name="lock" /></span>}
+      {canEdit && <HeadBtn icon={meta.locked ? 'lock' : 'unlock'} on={meta.locked} label={`${meta.locked ? 'Locked: only people with write access can comment. Unlock' : 'Lock the conversation'}${hint(keys.lock)}`} run={() => void lock()} />}
+      {meta.subscribed != null && <HeadBtn icon={meta.subscribed ? 'bell' : 'bell-slash'} on={meta.subscribed} label={`${meta.subscribed ? 'Subscribed to its notifications. Unsubscribe' : 'Not subscribed. Subscribe to its notifications'}${hint(keys.subscribe)}`} run={subscribe} />}
+    </span>
   );
 }
 
@@ -693,9 +743,10 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
       </Section>
 
       {(canLabel || !!pr.labels?.length) && <Labels repo={repo} n={pr.number} labels={pr.labels ?? []} canEdit={canLabel} />}
-      <Details repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} />
+      <Assignees repo={repo} n={pr.number} canEdit={canLabel} />
+      <MilestoneSec repo={repo} n={pr.number} canEdit={canLabel} />
 
-      <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length}>
+      <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} />}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
         {myConv + drafts.length + tiers.mine.length > 0 && (
           <Fold k="ix-yours" class="ix-ckgroup">
