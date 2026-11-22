@@ -42,7 +42,7 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-queue-dark.png">
-  <img alt="The PR list: Reviewing, Your PRs and Team tabs, PRs grouped by where they stand, with pills for what needs you" src="docs/features/scene-queue-light.png" width="380">
+  <img alt="The PR list: Reviewing, Your PRs and Browse tabs, PRs grouped by where they stand, with pills for what needs you" src="docs/features/scene-queue-light.png" width="380">
 </picture>
 
 - PRs to review, your own, and your team's, grouped by where they stand.

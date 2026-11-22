@@ -616,7 +616,7 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
           <div class="pr-tabs" role="tablist">
             <button role="tab" aria-selected="true">Reviewing <span class="count">5</span></button>
             <button role="tab" aria-selected="false">Your {T.PRs} <span class="count">2</span></button>
-            <button role="tab" aria-selected="false">{T.Team} <span class="count">9</span></button>
+            <button role="tab" aria-selected="false">Browse</button>
           </div>
           {QUEUE.map(([g, label, items]) => (
             <details open class={`pr-group g-${g}`}>
