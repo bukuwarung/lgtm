@@ -35,7 +35,7 @@ export const isArchivedSpec = (path: string) => !CODE.test(path) && /(^|\/)_?arc
 
 // Reading order: markdown (the intent) first, then each source file followed by its tests.
 export const reviewOrder = (paths: string[]) =>
-  [...paths].sort(
+  paths.toSorted(
     (a, b) => +isMarkdown(b) - +isMarkdown(a) || subject(a).localeCompare(subject(b)) || +isTest(a) - +isTest(b) || a.localeCompare(b),
   );
 
@@ -164,7 +164,7 @@ export type BuildRoot = { dir: string; gradle: boolean };
 const plainRoots = new Set<string>(); // modules that aren't Gradle's, named by folder
 export function modulesOf(paths: string[], roots: BuildRoot[] | null): Map<string, string> {
   if (!roots) return gradleModules(paths);
-  const deepest = [...roots].sort((a, b) => b.dir.length - a.dir.length);
+  const deepest = roots.toSorted((a, b) => b.dir.length - a.dir.length);
   for (const r of roots) if (!r.gradle) plainRoots.add(r.dir);
   return new Map(paths.map((p) => [p, deepest.find((r) => r.dir === '.' || p.startsWith(r.dir + '/'))?.dir ?? '']));
 }

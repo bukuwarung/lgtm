@@ -80,7 +80,7 @@ async function ask(host: string, path: string, init: RequestInit, renewed = fals
     headers: { Authorization: `Bearer ${await tokenOf(host)}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}) },
   }).catch((e) => {
     setOffline(true, host);
-    throw new Error(`Couldn't reach ${host} (${e.message})`);
+    throw new Error(`Couldn't reach ${host} (${e.message})`, { cause: e });
   });
   setOffline(false, host);
   if (res.status === 429) {

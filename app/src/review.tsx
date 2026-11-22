@@ -32,7 +32,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
+import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -154,7 +154,7 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: s
   const [editing, setEditing] = useState(false); // the Slack markup itself, else the message as Slack shows it
   const { emoji } = useSlackEmoji();
   const box = useRef<HTMLDialogElement>(null);
-  useEffect(() => void (text != null && !box.current?.open && box.current?.showModal()), [text]);
+  useEffect(() => void (text != null && !box.current?.open && (box.current?.showModal(), closeOnBackdrop(box.current))), [text]);
   const open = async () => {
     // The Jira site, for the ticket's link: asked once, and not waited on past a moment (its check can be slow).
     jiraSite ??= fetchIntegrations().then((i) => i.jira.site, () => undefined);
@@ -195,7 +195,7 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: s
         </button>
       )}
       {text != null && (
-        <dialog ref={box} class="ask qa-dialog" onClose={() => setText(null)} onClick={(e) => e.target === box.current && box.current?.close()}>
+        <dialog ref={box} class="ask qa-dialog" aria-label={review ? 'Ask for review' : 'Ask QA'} onClose={() => setText(null)}>
           <p>
             <b>{review ? 'Ask for review' : 'Ask QA'}</b> in <code>{channel || 'no channel yet'}</code>
           </p>
@@ -405,7 +405,7 @@ function BaseDialog({ repo, n, base, head, onClose }: { repo: string; n: number;
   const [at, setAt] = useState(0);
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
-  useEffect(() => void box.current?.showModal(), []);
+  useEffect(() => void (box.current?.showModal(), closeOnBackdrop(box.current)), []);
   useEffect(() => {
     let live = true;
     const t = setTimeout(() => searchBranches(repo, q.trim()).then((l) => live && (setList(l.filter((b) => b !== base && b !== head)), setAt(0)), (e) => live && setErr(e.message)), q ? 250 : 0);
@@ -420,7 +420,7 @@ function BaseDialog({ repo, n, base, head, onClose }: { repo: string; n: number;
     );
   };
   return (
-    <dialog ref={box} class="ask base-dialog" onClose={onClose} onClick={(e) => e.target === box.current && box.current?.close()}>
+    <dialog ref={box} class="ask base-dialog" aria-label="Change base" onClose={onClose}>
       <p>
         <b>Change base</b> from <code>{base}</code> to:
       </p>
@@ -1808,7 +1808,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const steps = readingOrder || showPlan ? reviewPlan(reviewOrder(visible.map((f) => f.filename)), stepOrder(stepsSaved)) : [];
   const plan = showPlan && visible.length >= PLAN_AT ? steps : null;
   const rank = readingOrder ? new Map(steps.flatMap((s) => s.paths).map((p, i) => [p, i])) : null;
-  const inOrder = rank ? [...visible].sort((a, b) => rank.get(a.filename)! - rank.get(b.filename)!) : visible;
+  const inOrder = rank ? visible.toSorted((a, b) => rank.get(a.filename)! - rank.get(b.filename)!) : visible;
   const shown = [...inOrder, ...(genOpen ? generated : []), ...(noDiffOpen ? noDiff : []), ...(showWsOnly ? wsOnly : []), ...(showImportsOnly ? importOnly : []), ...(showArchived ? archived : [])];
   knowFiles(shown.map((f) => f.filename)); // names unique among the files on show (files.ts fileLabel), before they draw
   // What waits behind a row, for the index to say so too.
@@ -2567,7 +2567,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 class="link"
                 disabled={discarding}
                 onClick={async () => {
-                  if (!(await ask(`Discard your review in progress on ${site(repo)}${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`, 'Discard'))) return;
+                  if (!(await ask(`Discard your review in progress on ${site(repo)}${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`, 'Discard', true))) return;
                   setDiscarding(true);
                   await discardReview(pending.id).catch((e) => setError(e.message));
                   setPending(null);
@@ -4787,7 +4787,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const flip = (on: boolean) => (setErr(''), ctx.resolve(t, on).catch((e: Error) => setErr(e.message)));
   // My PR, a reviewer waiting on me, and the code under it changed since: the commit that did it, to say so in one click
   // (Fixed in abc1234, then resolved).
-  const theirs = [...t.comments.nodes].reverse().find((c) => c.author?.login !== ctx.me && c.state !== 'PENDING');
+  const theirs = t.comments.nodes.findLast((c) => c.author?.login !== ctx.me && c.state !== 'PENDING');
   const fixable = !!ctx.me && ctx.pr.user.login === ctx.me && waiting && !t.isResolved && !!theirs && (t.isOutdated || ctx.sinceComment.get(t.id)?.kind === 'changed');
   const [fixes, setFixes] = useState<Fix[]>([]);
   useEffect(() => {
@@ -4921,7 +4921,7 @@ function PendingComment({ c, ctx, path, t }: { c: Thread['comments']['nodes'][nu
       <div class="row">
         {agent && !looked && <button disabled={busy} onClick={() => markLooked(c.id!)} title="Keep it in your review (↵)">Keep</button>}
         <button disabled={busy} onClick={() => setText(c.body ?? c.bodyText)}>Edit</button>
-        <button disabled={busy} onClick={async () => (agent ? drop() : (await ask(`Delete this comment from your review in progress on ${site(ctx.repo)}? Its text goes with it.`, 'Delete')) && run(null))} title={agent ? 'Drop it from your review (⌫)' : undefined}>{agent ? 'Drop' : 'Delete'}</button>
+        <button disabled={busy} onClick={async () => (agent ? drop() : (await ask(`Delete this comment from your review in progress on ${site(ctx.repo)}? Its text goes with it.`, 'Delete', true)) && run(null))} title={agent ? 'Drop it from your review (⌫)' : undefined}>{agent ? 'Drop' : 'Delete'}</button>
         {looked && <span class="note">Kept</span>}
       </div>
       {err && <p class="error">{err}</p>}
@@ -5062,7 +5062,7 @@ function MyThreads({ threads, drafts, files, ctx, close }: { threads: Thread[]; 
   const [dropping, setDropping] = useState(false);
   const dropStale = async () => {
     const n = stale.length;
-    if (!(await ask(`Drop the ${n === 1 ? 'outdated comment' : `${n} outdated comments`} from your review? The code under ${n === 1 ? 'it' : 'them'} changed since; ${n === 1 ? 'it' : 'they'} can't be put back.`, 'Drop'))) return;
+    if (!(await ask(`Drop the ${n === 1 ? 'outdated comment' : `${n} outdated comments`} from your review? The code under ${n === 1 ? 'it' : 'them'} changed since; ${n === 1 ? 'it' : 'they'} can't be put back.`, 'Drop', true))) return;
     setDropping(true);
     await ctx.dropPending(stale).catch((e) => reportError(`Couldn't drop them all: ${e.message}`));
     setDropping(false);
@@ -5648,7 +5648,7 @@ function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: stri
             value={q}
             onInput={(e) => setQ(e.currentTarget.value)}
             onKeyDown={(e) => {
-              if (composing(e)) return;
+              if (e.isComposing || e.keyCode === 229) return; // an input method's Enter or arrows (platform.ts composing)
               if (e.key === 'Enter' && !e.shiftKey) (e.preventDefault(), void ask());
               else if (e.key === 'Escape') setPanel(null);
             }}
@@ -5931,7 +5931,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             </details>
             );
             if (list.length === 1) return one(list[0]);
-            const newest = [...list].sort((a, b) => b.at.localeCompare(a.at));
+            const newest = list.toSorted((a, b) => b.at.localeCompare(a.at));
             return (
               <details class="bot-group" key={author}>
                 <summary>

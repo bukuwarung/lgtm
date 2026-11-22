@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { composing, useStoredValue } from './platform.ts';
+import { useStoredValue } from './platform.ts';
 
 // ⌘F in the app: the macOS web view has no find bar of its own. Matches are marked with the CSS Custom Highlight API
 // (no changes to the page); Enter / ⇧Enter move between them, Esc closes. The review page renders every file on ⌘F,
@@ -99,7 +99,7 @@ export function FindBar() {
         list="find-recent"
         onInput={(e) => setQ(e.currentTarget.value)}
         onKeyDown={(e) => {
-          if (composing(e)) return;
+          if (e.isComposing || e.keyCode === 229) return; // an input method's Enter or arrows (platform.ts composing)
           if (e.key === 'Enter') {
             e.preventDefault();
             remember();

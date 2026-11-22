@@ -255,7 +255,7 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
     },
   }).catch((e) => {
     setOffline(true);
-    throw new Error(`Couldn't reach GitHub (${e.message})`);
+    throw new Error(`Couldn't reach GitHub (${e.message})`, { cause: e });
   });
   setOffline(false);
   if (res.status === 401) throw new Error('GitHub rejected the gh token. Run `gh auth login`, then reload.');
@@ -1033,7 +1033,7 @@ let noEmailScope = false;
 // GitHub name and emails per login (verified company emails first), to find people on Slack. A GitLab person's key
 // (login@host) is asked of that GitLab: their name and public email.
 // Kept a week, per set of people.
-export const getPeople = (org: string, logins: string[]) => kept(`people:${org}:${[...logins].sort().join(',')}`, () => fetchPeople(org, logins), 7 * DAY);
+export const getPeople = (org: string, logins: string[]) => kept(`people:${org}:${logins.toSorted().join(',')}`, () => fetchPeople(org, logins), 7 * DAY);
 async function fetchPeople(org: string, logins: string[]): Promise<Record<string, { name: string | null; emails: string[] }>> {
   const labKeys = logins.filter((l) => l.includes('@'));
   if (labKeys.length) {
@@ -1249,7 +1249,7 @@ export function suggestionOf(t: Thread, c: Comment): Suggestion | null {
 export function applySuggestions(src: string, list: Pick<Suggestion, 'path' | 'start' | 'end' | 'text'>[]): string {
   const eol = src.includes('\r\n') ? '\r\n' : '\n';
   const lines = src.split(/\r?\n/);
-  const sorted = [...list].sort((a, b) => b.start - a.start);
+  const sorted = list.toSorted((a, b) => b.start - a.start);
   sorted.forEach((x, k) => {
     if (k && x.end >= sorted[k - 1].start) throw new Error(`Two suggestions on ${x.path} overlap; commit them one at a time`);
     lines.splice(x.start - 1, x.end - x.start + 1, ...(x.text ? x.text.replace(/\n$/, '').split('\n') : []));

@@ -133,7 +133,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
       <div class={`panel merge m-${s.state.toLowerCase()}`}>
         <b>{s.state === 'MERGED' ? <>Merged{s.mergedBy && <> by <Who login={s.mergedBy.login} /></>}</> : 'Closed'}</b>
         {s.state === 'MERGED' && s.headRef && s.viewerCanDeleteHeadRef && !s.isCrossRepository && (
-          <button disabled={!!busy} onClick={async () => (await ask(`Delete ${s.headRefName} on ${site(repo)}? Its ${pageTerm().PR} is merged.`, 'Delete')) && (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
+          <button disabled={!!busy} onClick={async () => (await ask(`Delete ${s.headRefName} on ${site(repo)}? Its ${pageTerm().PR} is merged.`, 'Delete', true)) && (setBusy('delete'), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(''), load())))}>
             {busy === 'delete' ? 'Deleting…' : `Delete ${s.headRefName}`}
           </button>
         )}

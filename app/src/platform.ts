@@ -1275,16 +1275,30 @@ const errors: string[] = (() => {
 // names it and opens it.
 export const reportError = (text: string, at?: { route: string; name: string }) => (recordError(`shown: ${at ? at.name + ': ' : ''}${text}`), dispatchEvent(new CustomEvent('lgtm:error', { detail: { text, at } })));
 
-// confirm() in the Mac app's web view says no without asking (wry doesn't show it), so lgtm asks in its own dialog.
-export function ask(text: string, yes = 'OK'): Promise<boolean> {
+// confirm() in the Mac app's web view says no without asking (wry doesn't show it), so lgtm asks in its own dialog,
+// named by its question. danger: it can't be taken back (a delete, a discard), so Cancel has the focus and a stray Enter
+// keeps things as they are.
+let askId = 0;
+// A modal dialog closed by a press and a release on its backdrop. Not by a click on the dialog element itself: its own
+// padding is the dialog too, and a click there threw away what was typed.
+export function closeOnBackdrop(d: HTMLDialogElement | null) {
+  if (!d || d.dataset.backdrop) return;
+  d.dataset.backdrop = '1';
+  const out = (e: PointerEvent) => ((r) => e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)(d.getBoundingClientRect());
+  let down = false;
+  d.addEventListener('pointerdown', (e) => void (down = out(e)));
+  d.addEventListener('pointerup', (e) => down && out(e) && d.close());
+}
+export function ask(text: string, yes = 'OK', danger = false): Promise<boolean> {
   const d = document.createElement('dialog');
   d.className = 'ask';
-  d.innerHTML = '<p></p><form method="dialog"><button value="">Cancel</button><button class="primary" value="y"></button></form>';
+  d.innerHTML = `<p id="ask-${++askId}"></p><form method="dialog"><button value="">Cancel</button><button class="primary" value="y"></button></form>`;
+  d.setAttribute('aria-labelledby', `ask-${askId}`);
   d.querySelector('p')!.textContent = text;
   d.querySelector('.primary')!.textContent = yes;
   document.body.append(d);
   d.showModal();
-  (d.querySelector('.primary') as HTMLButtonElement).focus();
+  (d.querySelector(danger ? 'button:not(.primary)' : '.primary') as HTMLButtonElement).focus();
   return new Promise((done) => d.addEventListener('close', () => (done(d.returnValue === 'y'), d.remove())));
 }
 
@@ -1293,7 +1307,8 @@ export function ask(text: string, yes = 'OK'): Promise<boolean> {
 export function askText(text: string, yes: string, placeholder: string, check?: Promise<string | null>): Promise<{ text: string; checked: boolean } | null> {
   const d = document.createElement('dialog');
   d.className = 'ask';
-  d.innerHTML = '<p></p><form method="dialog"><input maxlength="500"><button value="">Cancel</button><button class="primary" value="y"></button></form>';
+  d.innerHTML = `<p id="ask-${++askId}"></p><form method="dialog"><input maxlength="500"><button value="">Cancel</button><button class="primary" value="y"></button></form>`;
+  d.setAttribute('aria-labelledby', `ask-${askId}`);
   d.querySelector('p')!.textContent = text;
   d.querySelector('.primary')!.textContent = yes;
   const input = d.querySelector('input')!;

@@ -1709,7 +1709,7 @@ function BackupSection() {
             if (!f) return;
             try {
               const text = await f.text();
-              if (!(await ask('Import these settings, drafts and Slack people and threads? Ones with the same name here are replaced; the page reloads.', 'Import'))) return;
+              if (!(await ask('Import these settings, drafts and Slack people and threads? Ones with the same name here are replaced; the page reloads.', 'Import', true))) return;
               const n = await restoreBackup(text);
               setMsg({ ok: true, text: `Imported ${n.entries} entries${n.people || n.threads ? `, ${n.people} Slack people and ${n.threads} Slack threads` : ''}. Reloading…` });
               setTimeout(() => location.reload(), 600);

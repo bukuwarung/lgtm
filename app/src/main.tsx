@@ -79,7 +79,7 @@ addEventListener('mouseover', (e) => {
 
 // Menus from the keyboard: Enter or Space on a menu's button opens it (they're buttons); ↓ / ↑ (Home, End) go into it and
 // through its items; Esc closes it (each menu's own handler) and puts the focus back on its button.
-const MENU_WRAP = '.bell, .recent-menu, .account, .agents-menu, .pill-menu, .pill-drop';
+const MENU_WRAP = '.bell, .recent-menu, .account, .agents-menu, .pill-menu, .pill-drop, .ed-fix';
 const MENU_POP = '.account-menu, .pill-pop, .quick-menu';
 addEventListener(
   'keydown',
@@ -1288,7 +1288,7 @@ type TeamSort = 'waiting' | 'free' | 'name';
 const teamKind = (members: string[], load: Record<string, number>, items: QueueItem[], sort: TeamSort): Kind => {
   const waiting: Record<string, string> = {};
   for (const i of items) if (!i.isDraft && i.reviewDecision !== 'APPROVED' && (!waiting[i.author] || i.waitingSince < waiting[i.author])) waiting[i.author] = i.waitingSince;
-  const order = [...members].sort(
+  const order = members.toSorted(
     sort === 'waiting' ? (a, b) => (waiting[a] ?? '~').localeCompare(waiting[b] ?? '~') || a.localeCompare(b)
     : sort === 'free' ? (a, b) => (load[a] ?? 0) - (load[b] ?? 0) || a.localeCompare(b)
     : (a, b) => a.localeCompare(b),
@@ -1309,7 +1309,7 @@ const REPO: Kind = { ...MINE, name: 'Repository' };
 // …or by who opened them, the busiest first.
 const repoByAuthor = (items: QueueItem[]): Kind => ({
   name: 'Repository',
-  groups: [...Map.groupBy(items, (i) => i.author)].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).map(([a]) => [a, shownName(a)]),
+  groups: Array.from(Map.groupBy(items, (i) => i.author)).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).map(([a]) => [a, shownName(a)]),
   groupOf: (i) => i.author,
   colorOf: MINE.groupOf,
   people: true,

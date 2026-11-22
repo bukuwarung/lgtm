@@ -201,7 +201,8 @@ export function Editor(p: Props) {
     ).finally(() => setFixing(null));
   };
   const tool = (label: string, title: string, run: () => void) => (
-    <button type="button" class="ed-tool" title={title} onMouseDown={(e) => { e.preventDefault(); run(); }}>
+    // Mouse-down keeps the text box's focus and selection; the click runs it, so Enter and Space do too.
+    <button type="button" class="ed-tool" title={title} onMouseDown={(e) => e.preventDefault()} onClick={run}>
       {label}
     </button>
   );
@@ -230,14 +231,17 @@ export function Editor(p: Props) {
                   class="ed-tool"
                   disabled={!!fixing && fixing !== 'pick'}
                   title={`A coding agent writes the change your comment asks for (or a fix, with no comment yet), as a suggestion to edit`}
-                  onMouseDown={(e) => (e.preventDefault(), p.fix!.agents.length > 1 ? setFixing(fixing === 'pick' ? null : 'pick') : fix(p.fix!.agents[0]))}
+                  aria-haspopup={p.fix.agents.length > 1 ? 'menu' : undefined}
+                  aria-expanded={p.fix.agents.length > 1 ? fixing === 'pick' : undefined}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => (p.fix!.agents.length > 1 ? setFixing(fixing === 'pick' ? null : 'pick') : fix(p.fix!.agents[0]))}
                 >
                   {fixing && fixing !== 'pick' ? <><AgentMark id={fixing} /> Fixing…</> : p.fix.agents.length > 1 ? '✦ Fix' : <><AgentMark id={p.fix.agents[0]} /> Fix</>}
                 </button>
                 {fixing === 'pick' && (
                   <span class="account-menu ed-fix-pick" role="menu">
                     {p.fix.agents.map((a) => (
-                      <button type="button" role="menuitem" onMouseDown={(e) => (e.preventDefault(), fix(a))}>
+                      <button type="button" role="menuitem" onMouseDown={(e) => e.preventDefault()} onClick={() => fix(a)}>
                         <AgentMark id={a} /> Fix with {AGENTS[a].name}
                       </button>
                     ))}

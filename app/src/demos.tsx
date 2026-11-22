@@ -968,7 +968,7 @@ Object.assign(DEMOS, {
   },
   readingOrder: {
     title: 'Files in reading order',
-    off: <>{[...READING].sort().map((p) => <File path={p} add={12} del={2} />)}</>,
+    off: <>{READING.toSorted().map((p) => <File path={p} add={12} del={2} />)}</>,
     on: <ReadingOrderOn />,
   },
   reviewPlan: {

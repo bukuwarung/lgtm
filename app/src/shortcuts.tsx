@@ -65,7 +65,7 @@ export function jumpTo(id: string, near?: string, noted = false) {
 // Drafts first, then threads in diff order: the order the index lists them and n/p walks them.
 export function threadOrder(threads: Thread[], drafts: Draft[], files: File[]) {
   const order = new Map(files.map((f, i) => [f.filename, i]));
-  const sorted = [...threads].sort((a, b) => (order.get(a.path) ?? 1e9) - (order.get(b.path) ?? 1e9) || (a.line ?? 0) - (b.line ?? 0));
+  const sorted = threads.toSorted((a, b) => (order.get(a.path) ?? 1e9) - (order.get(b.path) ?? 1e9) || (a.line ?? 0) - (b.line ?? 0));
   type Item = { id: string; path: string; t?: Thread };
   return [...drafts.map((d): Item => ({ id: 'd-' + d.id, path: d.path })), ...sorted.map((t): Item => ({ id: 't-' + t.id, path: t.path, t }))];
 }
