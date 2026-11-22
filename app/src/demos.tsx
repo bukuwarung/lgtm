@@ -1343,8 +1343,7 @@ Object.assign(DEMOS, {
     ),
     on: (
       <div class="demo-index">
-        <div class="demo-idx"><small>+ Add a label, an assignee, a milestone</small></div>
-        <b>Conversation 2</b>
+        <b class="demo-head">Conversation 2 <span class="ix-head-acts">{['tag', 'person', 'milestone'].map((i) => <span class="ix-head-btn"><Octicon name={i} /></span>)}<span class="ix-head-sep" /><span class="ix-head-btn on"><Octicon name="bell" /></span></span></b>
         <div class="demo-idx">OrderNotifier.kt:41 <small>you</small></div>
       </div>
     ),

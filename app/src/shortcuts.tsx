@@ -216,7 +216,6 @@ function usePrMeta(repo: string, n: number) {
   };
   return [meta, change] as const;
 }
-const anA = (word: string) => (/^[aeiou]/.test(word) ? 'an' : 'a');
 // The labels section while it's hidden empty (Settings → Reviewing): shown once a label is being added.
 function LabelsOnAsk({ repo, n, canEdit }: { repo: string; n: number; canEdit: boolean }) {
   const [shown, setShown] = useState(false);
@@ -295,8 +294,10 @@ function MilestoneSec({ repo, n, canEdit, hideEmpty }: { repo: string; n: number
   );
 }
 
-// The Conversation section's header: my notifications (the bell) and the lock, each a click to flip.
-function ConvToggles({ repo, n, prNode, canEdit }: { repo: string; n: number; prNode: string; canEdit: boolean }) {
+// The Conversation section's header: a label, an assignee or a milestone to add while their sections are hidden empty
+// (Settings → Reviewing); my notifications (the bell) and the lock, each a click to flip.
+type Add = [what: string, icon: string, label: string, key: string];
+function ConvToggles({ repo, n, prNode, canEdit, adds }: { repo: string; n: number; prNode: string; canEdit: boolean; adds: Add[] }) {
   const [meta, change] = usePrMeta(repo, n);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
   const T = pageTerm();
@@ -311,6 +312,8 @@ function ConvToggles({ repo, n, prNode, canEdit }: { repo: string; n: number; pr
   if (!meta) return null;
   return (
     <span class="ix-head-acts">
+      {adds.map(([what, icon, label, key]) => <HeadBtn icon={icon} label={`${label}${hint(key)}`} run={() => dispatchEvent(new CustomEvent('lgtm:details', { detail: what }))} />)}
+      {adds.length > 0 && <span class="ix-head-sep" />}
       {meta.locked && !canEdit && <span class="ix-head-btn" title="Locked: only people with write access can comment"><Octicon name="lock" /></span>}
       {canEdit && <HeadBtn icon={meta.locked ? 'lock' : 'unlock'} on={meta.locked} label={`${meta.locked ? 'Locked: only people with write access can comment. Unlock' : 'Lock the conversation'}${hint(keys.lock)}`} run={() => void lock()} />}
       {meta.subscribed != null && <HeadBtn icon={meta.subscribed ? 'bell' : 'bell-slash'} on={meta.subscribed} label={`${meta.subscribed ? 'Subscribed to its notifications. Unsubscribe' : 'Not subscribed. Subscribe to its notifications'}${hint(keys.subscribe)}`} run={subscribe} />}
@@ -722,12 +725,12 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
   const [hideEmpty] = useStoredFlag('hideEmptyIndex', true);
   const [meta] = usePrMeta(repo, pr.number);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
+  // What a hidden empty section adds, as an icon on the Conversation header (ConvToggles): what, its icon, its words, its key.
   const adds = !hideEmpty || !canLabel || !meta ? [] : ([
-    !pr.labels?.length && ['label', 'label', ''],
-    !meta.assignees.length && ['assign', 'assignee', keys.assign],
-    !meta.milestone && ['milestone', 'milestone', keys.milestone],
-  ].filter(Boolean) as [string, string, string][]);
-  const add = (what: string) => (dispatchEvent(new CustomEvent('lgtm:details', { detail: what })));
+    !pr.labels?.length && ['label', 'tag', 'Add a label', ''],
+    !meta.assignees.length && ['assign', 'person', 'Assign someone', keys.assign],
+    !meta.milestone && ['milestone', 'milestone', 'Set a milestone', keys.milestone],
+  ].filter(Boolean) as Add[]);
   return (
     <div class="index">
       {!(hideEmpty && !reviewers.size && !ask && !(addMe && !reviewers.has(me))) && <Section id="ix-reviewers" title="Reviewers" count={reviewers.size}>
@@ -766,18 +769,7 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
       {hideEmpty && canLabel && !pr.labels?.length && <LabelsOnAsk repo={repo} n={pr.number} canEdit={canLabel} />}
       <Assignees repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
       <MilestoneSec repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
-      {adds.length > 0 && (
-        <p class="ix-add-row">
-          <Octicon name="plus" /> Add
-          {adds.map(([what, word, key], k) => (
-            <>
-              {k ? ',' : ''} <button class="link" title={key ? `Add ${anA(word)} ${word}${hint(key)}` : undefined} onClick={() => add(what)}>{anA(word)} {word}</button>
-            </>
-          ))}
-        </p>
-      )}
-
-      <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} />}>
+      <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} adds={adds} />}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
         {myConv + drafts.length + tiers.mine.length > 0 && (
           <Fold k="ix-yours" class="ix-ckgroup">
