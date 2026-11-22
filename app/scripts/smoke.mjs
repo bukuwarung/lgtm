@@ -252,6 +252,32 @@ try {
       return r.width && i.width && d > 1 ? [${JSON.stringify(where)} + ': ' + (b.getAttribute('aria-label') || b.title || b.className) + ' ' + d.toFixed(1) + 'px off'] : [];
     })`);
     const off = await icons('the PR');
+    // Every row that lines things up (the top bar, the title bar, the pill bar, file headers, the PR list's pills): the
+    // items on each line of it centred on one another, within a pixel. Lines found by where items sit (the pill bar wraps).
+    const rows = (where) => evaluate(`(() => {
+      const out = [];
+      for (const row of document.querySelectorAll('.top, .bar, .pr-status, .file-h, .pr-item .pills, .pr-item .pr-meta')) {
+        if (!row.offsetParent && getComputedStyle(row).position !== 'fixed') continue;
+        const items = [...row.children].filter((c) => { const st = getComputedStyle(c), r = c.getBoundingClientRect(); return r.width > 1 && r.height > 1 && !['absolute', 'fixed'].includes(st.position) && st.visibility !== 'hidden'; })
+          .map((c) => { const b = c.getBoundingClientRect(), st = getComputedStyle(c); return { c, r: { top: b.top + parseFloat(st.paddingTop), bottom: b.bottom - parseFloat(st.paddingBottom), get height() { return this.bottom - this.top; } } }; }); // content, not padding: room left for a badge isn't misalignment
+        const lines = [];
+        for (const it of items.sort((a, b) => a.r.top - b.r.top)) {
+          const line = lines.find((l) => it.r.top < l.bottom - 2 && it.r.bottom > l.top + 2);
+          line ? (line.items.push(it), (line.top = Math.min(line.top, it.r.top)), (line.bottom = Math.max(line.bottom, it.r.bottom))) : lines.push({ top: it.r.top, bottom: it.r.bottom, items: [it] });
+        }
+        for (const l of lines) {
+          if (l.items.length < 2) continue;
+          const mids = l.items.map((it) => it.r.top + it.r.height / 2), lo = Math.min(...mids), hi = Math.max(...mids);
+          if (hi - lo > 1) {
+            const name = (e) => (e.getAttribute('aria-label') || e.title || e.textContent.trim() || e.className || e.tagName).toString().replace(/\\s+/g, ' ').slice(0, 24);
+            const odd = l.items[mids.indexOf(Math.abs(hi - mids.reduce((a, b) => a + b) / mids.length) > Math.abs(lo - mids.reduce((a, b) => a + b) / mids.length) ? hi : lo)];
+            out.push(${JSON.stringify(where)} + ' ' + (row.className.split(' ')[0]) + ': ' + name(odd.c) + ' ' + (hi - lo).toFixed(1) + 'px off');
+          }
+        }
+      }
+      return out;
+    })()`);
+    const misaligned = await rows('the PR');
     // A dropdown pill (its <details>) as tall as its pill, not sitting low on a text line.
     const low = await evaluate(`[...document.querySelectorAll('details.pill-menu')].filter((d) => d.offsetParent && Math.abs(d.getBoundingClientRect().height - d.querySelector('summary').getBoundingClientRect().height) > 1).length`);
     if (low) throw new Error(`${low} dropdown pills sit low in their row`);
@@ -268,6 +294,10 @@ try {
     await evaluate(`location.hash = '/settings'`);
     await until('Settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`);
     off.push(...(await icons('Settings')));
+    await evaluate(`location.hash = '/'`);
+    await until('the PR list', `!!document.querySelector('.pr-item')`);
+    misaligned.push(...(await rows('the list')));
+    if (misaligned.length) throw new Error(`not lined up: ${misaligned.join('; ')}`);
     if (off.length) throw new Error(`icons off centre: ${off.join('; ')}`);
     // Previews are miniatures: only their look is checked. Under 13px: WebKit's small control font, not the page's.
     const boxes = await evaluate(`[...document.querySelectorAll('.page.settings input[type=checkbox]')].filter((c) => c.offsetParent && (getComputedStyle(c).appearance !== 'none' || (!c.closest('.demo-side') && c.getBoundingClientRect().width < 13))).map((c) => getComputedStyle(c).appearance + ' ' + c.getBoundingClientRect().width.toFixed(1) + 'px in ' + c.closest('[class]')?.className)`);
