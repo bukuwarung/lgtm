@@ -861,7 +861,8 @@ test('morningFor and zoneLine: their next 9 am, and their clock beside yours', a
   assert.match(morningWords('Asia/Kolkata', morningFor('Asia/Kolkata', friday), friday), /^9 am Monday their time$/);
   const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
   assert.match(zoneLine(mine, new Date(at)), /there · .*, the same time as you$/);
-  assert.match(zoneLine('Asia/Kolkata', new Date(at)), /^10:30\s?(PM|pm) there · Kolkata/);
+  assert.match(zoneLine('Asia/Kolkata', new Date(at)), /^10:30\s?(PM|pm) there · GMT\+5:30, /);
+  assert.match(zoneLine('Asia/Bangkok', new Date(at)), / there · GMT\+7, /); // Jakarta's too: the offset, not the zone's city
   assert.equal(zoneLine('Not/AZone', new Date(at)), '');
 });
 

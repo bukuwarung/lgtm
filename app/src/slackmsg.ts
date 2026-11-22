@@ -103,13 +103,14 @@ export function morningFor(tz: string, now = Date.now()) {
 export const morningWords = (tz: string, at: number, now = Date.now()) =>
   `9 am${at - now > 86_400_000 ? ` ${new Date(at).toLocaleDateString([], { timeZone: tz, weekday: 'long' })}` : ''} their time`;
 
-// Their clock beside yours: "2:48 pm there · Kolkata, 1h 30m behind you" ('' for a time zone this browser doesn't know).
+// Their clock beside yours: "2:48 pm there · GMT+5:30, 1h 30m behind you" ('' for a time zone this browser doesn't know).
+// The offset, not the zone's city: Slack's Asia/Bangkok covers Jakarta too, Asia/Kolkata all of India.
 export function zoneLine(tz: string, now = new Date()) {
   try {
     const wall = (timeZone?: string) => Date.parse(now.toLocaleString('sv-SE', { timeZone }).replace(' ', 'T') + 'Z');
     const diff = Math.round((wall(tz) - wall()) / 60_000);
     const time = now.toLocaleTimeString([], { timeZone: tz, hour: 'numeric', minute: '2-digit' });
-    const city = tz.split('/').pop()!.replace(/_/g, ' ');
+    const city = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(now).find((x) => x.type === 'timeZoneName')!.value;
     const gap = [Math.floor(Math.abs(diff) / 60) && `${Math.floor(Math.abs(diff) / 60)}h`, Math.abs(diff) % 60 && `${Math.abs(diff) % 60}m`].filter(Boolean).join(' ');
     return `${time} there · ${city}, ${diff ? `${gap} ${diff < 0 ? 'behind' : 'ahead of'} you` : 'the same time as you'}`;
   } catch {
