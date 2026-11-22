@@ -5845,7 +5845,7 @@ function EditDescription({ pr, repo, mentions, onDone }: { pr: PR; repo: string;
   return (
     <div class="edit-desc">
       <input value={title} onInput={(e) => setTitle(e.currentTarget.value)} aria-label="Title" />
-      <Editor value={body} onInput={setBody} onSubmit={save} onCancel={onDone} repo={repo} mentions={mentions} rows={14} autoFocus placeholder="Describe the change · ⌘↵ to save" />
+      <Editor value={body} onInput={setBody} onSubmit={save} onCancel={onDone} repo={repo} mentions={mentions} rows={14} autoFocus placeholder="Describe the change · ⌘↵ to save" doc />
       <div class="row">
         <button class="primary" disabled={busy || !title.trim()} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
         <button disabled={busy} onClick={onDone}>Cancel</button>

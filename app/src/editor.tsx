@@ -5,6 +5,7 @@ import { composing, own, recentPRs, useSavedReplies } from './platform.ts';
 import { isLab } from './github.ts';
 import { AGENTS, type AgentId } from './agents.ts';
 import { AgentMark } from './tags.tsx';
+import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 
 type Props = {
   value: string;
@@ -18,6 +19,7 @@ type Props = {
   autoFocus?: boolean;
   rows?: number;
   placeholder?: string;
+  doc?: boolean; // a PR's description: previewed in your Markdown style (Settings → Markdown files), as it shows
 };
 
 type Completion = { kind: ':' | '@' | '/' | '`' | '#' | 'jira'; start: number; items: { name: string; img?: string; body?: string }[]; i: number };
@@ -51,6 +53,8 @@ export function Editor(p: Props) {
   const area = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<'write' | 'preview'>('write');
+  const [mdStyle] = useMdStyle();
+  const look = mdStyleProps(mdStyle);
   const [preview, setPreview] = useState<{ html?: string; error?: string } | null>(null);
   const [emojis, setEmojis] = useState<Record<string, string>>({});
   const [ac, setAc] = useState<Completion | null>(null);
@@ -289,8 +293,12 @@ export function Editor(p: Props) {
           )}
         </div>
       ) : (
-        <div class="ed-preview md" ref={previewRef}>
-          {!preview ? <p class="note">Rendering preview…</p> : preview.error ? <p class="error">{preview.error}</p> : <div dangerouslySetInnerHTML={{ __html: preview.html! }} />}
+        <div class={p.doc ? 'ed-preview' : 'ed-preview md'} ref={previewRef}>
+          {!preview ? <p class="note">Rendering preview…</p> : preview.error ? <p class="error">{preview.error}</p> : p.doc ? (
+            <div class={`rich pr-desc ${look.class}`} style={look.style}>
+              <div class="md chunk" dangerouslySetInnerHTML={{ __html: preview.html! }} />
+            </div>
+          ) : <div dangerouslySetInnerHTML={{ __html: preview.html! }} />}
         </div>
       )}
     </div>

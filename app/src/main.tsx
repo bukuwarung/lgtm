@@ -243,7 +243,7 @@ function NewPR() {
       </p>
       <label class="new-pr-into">Into <input value={base} onInput={(e) => setBase(e.currentTarget.value)} aria-label="Base branch" /></label>
       <input class="new-pr-title" value={title} onInput={(e) => setTitle(e.currentTarget.value)} aria-label="Title" placeholder="Title" autoFocus />
-      <Editor value={body} onInput={setBody} onSubmit={go} onCancel={() => box.current?.close()} repo={p.repo} mentions={[]} rows={12} placeholder={`Describe the change · ⌘↵ to open the ${t.PR}`} />
+      <Editor value={body} onInput={setBody} onSubmit={go} onCancel={() => box.current?.close()} repo={p.repo} mentions={[]} rows={12} placeholder={`Describe the change · ⌘↵ to open the ${t.PR}`} doc />
       <div class="row">
         <label><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.currentTarget.checked)} /> Draft</label>
         <span class="spacer" />
