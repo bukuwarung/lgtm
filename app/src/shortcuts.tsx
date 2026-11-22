@@ -294,10 +294,9 @@ function MilestoneSec({ repo, n, canEdit, hideEmpty }: { repo: string; n: number
   );
 }
 
-// The Conversation section's header: a label, an assignee or a milestone to add while their sections are hidden empty
-// (Settings → Reviewing); my notifications (the bell) and the lock, each a click to flip.
-type Add = [what: string, icon: string, label: string, key: string];
-function ConvToggles({ repo, n, prNode, canEdit, adds }: { repo: string; n: number; prNode: string; canEdit: boolean; adds: Add[] }) {
+// The Conversation section's header: my threads on their own (when I have some), my notifications (the bell) and the
+// lock, each a click.
+function ConvToggles({ repo, n, prNode, canEdit, threads }: { repo: string; n: number; prNode: string; canEdit: boolean; threads: boolean }) {
   const [meta, change] = usePrMeta(repo, n);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
   const T = pageTerm();
@@ -312,8 +311,7 @@ function ConvToggles({ repo, n, prNode, canEdit, adds }: { repo: string; n: numb
   if (!meta) return null;
   return (
     <span class="ix-head-acts">
-      {adds.map(([what, icon, label, key]) => <HeadBtn icon={icon} label={`${label}${hint(key)}`} run={() => dispatchEvent(new CustomEvent('lgtm:details', { detail: what }))} />)}
-      {adds.length > 0 && <span class="ix-head-sep" />}
+      {threads && <HeadBtn icon="comment-discussion" label={`Your threads on their own, each with its code and what changed since${hint(keys.myThreads)}`} run={() => dispatchEvent(new CustomEvent('lgtm:act', { detail: 'myThreads' }))} />}
       {meta.locked && !canEdit && <span class="ix-head-btn" title="Locked: only people with write access can comment"><Octicon name="lock" /></span>}
       {canEdit && <HeadBtn icon={meta.locked ? 'lock' : 'unlock'} on={meta.locked} label={`${meta.locked ? 'Locked: only people with write access can comment. Unlock' : 'Lock the conversation'}${hint(keys.lock)}`} run={() => void lock()} />}
       {meta.subscribed != null && <HeadBtn icon={meta.subscribed ? 'bell' : 'bell-slash'} on={meta.subscribed} label={`${meta.subscribed ? 'Subscribed to its notifications. Unsubscribe' : 'Not subscribed. Subscribe to its notifications'}${hint(keys.subscribe)}`} run={subscribe} />}
@@ -620,6 +618,7 @@ type IndexProps = {
   viewed: Set<string>;
   counts: Counts;
   me: string;
+  commits?: number; // the PR's commits, for the top row's button (review.tsx's commits pill)
   ask?: ComponentChildren; // on my own PR: who to ask for a review (review.tsx AskReviewer)
   modules?: Map<string, string>; // each file's Gradle module (files.ts gradleModules), when grouping by them
   steps?: PlanStep[]; // the reading order's steps (files.ts reviewPlan), when the files are in it
@@ -634,7 +633,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ commits = 0, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -725,14 +724,22 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
   const [hideEmpty] = useStoredFlag('hideEmptyIndex', true);
   const [meta] = usePrMeta(repo, pr.number);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
-  // What a hidden empty section adds, as an icon on the Conversation header (ConvToggles): what, its icon, its words, its key.
+  // The index's top row: each commit on its own (the commits pill's list), and a label, an assignee or a milestone to
+  // add while their sections are hidden empty: what, its icon, its words, its key.
   const adds = !hideEmpty || !canLabel || !meta ? [] : ([
     !pr.labels?.length && ['label', 'tag', 'Add a label', ''],
     !meta.assignees.length && ['assign', 'person', 'Assign someone', keys.assign],
     !meta.milestone && ['milestone', 'milestone', 'Set a milestone', keys.milestone],
-  ].filter(Boolean) as Add[]);
+  ].filter(Boolean) as [string, string, string, string][]);
   return (
     <div class="index">
+      {(commits > 1 || adds.length > 0) && (
+        <div class="ix-top">
+          {commits > 1 && <HeadBtn icon="git-commit" label={`${commits} commits: one on its own${hint(keys.prevCommit)}${hint(keys.nextCommit)}`} run={() => dispatchEvent(new Event('lgtm:commits'))} />}
+          {commits > 1 && adds.length > 0 && <span class="ix-head-sep" />}
+          {adds.map(([what, icon, label, key]) => <HeadBtn icon={icon} label={`${label}${hint(key)}`} run={() => dispatchEvent(new CustomEvent('lgtm:details', { detail: what }))} />)}
+        </div>
+      )}
       {!(hideEmpty && !reviewers.size && !ask && !(addMe && !reviewers.has(me))) && <Section id="ix-reviewers" title="Reviewers" count={reviewers.size}>
         {[...reviewers].map(([who, r]) => (
           <div class="ix-check">
@@ -769,12 +776,11 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
       {hideEmpty && canLabel && !pr.labels?.length && <LabelsOnAsk repo={repo} n={pr.number} canEdit={canLabel} />}
       <Assignees repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
       <MilestoneSec repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
-      <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} adds={adds} />}>
+      <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} threads={tiers.mine.length > 0} />}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
         {myConv + drafts.length + tiers.mine.length > 0 && (
           <Fold k="ix-yours" class="ix-ckgroup">
             <summary><Octicon name="person" /> {myConv + drafts.length + tiers.mine.length} yours</summary>
-            {tiers.mine.length > 0 && <Entry label={<><Octicon name="comment-discussion" /> Your threads on their own</>} meta={readBindings(localStorage.getItem('shortcuts') ?? '{}').myThreads || undefined} onClick={() => dispatchEvent(new CustomEvent('lgtm:act', { detail: 'myThreads' }))} />}
             {tiers.mine.filter(waitsOnMe).map((t) => threadEntry(t))}
             {conversation.map((c, i) => !c.bot && c.author === me && !replaced.has(c.id) && convEntry(c, i))}
             {drafts.map((d) => (

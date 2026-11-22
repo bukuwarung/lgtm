@@ -91,7 +91,7 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 - In the conversation, bot comments wait behind one line, each review lists its comments on the code, and a reviewer's earlier verdict folds under their latest.
 - Reactions (`+` for 👍); from a comment's ⋯, edit (`E`) or delete your own, hide one as off-topic, outdated or resolved, or dismiss a review (hiding and dismissing on GitHub). Tick the description's task list, and edit it if you may.
 - New comments and replies show up while the PR is open, no reload.
-- Labels, assignees and milestone in the index, each with a + on its header; the Conversation header has the bell (your notifications) and the lock. Empty sections are left out (a switch), and icons on the Conversation header add them.
+- Labels, assignees and milestone in the index, each with a + on its header; the Conversation header has the bell (your notifications) and the lock. Empty sections are left out (a switch); icons at the top of the index add them, and open each commit on its own.
 - Branches you pushed in the last three days with no PR yet wait above Your PRs (and in ⌘K): open one with its title, the repo's template, the base and draft or not.
 - Other PRs for the same Jira ticket, in any of your repos, under the ticket.
 - A link to a PR, a comment or a file of this PR, in anything people wrote, opens here; Jira keys link to the ticket; links that leave lgtm end in ↗.

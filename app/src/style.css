@@ -1724,4 +1724,4 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .new-pr .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .new-pr .row .spacer { flex: 1; }
 .ix-head-sep { width: 1px; margin: 4px 2px; background: var(--border); }
-.demo-head { display: flex; align-items: center; gap: 6px; }
+.ix-top { display: flex; align-items: center; gap: 2px; padding: 4px 6px 2px; }

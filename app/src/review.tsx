@@ -1215,6 +1215,18 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     showCommit(commits[next]?.sha ?? null);
   };
   const commitView = since && !!toSha;
+  // The index's commits button: the pill's list opened, its first commit focused.
+  useEffect(() => {
+    const open = () => {
+      const d = document.querySelector('summary.commits-pill')?.closest('details');
+      if (!d) return;
+      d.open = true;
+      d.scrollIntoView({ block: 'nearest' });
+      setTimeout(() => d.querySelector<HTMLElement>('.pill-pop button')?.focus(), 0);
+    };
+    addEventListener('lgtm:commits', open);
+    return () => removeEventListener('lgtm:commits', open);
+  }, []);
 
   // My open threads against the code now: a compare from the commit each thread was written on to the head (one per
   // commit, kept), then whether the commented lines changed. Rewritten history (force-push) can't be mapped.
@@ -2096,6 +2108,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <aside class={`side tree${showIndex ? '' : ' collapsed'}${narrowIx && showIndex ? ' over' : ''}`} aria-hidden={!showIndex} onClick={(e) => narrowIx && (e.target as Element).closest('.ix-item, .tree-file, .ix-hidden-row') && setIxOver(false)}>
           <div class="side-scroll">
             <ShortcutIndex
+              commits={commits.length}
               canLabel={!!rights?.label}
               checksErr={checksErr}
               hidden={hiddenRows}
@@ -2561,7 +2574,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             )}
             {/* Each commit on its own, as GitHub's Commits tab. */}
             {commits.length > 1 && (
-              <PillMenu cls={toSha ? 'on' : ''} label={<Tg i="commit" t={`${commits.length} commits`} />} head={`One commit on its own${hint(bindings.prevCommit)}${hint(bindings.nextCommit)}:`}>
+              <PillMenu cls={toSha ? 'commits-pill on' : 'commits-pill'} label={<Tg i="commit" t={`${commits.length} commits`} />} head={`One commit on its own${hint(bindings.prevCommit)}${hint(bindings.nextCommit)}:`}>
                 {commits.map((c) => (
                   <button aria-current={c.sha === toSha || undefined} onClick={() => showCommit(c.sha)} title={c.sha}>
                     <code>{c.sha.slice(0, 7)}</code> <b>{c.label}</b> <small><Time at={c.at} /></small>
