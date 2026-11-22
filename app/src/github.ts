@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, DAY, kept, knowFace, reportUsage, fetchJobLog, fetchToken, knownRepos, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
+import { agentsAsBots, DAY, kept, knowFace, markAppAccounts, reportUsage, fetchJobLog, fetchToken, knownRepos, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 import * as lab from './gitlab.ts';
@@ -1041,14 +1041,18 @@ async function fetchPeople(org: string, logins: string[]): Promise<Record<string
     return { ...hub, ...labs };
   }
   if (!logins.length) return {};
+  const notUsers: string[] = [];
   const query = async (ls: string[], withOrg: boolean): Promise<any[]> => {
     const vars = Object.fromEntries(ls.map((l, i) => [`l${i}`, l]));
     const withEmail = !noEmailScope; // this query's own: another lookup may learn there's no scope while this one runs
     const fields = ls.map((_, i) => `u${i}:user(login:$l${i}){name${withEmail ? ' email' : ''}${withOrg ? ' organizationVerifiedDomainEmails(login:$org)' : ''}}`).join(' ');
     const decl = [...ls.map((_, i) => `$l${i}:String!`), ...(withOrg ? ['$org:String!'] : [])].join(',');
     try {
-      const d = await graphql(`query(${decl}){${fields}}`, withOrg ? { ...vars, org } : vars, true);
-      return ls.map((_, i) => d[`u${i}`] ?? null);
+      const r = await graphqlFull(`query(${decl}){${fields}}`, withOrg ? { ...vars, org } : vars);
+      if (r.errors?.length && !r.data) throw new Error(r.errors[0].message);
+      // GitHub's word that a login isn't a person (not just empty): an app's or bot's account.
+      if (!withOrg) for (const e of r.errors ?? []) if (e.type === 'NOT_FOUND' && /^u\d+$/.test(String(e.path?.[0]))) notUsers.push(ls[+String(e.path![0]).slice(1)]);
+      return ls.map((_, i) => r.data[`u${i}`] ?? null);
     } catch (e) {
       // A public email needs the read:user or user:email scope, which gh's own login doesn't ask for: without it, the
       // org's verified emails and names still find people.
@@ -1062,6 +1066,7 @@ async function fetchPeople(org: string, logins: string[]): Promise<Record<string
   const first = await query(logins, true);
   const missing = logins.filter((_, i) => !first[i]);
   const second = missing.length ? await query(missing, false) : [];
+  markAppAccounts(notUsers); // no Slack messages; their comments fold like bots' (Settings → Slack → People: Not a bot)
   const user = (l: string, i: number) => first[i] ?? second[missing.indexOf(l)] ?? null;
   return Object.fromEntries(
     logins.map((l, i) => {

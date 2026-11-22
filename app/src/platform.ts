@@ -490,12 +490,36 @@ export const readBots = (): Set<string> => {
     return new Set();
   }
 };
+// Logins GitHub says aren't people (an app's account, an automation bot): bots by themselves, unless you've said "Not a
+// bot" for one (kept in notBots, so it isn't marked again).
+const notBots = (): Set<string> => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('notBots') ?? '[]'));
+  } catch {
+    return new Set();
+  }
+};
+export function markAppAccounts(logins: string[]) {
+  const bots = readBots(), not = notBots();
+  const add = logins.filter((l) => !bots.has(l) && !not.has(l));
+  if (!add.length) return;
+  try {
+    localStorage.setItem('bots', JSON.stringify([...bots, ...add].sort()));
+  } catch {
+    return;
+  }
+  dispatchEvent(new CustomEvent('lgtm:pref', { detail: 'bots' }));
+}
 export function useBots() {
   const [raw, set] = useStoredValue('bots', '[]');
   const bots = new Set<string>(JSON.parse(raw || '[]'));
   const toggleBot = (login: string) => {
-    bots.has(login) ? bots.delete(login) : bots.add(login);
+    const not = notBots();
+    bots.has(login) ? (bots.delete(login), not.add(login)) : (bots.add(login), not.delete(login));
     set(JSON.stringify([...bots].sort()));
+    try {
+      localStorage.setItem('notBots', JSON.stringify([...not].sort()));
+    } catch {}
   };
   return { bots, toggleBot };
 }
