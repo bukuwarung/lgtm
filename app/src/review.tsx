@@ -43,7 +43,7 @@ import { SymbolNav } from './symbolnav.tsx';
 import { codeIndex, docSnippet, isDoc, peekLines, refTo, specRefs, type CodeIndex, type SpecRef } from './specrefs.ts';
 import { createPortal } from 'preact/compat';
 import { Resizer } from './resizer.tsx';
-import { OnBase, below, jumpTo, noteJump, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File, FileName } from './shortcuts.tsx';
+import { OnBase, below, firstBox, jumpTo, noteJump, ModuleIcon, FileIcon, ShortcutIndex, threadOrder, type File, FileName } from './shortcuts.tsx';
 
 type Side = 'LEFT' | 'RIGHT';
 // Where the (single) open comment form is. No line = file-level; editId = the draft being edited;
@@ -1206,12 +1206,18 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (!data) return;
     const where = (): Visit['at'] => {
       const top = 46 + 44 + 4; // below the top bar (--nav) and the review bar (--bar)
-      const cur = [...document.querySelectorAll<HTMLElement>('main > .file')].findLast((s) => s.getBoundingClientRect().top <= top);
+      const all = document.querySelectorAll<HTMLElement>('main > .file');
+      const below = firstBox(all, (r) => r.top > top);
+      const cur = all[(below < 0 ? all.length : below) - 1];
       return cur ? { path: cur.id.slice(2), y: top - cur.getBoundingClientRect().top } : null;
     };
     let at = where();
-    const onScroll = () => (at = where());
+    // Noted once scrolling stops, not on every scroll event: it's only read when you leave.
+    let settle = 0;
+    const onScroll = () => (clearTimeout(settle), (settle = window.setTimeout(() => (at = where()), 250)));
     const save = () => {
+      clearTimeout(settle);
+      at = where() ?? at; // where you are now, if the page is still there; else where scrolling last stopped
       void storage.set(visitKey, { files: Object.fromEntries(data.files.map((f) => [f.filename, f.sha])), at, seenAt: Date.now() } satisfies Visit);
       pruneVisits();
     };
@@ -1509,13 +1515,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // description's and specs' do: linked as comments are drawn.
   const commentPeek = useRefPeek(codeIx);
   useEffect(() => {
-    let frame = 0;
-    const link = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => document.querySelectorAll<HTMLElement>('.comment:not(#pr-description) .md').forEach((el) => linkSpecRefs(el, codeIx, false)));
-    };
-    link();
-    const watch = new MutationObserver(link);
+    // Every comment at first, then only the ones a change brings (a file drawn as you scroll used to re-scan them all).
+    const SEL = '.comment:not(#pr-description) .md';
+    document.querySelectorAll<HTMLElement>(SEL).forEach((el) => linkSpecRefs(el, codeIx, false));
+    const watch = new MutationObserver((ms) => {
+      for (const m of ms) {
+        (m.target as Element).closest?.<HTMLElement>(SEL) && linkSpecRefs((m.target as Element).closest<HTMLElement>(SEL), codeIx, false);
+        for (const n of m.addedNodes) if (n instanceof HTMLElement) (n.matches(SEL) ? [n] : n.querySelectorAll<HTMLElement>(SEL)).forEach((el) => linkSpecRefs(el, codeIx, false));
+      }
+    });
     watch.observe(document.body, { childList: true, subtree: true });
     const inComment = (e: Event) => !!(e.target as Element).closest?.('.comment:not(#pr-description) .md [data-jump]'); // the description has its own
     const over = (e: MouseEvent) => inComment(e) && commentPeek.over(e);
@@ -1524,7 +1532,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     addEventListener('mouseover', over);
     addEventListener('mouseout', out);
     addEventListener('click', click);
-    return () => (cancelAnimationFrame(frame), watch.disconnect(), removeEventListener('mouseover', over), removeEventListener('mouseout', out), removeEventListener('click', click));
+    return () => (watch.disconnect(), removeEventListener('mouseover', over), removeEventListener('mouseout', out), removeEventListener('click', click));
   }, [codeIx]);
   const refs = useMemo(() => specRefs(data.files, codeIx), [data.files, codeIx]);
   const none = { list: [], byPath: new Map() };
@@ -4063,7 +4071,7 @@ function DocView({ doc, syntax, onSource }: { doc: DocBlock; syntax: 'kdoc' | 'j
   );
 }
 
-const rawSeen = new Map<string, string>();
+const rawSeen = new Map<string, string>(); // ponytail: the last 100 kept (a session lasts days); getRaw's cache and the browser's hold more
 // A spec's code spans naming a changed file become links to it (specrefs.ts); its tasks ("[ ] 2.1 …") say how many of
 // the PR's files they name (one naming none says nothing: "build it", "delete the X block" name no file). Run after
 // each draw (the blocks' HTML is set as is).
@@ -4273,7 +4281,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const rawKey = `${ctx.headRepo}@${ctx.pr.head.sha}:${path}`;
   const [src, setSrc] = useState<string | null | undefined>(() => rawSeen.get(rawKey));
   useEffect(() => {
-    if (src === undefined) getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((t) => (t != null && rawSeen.set(rawKey, t), setSrc(t)), () => setSrc(null));
+    if (src === undefined) getRaw(ctx.headRepo, path, ctx.pr.head.sha).then((t) => (t != null && (rawSeen.set(rawKey, t), rawSeen.size > 100 && rawSeen.delete(rawSeen.keys().next().value!)), setSrc(t)), () => setSrc(null));
   }, [src === undefined]);
   // Only diff lines take line comments, so sections outside the diff fold away (expandable, read-only).
   const inDiff = useMemo(() => new Set(hunks.flatMap((h) => h.lines.flatMap((l) => l.new ?? []))), [hunks]);
@@ -4519,7 +4527,8 @@ function HoldPlace() {
           break;
         }
       }
-      const next = [...main.querySelectorAll(':scope > section.file')].find((f) => f.getBoundingClientRect().top >= top);
+      const files = main.querySelectorAll(':scope > section.file');
+      const next = files[firstBox(files, (r) => r.top >= top)];
       if (next && !refs.some((r) => r.el === next)) refs.push({ el: next, at: next.getBoundingClientRect().top + scrollY });
     };
     const ro = new ResizeObserver(() => {
@@ -4555,7 +4564,7 @@ function DocCodeJump({ files }: { files: File[] }) {
   const where = () => {
     const y = barsHeight() + 40;
     const all = sections();
-    const cur = all.findIndex((s) => s.getBoundingClientRect().bottom > y);
+    const cur = firstBox(all, (r) => r.bottom > y);
     if (cur < 0) return null;
     const doc = isDoc(all[cur].id.slice(2));
     const to = all.findIndex((s) => isDoc(s.id.slice(2)) !== doc);

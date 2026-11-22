@@ -39,6 +39,19 @@ export function noteJump() {
 }
 
 // noted: the caller already made it a history step (it scrolled on the way).
+// The first of these elements (in page order, so top to bottom) whose box passes the test: a binary search, a dozen
+// looks on a 675-file PR rather than one per file, on every scroll. The test must hold from some element on (a box's
+// bottom below a line, say). -1: none does.
+export function firstBox<T extends Element>(els: ArrayLike<T>, test: (r: DOMRect) => boolean) {
+  let lo = 0, hi = els.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (test(els[mid].getBoundingClientRect())) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo < els.length ? lo : -1;
+}
+
 export function jumpTo(id: string, near?: string, noted = false) {
   if (!noted) noteJump();
   if (near && !document.getElementById(id)) document.getElementById(near)?.scrollIntoView();
@@ -492,7 +505,8 @@ export function ShortcutIndex({ canLabel = false, checksErr, hidden = [], repo, 
     const mark = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        const at = [...document.querySelectorAll<HTMLElement>('main section.file[id^="f-"]')].find((s) => s.getBoundingClientRect().bottom > 120)?.id.slice(2);
+        const all = document.querySelectorAll<HTMLElement>('main section.file[id^="f-"]');
+        const at = all[firstBox(all, (r) => r.bottom > 120)]?.id.slice(2);
         const row = at ? document.querySelector<HTMLElement>(`.index .tree-file[title="${CSS.escape(at)}"]`)?.closest<HTMLElement>('.tree-row') : null;
         const was = document.querySelector('.index .tree-row.cur');
         if (row === was) return;
