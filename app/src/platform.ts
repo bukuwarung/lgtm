@@ -273,7 +273,7 @@ export const words = (text: string, where?: string | boolean) => {
 };
 
 // A team as lgtm shows it: GitHub's "org/slug"; a GitLab group by its path alone (the account on show names the host).
-// Settings → Appearance → Shorter logins (off): the ending my login shares with my company's logins (andika-buku's
+// Settings → Accounts → Shorter logins (off): the ending my login shares with my company's logins (andika-buku's
 // "-buku"; GitHub's Enterprise Managed Users all end in "_company") left off everyone's that has it, where logins show.
 // The full login on hover, and in anything sent.
 export const loginEnding = () => account.split('@')[0].match(/[-_][^-_]+$/)?.[0] ?? '';
@@ -1392,7 +1392,7 @@ export async function openAppLink(url: string) {
   location.href = url;
 }
 
-// Claude Code sessions whose first prompt links a PR, newest first (Settings → Claude Code; read from the Claude app's
+// Claude Code sessions whose first prompt links a PR, newest first (Settings → Coding agents; read from the Claude app's
 // local records).
 export type ClaudeSession = { id: string; cli: string; title: string; lastActivityAt: number; prs: string[] };
 export async function getClaudeSessions(): Promise<ClaudeSession[]> {
@@ -1417,7 +1417,7 @@ export function ago(when: string | number) {
   return u ? rtf.format(Math.round(s / u[1]), u[0]) : 'just now';
 }
 
-// Per repo, the local checkout Claude Code should work in (Settings → Claude Code): { "owner/repo": "/path" }.
+// Per repo, the local checkout Claude Code should work in (Settings → Coding agents): { "owner/repo": "/path" }.
 export function claudeFolder(repo: string): string | undefined {
   try {
     return JSON.parse(localStorage.getItem('claudeFolders') ?? '{}')[repo] || undefined;

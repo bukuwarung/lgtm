@@ -307,7 +307,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
           </div>
           {openTickets.length > 0 && (
             <div class="merge-opt">
-              <label title={confirm === 'auto' ? `Auto-merge merges later: the ticket moves the next time you open this ${pageTerm().PR} here after it merged` : 'Settings → Reviewing: whether this starts ticked, and the status'}>
+              <label title={confirm === 'auto' ? `Auto-merge merges later: the ticket moves the next time you open this ${pageTerm().PR} here after it merged` : 'Settings → Jira: whether this starts ticked, and the status'}>
                 <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> {confirm === 'auto' ? 'Once merged, move' : 'Move'} {openTickets.join(', ')} {revert ? 'back to' : 'to'}
               </label>
               <StatusSelect value={to} onChange={setTo} statuses={statuses} />

@@ -157,7 +157,7 @@ function AgentLimit() {
     <label class="set-row">
       <span>
         At most <input type="number" min={0} max={500} class="num-input" value={limit} onChange={(e) => setLimit(String(Math.max(0, Math.round(Number(e.currentTarget.value) || 0))))} /> a day
-        <small>The rest wait for tomorrow, marked “limit reached”. 0: no limit. Reviews you ask for (the {T.PR}'s Agents → Review with…) don't count.</small>
+        <small>0: no limit. Reviews you ask for don't count.</small>
       </span>
     </label>
   );
@@ -176,7 +176,7 @@ function AutoAgent() {
         <select value={cur} onChange={(e) => setPick(e.currentTarget.value)}>
           {on.map((a) => <option value={a}>{AGENTS[a].name}</option>)}
         </select>
-        <small>Its model and effort: under Coding agents. Reviews and questions you ask for pick their agent each time.</small>
+
       </span>
     </label>
   );
@@ -189,11 +189,11 @@ function AgentPost() {
     <div class="set-choices">
       <label class="set-row">
         <input type="radio" name="agentReviewPost" checked={mode !== 'comment'} onChange={() => setMode('pending')} />
-        <span>As your pending review<small>Draft comments, not sent: you edit or delete them, then Finish review sends them with yours.</small></span>
+        <span>As your pending review<small>Drafts you edit or drop; Finish review sends them.</small></span>
       </label>
       <label class="set-row">
         <input type="radio" name="agentReviewPost" checked={mode === 'comment'} onChange={() => setMode('comment')} />
-        <span>As comments, posted at once<small>Everyone on the {T.PR} sees them straight away. With a review of yours in progress, they join it instead.</small></span>
+        <span>As comments, posted at once</span>
       </label>
     </div>
   );
@@ -273,6 +273,13 @@ const SECTION_ICON: Record<string, string> = {
   Accounts: 'person',
   Slack: 'comment-discussion',
   'PR list': 'git-pull-request',
+  Notifications: 'bell',
+  Conversation: 'comment',
+  'Coding agents': 'dependabot',
+  Jira: 'book',
+  Names: 'person',
+  'Saved replies': 'reply',
+  'Keyboard shortcuts': 'command-palette',
   'MR list': 'git-pull-request',
   'Time to review': 'stopwatch',
   Reviewing: 'eye',
@@ -286,9 +293,6 @@ const SECTION_ICON: Record<string, string> = {
   Appearance: 'paintbrush',
   'Markdown files': 'markdown',
   Backup: 'archive',
-  'Keyboard shortcuts': 'command-palette',
-  'Saved replies': 'reply',
-  'Coding agents': 'dependabot',
 };
 
 export function Settings() {
@@ -378,7 +382,7 @@ export function Settings() {
 
       <section>
         <h3>Accounts</h3>
-        <p class="note">lgtm runs on your machine and borrows the sign-ins of these command-line tools; it stores no tokens.</p>
+        <p class="note">lgtm uses these command-line tools' sign-ins and stores no tokens.</p>
         <Status ok={me == null ? null : !!me}>
           <b>GitHub</b> {me ? <>signed in as <code>@{me}</code> through the GitHub CLI</> : me === '' ? 'not signed in' : 'checking…'}
           {me === '' && <pre>gh auth login</pre>}
@@ -405,7 +409,7 @@ export function Settings() {
           ) : (
             accounts?.length === 1 && (
               <small>
-                Signed in to more than one GitHub account in gh (<code>gh auth login</code> adds one)? You'll pick here which lgtm uses.
+                More GitHub accounts: add them with <code>gh auth login</code>, then pick one here.
               </small>
             )
           )}
@@ -414,15 +418,12 @@ export function Settings() {
           <b>GitLab</b> (merge requests){' '}
           {!glab ? 'checking…' : glab.length ? <>signed in through the GitLab CLI as {glab.map((a, k) => <>{k ? ', ' : ''}<code>@{a.login}</code> on {a.host}</>)}</> : 'not signed in'}
           {glab && !glab.length && <pre>brew install glab{'\n'}glab auth login</pre>}
-          <small>Optional. GitLab merge requests (on gitlab.com or your own GitLab) open and list like PRs; another host is <code>glab auth login --hostname gitlab.example.com</code>.</small>
+          <small>Optional. Another host: <code>glab auth login --hostname gitlab.example.com</code>.</small>
         </Status>
         <Status ok={ints ? ints.slack.ok : null}>
           <b>Slack</b> (review DMs){' '}
           {!ints ? 'checking…' : ints.slack.ok ? <>signed in{ints.slack.who && <> as <code>{ints.slack.who}</code></>} through slackcli</> : <>not available: {ints.slack.error}</>}
           {ints && !ints.slack.ok && <pre>brew install shaharia-lab/tap/slackcli{'\n'}slackcli auth login-auto</pre>}
-          <small>
-            Who's who on Slack is set under Slack → People below (saved in <code>~/.config/lgtm/config.json</code>).
-          </small>
         </Status>
         <Status ok={ints ? ints.jira.ok : null}>
           <b>Jira</b> (ticket summaries){' '}
@@ -430,41 +431,38 @@ export function Settings() {
           {ints && !ints.jira.ok && <pre>brew install atlassian/homebrew-acli/acli{'\n'}acli jira auth login --web</pre>}
         </Status>
         {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
-        <Flag k="realNames" initial={false} label="Real names" hint="People's names from their GitHub profiles instead of their logins, where there's one. The login shows when you point at it." demo>
-          <Flag k="slackNames" initial={true} label="Use Slack names" hint="For people with no name on GitHub: their name on Slack, once lgtm knows who they are there (Slack, below)." demo />
+        <div class="set-group">
+          <h4>Names</h4>
+        <Flag k="realNames" initial={false} label="Real names" hint="From GitHub profiles. The login shows on hover." demo>
+          <Flag k="slackNames" initial={true} label="Use Slack names" hint="For people with no name on GitHub." demo />
         </Flag>
         {loginEnding() && (
-          <Flag k="shortLogins" initial={false} label="Shorter logins" hint="When your company's logins all end the same way, like jane_acme and budi_acme, show them as jane and budi. The full login shows when you point at it." demo />
+          <Flag k="shortLogins" initial={false} label="Shorter logins" hint="jane_acme shows as jane. The full login shows on hover." demo />
         )}
-      
-        <div class="set-group">
-          <h4>Slack</h4>
-          {ints?.slack.ok && <SlackPeople team={team} />}
-          <Flag k="slackFaces" initial={true} label="Pictures from Slack" hint="For people who haven't set a picture on GitHub (it shows its generated pattern): their Slack picture, once lgtm knows who they are there." demo />
-          <Flag k="slackDone" initial={false} label="✅ on review requests" hint={`When you approve a ${T.PR}, a ✅ on the posts in Slack channels where its author linked it (once lgtm knows who they are on Slack), so they and the channel see it's done; your own posts get one when you merge. Not DMs: lgtm's message replies there.`} demo />
-          <Flag k="reviewAsk" initial={false} label={`A button to ask for review in a channel, on your ${T.PRs}`} hint={`Ask in channel posts to the channel below, tagging each reviewer asked on the ${T.PR} by name, so it's theirs and not everyone's; you read it first. It needs reviewers asked, and goes once lgtm finds your request on Slack. Its wording is under Messages.`} demo>
-            <SlackChannel k="reviewChannel" initial="" label="Review channel" />
-          </Flag>
-          <Flag k="reviewReplies" initial={false} label="Replies to your review request" hint={`Beside your ${T.PR}'s title: your post in a Slack channel that links it, with how many replies you haven't opened. It's looked for when you open the ${T.PR}.`} demo />
-          <Flag k="slackAsked" initial={false} label={`${T.PRs} asked of you on Slack, in Needs your review`} hint={`A ${T.PR} linked in a DM to you, or beside a tag of you, in the last 7 days, when GitHub or GitLab doesn't ask you yet: open, not yours, and not reviewed by you. Its pill adds you as a reviewer.`} demo />
-          <Flag k="slackSent" initial={false} label="People you asked on Slack, not as reviewers" hint={`On your ${T.PR}: whoever you sent its link to in a Slack DM but haven't asked to review it (and who hasn't), with a button to ask them there too, so it's in their list and the ${T.PR} waits on them. Looked for when you open the ${T.PR}.`} demo />
-          <Flag k="closeReply" initial={false} label="Tell your review request when you close" hint={`Closing your ${T.PR} without merging (Close, beside Merge) replies in its review request's thread, tagging the reviewers asked: closed, no review needed. Closed elsewhere, its banner offers the same.`} demo />
-          <Flag k="askThreadReply" initial={false} label="Answer in the thread where you were asked" hint={`When someone asked you about a ${T.PR} on Slack (a link in a DM to you, or beside a tag of you, in the last 7 days), the message after your review replies in that thread, tagging them, instead of a DM. Others it goes to still get a DM.`} demo />
-          <Flag k="againInThread" initial={false} label="Ask again in your review request's thread" hint={`When you ask a reviewer to look again, the "Ask to look again" message goes as a reply in the thread of your post that linked the ${T.PR}, tagging them, instead of a DM. With no such post, the DM goes.`} demo />
-          <Flag k="qaRequest" initial={true} label={`A button to ask QA, on your ${T.PRs}`} hint={`Ask QA posts your QA request to the channel below, filled in from the ${T.PR}: you read and can change it before it goes. Its wording is under Messages.`} demo>
-            <SlackChannel k="qaChannel" initial={QA_CHANNEL} label="QA channel" />
-          </Flag>
-          <SlackMessages />
+          <Flag k="slackFaces" initial={true} label="Pictures from Slack" hint="For people with no GitHub picture." demo />
         </div>
-        <CodingAgents />
       </section>
-
 
       <section>
         <h3>{T.PR} list</h3>
-        <Flag k="showDrafts" initial={false} label={`Show other people's draft ${T.PRs}`} hint="Your own drafts always show."  demo />
-        <Flag k="gitlabTodoSync" initial={true} label="Mark GitLab to-dos done from the inbox" hint="Done on a GitLab mention in lgtm's inbox also marks its to-do done on GitLab, so you don't clear it twice; Undo brings it back. (Replying there clears it anyway: GitLab does.)" />
-        <Flag k="muteApproved" initial={true} label={`Mute replies and mentions on ${T.PRs} you've approved`} hint={`No “awaiting your reply”, no inbox entry, no notification, while your latest review is an approval. New commits that dismiss it, or another verdict, bring them back. The ${T.PR} itself still shows its threads.`} demo />
+        <Flag k="showDrafts" initial={false} label={`Show other people's draft ${T.PRs}`} hint="Yours always show."  demo />
+        <Flag k="gitlabTodoSync" initial={true} label="Mark GitLab to-dos done from the inbox" hint="Done in the inbox clears the to-do on GitLab too." />
+        <Flag k="muteApproved" initial={true} label={`Mute replies and mentions on ${T.PRs} you've approved`} hint="While your latest review is an approval. New commits that dismiss it bring them back." demo />
+        <label class="set-row">
+          <span>
+            {T.Team} to watch
+            <small>For reviewer suggestions and Slack lookups.</small>
+          </span>
+          <select value={team} onChange={(e) => setTeam(e.currentTarget.value)}>
+            <option value="">None</option>
+            {((all) => all.map((t) => <option value={t}>{teamLabel(t, all)}</option>))([...new Set([...(team ? [team] : []), ...(teams ?? [])])])}
+          </select>
+        </label>
+        <TimeToReview />
+      </section>
+
+      <section>
+        <h3>Notifications</h3>
         <label class="set-row">
           <input
             type="checkbox"
@@ -476,61 +474,127 @@ export function Settings() {
           />
           <span>
             Desktop notifications
-            <small>For new review requests, {T.PRs} coming back to you for re-review, and what you pick below.</small>
+            <small>Review requests and re-reviews, plus what you pick below.</small>
           </span>
         </label>
         <fieldset class="set-sub" disabled={!notify}>
-          <Flag k="notifySound" initial={true} label="Play a sound" hint="The usual notification sound." />
+          <Flag k="notifySound" initial={true} label="Play a sound" />
           <button class="set-test" onClick={() => void sendNotification('lgtm', 'A test notification. Click it to come back to lgtm.', '')}>
             Send a test notification
           </button>
           <Flag k="notifyReplies" initial={true} label="New replies waiting for you" />
           <Flag k="notifyVerdicts" initial={true} label={`Your ${T.PR} approved, or changes requested`} />
           <Flag k="notifyCI" initial={true} label={`Your ${T.PRs_} checks passed or failed`} />
-          <Flag k="notifyReady" initial={true} label={`Your ${T.PR} is ready to merge`} hint="Approved, checks passed, nothing in the way and no auto-merge on: the notification opens its merge box." />
+          <Flag k="notifyReady" initial={true} label={`Your ${T.PR} is ready to merge`} hint="Approved, checks green, no auto-merge. Opens the merge box." />
           <Flag k="notifyMentions" initial={true} label={`Someone mentions you in a ${T.PR}`} />
           <Flag k="notifyQueue" initial={true} label={`Your ${T.PR} left the merge queue, or its auto-merge turned off`} />
-          <Flag k="notifyAgents" initial={true} label="A coding agent finished" hint={`A review, why a check failed, or the check of your threads, done while lgtm was in the background: the notification opens the ${T.PR}.`} />
+          <Flag k="notifyAgents" initial={true} label="A coding agent finished" hint="While lgtm is in the background." />
         </fieldset>
-        <label class="set-row">
-          <span>
-            {T.Team} to watch
-            <small>The {T.Team} tab lists its members' open {T.PRs}.</small>
-          </span>
-          <select value={team} onChange={(e) => setTeam(e.currentTarget.value)}>
-            <option value="">None</option>
-            {((all) => all.map((t) => <option value={t}>{teamLabel(t, all)}</option>))([...new Set([...(team ? [team] : []), ...(teams ?? [])])])}
-          </select>
-        </label>
-        <TimeToReview />
       </section>
-
 
       <section>
         <h3>Reviewing</h3>
         <Flag k="showIndex" initial={true} label={`Show the ${T.PR} index beside the diff`} hint={also(keys.index)}  demo />
-        <Flag k="hideIndexToReview" initial={true} label={`Hide the index on ${T.PRs} waiting for your review`} hint={`They open with just the diff; ${keys.index ? keyLabel(keys.index) + ' or the index button' : 'the index button'} shows it, on that ${T.PR} only. Your own ${T.PRs} and the rest keep it.`} demo />
+        <Flag k="hideIndexToReview" initial={true} label={`Hide the index on ${T.PRs} waiting for your review`} hint={keys.index ? `${keyLabel(keys.index)} shows it.` : undefined} demo />
         <Flag k="ignoreWs" initial={true} label="Ignore whitespace-only changes" hint={also(keys.whitespace)} demo />
-        <Flag k="ticketOpen" initial={false} label="Expand the Jira ticket above the conversation"  demo />
-        <Flag k="jiraOnMerge" initial={true} label="Move the Jira ticket when you merge" hint="The merge box ticks it for you, to the status below; untick it per merge."  demo />
-        <JiraAfterMerge />
-        <Flag k="jiraOnReview" initial={false} label="Move the Jira ticket when you ask for review" hint={`When you mark your ${T.PR} ready for review or ask a reviewer, its tickets (from its title, else its branch) move to the status below. Not done ones.`} demo>
-          <JiraStatusRow k="jiraInReview" initial="In Review" label="When you ask for review, move the Jira ticket to" />
-        </Flag>
-        <Flag k="jiraOnQa" initial={false} label="Move the Jira ticket when you ask QA" hint={`When Ask QA posts your request, the ${T.PR}'s tickets (from its title, else its branch) move to the status below. Not done ones.`} demo>
-          <JiraStatusRow k="jiraInQa" initial="In QA" label="When you ask QA, move the Jira ticket to" />
-        </Flag>
-        <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Specs and docs, then build and config, models and contracts, the implementation (each file with its tests right below it), other tests, and last resources and assets. Off: GitHub's order, by path. Drag the steps into the order you read in." demo>
+        <Flag k="sinceFirst" initial={false} label="On a re-review, show only what changed since your last review" demo />
+        <Flag k="readingOrder" initial={true} label="Files in reading order" hint="Off: by path. Drag the steps to reorder them." demo>
           <ReadingSteps />
         </Flag>
-        <Flag k="gradleModules" initial={true} label="Group files by module" hint={`Gradle modules, npm/TypeScript packages, Go, Rust and Python projects (folders with their own build file). When a ${T.PR} touches two or more, the index groups its files by them and each file says its own; with one, a pill names it.`}  demo />
-        <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts and go out together with Finish review. Either way, the other is a button beside it."  demo />
-        <Flag k="slackNotify" initial={true} label="Message the author and assignees on Slack after a review" hint="You can still untick it per review."  demo />
+        <Flag k="gradleModules" initial={true} label="Group files by module" hint="Folders with their own build file: Gradle, npm, Go, Rust, Python."  demo />
+        <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts until Finish review."  demo />
+        <Flag k="nextAfterReview" initial={true} label={`After a review, open the next ${T.PR} that needs it`} demo />
+        <Flag k="resumePosition" initial={false} label={`Reopen a ${T.PR} where you left off`} />
+        <SavedReplies />
+      </section>
+
+      <section>
+        <h3>Diff</h3>
+        <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New packages are still named." demo />
+        <Flag k="hideArchivedSpecs" initial={true} label="Hide archived specs" hint="Docs in archive folders, behind one row. Code there still shows." demo />
+        <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Marked linguist-generated or linguist-binary in .gitattributes." demo />
+        <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
+        <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
+        <Flag k="dimMoved" initial={true} label="Fold code moved without changes" hint="One row naming where it went." demo />
+        <Flag k="symbolNav" initial={true} label="Where functions and classes are used" hint={`Point at a function or class the ${T.PR} declares: every line naming it, and a repo search.`} demo />
+        <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too"   demo />
+        <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="More room for long lines. Copies and comments keep the real text."  demo />
+        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Also a button beside the ${T.PRs_} title.`}  demo />
+        <Flag k="centerDiff" initial={true} label={`Centre the ${T.PR} at a comfortable width`} hint={`Also a button beside the ${T.PRs_} title.`} demo>
+          <CenterCols />
+          <Flag k="centerFit" initial={false} label="Fill the window when a line in the diff is wider than that"  demo />
+        </Flag>
+        <Flag k="diffSigns" initial={false} label="Show + and − before changed lines"   demo />
+        <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Name, Comment and Viewed, as in the header."  demo />
+        <Flag k="rainbowBrackets" initial={true} label="Rainbow brackets" hint="Coloured by depth, as in IntelliJ."  demo />
+        <LineStyle />
+        <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
+          <WordStyle />
+        </Flag>
+        <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc, like IntelliJ's reader mode." demo>
+          <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Changes highlighted."  demo />
+          <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of // or # lines. Commented-out code stays source." demo>
+            <Flag k="renderSingleComments" initial={true} label="Single comment lines too"   demo />
+          </Flag>
+        </Flag>
+        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Comment on any block. <> beside a file shows its source." demo>
+          <Flag k="strikeRemoved" initial={false} label="Strike through removed text"   demo />
+        </Flag>
+        <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
+      </section>
+
+      <section>
+        <h3>Conversation</h3>
+        <Flag k="hideSettled" initial={true} label="Hide resolved and outdated threads" hint="Unless you commented in them."  demo />
+        <Flag k="foldBots" initial={true} label="Bot comments behind one line, bot-only threads folded" hint="CI reports and AI reviewers." demo>
+          <Flag k="unfoldBotsOnMine" initial={true} label={`Except on your own ${T.PRs}`}  demo />
+        </Flag>
+        <Flag k="agentsAsBots" initial={true} label="Comments that open with 🤖 are a bot's" hint="Agents posting from people's accounts. They fold and never wait on you." demo />
+      </section>
+
+      {/* What lgtm looks for in a PR. Ones for one platform or framework get a section of their own, below. */}
+      <section>
+        <h3>Checks</h3>
+        <p class="note">What lgtm points out in a {T.PR}, each a click from a comment. Turn off what's noise.</p>
+        <Flag k="checkSecrets" initial={true} label="Possible secrets" hint="Keys, tokens and literal passwords in added lines. Placeholders and tests don't count."  demo />
+        <Flag k="checkDeps" initial={true} label="Dependency changes" hint="Major jumps and unpinned versions marked."  demo />
+        <Flag k="checkBinaries" initial={true} label="Binary files: what they are" hint="Kind, size and Git LFS; warns over 1 MB outside LFS."  demo />
+        <Flag k="checkSuppressions" initial={true} label="Tests, CI and checks switched off" hint="Skipped tests (@Ignore, .skip…), CI let off (-DskipTests, continue-on-error…), silenced checks (@Suppress, eslint-disable, noqa…)." demo />
+        <Flag k="checkProtections" initial={true} label="Protections switched off" hint="Unminified release builds, debuggable, plain HTTP, user certificates trusted, TLS checks off." demo />
+        <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint="By name: Foo.kt counts as tested if FooTest.kt changes too."  demo />
+        <Flag k="reviewPlan" initial={false} label={`A review plan for big ${T.PRs}`} hint="50 files or more: the reading steps, each with how much is viewed."  demo />
+        <div class="set-group">
+          <h4>Android</h4>
+        <Flag k="checkHardcoded" initial={true} label="UI text not in strings.xml" hint="android:text, Text(“…”), toasts, dialogs. Tests and previews don't count."  demo />
+        <Flag k="checkRoom" initial={true} label="Room tables changed without a version bump" hint="Installed apps crash on update."  demo />
+        <Flag k="manifestSummary" initial={true} label="What a manifest change means" hint="Permissions and components added, removed or exported."  demo />
+        <Flag k="lintBaselines" initial={true} label="Lint baselines as suppressions" hint="What lint-baseline.xml newly hides, and stops hiding."  demo />
+        <Flag k="stringsView" initial={true} label="strings.xml as names and texts" demo>
+          <Flag k="translationChecks" initial={true} label="Check the other languages" hint="Missing, mismatched placeholders, or left stale in values-xx."  demo />
+        </Flag>
+        </div>
+        <div class="set-group">
+          <h4>Java backend</h4>
+        <Flag k="checkMigrations" initial={true} label="Flyway migrations edited or out of order" hint="An applied one changed, or a new one not newer than the base branch's newest." demo />
+        <Flag k="checkJpa" initial={true} label="JPA entities changed with no migration"  demo />
+        <Flag k="checkTransactional" initial={true} label="@Transactional on a private method" hint="Spring skips it: no transaction." demo />
+        </div>
+        <div class="set-group">
+          <h4>Web</h4>
+        <Flag k="checkLockfile" initial={true} label="Lockfile not updated" hint="package.json changed but its lockfile didn't: npm ci fails." demo />
+        <Flag k="checkFocused" initial={true} label="Focused tests and debugger left in" hint=".only (CI runs only those) and debugger statements." demo />
+        <Flag k="checkRawHtml" initial={true} label="Raw HTML rendering" hint="v-html, dangerouslySetInnerHTML, innerHTML, document.write." demo />
+        </div>
+      </section>
+
+      <section>
+        <h3>Coding agents</h3>
+        <CodingAgents />
         <Flag
           k="agentReview"
           initial={false}
-          label={`An agent reviews ${T.PRs} waiting for you first`}
-          hint={`An adversarial review of each ${T.PR} as it comes to “Needs your review”, and again when you’re asked to review it again (only what changed since its last review): the coding agent below reads its description, diff and changed files (Coding agents → Prompts → Review first), with no tools. Meanwhile it waits under “Agents reviewing”. The findings go on the ${T.PR} under your name, each starting with 🤖. Two at a time.`}
+          label={`An agent reviews ${T.PRs} before you`}
+          hint={`Each ${T.PR} new to Needs your review, and what changed on a re-review. Findings go on it under your name, starting with 🤖.`}
           demo
         >
           <AutoAgent />
@@ -541,101 +605,54 @@ export function Settings() {
           k="agentThreads"
           initial={true}
           label="An agent checks whether your comments were addressed"
-          hint={`When a ${T.PR} you reviewed comes back with new commits, the coding agent under the switch above reads each of your open threads against them and marks it addressed (with a Resolve, or all at once) or not yet. On your own ${T.PRs}, the same for the threads of whoever asked for changes, before you ask them to look again. Once a push.`}
+          hint={`After new commits, on ${T.PRs} you reviewed and on yours.`}
           demo
         />
-        <Flag k="nextAfterReview" initial={true} label={`After a review, open the next ${T.PR} that needs it`} hint={`Finish review starts with “Then open the next ${T.PR} that needs my review” ticked.`} demo />
-        <SavedReplies />
       </section>
 
       <section>
-        <h3>Diff</h3>
-        <Flag k="sinceFirst" initial={false} label="On a re-review, show only what changed since your last review" demo />
-        <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New outside packages are still named. Files whose only changes are imports wait behind one row." demo />
-        <Flag k="hideArchivedSpecs" initial={true} label="Hide archived specs" hint="Specs, docs and their metadata (OpenSpec's .openspec.yaml, say) in an archive folder (archive/, archives/, archived/), behind one row: what was, not what this change does. Code there still shows." demo />
-        <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Files marked linguist-generated or linguist-binary in .gitattributes." demo />
-        <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
-        <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
-        <Flag k="dimMoved" initial={true} label="Fold code moved without changes" hint="Each copy, where it went and where it came from, is one row naming the other; open it to see the lines (dimmed). Side by side, the lines show dimmed." demo />
-        <Flag k="symbolNav" initial={true} label="Where functions and classes are used" hint={`Pointing at a function or class the ${T.PR} declares, in its diff, shows a small button beside it: every line of the ${T.PR}'s changes naming it, to jump to (by name), and a search of the whole repo.`} demo />
-        <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" hint="Off: one column, the new line numbers (a removed line shows its old one, faint)."  demo />
-        <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="Code nested in a class or function starts at the left, with more room for long lines. Copying and comments keep the real text."  demo />
-        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Old on the left, new on the right; rendered doc comments show as source. The button beside the ${T.PRs_} title switches it too.`}  demo />
-        <Flag k="centerDiff" initial={true} label={`Centre the ${T.PR} at a comfortable width`} hint={`Off: it fills the window. The button beside the ${T.PRs_} title switches it too.`} demo>
-          <CenterCols />
-          <Flag k="centerFit" initial={false} label="Fill the window when a line in the diff is wider than that"  demo />
-        </Flag>
-        <Flag k="diffSigns" initial={false} label="Show + and − before changed lines" hint="Off: their colour alone marks added and removed lines, and the code gets that column back."  demo />
-        <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Its name, Comment and Viewed, as in its header."  demo />
-        <Flag k="rainbowBrackets" initial={true} label="Rainbow brackets" hint="Brackets coloured by how deep they nest, as in IntelliJ (not in strings or comments)."  demo />
-        <LineStyle />
-        <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
-          <WordStyle />
-        </Flag>
-        <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc read like IntelliJ's reader mode." demo>
-          <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Rendered from the new version, the changed paragraphs and tags highlighted, as in rendered markdown. Otherwise they show as source."  demo />
-          <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of two or more // lines (or # lines, in Python, shell, YAML, ProGuard and the like) read as prose. Commented-out code stays source." demo>
-            <Flag k="renderSingleComments" initial={true} label="Single comment lines too" hint="A lone comment line, lighter. Comments after code on the same line stay as they are."  demo />
+        <h3>Slack</h3>
+        <Flag k="slackNotify" initial={true} label="Message the author and assignees after a review" hint="Untick it per review."  demo />
+          <Flag k="slackDone" initial={false} label="✅ on review requests" hint={`On the author's channel posts linking a ${T.PR} you approve; on yours when you merge.`} demo />
+          <Flag k="reviewAsk" initial={false} label="Ask for review in a channel" hint={`A button on your ${T.PRs}. Tags each reviewer asked, by name; you read it first.`} demo>
+            <SlackChannel k="reviewChannel" initial="" label="Review channel" />
           </Flag>
-        </Flag>
-        <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Still commented line by line: hover a block for its +. Per file, <> beside it shows the source, as on GitHub. Their look: Markdown files, below." demo>
-          <Flag k="strikeRemoved" initial={false} label="Strike through removed text" hint="Removed passages show in a red box, as their source."  demo />
-        </Flag>
-        <Flag k="previewImages" initial={true} label="Show images and vector drawables as pictures" demo />
-        <Flag k="foldBots" initial={true} label="Bot comments behind one line, bot-only threads folded" hint="In the conversation, all the bots' comments (CI reports, AI reviewers) sit behind one “N comments from bots” line; open it for one line each." demo>
-          <Flag k="unfoldBotsOnMine" initial={true} label={`Except on your own ${T.PRs}`} hint="There, CI and AI-reviewer comments are usually yours to act on." demo />
-        </Flag>
-        <Flag k="agentsAsBots" initial={true} label="Comments that open with 🤖 are a bot's" hint="Agents posting from people's accounts often say so that way (“🤖 Posted by an agent”). They then fold like bots', and don't wait on your reply or count as mentions." demo />
-        <Flag k="hideSettled" initial={true} label="Hide resolved and outdated threads" hint={`Unless you commented in them. The index offers to show them per ${T.PR}.`}  demo />
-        <Flag k="resumePosition" initial={false} label={`Reopen a ${T.PR} where you left off`} hint={`Off: every ${T.PR} opens at its top.`} />
+          <Flag k="reviewReplies" initial={false} label="Replies to your review request" hint={`Beside your ${T.PR}'s title, with how many you haven't opened.`} demo />
+          <Flag k="slackAsked" initial={false} label={`${T.PRs} asked of you on Slack, in Needs your review`} hint="Linked in a DM to you or next to a tag of you, in the last 7 days. Its pill adds you as a reviewer." demo />
+          <Flag k="slackSent" initial={false} label="People you asked on Slack, not as reviewers" hint={`Whoever you DM'd your ${T.PR} to, with a button to ask them.`} demo />
+          <Flag k="closeReply" initial={false} label="Tell your review request when you close" hint="A reply in its thread, tagging the reviewers asked." demo />
+          <Flag k="askThreadReply" initial={false} label="Answer in the thread where you were asked" hint="Your after-review message replies there, not as a DM." demo />
+          <Flag k="againInThread" initial={false} label="Ask again in your review request's thread" hint="Not as a DM." demo />
+          <Flag k="qaRequest" initial={true} label="Ask QA" hint={`A button on your ${T.PRs}. Filled in from the ${T.PR}; you read it first.`} demo>
+            <SlackChannel k="qaChannel" initial={QA_CHANNEL} label="QA channel" />
+          </Flag>
+        {ints?.slack.ok && <SlackPeople team={team} />}
+        <SlackMessages />
       </section>
 
-      {/* What lgtm looks for in a PR. Ones for one platform or framework get a section of their own, below. */}
       <section>
-        <h3>Checks</h3>
-        <p class="note">What lgtm points out in a {T.PR}, each with a button to turn it into a comment. Switch off any that's noise in your repos. Ones for a platform or framework are grouped under it, below.</p>
-        <Flag k="checkSecrets" initial={true} label="Possible secrets" hint="Added lines that look like a private key, a token (AWS, GitHub, Slack, Google, Stripe, JWT) or a password or key given a literal. Placeholders, environment lookups and tests' made-up passwords don't count."  demo />
-        <Flag k="checkDeps" initial={true} label="Dependency changes" hint="Libraries added, removed or moved to another version (Gradle, version catalogs, package.json). Marked: major jumps, and versions not pinned (-SNAPSHOT, 1.+, ranges, latest, a git branch)."  demo />
-        <Flag k="checkBinaries" initial={true} label="Binary files: what they are" hint="Kind, size before and after, in Git LFS or not; a warning for one over 1 MB straight in Git, or one .gitattributes puts in LFS that isn't."  demo />
-        <Flag k="checkSuppressions" initial={true} label="Tests, CI and checks switched off" hint="Tests skipped or ignored (@Ignore, @Disabled, .skip, xit, pytest.mark.skip, t.Skip…); CI let off (continue-on-error, allow_failure, if: false, || true, -x test, -DskipTests, --no-verify); and checks silenced: @Suppress, @SuppressLint, @ts-ignore, eslint-disable, noqa, type: ignore, nolint, NOSONAR, coverage ignores and the like. Lines moved as they were don't count; new files count too." demo />
-        <Flag k="checkProtections" initial={true} label="Protections switched off" hint="Release builds not minified or obfuscated (minifyEnabled false, -dontobfuscate, keep-everything rules), android:debuggable, plain HTTP allowed, user-installed certificates trusted, TLS not checked (verify=False, InsecureSkipVerify, rejectUnauthorized: false, a HostnameVerifier that says yes). Debug-only sources don't count, nor TLS ones in tests." demo />
-        <Flag k="flagUntested" initial={true} label="Code changed without test changes" hint={`A guess by file name: Foo.kt counts as tested when the ${T.PR} also changes FooTest.kt (or foo.test.ts, test_foo.py…).`}  demo />
-        <Flag k="reviewPlan" initial={false} label={`A review plan for big ${T.PRs}`} hint="50 files or more: specs and docs, build and config, models, the implementation, tests, then resources, each with how much is viewed."  demo />
-        <div class="set-group">
-          <h4>Android</h4>
-        <Flag k="checkHardcoded" initial={true} label="UI text not in strings.xml" hint="A layout's android:text, Compose's Text(“…”), toasts, dialogs: text written in code is never translated. Tests, debug code and previews don't count."  demo />
-        <Flag k="checkRoom" initial={true} label="Room tables changed without a version bump" hint="An @Entity's columns changed while no @Database version goes up: installed apps would crash on update."  demo />
-        <Flag k="manifestSummary" initial={true} label="What a manifest change means" hint="Above AndroidManifest.xml's diff: permissions asked for or dropped, components added, removed or now reachable by other apps."  demo />
-        <Flag k="lintBaselines" initial={true} label="Lint baselines as suppressions" hint="lint-baseline.xml as the warnings it newly hides and the ones it no longer does; the XML a click away."  demo />
-        <Flag k="stringsView" initial={true} label="strings.xml as names and texts" hint="The XML a click away." demo>
-          <Flag k="translationChecks" initial={true} label="Check the other languages" hint="A new or changed string missing in a values-xx folder, with different placeholders there, or not updated with it."  demo />
+        <h3>Jira</h3>
+        <Flag k="ticketOpen" initial={false} label="Expand the ticket above the conversation"  demo />
+        <Flag k="jiraOnMerge" initial={true} label="Move the ticket when you merge" hint="Untick it per merge."  demo />
+        <JiraAfterMerge />
+        <Flag k="jiraOnReview" initial={false} label="Move the ticket when you ask for review" hint="Ready for review, or asking a reviewer. Done tickets stay." demo>
+          <JiraStatusRow k="jiraInReview" initial="In Review" label="Move it to" />
         </Flag>
-        </div>
-        <div class="set-group">
-          <h4>Java backend</h4>
-        <Flag k="checkMigrations" initial={true} label="Flyway migrations edited or out of order" hint="One already there changed, renamed or deleted (Flyway won't start where it ran), or a new one with a version older than, or the same as, the newest on the base branch." demo />
-        <Flag k="checkJpa" initial={true} label="JPA entities changed with no migration" hint={`An @Entity's columns change and the ${T.PR} adds no migration: the database won't have them.`} demo />
-        <Flag k="checkTransactional" initial={true} label="@Transactional on a private method" hint="Spring's proxy never sees the call, so it runs without a transaction." demo />
-        </div>
-        <div class="set-group">
-          <h4>Web</h4>
-        <Flag k="checkLockfile" initial={true} label="Lockfile not updated" hint="package.json's dependencies change but its package-lock.json, yarn.lock or pnpm-lock.yaml doesn't: a clean install (npm ci) fails." demo />
-        <Flag k="checkFocused" initial={true} label="Focused tests and debugger left in" hint="it.only, describe.only, test.only (CI runs only those, and passes), and debugger statements." demo />
-        <Flag k="checkRawHtml" initial={true} label="Raw HTML rendering" hint="v-html, dangerouslySetInnerHTML, innerHTML = and document.write: an XSS hole if any of it comes from users." demo />
-        </div>
+        <Flag k="jiraOnQa" initial={false} label="Move the ticket when you ask QA" demo>
+          <JiraStatusRow k="jiraInQa" initial="In QA" label="Move it to" />
+        </Flag>
       </section>
-
 
       <section>
         <h3>Appearance</h3>
-        <Flag k="glass" initial={true} label="Glass" hint="Translucent, blurred bars and pop-ups with capsule buttons, in the spirit of macOS's Liquid Glass. Off when macOS is set to reduce transparency."  demo />
+        <Flag k="glass" initial={true} label="Glass" hint="Translucent bars and pop-ups. Off with Reduce transparency."  demo />
         <TagStyle />
-        <Flag k="themeColors" initial={true} label="Theme colours for lgtm's marks" hint="With a theme on: warnings, findings, away, Given/When/Then and the like take its colours. Solid badges with white text (Merged, the failing-checks bar, counts) keep lgtm's, so they stay readable. Off: lgtm's own colours everywhere." demo />
-        <Flag k="relativeTimes" initial={true} label="Relative times" hint="“2 hours ago”, “yesterday”. Off: the date and time. Either way, the other shows when you point at it." demo />
+        <Flag k="themeColors" initial={true} label="Theme colours for lgtm's marks" hint="Warnings and findings in the theme's colours. Solid badges keep lgtm's." demo />
+        <Flag k="relativeTimes" initial={true} label="Relative times" hint="The exact time shows on hover." demo />
         <div class="set-row">
           <span>
             Colour theme
-            <small>The whole app's colours, code included. Each card: its light version, then its dark one.</small>
+            <small>Each card: light, then dark.</small>
           </span>
         </div>
         <div class="thm-grid" role="radiogroup" aria-label="Colour theme">
@@ -668,7 +685,7 @@ export function Settings() {
         <label class="set-row">
           <span>
             Text size
-            <small>The app's own text: lists, comments, menus. Markdown files have theirs, below.</small>
+
           </span>
           <span class="set-size">
             <input type="range" min={11} max={20} step={0.5} value={look.textSize} onInput={(e) => look.setTextSize(e.currentTarget.value)} />
@@ -679,7 +696,6 @@ export function Settings() {
         <label class="set-row">
           <span>
             Code size
-            <small>Code in diffs.</small>
           </span>
           <span class="set-size">
             <input type="range" min={10} max={18} step={0.5} value={look.codeSize} onInput={(e) => look.setCodeSize(e.currentTarget.value)} />
@@ -697,7 +713,6 @@ export function Settings() {
         <label class="set-row">
           <span>
             Code font
-            <small>Free, open-source fonts, bundled with lgtm.</small>
           </span>
           <select value={look.font} onChange={(e) => look.setFont(e.currentTarget.value)}>
             {Object.entries(CODE_FONTS).map(([k, f]) => <option value={k}>{f.name}</option>)}
@@ -886,7 +901,7 @@ function ThemeGallery({ look }: { look: Look }) {
       <div class="set-row">
         <span>
           More themes
-          <small>Hundreds from Zed's theme gallery and from VS Code's (Open VSX), or a Zed or VS Code theme file you have.</small>
+          <small>From Zed's or VS Code's galleries, or a theme file.</small>
         </span>
         <span class="row">
           <button onClick={() => setOpen(true)}>Browse themes</button>
@@ -985,7 +1000,7 @@ function MissingScopes() {
 }
 
 // The status a merged PR's Jira ticket moves to, as the merge box offers it (you can change it there each time).
-const JiraAfterMerge = () => <JiraStatusRow k="jiraAfterMerge" initial="Done" label="After merging, move the Jira ticket to" note="As you merge (above), or offered under the merge box once your PR is merged." />;
+const JiraAfterMerge = () => <JiraStatusRow k="jiraAfterMerge" initial="Done" label="Move it to" note="" />;
 function JiraStatusRow({ k, initial, label, note = '' }: { k: string; initial: string; label: string; note?: string }) {
   const [status, setStatus] = useStoredValue(k, initial);
   // The projects of the tickets seen lately (review.tsx keeps them), for their statuses.
@@ -1001,7 +1016,7 @@ function JiraStatusRow({ k, initial, label, note = '' }: { k: string; initial: s
     <label class="set-row">
       <span>
         {label}
-        <small>{note.replace('PR', T.PR)} {projects.length ? 'The statuses of your recent tickets\' projects.' : `Open a ${T.PR} with a Jira ticket to list its project's statuses.`}</small>
+        {!projects.length && <small>Open a {T.PR} with a Jira ticket to list its statuses.</small>}
       </span>
       <StatusSelect value={status} onChange={setStatus} statuses={statuses} />
     </label>
@@ -1051,7 +1066,7 @@ function SlackMessages() {
   return (
     <>
       <h5>Messages</h5>
-      <p class="note">What lgtm says on Slack. Open one to change it. Tags mention people mapped above (or who gets it, by email); Slack emoji work, your workspace's too.</p>
+      <p class="note">Open one to change it. Tags mention mapped people; Slack emoji work.</p>
       <div class="templates">
         {(Object.keys(SLACK_MESSAGES) as SlackKind[]).map((k) => (
           <SlackMessage k={k} emoji={emoji} names={names} />
@@ -1219,7 +1234,7 @@ function MarkdownStyle() {
   return (
     <div class="set-group">
       <h4>Markdown files</h4>
-      <p class="note">How markdown files and {T.PR} descriptions read: pick a theme, then change anything in it. In dark mode they follow your light-mode theme (its night version), or pick another.</p>
+      <p class="note">Markdown files and {T.PR} descriptions. In dark mode: your light theme's night version, or pick one.</p>
       <div class="md-mode">
         <span class="set-seg" role="radiogroup" aria-label="Style for">
           {(['light', 'dark'] as const).map((m) => (
@@ -1326,11 +1341,10 @@ function About() {
         >
           Copy diagnostics
         </button>{' '}
-        {copied || `Version, macOS, which sign-ins work and recent errors, for a bug report. No tokens or ${T.PR} text.`}
+        {copied || `For a bug report: version, sign-ins and recent errors. No tokens or ${T.PR} text.`}
       </p>
       <p>
-        <button onClick={forgetKept}>Refresh saved lookups</button> Teams, people, required checks, code owners, reviewers and emoji are kept
-        a day or more so lgtm starts fast. Ask GitHub, GitLab and Slack for them again now (lgtm reloads).
+        <button onClick={forgetKept}>Refresh saved lookups</button> Teams, people, checks, code owners and emoji, kept a day or more. Fetches them again and reloads.
       </p>
       <p>
         lgtm is <a href="https://github.com/bukuwarung/lgtm/blob/main/LICENSE" target="_blank" rel="noopener">MIT licensed</a>. Its colour themes, icons,
@@ -1351,20 +1365,17 @@ function TimeToReview() {
     <div class="set-group">
       <h4>Time to review</h4>
       <p class="note">
-        Each PR in the list gets a rough time to review (<Octicon name="stopwatch" />): reading its description, then its changed lines. The paces:
+        The <Octicon name="stopwatch" /> estimate on each {T.PR}:
       </p>
       <ul class="note set-sources">
-        <li>
-          Code: 5 changed lines a minute (300 an hour), the careful end of the SmartBear/Cisco code review study, which found reviewers catch the
-          most defects below 300–500 lines an hour (Jason Cohen, <i>Best Kept Secrets of Peer Code Review</i>, 2006).
-        </li>
-        <li>Description: 200 words a minute, a little under typical silent reading (about 240; Brysbaert, 2019), since PR descriptions are technical.</li>
-        <li>Tests at twice the code pace, docs at six times, deleted lines counted at a third, generated files and lockfiles skipped: lgtm's own guesses.</li>
+        <li>Code: 300 changed lines an hour, the careful end of the SmartBear/Cisco review study.</li>
+        <li>Description: 200 words a minute.</li>
+        <li>Tests twice as fast, docs six times, deleted lines a third; generated files skipped.</li>
       </ul>
       <label class="set-row set-pace">
         <span>
           Your pace: <b>{pace}%</b>
-          <small>{pace === 100 ? 'As above.' : pace < 100 ? 'Slower: estimates grow.' : 'Faster: estimates shrink.'} 300 lines of code would take {example(60)}.</small>
+          <small>300 lines of code: {example(60)}.</small>
         </span>
         <input type="range" min={50} max={200} step={10} value={pace} onInput={(e) => setPace(e.currentTarget.value)} aria-label="Your review pace, percent" />
       </label>
@@ -1380,7 +1391,7 @@ function SavedReplies() {
   return (
     <div class="set-group">
       <h4>Saved replies</h4>
-      <p class="note">In a comment box, type / and the name at the start of a line (or use ↩︎ Replies), then Enter.</p>
+      <p class="note">Type / and the name at the start of a line in a comment box.</p>
       <table class="set-replies">
         <tbody>
           {list.map((r, i) => (
@@ -1429,7 +1440,7 @@ function Shortcuts() {
   return (
     <div class="set-group">
       <h4>Keyboard shortcuts</h4>
-      <p class="note">On a {T.PR}. Click a key to change it.</p>
+      <p class="note">Click a key to change it.</p>
       <table class="set-keys">
         <tbody>
           {ACTIONS.map(([a, d]) => (
@@ -1563,8 +1574,7 @@ function SlackPeople({ team }: { team: string }) {
     <>
       <h5>People</h5>
       <p class="note">
-        Who gets the Slack message for each GitHub account, saved in your <code>~/.config/lgtm/config.json</code>. People are matched by
-        themselves when their GitHub email is someone's on Slack; for the rest, Find suggests who they could be.
+        Who each account is on Slack, saved in <code>~/.config/lgtm/config.json</code>. Exact email matches map themselves; Find suggests the rest.
       </p>
       <div class="row">
         <button disabled={!!busy || !unmapped.length || !org} onClick={find}>
@@ -1660,7 +1670,6 @@ function LaunchAtLogin() {
         />
         <span>
           Launch at login
-          <small>Start lgtm when you log in to your Mac, so the Dock badge and notifications are there from the start.</small>
         </span>
       </label>
       <div class="set-flag with-demo">
@@ -1668,12 +1677,12 @@ function LaunchAtLogin() {
           <input type="checkbox" checked={menuBar} onChange={toggleMenuBar} />
           <span>
             Show in the menu bar
-            <small>How many PRs wait on your review, beside lgtm's icon; its menu lists them and your own PRs with where each stands, and starts review mode.</small>
+            <small>PRs waiting on you beside the icon; its menu lists them and starts review mode.</small>
           </span>
         </label>
         <DemoPair k="menuBar" active={menuBar} />
       </div>
-      <Flag k="badgeInbox" initial={false} label="Count your inbox on the Dock badge" hint={`Replies and mentions waiting on you join the ${T.PRs} waiting for your review (and Claude sessions waiting on you) in the badge's number.`} demo />
+      <Flag k="badgeInbox" initial={false} label="Count your inbox on the Dock badge" hint="Replies and mentions waiting on you join its count." demo />
     </div>
   );
 }
@@ -1685,7 +1694,7 @@ function BackupSection() {
   return (
     <div class="set-group">
       <h4>Backup</h4>
-      <p class="note">Your preferences (themes you added included) and pending (unsubmitted) comments live in this {isDesktop ? 'app' : 'browser'}. Export them to move to {isDesktop ? 'the browser version' : 'the macOS app'} or another Mac.</p>
+      <p class="note">Preferences, added themes and unsent comments, to move to {isDesktop ? 'the browser version' : 'the macOS app'} or another Mac.</p>
       <div class="row">
         <button onClick={() => saveBackup().then((where) => setMsg({ ok: true, text: `Saved to ${where}.` }), (e) => setMsg({ ok: false, text: e.message }))}>Export settings and drafts</button>
         <button onClick={() => file.current?.click()}>Import…</button>
@@ -1728,8 +1737,7 @@ function AgentSkill({ agent }: { agent: AgentId }) {
       <span>
         lgtm-review skill
         <small>
-          {AGENTS[agent].short} opens {T.PRs} ready for review here, linked to its {where} (the Agents menu goes back to it), and reads your review when you say
-          “check lgtm” there.{s?.installed && <> In <code>{s.path}</code>.</>}
+          {AGENTS[agent].short} opens {T.PRs} here for review and reads your review when you say “check lgtm”.{s?.installed && <> In <code>{s.path}</code>.</>}
         </small>
         {err && <small class="error">{err}</small>}
       </span>
@@ -1816,15 +1824,14 @@ function AgentRow({ id }: { id: AgentId }) {
 function CodingAgents() {
   const { detected } = useAgents();
   return (
-    <div class="set-group">
-      <h4>Coding agents</h4>
+    <>
       <p class="note">
-        Each one found through its CLI, signed in as you are. Reviews and questions run with no tools: the agent reads what lgtm gives it and answers.{' '}
+        Found through their CLIs, signed in as you. They run with no tools.{' '}
         {detected && <button class="link" onClick={() => detectAgents(true).then(() => dispatchEvent(new Event('lgtm:agents-set')))}>Look again</button>}
       </p>
       {AGENT_IDS.map((id) => <AgentRow key={id} id={id} />)}
       <AgentPrompts />
-    </div>
+    </>
   );
 }
 

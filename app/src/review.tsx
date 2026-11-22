@@ -1237,7 +1237,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // Accounts marked as bots in Settings count as bots here, like GitHub's own.
   const allThreads = useMemo(() => markBots(threads, bots), [threads, bots.size]);
   const conv = useMemo(() => (bots.size ? conversation.map((c) => (bots.has(c.author) ? { ...c, bot: true } : c)) : conversation), [conversation, bots.size]);
-  // Resolved and outdated conversations are hidden unless I'm in them (Settings → Conversations), until "show".
+  // Resolved and outdated conversations are hidden unless I'm in them (Settings → Conversation), until "show".
   const [hideSettled] = useStoredFlag('hideSettled', true);
   const [showSettled, setShowSettled] = useStoredFlag(`showSettled:${repo}#${n}`, false); // remembered per PR
   const settled = (t: Thread) => (t.isResolved || t.isOutdated) && !t.comments.nodes.some((c) => c.author?.login === me);
@@ -5385,7 +5385,7 @@ function AgentsMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
             <button
               key={a}
               role="menuitem"
-              title={`An adversarial review of this ${pageTerm().PR} by ${AGENTS[a].name}: its findings go on it under your name, each starting with 🤖 (Settings → Reviewing: as your pending review or as comments)`}
+              title={`An adversarial review of this ${pageTerm().PR} by ${AGENTS[a].name}: its findings go on it under your name, each starting with 🤖 (Settings → Coding agents: as your pending review or as comments)`}
               onClick={() => (setMenu(false), flash(reviewNow({ id: full.node_id, repo, number: full.number, headSha: full.head.sha }, a) ? `${AGENTS[a].name} is reviewing it: you'll hear when it's done` : 'An agent is already on it'))}
             >
               <AgentMark id={a} /> Review with {AGENTS[a].name} <small>adversarial</small>
