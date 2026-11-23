@@ -123,7 +123,7 @@ lgtm reads the diff for what's easy to miss, and says so in a pill with a commen
 
 Each with a switch and a preview in Settings, on unless it says otherwise:
 
-- **Since your last review:** re-reviews show only what's new (off to start with).
+- **Since your last review:** re-reviews show only what's new (off to start with); after a rebase, only what the author changed, not what came in from the base branch.
 - **Fold imports**, naming only new libraries.
 - **Generated, moved and deleted files** wait behind one row each.
 - **Moved code** dimmed, with where it came from.

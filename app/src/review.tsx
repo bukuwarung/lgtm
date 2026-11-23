@@ -9,7 +9,7 @@ import { protectionsOff, switchedOff } from './switchedoff.ts';
 import { entityWithoutMigration, isMigration, migrationIssues, privateTransactional, type MigrationIssue } from './spring.ts';
 import { isManifest, isRisky, manifestChanges, type ManifestChanges } from './manifest.ts';
 import { baselineChanges, isLintBaseline, type Suppression } from './lintbaseline.ts';
-import { addedLines, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
+import { addedLines, interdiff, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
@@ -1183,7 +1183,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (!since || !sinceBase || !data || sinceData) return;
     getCompare(repo, sinceBase, toSha ?? data.pr.head.sha).then(
       // After a rebase the comparison also carries the base branch's changes; keep only files this PR touches.
-      (d) => {
+      async (d) => {
         // GitHub lists at most 300 files per comparison. After a rebase onto lots of base-branch work those can all be
         // base-branch files, and the PR's own changes are cut off: fall back to the full diff rather than show nothing.
         if (d.files.length >= 300) {
@@ -1193,6 +1193,23 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           return;
         }
         const inPR = new Set(data.files.map((f) => f.filename));
+        // Rebased since then: the PR's diff now, cut to the changes it didn't have then (diff.ts interdiff), so what
+        // came in from the base branch stays out. The diff then: from where that push left the base, to it.
+        if (!toSha && d.status === 'diverged') {
+          const then = await getCompare(repo, data.pr.base.sha, sinceBase).catch(() => null);
+          if (then && then.files.length < 300) {
+            const was = new Map(then.files.map((f) => [f.filename, f]));
+            const files = data.files.flatMap((f) => {
+              const old = was.get(f.previous_filename ?? f.filename) ?? was.get(f.filename);
+              if (!f.patch) return old && old.sha === f.sha ? [] : [f]; // binary or too big: in when it's different
+              const patch = interdiff(old?.patch, f.patch);
+              if (!patch) return [];
+              const ls = patch.split('\n');
+              return [{ ...f, patch, additions: ls.filter((l) => l[0] === '+').length, deletions: ls.filter((l) => l[0] === '-').length }];
+            });
+            return setSinceData({ status: 'rebased', files: prepare(files, data.rules) });
+          }
+        }
         setSinceData({ status: d.status, files: prepare(toSha ? d.files : d.files.filter((f) => inPR.has(f.filename)), data.rules), body: toSha && fromSha === `${toSha}^` ? d.message?.split('\n').slice(1).join('\n').trim() : undefined }); // commits: all they changed; one, its message under the headline
       },
       (e) => {
@@ -2694,6 +2711,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                     (<CopyCode text={sinceBase!}>{sinceBase!.slice(0, 7)}</CopyCode> → <CopyCode text={pr.head.sha}>{pr.head.sha.slice(0, 7)}</CopyCode>)
                     {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
                     {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
+                    {sinceData?.status === 'rebased' && <> · rebased since then: the base branch's changes left out</>}
                     {sinceData && !sinceData.files.length && <b> · none of this {pageTerm().PRs_} files changed (only a rebase)</b>}
                   </span>
                   <button onClick={() => showCommit(null)}>Show all changes</button>

@@ -514,3 +514,72 @@ export function splitPatch(text: string): { lead: string; files: PatchFile[] } {
   });
   return { lead: lines.slice(0, starts[0] ?? lines.length).join('\n').trim(), files };
 }
+
+// A file's PR diff now, cut to the changes it didn't have at an earlier push (a re-review after a rebase: what the
+// author changed, not what came in from the base branch). Each run of changed lines found the same in the earlier
+// diff is left out; the rest keep `keep` lines around them, on the head's line numbers. '' when nothing's new.
+export function interdiff(before: string | undefined, now: string, keep = 3): string {
+  const key = (ls: Line[]) => ls.map((l) => l.kind + l.text).join('\n');
+  const runs = (h: Hunk) => {
+    const out: [number, number][] = [];
+    for (let i = 0; i < h.lines.length; i++) {
+      if (h.lines[i].kind === ' ') continue;
+      let j = i;
+      while (j < h.lines.length && h.lines[j].kind !== ' ') j++;
+      out.push([i, j]), (i = j);
+    }
+    return out;
+  };
+  const seen = new Map<string, number>();
+  for (const h of parsePatch(before ?? '')) for (const [i, j] of runs(h)) seen.set(key(h.lines.slice(i, j)), (seen.get(key(h.lines.slice(i, j))) ?? 0) + 1);
+  let hunks = parsePatch(now);
+  // A file the PR adds, then and now: one run of added lines each time, so the two versions diffed line by line.
+  const added = (hs: Hunk[]) => (hs.length === 1 && hs[0].lines.every((l) => l.kind === '+') ? hs[0].lines.map((l) => l.text) : null);
+  const a = before ? added(parsePatch(before)) : null, b = added(hunks);
+  const lines = a && b && lineDiff(a, b);
+  if (lines) (hunks = [{ header: `@@ -1,${a!.length} +1,${b!.length} @@`, newStart: 1, lines }]), seen.clear();
+  const out: string[] = [];
+  for (const h of hunks) {
+    const kept = new Set<number>();
+    for (const [i, j] of runs(h)) {
+      const k = key(h.lines.slice(i, j)), n = seen.get(k) ?? 0;
+      if (n) seen.set(k, n - 1);
+      else for (let x = Math.max(0, i - keep); x < Math.min(h.lines.length, j + keep); x++) kept.add(x);
+    }
+    // Where each line sits: the old and new line numbers the next old or new line would have.
+    let o = +(h.header.match(/^@@ -(\d+)/)?.[1] ?? 1), n = h.newStart;
+    const at = h.lines.map((l) => {
+      const here = [o, n];
+      if (l.kind !== '+') o++;
+      if (l.kind !== '-') n++;
+      return here;
+    });
+    const idx = [...kept].sort((a, b) => a - b);
+    for (let s = 0; s < idx.length; ) {
+      let e = s;
+      while (e + 1 < idx.length && idx[e + 1] === idx[e] + 1) e++;
+      const ls = h.lines.slice(idx[s], idx[e] + 1);
+      const oc = ls.filter((l) => l.kind !== '+').length, nc = ls.filter((l) => l.kind !== '-').length;
+      const [o0, n0] = at[idx[s]];
+      out.push(`@@ -${oc ? o0 : Math.max(0, o0 - 1)},${oc} +${nc ? n0 : Math.max(0, n0 - 1)},${nc} @@`, ...ls.map((l) => l.kind + l.text));
+      s = e + 1;
+    }
+  }
+  return out.join('\n');
+}
+
+// Lines a → b as a diff (the longest common run of lines kept), removals before additions; null when too big to work out
+// here. ponytail: quadratic LCS, capped; Myers if bigger files need it.
+export function lineDiff(a: string[], b: string[]): Line[] | null {
+  const n = a.length, m = b.length;
+  if (n * m > 4_000_000) return null;
+  const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out: Line[] = [];
+  for (let i = 0, j = 0; i < n || j < m; ) {
+    if (i < n && j < m && a[i] === b[j]) out.push({ kind: ' ', text: a[i++], old: i, new: ++j });
+    else if (i < n && (j === m || L[i + 1][j] >= L[i][j + 1])) out.push({ kind: '-', text: a[i++], old: i });
+    else out.push({ kind: '+', text: b[j++], new: j });
+  }
+  return out;
+}

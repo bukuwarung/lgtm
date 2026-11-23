@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, rangeChange, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
+import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, rangeChange, interdiff, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
 import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef, afterApproval } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
@@ -1573,4 +1573,15 @@ test('toggleTask ticks the nth box, skipping code fences', () => {
   assert.equal(toggleTask(t, 1, false), t.replace('> * [x] two', '> * [ ] two'));
   assert.equal(toggleTask(t, 2, true), t.replace('1. [ ] three', '1. [x] three'));
   assert.equal(toggleTask(t, 3, true), null);
+});
+
+test('interdiff: only the changes a push added, on the head\'s lines', () => {
+  const before = '@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e';
+  // Rebased (two base lines above), the same b→B change, and a new one: e→E.
+  const now = '@@ -3,5 +3,5 @@\n a\n-b\n+B\n c\n d\n-e\n+E';
+  assert.equal(interdiff(before, now, 1), '@@ -6,2 +6,2 @@\n d\n-e\n+E');
+  assert.equal(interdiff(now, now), ''); // nothing new
+  assert.equal(interdiff(undefined, '@@ -0,0 +1,1 @@\n+x'), '@@ -0,0 +1,1 @@\n+x'); // a new file
+  // A new file edited: just the edit, not the whole file.
+  assert.equal(interdiff('@@ -0,0 +1,5 @@\n+a\n+b\n+c\n+d\n+e', '@@ -0,0 +1,5 @@\n+a\n+b\n+C\n+d\n+e', 1), '@@ -2,3 +2,3 @@\n b\n-c\n+C\n d');
 });
