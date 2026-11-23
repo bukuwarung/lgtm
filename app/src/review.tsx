@@ -2169,6 +2169,20 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       ))}
     </PillMenu>
   );
+  // Finish review: in the bar, and inline at the page's end (the same summary in both).
+  const submitPanel = (inline = false) => (
+    <SubmitPanel inline={inline} count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit}
+      checkLanded={async () => {
+        const head = await getHead(repo, n);
+        if (!head || head === pr.head.sha) return null;
+        const c = await getCompare(repo, pr.head.sha, head).catch(() => null);
+        return !c || c.status === 'diverged' || !c.commits
+          ? `The branch was rewritten since you opened it: your review goes on code you haven't seen.`
+          : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it: your review goes on the newest.`;
+      }}
+      seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
+      canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
+  );
   return (
     <div class={`review${showIndex && !narrowIx ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}`}>
       {/* Always there, so showing and hiding can slide (style.css); hidden, it's out of reach of the keyboard. */}
@@ -2293,17 +2307,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
             {(askQa || (rights && (rights.close || rights.reopen || rights.restore || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} />}
-            <SubmitPanel count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit}
-              checkLanded={async () => {
-                const head = await getHead(repo, n);
-                if (!head || head === pr.head.sha) return null;
-                const c = await getCompare(repo, pr.head.sha, head).catch(() => null);
-                return !c || c.status === 'diverged' || !c.commits
-                  ? `The branch was rewritten since you opened it: your review goes on code you haven't seen.`
-                  : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it: your review goes on the newest.`;
-              }}
-              seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
-              canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
+            {submitPanel()}
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
@@ -2803,6 +2807,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             ))}
           </>
           )}
+          {!commitView && !onlyMine && <div class="review-end">{submitPanel(true)}</div>}
         </main>
       </div>
     </div>
@@ -2810,6 +2815,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 }
 
 type SubmitProps = {
+  inline?: boolean; // at the page's end, always there (else the bar's button and its panel)
   unlooked?: number; // the agent's drafts in my pending review I haven't looked at (kept or edited)
   stillOpen?: { id: string; path: string; line?: number | null }[]; // threads I started, unresolved, their code unchanged since
   saveAs: string; // where an unsent summary is kept
@@ -2853,9 +2859,17 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 const slackWhy = (r: { login: string; error?: string }) =>
   /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
 
-function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, inFlight = false, checkLanded, seeLanded }: SubmitProps) {
+function SubmitPanel({ inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, inFlight = false, checkLanded, seeLanded }: SubmitProps) {
   const [open, setOpen] = useState(false);
-  useDismiss(open, () => setOpen(false), '.review-submit');
+  useDismiss(open && !inline, () => setOpen(false), '.review-submit');
+  const root = useRef<HTMLDivElement>(null);
+  // Inline, at the page's end: always there, and "open" (its checks run, its verdict picked) once scrolled to.
+  useEffect(() => {
+    if (!inline || !root.current) return;
+    const o = new IntersectionObserver(([e]) => e.isIntersecting && setOpen(true));
+    o.observe(root.current);
+    return () => o.disconnect();
+  }, [inline]);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
   const [mergeIt, toggleMergeIt] = useStoredFlag('mergeOnApprove', false);
@@ -2890,11 +2904,14 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   useEffect(() => {
     // detail.append: text for the summary, after what's there (an agent's answer, from Ask).
     const show = (e: Event) => {
+      // The inline form when it's on screen, else the bar's.
+      const end = document.querySelector('.submit-inline')?.getBoundingClientRect();
+      if (inline !== (!!end && end.top < innerHeight && end.bottom > 0)) return;
       const { append: add, event: v } = (e as CustomEvent<{ append?: string; event?: ReviewEvent } | null>).detail ?? {};
       if (v) want.current = v;
       if (add) setBody((b) => (b.trim() ? `${b.trimEnd()}\n\n${add}` : add));
       setOpen(true);
-      setTimeout(() => document.querySelector<HTMLTextAreaElement>('.panel textarea')?.focus());
+      setTimeout(() => root.current?.querySelector<HTMLTextAreaElement>('.panel textarea')?.focus());
     };
     addEventListener('lgtm:finish', show);
     return () => removeEventListener('lgtm:finish', show);
@@ -2905,6 +2922,23 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   useEffect(() => {
     kept.current = null;
     void storage.get<{ body: string; event: ReviewEvent }>(saveAs).then((k) => k && ((kept.current = k), setBody(k.body), setEvent(k.event)));
+  }, [saveAs]);
+  // The two forms (bar, page's end) are one: what's written or picked in either shows in the other.
+  const self = useRef(Symbol());
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) return void (mounted.current = true); // a form appearing doesn't blank the other
+    dispatchEvent(new CustomEvent('lgtm:summary', { detail: { saveAs, from: self.current, body, event } }));
+  }, [body, event]);
+  useEffect(() => {
+    const sync = (e: Event) => {
+      const d = (e as CustomEvent<{ saveAs: string; from: symbol; body: string; event: ReviewEvent }>).detail;
+      if (d.saveAs !== saveAs || d.from === self.current) return;
+      setBody(d.body), setEvent(d.event);
+      kept.current = d.body.trim() ? { body: d.body, event: d.event } : null;
+    };
+    addEventListener('lgtm:summary', sync);
+    return () => removeEventListener('lgtm:summary', sync);
   }, [saveAs]);
   const keep = (b: string, e: ReviewEvent) => void (b.trim() && b !== mySummary && b !== APPROVE_NOTE ? storage.set(saveAs, { body: b, event: e }) : storage.remove(saveAs));
   useEffect(() => {
@@ -2944,25 +2978,26 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
   }
 
   return (
-    <div class="submit review-submit">
-      <button class="primary" aria-expanded={open} disabled={inFlight} onClick={() => setOpen(!open)}>
+    <div ref={root} class={inline ? 'submit-inline' : 'submit review-submit'}>
+      {inline ? <h3>{authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''}</h3> : <button class="primary" aria-expanded={open} disabled={inFlight} onClick={() => setOpen(!open)}>
         {inFlight ? <><span class="btn-spin" aria-hidden="true" />Sending your review…</> : busy && !open ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : <>{authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" /></>}
-      </button>
-      {open && (
+      </button>}
+      {(open || inline) && (
         <div class="panel">
+          {inline && inFlight && <p class="note"><span class="btn-spin" aria-hidden="true" />Sending your review…</p>}
           <Editor
             value={body}
             onInput={(b: string) => (setBody(b), keep(b, event), (kept.current = b.trim() ? { body: b, event } : null))}
             onSubmit={() => !busy && go()}
-            onCancel={() => setOpen(false)}
+            onCancel={() => !inline && setOpen(false)}
             repo={repo}
             mentions={mentions}
-            autoFocus
+            autoFocus={!inline}
             placeholder="Leave a review summary (optional) · ⌘↵ to submit"
           />
           {!authored && (Object.keys(labels) as ReviewEvent[]).map((v) => (
             <label>
-              <input type="radio" name="event" checked={event === v} onChange={() => pick(v)} /> {labels[v]}
+              <input type="radio" name={inline ? "event-end" : "event"} checked={event === v} onChange={() => pick(v)} /> {labels[v]}
             </label>
           ))}
           {slackTo && slackTo.length > 0 && (
@@ -3028,7 +3063,7 @@ function SubmitPanel({ count, myOpenThreads, mySummary, lineComments, slackTo, s
               </>
             )}
           </div>
-          <button class="primary" disabled={!!busy} onClick={go}>
+          <button class="primary" disabled={!!busy || (inline && inFlight)} onClick={go}>
             {busy ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : authored ? 'Comment' : 'Submit review'}
           </button>
           {err && <p class="error">{err}</p>}
