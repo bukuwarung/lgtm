@@ -1780,6 +1780,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       } catch {}
     }, (e) => setErr(e instanceof TypeError && /fetch|load failed|network/i.test(e.message) ? "Couldn't reach GitHub" : e.message));
   };
+  const [hideEmptyGroups] = useStoredFlag('hideEmptyGroups', false); // Settings → PR list: groups with nothing in them left out
   // Unsent comments live in localStorage; re-read them whenever a review page saves drafts.
   const [, setStorageTick] = useState(0);
   useEffect(() => {
@@ -2116,6 +2117,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         {kind.groups.map(([g, label]) => {
           const inGroup = list.filter((i) => kind.groupOf(i) === g);
           if (g === 'agents' && !inGroup.length && !agentReviewOn()) return null;
+          // Empty, with empty groups hidden: gone, but an empty "Needs your review" still says you're clear.
+          if (hideEmptyGroups && !kind.people && !inGroup.length) return g === 'needs' ? <p class="g-clear" key={g}><Octicon name="check" /> Nothing needs your review</p> : null;
           const own = (i: QueueItem) => (kind.people ? g : kind === MINE && i.authored ? i.author : undefined);
           const stackOf = new Map(findStacks(inGroup).flatMap((st) => st.map((i) => [i.id, st] as const)));
           const entries = inGroup.filter((i) => !stackOf.has(i.id) || stackOf.get(i.id)!.at(-1) === i).map((i) => stackOf.get(i.id) ?? i);

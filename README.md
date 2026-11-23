@@ -45,7 +45,7 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
   <img alt="The PR list: Reviewing, Your PRs and Browse tabs, PRs grouped by where they stand, with pills for what needs you" src="docs/features/scene-queue-light.png" width="380">
 </picture>
 
-- PRs to review, your own, and your team's, grouped by where they stand.
+- PRs to review, your own, and your team's, grouped by where they stand (empty groups can be hidden: Settings → PR list).
 - Pills for what needs you: `CI failing`, `conflicts`, `↻ re-review`, replies waiting, commits since you approved. On your PRs, a pill's menu fixes what it names.
 - Drafts you're a code owner of, before GitHub asks you.
 - The bell keeps what needs you (review requested, replies, verdicts, mentions, CI, ready to merge, QA) until you open the PR; desktop notifications are a switch.

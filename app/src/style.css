@@ -20,7 +20,7 @@
   --hl-tag: light-dark(#116329, #e8bf6a);
   /* The Classic code colours for the Kotlin extras */
   --hl-ann: light-dark(#9e880d, #bbb529); --hl-prop: light-dark(#871094, #9876aa); --hl-arg: light-dark(#4a86e8, #467cda); --hl-it: light-dark(#0033b3, #507874);
-  --g-needs: var(--accent); --g-changes: var(--delfg); --g-commented: light-dark(#8c959f, #808080); --g-approved: var(--addfg);
+  --g-needs: var(--accent); --g-mentioned: light-dark(#8250df, #a371f7); --g-changes: var(--delfg); --g-commented: light-dark(#8c959f, #808080); --g-approved: var(--addfg);
   --bar: 44px; --nav: 46px; /* the review bar, and the app's top bar above it */
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   /* Bundled first so everyone gets the same font with ligatures (a local "NL" install would have none). */
@@ -224,7 +224,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .pr-tabs button { flex: 1; padding: 6px 4px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; font-weight: 600; font-size: calc(12px * var(--ts)); color: var(--muted); cursor: pointer; }
 .pr-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
 .g-m-changes { --g: var(--g-changes); } .g-m-approved { --g: var(--g-approved); } .g-m-waiting { --g: var(--g-needs); } .g-m-draft { --g: var(--g-commented); }
-.g-agents { --g: var(--pill-ok, var(--add)); } .g-needs { --g: var(--g-needs); } .g-changes { --g: var(--g-changes); } .g-commented { --g: var(--g-commented); } .g-approved { --g: var(--g-approved); }
+.g-agents { --g: var(--pill-ok, var(--add)); } .g-needs { --g: var(--g-needs); } .g-mentioned { --g: var(--g-mentioned); } .g-changes { --g: var(--g-changes); } .g-commented { --g: var(--g-commented); } .g-approved { --g: var(--g-approved); }
 .gdot { background: var(--g); }
 .count { margin-left: 4px; padding: 0 6px; border-radius: 10px; background: var(--soft); border: 1px solid var(--border); font-weight: 400; }
 .pr-item { display: grid; gap: 1px; margin: 2px 0; padding: 6px 8px; border-left: 3px solid var(--g); border-radius: 0 6px 6px 0; color: var(--fg); }
@@ -1747,3 +1747,7 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .quote-btn { position: fixed; z-index: 30; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: calc(12px * var(--ts)); background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px var(--shadow); cursor: pointer; }
 .quote-btn:hover { border-color: var(--accent); }
 .fixed-all button { margin-left: 4px; }
+
+/* With empty groups hidden: the line that stands in for an empty "Needs your review" */
+.g-clear { display: flex; align-items: center; gap: 6px; margin: 6px 12px; font-size: calc(12px * var(--ts)); color: var(--muted); }
+.g-clear svg { color: var(--addfg); }

@@ -1360,6 +1360,23 @@ Object.assign(DEMOS, {
       </div>
     ),
   },
+  hideEmptyGroups: {
+    title: 'Hide empty groups',
+    off: (
+      <div>
+        {agentGroup('needs', 'Needs your review', [])}
+        {agentGroup('mentioned', 'Mentioned you', [])}
+        {agentGroup('changes', 'You requested changes', [LIST_ONE])}
+        {agentGroup('commented', 'You commented', [])}
+      </div>
+    ),
+    on: (
+      <div>
+        <p class="g-clear"><Octicon name="check" /> Nothing needs your review</p>
+        {agentGroup('changes', 'You requested changes', [LIST_ONE])}
+      </div>
+    ),
+  },
   viewOnScroll: {
     title: 'Mark files viewed as you scroll past them',
     off: SCROLLED(false),
