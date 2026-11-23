@@ -1636,19 +1636,22 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   useEffect(() => {
     if (!viewOnScroll || commitView || onlyMine) return;
     const onScreen = new Map<string, number>(); // when each file came into view
+    const once = new Set<string>(); // marked here already: unmarked again (Undo, or by hand), it stays unmarked
     let raf = 0;
     const check = () => {
       raf = 0;
       const now = Date.now(), past: string[] = [];
       for (const el of document.querySelectorAll<HTMLElement>('main section.file[id^="f-"]')) {
         const path = el.id.slice(2), r = el.getBoundingClientRect();
-        if (viewedNow.current.has(path)) continue;
+        if (viewedNow.current.has(path) || once.has(path)) continue;
         if (r.bottom > 0 && r.top < innerHeight) onScreen.has(path) || onScreen.set(path, now);
         else if (r.bottom <= 0 && now - (onScreen.get(path) ?? now) >= 3000) past.push(path);
       }
       if (!past.length) return;
+      for (const p of past) once.add(p);
       markNow.current(past, true);
       setExpanded((x) => new Set([...x, ...past]));
+      offerUndo(`Marked ${past.length === 1 ? fileLabel(past[0]) : `${past.length} files`} viewed`, () => markNow.current(past, false)); // scrolled past without reading
     };
     const on = () => void (raf ||= requestAnimationFrame(check));
     addEventListener('scroll', on, { passive: true });
@@ -2114,6 +2117,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       usages: () => {}, // symbolnav.tsx, which knows the name under the mouse
       nextFile: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
       prevFile: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
+      // The next file not marked viewed (after the last, the first one left).
+      nextUnviewed: () => {
+        const left = (s: HTMLElement) => !viewed.has(s.id.slice(2));
+        const to = sections.slice(cur + 1).find(left) ?? sections.find(left);
+        if (to) to.scrollIntoView();
+        else dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Every file is viewed', ms: 2500 } }));
+      },
       nextChange: () => jumpChange(1),
       prevChange: () => jumpChange(-1),
       nextThread: () => ordered.length && go(Math.min(threadCursor.current + 1, ordered.length - 1)),

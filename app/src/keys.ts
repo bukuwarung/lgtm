@@ -5,6 +5,7 @@ import { useStoredValue, words } from './platform.ts';
 export const ACTIONS = [
   ['nextFile', 'Next file', 'j'],
   ['prevFile', 'Previous file', 'k'],
+  ['nextUnviewed', 'Next file not marked viewed', 'V'],
   ['nextThread', 'Next review thread', 'n'],
   ['prevThread', 'Previous review thread', 'p'],
   ['nextChange', 'Next change (across files)', 'd'],
