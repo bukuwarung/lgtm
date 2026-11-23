@@ -446,7 +446,7 @@ export function Settings() {
       <section>
         <h3>{T.PR} list</h3>
         <Flag k="showDrafts" initial={false} label={`Show other people's draft ${T.PRs}`} hint="Yours always show."  demo />
-        <Flag k="hideEmptyGroups" initial={false} label="Hide empty groups" hint={`"Needs your review" says when it's clear.`} demo />
+        <Flag k="hideEmptyGroups" initial={false} label="Hide empty groups" hint={`"Needs your review" says when it's clear, and a tab with nothing in it shows no 0.`} demo />
         <Flag k="gitlabTodoSync" initial={true} label="Mark GitLab to-dos done from the inbox" hint="Done in the inbox clears the to-do on GitLab too." />
         <Flag k="muteApproved" initial={true} label={`Mute replies and mentions on ${T.PRs} you've approved`} hint="While your latest review is an approval. New commits that dismiss it bring them back." demo />
         <label class="set-row">

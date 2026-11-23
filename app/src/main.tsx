@@ -2172,7 +2172,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         <div class="pr-tabs" role="tablist">
           {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-              {name} {n != null && <span class="count">{n}</span>}
+              {name} {n != null && !(hideEmptyGroups && !n) && <span class="count">{n}</span>}
             </button>
           ))}
         </div>
