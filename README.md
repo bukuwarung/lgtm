@@ -243,7 +243,7 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
   <img alt="An agent reviews first, off and on: PRs wait under Agents reviewing, then come to Needs your review with the agent's findings" src="docs/features/agentReview-light.png" width="760">
 </picture>
 
-- An adversarial review from the Agents menu, or of every PR before it reaches “Needs your review” (Settings → Coding agents picks the agent, and a daily limit). The findings go on the PR under your name, each starting with 🤖: in your pending review, or posted at once.
+- An adversarial review from the Agents menu, or of every PR before it reaches “Needs your review” (Settings → Coding agents picks the agent, and a daily limit). The findings go on the PR under your name, each starting with 🤖: in your pending review, or posted at once. With Claude Code, and a checkout of the repo on your machine (found from where your Claude Code and Codex sessions worked), it reviews in a read-only copy of the base commit: it reads the repo's CLAUDE.md or AGENTS.md, skills and linked docs itself, and nothing outside that copy. Otherwise, and always with Codex, the repo's guides and the docs they link are put in its prompt.
 - A finding with a small, certain fix carries it as a suggested change, so the author applies it in one click.
 - Asked to review again, the agent reads only what changed since its last review; new pushes alone don't run it again.
 

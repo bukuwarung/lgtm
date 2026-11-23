@@ -1,6 +1,6 @@
 // The local server's routes (app/bin/lgtm.mjs) as app commands: same CLIs, same inputs, same validation, same
 // results. Keep the two in step when either changes.
-use crate::cli::{last_line, parse_json, plain, run, run_env, run_lines, SECONDS_30};
+use crate::cli::{last_line, parse_json, plain, run, run_env, SECONDS_30};
 use crate::config;
 use regex::Regex;
 use serde::Deserialize;
@@ -1255,20 +1255,40 @@ pub async fn clipboard_pr() -> Option<String> {
 /// Ask Claude: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
 /// agentText()). `on_text`: each piece of Claude's answer as it's written (Codex's comes whole, at the end).
 #[tauri::command]
-pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>, on_text: tauri::ipc::Channel<String>) -> Result<String, String> {
+pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>, local: Option<Local>, on_text: tauri::ipc::Channel<String>) -> Result<String, String> {
     if input.is_empty() || input.len() > 800_000 {
         return Err("Bad request for Claude".into());
     }
     if agent.as_deref() == Some("codex") {
-        return codex_text(&input, model, effort);
+        return codex_text(&input, model, effort); // never in the repo: its sandbox could read the whole disk
     }
+    // A checkout of the repo here: Claude reads it (restricted to it, reading only) with the prompt made for that.
+    let wt = local.as_ref().and_then(review_worktree);
+    let input = match (&wt, &local) {
+        (Some(_), Some(l)) if !l.input.is_empty() && l.input.len() <= 800_000 => l.input.clone(),
+        _ => input,
+    };
+    let res = claude_text(&input, model, effort, wt.as_ref().map(|w| w.dir.clone()), &on_text);
+    if let Some(w) = wt {
+        w.done();
+    }
+    res
+}
+
+fn claude_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>, on_text: &tauri::ipc::Channel<String>) -> Result<String, String> {
     // The model and effort Settings picked for this prompt; none, Claude Code's own.
     let model = model.filter(|m| !m.is_empty());
     let effort = effort.filter(|e| !e.is_empty());
     if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !["low", "medium", "high", "xhigh", "max"].contains(&e)) {
         return Err("Bad request for Claude".into());
     }
-    let mut args = vec!["-p", "--tools", "", "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages"];
+    let mut args = vec!["-p"];
+    if cwd.is_some() {
+        args.extend(["--restricted", "--tools", "Read,Grep,Glob,Skill", "--allowedTools", "Read,Grep,Glob,Skill", "--strict-mcp-config"]);
+    } else {
+        args.extend(["--tools", ""]);
+    }
+    args.extend(["--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
     if let Some(m) = model.as_deref() {
         args.extend(["--model", m]);
     }
@@ -1276,7 +1296,8 @@ pub async fn agent_text(input: String, model: Option<String>, effort: Option<Str
         args.extend(["--effort", e]);
     }
     let (mut text, mut result) = (String::new(), Value::Null);
-    let out = run_lines("claude", &args, &input, std::time::Duration::from_secs(300), |line| {
+    let secs = if cwd.is_some() { 600 } else { 300 }; // reading the repo takes longer
+    let out = crate::cli::run_lines_in("claude", &args, input, std::time::Duration::from_secs(secs), cwd.as_deref(), |line| {
         let Ok(e) = serde_json::from_str::<Value>(line) else { return };
         if e["type"] == "stream_event" && e["event"]["delta"]["type"] == "text_delta" {
             let d = e["event"]["delta"]["text"].as_str().unwrap_or("");
@@ -1300,6 +1321,134 @@ pub async fn agent_text(input: String, model: Option<String>, effort: Option<Str
         return Err(last);
     }
     Ok(result["result"].as_str().map(String::from).unwrap_or(text).trim().to_string())
+}
+
+/// A repo to read for a review: "owner/name" (GitHub) or "host/group/name" (GitLab), the PR's base commit, the folder
+/// Settings names for it, and the prompt for reading it there.
+#[derive(Deserialize)]
+pub struct Local {
+    repo: String,
+    sha: String,
+    folder: Option<String>,
+    input: String,
+}
+
+fn git(dir: &str, args: &[&str]) -> Result<String, String> {
+    let mut all = vec!["-C", dir];
+    all.extend(args);
+    let out = run_env("git", &all, None, std::time::Duration::from_secs(120), &[("GIT_TERMINAL_PROMPT", "0")]);
+    if out.ok { Ok(out.stdout) } else { Err(last_line(&out.stderr)) }
+}
+
+static FOLDERS: OnceLock<Mutex<(u64, Vec<String>)>> = OnceLock::new();
+/// Where you've worked, newest first, from the tools' own records (so wherever they put things, on any machine): Claude
+/// desktop's sessions (originCwd, cwd), Claude Code's transcripts ($CLAUDE_CONFIG_DIR or ~/.claude, projects/*/*.jsonl,
+/// their first "cwd") and Codex's ($CODEX_HOME or ~/.codex, sessions/**/*.jsonl, its session_meta's cwd). Kept ten
+/// minutes; the newest 400 files read, each from its start only. The server's sessionFolders().
+fn session_folders() -> Vec<String> {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let cache = FOLDERS.get_or_init(|| Mutex::new((0, vec![])));
+    if let Ok(c) = cache.lock() {
+        if c.0 > 0 && now - c.0 < 600 {
+            return c.1.clone();
+        }
+    }
+    let mut files: Vec<(std::path::PathBuf, std::time::SystemTime)> = vec![];
+    let mut walk = |root: std::path::PathBuf, depth: usize, ok: &dyn Fn(&str) -> bool| {
+        let mut stack = vec![(root, depth)];
+        while let Some((dir, d)) = stack.pop() {
+            for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    if d > 0 {
+                        stack.push((p, d - 1));
+                    }
+                } else if ok(&e.file_name().to_string_lossy()) {
+                    let t = e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+                    files.push((p, t));
+                }
+            }
+        }
+    };
+    let env_or = |k: &str, d: &str| std::env::var(k).map(std::path::PathBuf::from).unwrap_or_else(|_| home().join(d));
+    walk(home().join("Library/Application Support/Claude/claude-code-sessions"), 3, &|n| n.starts_with("local_") && n.ends_with(".json"));
+    walk(env_or("CLAUDE_CONFIG_DIR", ".claude").join("projects"), 1, &|n| n.ends_with(".jsonl"));
+    walk(env_or("CODEX_HOME", ".codex").join("sessions"), 4, &|n| n.ends_with(".jsonl"));
+    files.sort_by(|a, b| b.1.cmp(&a.1));
+    let cwd = re(r#""cwd":\s*"([^"\\]+)""#);
+    let mut dirs: Vec<String> = vec![];
+    for (f, _) in files.into_iter().take(400) {
+        let found: Vec<String> = if f.extension().is_some_and(|x| x == "json") {
+            let j: Value = std::fs::read_to_string(&f).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
+            ["originCwd", "cwd"].iter().filter_map(|k| j[*k].as_str().map(String::from)).collect()
+        } else {
+            use std::io::Read;
+            let mut buf = vec![0u8; 65536];
+            let n = std::fs::File::open(&f).and_then(|mut h| h.read(&mut buf)).unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..n]).to_string();
+            cwd.captures(&head).map(|c| vec![c[1].to_string()]).unwrap_or_default()
+        };
+        for d in found {
+            if d.starts_with('/') && !dirs.contains(&d) {
+                dirs.push(d);
+            }
+        }
+    }
+    if let Ok(mut c) = cache.lock() {
+        *c = (now, dirs.clone());
+    }
+    dirs
+}
+
+/// A checkout of the repo here (Settings' folder first, then where you've worked), whose remote is the repo: its main
+/// folder (worktrees share its git data) and the remote's name. The server's localCheckout().
+fn local_checkout(repo: &str, folder: Option<&str>) -> Option<(String, String)> {
+    let parts: Vec<&str> = repo.split('/').collect();
+    let (host, path) = if parts[0].contains('.') && parts.len() > 2 { (parts[0].to_string(), parts[1..].join("/")) } else { ("github.com".to_string(), repo.to_string()) };
+    let url = Regex::new(&format!(r"(?i){}[:/]{}(\.git)?/?$", regex::escape(&host), regex::escape(&path))).ok()?;
+    for dir in folder.map(String::from).into_iter().chain(session_folders()) {
+        let Ok(remotes) = git(&dir, &["remote", "-v"]) else { continue };
+        let hit = remotes.lines().find_map(|l| {
+            let mut w = l.split_whitespace();
+            let (name, u) = (w.next()?, w.next()?);
+            url.is_match(u).then(|| name.to_string())
+        });
+        if let Some(remote) = hit {
+            let common = git(&dir, &["rev-parse", "--path-format=absolute", "--git-common-dir"]).ok()?;
+            let main = common.trim().trim_end_matches("/.git").to_string();
+            return Some((main, remote));
+        }
+    }
+    None
+}
+
+pub struct Worktree {
+    dir: String,
+    main: String,
+}
+impl Worktree {
+    fn done(&self) {
+        if git(&self.main, &["worktree", "remove", "--force", &self.dir]).is_err() {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+}
+/// The repo at the PR's base commit (its rules as they were before the PR), as a detached worktree of your checkout in a
+/// folder of its own: your branch and files untouched. The commit fetched first when the checkout hasn't it. The
+/// server's reviewWorktree().
+fn review_worktree(l: &Local) -> Option<Worktree> {
+    if !re(r"^[\w.-]+(/[\w.-]+)+$").is_match(&l.repo) || !re(r"^[0-9a-f]{40}$").is_match(&l.sha) || l.folder.as_deref().is_some_and(|f| !f.starts_with('/')) {
+        return None;
+    }
+    let (main, remote) = local_checkout(&l.repo, l.folder.as_deref())?;
+    let commit = format!("{}^{{commit}}", l.sha);
+    if git(&main, &["cat-file", "-e", &commit]).is_err() {
+        git(&main, &["fetch", "--quiet", "--no-tags", &remote, &l.sha]).ok()?;
+    }
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!("lgtm-review-{}-{nonce}", std::process::id())).to_string_lossy().to_string();
+    git(&main, &["worktree", "add", "--detach", "--quiet", &dir, &l.sha]).ok()?;
+    Some(Worktree { dir, main })
 }
 
 /// The coding agents' CLIs installed (Settings → Coding agents): each one's --version, or null. The server's detectAgents().

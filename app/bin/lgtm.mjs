@@ -2,7 +2,7 @@
 // lgtm: serve the review UI on 127.0.0.1 and hand it the GitHub CLI's token.
 // Usage: lgtm [https://github.com/owner/repo/pull/123]
 import { execFile, execFileSync, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -681,15 +681,18 @@ function jobLog(repo, job, user) {
 const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'], CODEX_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 // `agent`: Claude Code (claude), or Codex (codex). `onDelta`: each piece of Claude's answer as it's written (Codex's
 // comes whole, at the end).
-function agentText(input, model, effort, agent, onDelta) {
+// `cwd`: a read-only checkout of the repo (reviewWorktree) to read it from, as in a terminal: its CLAUDE.md or AGENTS.md,
+// its skills, what they point to. Restricted (no shell, none of the repo's settings or hooks), reading only.
+function agentText(input, model, effort, agent, onDelta, cwd) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
-  if (agent === 'codex') return codexText(input, model, effort);
+  if (agent === 'codex') return codexText(input, model, effort); // never in the repo: its sandbox could read the whole disk
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !EFFORTS.includes(effort))) return Promise.reject(new Error('Bad request for Claude'));
   return new Promise((resolve, reject) => {
-    const args = ['-p', '--tools', '', '--no-session-persistence', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])];
-    const child = spawn('claude', args, { cwd: homedir() });
+    const tools = cwd ? ['--restricted', '--tools', 'Read,Grep,Glob,Skill', '--allowedTools', 'Read,Grep,Glob,Skill', '--strict-mcp-config'] : ['--tools', ''];
+    const args = ['-p', ...tools, '--no-session-persistence', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])];
+    const child = spawn('claude', args, { cwd: cwd ?? homedir() });
     let text = '', result = null, err = '', buf = '', late = false;
-    const timer = setTimeout(() => ((late = true), child.kill()), 300000);
+    const timer = setTimeout(() => ((late = true), child.kill()), cwd ? 600000 : 300000); // reading the repo takes longer
     child.stdout.setEncoding('utf8').on('data', (d) => {
       buf += d;
       for (let n; (n = buf.indexOf('\n')) >= 0; buf = buf.slice(n + 1)) {
@@ -762,6 +765,78 @@ async function codexText(input, model, effort) {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+// A checkout of a repo ("owner/name" on GitHub, "host/group/name" on GitLab) on this machine: the folder Settings names
+// for it, else one a Claude Code session worked in (its main checkout first; worktrees share its git data) whose remote
+// is the repo. With the remote's name, to fetch from.
+const git = (dir, args) =>
+  new Promise((resolve, reject) =>
+    execFile('git', ['-C', dir, ...args], { timeout: 120000, maxBuffer: 1 << 22, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (err, stdout, stderr) => (err ? reject(new Error(stderr.trim().split('\n').pop() || err.message)) : resolve(stdout))),
+  );
+// Where you've worked, newest first, from the tools' own records (so wherever they put things, on any machine): Claude
+// desktop's sessions (originCwd, cwd), Claude Code's transcripts ($CLAUDE_CONFIG_DIR or ~/.claude, projects/*/*.jsonl,
+// their first "cwd") and Codex's ($CODEX_HOME or ~/.codex, sessions/**/*.jsonl, its session_meta's cwd). Kept ten
+// minutes; the newest 400 files read, each from its start only.
+let foldersSeen;
+async function sessionFolders() {
+  if (foldersSeen && Date.now() - foldersSeen.at < 600_000) return foldersSeen.dirs;
+  const files = [];
+  const walk = async (dir, depth, ok) => {
+    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      const p = join(dir, e.name);
+      if (e.isDirectory() && depth > 0) await walk(p, depth - 1, ok);
+      else if (e.isFile() && ok.test(e.name)) files.push(p);
+    }
+  };
+  await walk(CLAUDE_SESSIONS, 3, /^local_[\w-]+\.json$/);
+  await walk(join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects'), 1, /\.jsonl$/);
+  await walk(join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'sessions'), 4, /\.jsonl$/);
+  const dated = await Promise.all(files.map(async (f) => [f, (await stat(f).catch(() => null))?.mtimeMs ?? 0]));
+  const dirs = [];
+  for (const [f] of dated.sort((a, b) => b[1] - a[1]).slice(0, 400)) {
+    if (f.endsWith('.json')) {
+      const j = await readFile(f, 'utf8').then(JSON.parse).catch(() => null);
+      for (const d of [j?.originCwd, j?.cwd]) if (typeof d === 'string' && d.startsWith('/') && !dirs.includes(d)) dirs.push(d);
+      continue;
+    }
+    let head = '';
+    try {
+      const h = await openFile(f, 'r');
+      const { bytesRead, buffer } = await h.read(Buffer.alloc(65536), 0, 65536, 0);
+      await h.close();
+      head = buffer.subarray(0, bytesRead).toString('utf8');
+    } catch {
+      continue;
+    }
+    const d = head.match(/"cwd":\s*"([^"\\]+)"/)?.[1];
+    if (d?.startsWith('/') && !dirs.includes(d)) dirs.push(d);
+  }
+  foldersSeen = { at: Date.now(), dirs };
+  return dirs;
+}
+async function localCheckout(repo, folder) {
+  const [host, ...path] = repo.includes('.') && repo.split('/')[0].includes('.') ? repo.split('/') : ['github.com', ...repo.split('/')];
+  const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const url = new RegExp(`${esc(host)}[:/]${esc(path.join('/'))}(\\.git)?/?$`, 'i');
+  for (const dir of [folder, ...(await sessionFolders())].filter(Boolean)) {
+    const remotes = await git(dir, ['remote', '-v']).catch(() => '');
+    const hit = remotes.split('\n').map((l) => l.split(/\s+/)).find(([, u]) => u && url.test(u));
+    if (hit) return { dir: (await git(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim().replace(/\/\.git$/, ''), remote: hit[0] };
+  }
+  return null;
+}
+// The repo at `sha` (the PR's base: its rules as they were before the PR), as a worktree of the user's checkout in a
+// folder of its own, detached: their branch and files untouched. The commit fetched first when the checkout hasn't it.
+// done() removes it. Null: no checkout of the repo here.
+async function reviewWorktree({ repo, sha, folder }) {
+  if (typeof repo !== 'string' || !/^[\w.-]+(\/[\w.-]+)+$/.test(repo) || !/^[0-9a-f]{40}$/.test(sha ?? '') || (folder && (typeof folder !== 'string' || !folder.startsWith('/')))) return null;
+  const co = await localCheckout(repo, folder);
+  if (!co) return null;
+  if (!(await git(co.dir, ['cat-file', '-e', `${sha}^{commit}`]).then(() => true, () => false))) await git(co.dir, ['fetch', '--quiet', '--no-tags', co.remote, sha]);
+  const dir = join(tmpdir(), `lgtm-review-${randomBytes(6).toString('hex')}`);
+  await git(co.dir, ['worktree', 'add', '--detach', '--quiet', dir, sha]);
+  return { dir, done: () => git(co.dir, ['worktree', 'remove', '--force', dir]).catch(() => rm(dir, { recursive: true, force: true })) };
 }
 
 // A Jira ticket, via the Atlassian CLI (`acli jira auth login`), which owns the sign-in like gh and slackcli do.
@@ -982,10 +1057,15 @@ const server = createServer(async (req, res) => {
     // A line of JSON per piece of the answer ({d}), then the whole of it ({text}) or why not ({error}).
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
     const say = (m) => res.write(JSON.stringify(m) + '\n');
+    // local: the repo to read, and the prompt for reading it there; without a checkout here, the plain prompt.
+    let wt = null;
     return readJson(req)
-      .then((b) => agentText(b?.input, b?.model, b?.effort, b?.agent, (d) => say({ d })))
+      .then(async (b) => {
+        wt = b?.local && b.agent !== 'codex' ? await reviewWorktree(b.local).catch(() => null) : null; // Claude only: its file tools stay in the checkout
+        return agentText(wt && typeof b.local.input === 'string' ? b.local.input : b?.input, b?.model, b?.effort, b?.agent, (d) => say({ d }), wt?.dir);
+      })
       .then((text) => say({ text }), (e) => say({ error: e.message }))
-      .finally(() => res.end());
+      .finally(() => (wt?.done(), res.end()));
   }
   if (path === '/job-log') {
     const q = new URL(req.url ?? '/', ORIGIN).searchParams;

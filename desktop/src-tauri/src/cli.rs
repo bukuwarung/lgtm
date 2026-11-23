@@ -56,8 +56,13 @@ pub fn run_env(program: &str, args: &[&str], input: Option<&str>, timeout: Durat
 }
 
 /// As run, with stdout handed over a line at a time as the program writes it (stdout comes back empty).
-pub fn run_lines(program: &str, args: &[&str], input: &str, timeout: Duration, mut on_line: impl FnMut(&str)) -> Out {
-    let mut child = match Command::new(program).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+/// In `dir` when given (a review's checkout), else here.
+pub fn run_lines_in(program: &str, args: &[&str], input: &str, timeout: Duration, dir: Option<&str>, mut on_line: impl FnMut(&str)) -> Out {
+    let mut cmd = Command::new(program);
+    if let Some(d) = dir {
+        cmd.current_dir(d);
+    }
+    let mut child = match cmd.args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
         Ok(c) => c,
         Err(e) => return Out { ok: false, missing: e.kind() == std::io::ErrorKind::NotFound, stdout: String::new(), stderr: e.to_string() },
     };

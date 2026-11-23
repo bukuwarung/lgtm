@@ -114,7 +114,10 @@ export function useAgents() {
 
 // A prompt through an agent's CLI, its model and effort as Settings has them: the answer's text. `onText`: the answer so
 // far, each time more of it is written (Claude Code's; Codex's comes whole).
-export async function runAgent(input: string, id: AgentId, onText?: (soFar: string) => void): Promise<string> {
+// local: read the repo too, from a checkout of it on this machine at `sha` (lgtm.mjs reviewWorktree), with `input` as the
+// prompt then; with none here, the plain one.
+export type AgentLocal = { repo: string; sha: string; folder?: string; input: string };
+export async function runAgent(input: string, id: AgentId, onText?: (soFar: string) => void, local?: AgentLocal): Promise<string> {
   await detectAgents();
   const model = agentModel(id) || undefined, agent = id;
   const effort = effortsOf(id, model ?? '').includes(agentEffort(id)) ? agentEffort(id) : undefined; // one the model takes
@@ -124,10 +127,10 @@ export async function runAgent(input: string, id: AgentId, onText?: (soFar: stri
     if (isDesktop) {
       const { Channel } = await import('@tauri-apps/api/core');
       const onPiece = new Channel<string>(more);
-      return await command<string>('agent_text', { input, model, effort, agent, onText: onPiece });
+      return await command<string>('agent_text', { input, model, effort, agent, local: local ?? null, onText: onPiece });
     }
     // A line of JSON per piece ({d}), then the answer ({text}) or why not ({error}): lgtm.mjs /agent-text.
-    const res = await fetch('/agent-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent }) });
+    const res = await fetch('/agent-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent, local }) });
     if (!res.ok || !res.body) throw new Error(res.statusText || `${AGENTS[id].name} failed`);
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buf = '', end: { text?: string; error?: string } = {};
