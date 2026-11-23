@@ -4719,10 +4719,13 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
           />
         );
         const inside = lines.filter((l) => l >= c.start && l <= c.end);
+        // Removed lines that gave way to a line inside this block go just before it (a list item, not the whole list).
+        const here = removed.filter((r) => markerSlot(r) === i);
+        const within = here.filter((r) => r.at > c.start && r.at <= c.end);
         return (
           <>
-            {removed.filter((r) => markerSlot(r) === i).map(marker)}
-            <ChunkView html={c.html} onClick={onChunkClick} placed={inside.map((l) => ({ line: l, node: notesAt(l) }))} />
+            {here.filter((r) => !within.includes(r)).map(marker)}
+            <ChunkView html={c.html} onClick={onChunkClick} placed={inside.map((l) => ({ line: l, node: notesAt(l) }))} before={within.map((r) => ({ line: r.at, node: marker(r) }))} />
             {lines.filter((l) => !inside.includes(l)).map(notesAt)}
           </>
         );
@@ -4735,9 +4738,11 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
 // A rendered markdown block (raw HTML) with comments mounted inside it, right under the line they're on: in the
 // deepest block covering the line. A list item gets them under its own text (before any sub-list), a table row
 // in a new row after it, a code line right after that line, anything else right after the block.
-function ChunkView({ html, placed, onClick }: { html: string; placed: { line: number; node: VNode }[]; onClick: (e: MouseEvent) => void }) {
+// `before`: removed lines, shown just before the deepest block they gave way to (a list item, not the whole list).
+function ChunkView({ html, placed, before = [], onClick }: { html: string; placed: { line: number; node: VNode }[]; before?: { line: number; node: VNode }[]; onClick: (e: MouseEvent) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const hosts = useRef(new Map<Element, { host: HTMLElement; outer: HTMLElement }>());
+  const ahead = useRef(new Map<Element, { host: HTMLElement; outer: HTMLElement }>());
 
   useLayoutEffect(() => {
     const blocks = [...ref.current!.querySelectorAll('[data-src]')];
@@ -4746,49 +4751,58 @@ function ChunkView({ html, placed, onClick }: { html: string; placed: { line: nu
       return line >= s && line <= e;
     };
     // Sibling blocks don't overlap, so the last block in document order that covers a line is the deepest one.
-    const groups = new Map<Element, VNode[]>();
-    for (const p of placed) {
-      const el = blocks.filter((b) => covers(b, p.line)).at(-1);
-      if (el) groups.set(el, [...(groups.get(el) ?? []), p.node]);
-    }
-    for (const [el, h] of hosts.current)
-      if (!groups.has(el) || !h.outer.isConnected) {
-        render(null, h.host);
-        h.outer.remove();
-        hosts.current.delete(el);
+    const place = (items: { line: number; node: VNode }[], map: Map<Element, { host: HTMLElement; outer: HTMLElement }>, put: (el: Element, host: HTMLElement) => HTMLElement) => {
+      const groups = new Map<Element, VNode[]>();
+      for (const p of items) {
+        const el = blocks.filter((b) => covers(b, p.line)).at(-1);
+        if (el) groups.set(el, [...(groups.get(el) ?? []), p.node]);
       }
-    for (const [el, nodes] of groups) {
-      let h = hosts.current.get(el);
-      if (!h) {
-        const host = document.createElement('div');
-        host.className = 'note-host';
-        let outer: HTMLElement = host;
-        if (el.matches('tr')) {
-          const tr = document.createElement('tr');
-          const td = document.createElement('td');
-          td.colSpan = el.children.length;
-          td.append(host);
-          tr.append(td);
-          tr.className = 'note-tr';
-          el.after(tr);
-          outer = tr;
-        } else if (el.matches('li')) {
-          const sub = [...el.children].find((c) => c.matches('ul, ol'));
-          if (sub) sub.before(host);
-          else el.append(host);
-        } else el.after(host);
-        // A comment on a line inside collapsed content (a diagram's source) opens it.
-        for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) d.open = true;
-        hosts.current.set(el, (h = { host, outer }));
+      for (const [el, h] of map)
+        if (!groups.has(el) || !h.outer.isConnected) {
+          render(null, h.host);
+          h.outer.remove();
+          map.delete(el);
+        }
+      for (const [el, nodes] of groups) {
+        let h = map.get(el);
+        if (!h) {
+          const host = document.createElement('div');
+          host.className = 'note-host';
+          const outer = put(el, host);
+          // A comment on a line inside collapsed content (a diagram's source) opens it.
+          for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) d.open = true;
+          map.set(el, (h = { host, outer }));
+        }
+        render(<>{nodes}</>, h.host);
       }
-      render(<>{nodes}</>, h.host);
-    }
+    };
+    // A table row: in a row of its own; else beside the block (before it, or after: a list item's under its own text).
+    const row = (el: Element, host: HTMLElement, where: 'before' | 'after') => {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = el.children.length;
+      td.append(host);
+      tr.append(td);
+      tr.className = 'note-tr';
+      el[where](tr);
+      return tr;
+    };
+    place(placed, hosts.current, (el, host) => {
+      if (el.matches('tr')) return row(el, host, 'after');
+      if (el.matches('li')) {
+        const sub = [...el.children].find((c) => c.matches('ul, ol'));
+        if (sub) sub.before(host);
+        else el.append(host);
+      } else el.after(host);
+      return host;
+    });
+    place(before, ahead.current, (el, host) => (el.matches('tr') ? row(el, host, 'before') : (el.before(host), host)));
     renderMermaid(ref.current);
   });
 
   useEffect(
     () => () => {
-      for (const h of hosts.current.values()) {
+      for (const h of [...hosts.current.values(), ...ahead.current.values()]) {
         render(null, h.host);
         h.outer.remove();
       }
