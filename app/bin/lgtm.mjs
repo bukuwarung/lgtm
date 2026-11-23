@@ -3,7 +3,7 @@
 // Usage: lgtm [https://github.com/owner/repo/pull/123]
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
@@ -685,7 +685,7 @@ const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'x
 // its skills, what they point to. Restricted (no shell, none of the repo's settings or hooks), reading only.
 function agentText(input, model, effort, agent, onDelta, cwd) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
-  if (agent === 'codex') return codexText(input, model, effort); // never in the repo: its sandbox could read the whole disk
+  if (agent === 'codex') return codexText(input, model, effort, cwd);
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !EFFORTS.includes(effort))) return Promise.reject(new Error('Bad request for Claude'));
   return new Promise((resolve, reject) => {
     const tools = cwd ? ['--restricted', '--tools', 'Read,Grep,Glob,Skill', '--allowedTools', 'Read,Grep,Glob,Skill', '--strict-mcp-config'] : ['--tools', ''];
@@ -738,19 +738,29 @@ const detectAgents = async () => [{ id: 'claude', version: await agentVersion('c
 // The same through Codex's CLI (`codex login`), signed in like the others: its last message back. With every tool it has
 // switched off (shell, browser, computer use, apps, images, MCP servers, web search) and read-only, in an empty
 // folder: like Claude above, it only reads what it's given (a PR's text could otherwise steer it to read files and
-// put them in a review lgtm posts).
+// put them in a review lgtm posts). In a review's copy of the repo its shell is on, under a profile that can read
+// nothing else (codexText).
 const CODEX_OFF = ['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'computer_use', 'in_app_browser', 'apps', 'view_image'];
-async function codexText(input, model, effort) {
+// `cwd`: the repo's copy (reviewWorktree), read through its shell under a permission profile that lets it read only
+// that copy, the system's basics (:minimal) and Codex's own install, and write nothing, no network: not your home
+// folder (your GitHub token, keys). Without one, no shell at all.
+async function codexText(input, model, effort, cwd) {
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !CODEX_EFFORTS.includes(effort))) throw new Error('Bad request for Codex');
   const dir = await mkdtemp(join(tmpdir(), 'lgtm-codex-'));
+  const off = cwd ? CODEX_OFF.filter((f) => !['shell_tool', 'unified_exec'].includes(f)) : CODEX_OFF;
+  const bin = cwd && (process.env.PATH ?? '').split(':').map((d) => join(d, 'codex')).find((p) => { try { return statSync(p).isFile(); } catch { return false; } });
+  const readable = bin ? [dirname(bin), dirname(dirname(realpathSync(bin)))] : []; // its helper runs from there
+  const sandbox = cwd
+    ? ['-c', 'default_permissions="lgtm_review"', '-c', `permissions.lgtm_review.filesystem={${[':minimal', ':workspace_roots', ...readable].map((p) => `${JSON.stringify(p)}="read"`).join(',')}}`]
+    : ['--sandbox', 'read-only'];
   const out = join(dir, 'answer.txt');
   try {
     await new Promise((resolve, reject) => {
       const child = execFile(
         'codex',
-        ['exec', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only', '--color', 'never', '-C', dir, ...CODEX_OFF.flatMap((f) => ['--disable', f]),
+        ['exec', '--skip-git-repo-check', '--ephemeral', ...sandbox, '--color', 'never', '-C', cwd ?? dir, ...off.flatMap((f) => ['--disable', f]),
           '-c', 'mcp_servers={}', '-c', 'web_search="disabled"', ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort=${effort}`] : []), '-o', out, '-'],
-        { cwd: dir, maxBuffer: 1 << 24, timeout: 300000 },
+        { cwd: cwd ?? dir, maxBuffer: 1 << 24, timeout: cwd ? 600000 : 300000 },
         (err, stdout, stderr) => {
           if (err?.code === 'ENOENT') return reject(new Error("Codex isn't installed (brew install codex), or not on the PATH"));
           const last = (stderr || stdout).trim().split('\n').pop() || err?.message;
@@ -1061,7 +1071,7 @@ const server = createServer(async (req, res) => {
     let wt = null;
     return readJson(req)
       .then(async (b) => {
-        wt = b?.local && b.agent !== 'codex' ? await reviewWorktree(b.local).catch(() => null) : null; // Claude only: its file tools stay in the checkout
+        wt = b?.local ? await reviewWorktree(b.local).catch(() => null) : null;
         return agentText(wt && typeof b.local.input === 'string' ? b.local.input : b?.input, b?.model, b?.effort, b?.agent, (d) => say({ d }), wt?.dir);
       })
       .then((text) => say({ text }), (e) => say({ error: e.message }))

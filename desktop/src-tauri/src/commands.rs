@@ -1259,16 +1259,15 @@ pub async fn agent_text(input: String, model: Option<String>, effort: Option<Str
     if input.is_empty() || input.len() > 800_000 {
         return Err("Bad request for Claude".into());
     }
-    if agent.as_deref() == Some("codex") {
-        return codex_text(&input, model, effort); // never in the repo: its sandbox could read the whole disk
-    }
-    // A checkout of the repo here: Claude reads it (restricted to it, reading only) with the prompt made for that.
+    // A checkout of the repo here: the agent reads it, with the prompt made for that. Claude restricted to it; Codex's
+    // shell under a profile that reads only it (codex_text).
     let wt = local.as_ref().and_then(review_worktree);
     let input = match (&wt, &local) {
         (Some(_), Some(l)) if !l.input.is_empty() && l.input.len() <= 800_000 => l.input.clone(),
         _ => input,
     };
-    let res = claude_text(&input, model, effort, wt.as_ref().map(|w| w.dir.clone()), &on_text);
+    let cwd = wt.as_ref().map(|w| w.dir.clone());
+    let res = if agent.as_deref() == Some("codex") { codex_text(&input, model, effort, cwd) } else { claude_text(&input, model, effort, cwd, &on_text) };
     if let Some(w) = wt {
         w.done();
     }
@@ -1484,7 +1483,7 @@ fn codex_models() -> Value {
 /// The same through Codex's CLI (`codex login`): its last message back. Every tool it has switched off (shell, browser,
 /// computer use, apps, images, MCP servers, web search), read-only, in an empty folder: like Claude above, it only
 /// reads what it's given. The server's codexText().
-fn codex_text(input: &str, model: Option<String>, effort: Option<String>) -> Result<String, String> {
+fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>) -> Result<String, String> {
     let model = model.filter(|m| !m.is_empty());
     let effort = effort.filter(|e| !e.is_empty());
     if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !CODEX_EFFORTS.contains(&e)) {
@@ -1495,8 +1494,33 @@ fn codex_text(input: &str, model: Option<String>, effort: Option<String>) -> Res
     let out = dir.join("answer.txt");
     let (dir_s, out_s) = (dir.to_string_lossy().to_string(), out.to_string_lossy().to_string());
     let effort_c = effort.as_deref().map(|e| format!("model_reasoning_effort={e}"));
-    let mut args: Vec<&str> = vec!["exec", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "--color", "never", "-C", &dir_s];
+    let at = cwd.clone().unwrap_or_else(|| dir_s.clone());
+    // Reading the repo's copy: its shell on, under a permission profile that reads only that copy, the system's basics
+    // (:minimal) and Codex's own install (its helper runs from there), writes nothing, no network: not your home folder
+    // (your GitHub token, keys). Otherwise no shell at all. The server's codexText().
+    let fs = cwd.as_ref().map(|_| {
+        let bin = std::env::var("PATH").unwrap_or_default().split(':').map(|d| std::path::Path::new(d).join("codex")).find(|p| p.is_file());
+        let mut read = vec![":minimal".to_string(), ":workspace_roots".to_string()];
+        if let Some(b) = bin {
+            if let Some(d) = b.parent() {
+                read.push(d.to_string_lossy().to_string());
+            }
+            if let Some(d) = std::fs::canonicalize(&b).ok().and_then(|r| r.parent().and_then(|p| p.parent()).map(|p| p.to_string_lossy().to_string())) {
+                read.push(d);
+            }
+        }
+        format!("permissions.lgtm_review.filesystem={{{}}}", read.iter().map(|p| format!("{}=\"read\"", serde_json::to_string(p).unwrap_or_default())).collect::<Vec<_>>().join(","))
+    });
+    let mut args: Vec<&str> = vec!["exec", "--skip-git-repo-check", "--ephemeral"];
+    match fs.as_deref() {
+        Some(f) => args.extend(["-c", "default_permissions=\"lgtm_review\"", "-c", f]),
+        None => args.extend(["--sandbox", "read-only"]),
+    }
+    args.extend(["--color", "never", "-C", &at]);
     for f in ["shell_tool", "unified_exec", "browser_use", "browser_use_external", "computer_use", "in_app_browser", "apps", "view_image"] {
+        if cwd.is_some() && (f == "shell_tool" || f == "unified_exec") {
+            continue;
+        }
         args.extend(["--disable", f]);
     }
     args.extend(["-c", "mcp_servers={}", "-c", "web_search=\"disabled\""]);
@@ -1507,7 +1531,7 @@ fn codex_text(input: &str, model: Option<String>, effort: Option<String>) -> Res
         args.extend(["-c", e]);
     }
     args.extend(["-o", &out_s, "-"]);
-    let res = run("codex", &args, Some(input), std::time::Duration::from_secs(300));
+    let res = crate::cli::run_in("codex", &args, Some(input), std::time::Duration::from_secs(if cwd.is_some() { 600 } else { 300 }), cwd.as_deref());
     let text = std::fs::read_to_string(&out).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&dir);
     if res.missing {

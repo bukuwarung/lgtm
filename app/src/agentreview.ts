@@ -241,7 +241,7 @@ async function review(i: Target & { agent: AgentId; since?: string }, onText?: (
     `The diff, each line numbered (R: the new file, L: the old):\n${shown.map((f) => numbered(f)).join('\n\n')}`.slice(0, 200_000),
     texts.join('\n\n'),
   ].filter(Boolean).join('\n\n');
-  const answer = await runAgent(build(guideNote), i.agent, onText, i.agent === 'claude' ? { repo: i.repo, sha: pr.base.sha, folder: claudeFolder(i.repo), input: build(repoNote) } : undefined); // Codex: the guides pasted (its shell, which could read the whole disk, stays off)
+  const answer = await runAgent(build(guideNote), i.agent, onText, { repo: i.repo, sha: pr.base.sha, folder: claudeFolder(i.repo), input: build(repoNote) });
   const json = answer.slice(answer.indexOf('{'), answer.lastIndexOf('}') + 1);
   let parsed: { summary?: string; findings?: Finding[] };
   try {

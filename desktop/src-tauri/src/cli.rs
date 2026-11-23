@@ -18,7 +18,20 @@ pub fn run(program: &str, args: &[&str], input: Option<&str>, timeout: Duration)
 
 /// As run, with these environment variables set for it.
 pub fn run_env(program: &str, args: &[&str], input: Option<&str>, timeout: Duration, env: &[(&str, &str)]) -> Out {
-    let child = Command::new(program)
+    run_env_in(program, args, input, timeout, env, None)
+}
+
+/// As run, in `dir` when given (a review's copy of the repo).
+pub fn run_in(program: &str, args: &[&str], input: Option<&str>, timeout: Duration, dir: Option<&str>) -> Out {
+    run_env_in(program, args, input, timeout, &[], dir)
+}
+
+fn run_env_in(program: &str, args: &[&str], input: Option<&str>, timeout: Duration, env: &[(&str, &str)], dir: Option<&str>) -> Out {
+    let mut cmd = Command::new(program);
+    if let Some(d) = dir {
+        cmd.current_dir(d);
+    }
+    let child = cmd
         .args(args)
         .envs(env.iter().copied())
         .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
