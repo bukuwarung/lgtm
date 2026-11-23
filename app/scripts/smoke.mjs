@@ -79,6 +79,9 @@ function graphql(body) {
   if (query.includes('nodes(ids:')) return { data: { nodes: [] } };
   // bayu was asked as a code owner of src/ (CODEOWNERS: dewi, busy, and fajar).
   if (query.includes('asCodeOwner')) return { data: { repository: { pullRequest: { reviewRequests: { nodes: [{ asCodeOwner: true, requestedReviewer: { login: 'bayu' } }] }, files: { nodes: [{ path: 'src/Cart.kt' }] } } } } };
+  // What I may do on the PR (write access: labels, assignees, milestone), and its labels, assignees and milestone (none).
+  if (query.includes('viewerPermission')) return { data: { repository: { viewerPermission: 'WRITE', pullRequest: { viewerCanClose: true, viewerCanReopen: false, viewerCanUpdate: true, viewerCanUpdateBranch: false, isCrossRepository: false, headRefName: 'retry', headRefOid: HEAD, headRef: { id: 'REF_1' } } } } };
+  if (query.includes('viewerSubscription')) return { data: { repository: { pullRequest: { locked: false, viewerCanSubscribe: true, viewerSubscription: 'SUBSCRIBED', labels: { nodes: [] }, assignees: { nodes: [] }, milestone: null } } } };
   if (query.includes('pullRequest(number')) return { data: { repository: { pullRequest: prOf(variables.n) } } };
   return { data: null, errors: [{ message: 'smoke: no fixture' }] };
 }
@@ -92,6 +95,10 @@ function rest(path, request) {
   if (/\/(issues\/1\/comments|pulls\/1\/reviews|pulls\/1\/comments|pulls\/1\/commits)/.test(path)) return [200, []];
   if (path === '/rate_limit') return [200, { resources: { core: { limit: 5000, remaining: 5000, used: 0, reset: 9e9 }, graphql: { limit: 5000, remaining: 5000, used: 0, reset: 9e9 } } }];
   if (path === '/emojis') return [200, {}];
+  // The index's pickers: long names, to show they wrap inside it rather than push it sideways.
+  if (path.startsWith('/repos/acme/shop/labels')) return [200, [{ name: 'bug', color: 'd73a4a', description: 'Something is broken' }, { name: 'needs-product-decision-before-merging', color: 'fbca04', description: 'A long label, as some repos have them, that should wrap rather than widen the index' }]];
+  if (path.startsWith('/repos/acme/shop/assignees')) return [200, [{ login: 'rina' }, { login: 'bayu' }, { login: 'a-very-long-github-login-for-wrapping' }]];
+  if (path.startsWith('/repos/acme/shop/milestones')) return [200, [{ number: 1, title: 'Q4 checkout reliability and payment retries, phase two', due_on: null }]];
   return [404, { message: 'Not Found' }];
 }
 // lgtm's own server: the token and the integrations, made up; its other endpoints, empty.
@@ -296,6 +303,21 @@ try {
     const sideways = (where) => evaluate(`[document.scrollingElement, ...document.querySelectorAll('.side-scroll')].filter((e) => e && e.scrollWidth > e.clientWidth + 1).map((e) => ${JSON.stringify(where)} + ': ' + (e.className || 'the page') + ' ' + (e.scrollWidth - e.clientWidth) + 'px wider than it shows')`);
     const unboxed = [...(await offWords('the PR')), ...(await offWords('the end of the PR'))];
     const wide = await sideways('the PR');
+    // Each picker the index's top row opens (a label, an assignee, a milestone): open, it stays inside the index.
+    await evaluate(`document.querySelector('.side.collapsed') && document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', bubbles: true }))`);
+    await until('the index\'s add buttons', `document.querySelectorAll('.ix-top .ix-head-btn').length >= 3`, 5000);
+    for (const which of ['label', 'assign', 'milestone']) {
+      await evaluate(`[...document.querySelectorAll('.ix-top .ix-head-btn')].find((b) => /${which}/i.test(b.title)).click()`);
+      await until(`the ${which} picker`, `!!document.querySelector('.index input.label-find') && document.querySelectorAll('.ix-pick button, .ix-pick .ix-item').length > 0`, 4000);
+      const out = await evaluate(`(() => {
+        const ix = document.querySelector('.index').closest('.side-scroll').getBoundingClientRect();
+        return [...document.querySelectorAll('.index input.label-find, .ix-pick button, .ix-pick .ix-item')].filter((e) => { const r = e.getBoundingClientRect(); return r.width && (r.left < ix.left - 1 || r.right > ix.right + 1); }).map((e) => (e.textContent.trim() || e.placeholder || e.tagName).slice(0, 24));
+      })()`);
+      if (out.length) wide.push(`the ${which} picker: ${out.join(', ')} outside the index `);
+      wide.push(...(await sideways(`the ${which} picker`)));
+      await evaluate(`document.querySelector('.index input.label-find').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+      await until(`the ${which} picker closed`, `!document.querySelector('.index input.label-find')`, 2000);
+    }
     // A dropdown pill (its <details>) as tall as its pill, not sitting low on a text line.
     const low = await evaluate(`[...document.querySelectorAll('details.pill-menu')].filter((d) => d.offsetParent && Math.abs(d.getBoundingClientRect().height - d.querySelector('summary').getBoundingClientRect().height) > 1).length`);
     if (low) throw new Error(`${low} dropdown pills sit low in their row`);
