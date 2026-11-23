@@ -1626,6 +1626,35 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [byModule] = useStoredFlag('gradleModules', true);
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
+  // Settings → Reviewing: a file scrolled past, after a few seconds on screen, marked viewed (and left open, so nothing
+  // above it folds and moves the page). Not on commits on their own or your threads (not the PR's files as they are).
+  const [viewOnScroll] = useStoredFlag('viewOnScroll', false);
+  const viewedNow = useRef(viewed);
+  viewedNow.current = viewed;
+  const markNow = useRef(markViewed);
+  markNow.current = markViewed;
+  useEffect(() => {
+    if (!viewOnScroll || commitView || onlyMine) return;
+    const onScreen = new Map<string, number>(); // when each file came into view
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const now = Date.now(), past: string[] = [];
+      for (const el of document.querySelectorAll<HTMLElement>('main section.file[id^="f-"]')) {
+        const path = el.id.slice(2), r = el.getBoundingClientRect();
+        if (viewedNow.current.has(path)) continue;
+        if (r.bottom > 0 && r.top < innerHeight) onScreen.has(path) || onScreen.set(path, now);
+        else if (r.bottom <= 0 && now - (onScreen.get(path) ?? now) >= 3000) past.push(path);
+      }
+      if (!past.length) return;
+      markNow.current(past, true);
+      setExpanded((x) => new Set([...x, ...past]));
+    };
+    const on = () => void (raf ||= requestAnimationFrame(check));
+    addEventListener('scroll', on, { passive: true });
+    const tick = setInterval(check, 1000); // what's on screen while you read, not only while scrolling
+    return () => (removeEventListener('scroll', on), clearInterval(tick), cancelAnimationFrame(raf));
+  }, [viewOnScroll, commitView, onlyMine]);
   const [symbolNav] = useStoredFlag('symbolNav', true); // Settings → Diff: where a declared name is used
   const symPeek = useRefPeek(codeIx); // a line in its list, previewed
   // What a backtick offers in comment boxes (editor.tsx): the declared names (with their file), then the files.
@@ -2181,7 +2210,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it: your review goes on the newest.`;
       }}
       seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
-      canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked} />
+      canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
+      unviewed={data.files.filter((f) => !viewed.has(f.filename)).length} viewAll={() => markViewed(data.files.map((f) => f.filename), true)} />
   );
   return (
     <div class={`review${showIndex && !narrowIx ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}`}>
@@ -2815,6 +2845,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 }
 
 type SubmitProps = {
+  unviewed?: number; // the PR's files I haven't marked viewed
+  viewAll?: () => void; // marks them viewed
   inline?: boolean; // at the page's end, always there (else the bar's button and its panel)
   unlooked?: number; // the agent's drafts in my pending review I haven't looked at (kept or edited)
   stillOpen?: { id: string; path: string; line?: number | null }[]; // threads I started, unresolved, their code unchanged since
@@ -2859,7 +2891,7 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 const slackWhy = (r: { login: string; error?: string }) =>
   /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
 
-function SubmitPanel({ inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, inFlight = false, checkLanded, seeLanded }: SubmitProps) {
+function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, inFlight = false, checkLanded, seeLanded }: SubmitProps) {
   const [open, setOpen] = useState(false);
   useDismiss(open && !inline, () => setOpen(false), '.review-submit');
   const root = useRef<HTMLDivElement>(null);
@@ -2873,6 +2905,8 @@ function SubmitPanel({ inline = false, count, myOpenThreads, mySummary, lineComm
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
   const [mergeIt, toggleMergeIt] = useStoredFlag('mergeOnApprove', false);
+  const [viewRest, toggleViewRest] = useStoredFlag('viewAllOnSubmit', false);
+  const viewing = viewRest && unviewed > 0;
   const merging = canMerge && mergeIt && !authored;
   const want = useRef<ReviewEvent | null>(null); // the verdict asked for (A: Approve), picked as it opens
   // Pushed while I read: the review would go on code I haven't seen. Asked each time the panel opens.
@@ -2965,6 +2999,7 @@ function SubmitPanel({ inline = false, count, myOpenThreads, mySummary, lineComm
     try {
       const done = await onSubmit(event, body, notify, next && !authored, setBusy, merging && event === 'APPROVE');
       if (done) {
+        if (viewing) viewAll?.();
         setOpen(false);
         setBody('');
         kept.current = null;
@@ -3010,6 +3045,11 @@ function SubmitPanel({ inline = false, count, myOpenThreads, mySummary, lineComm
               <input type="checkbox" checked={mergeIt} onChange={toggleMergeIt} /> Then merge it, or turn on auto-merge while checks run
             </label>
           )}
+          {unviewed > 0 && (
+            <label>
+              <input type="checkbox" checked={viewRest} onChange={toggleViewRest} /> Then mark the rest viewed ({unviewed === 1 ? '1 file' : `${unviewed} files`})
+            </label>
+          )}
           {!authored && (
             <label>
               <input type="checkbox" checked={next} onChange={toggleNext} /> Then open the next PR that needs my review
@@ -3052,6 +3092,7 @@ function SubmitPanel({ inline = false, count, myOpenThreads, mySummary, lineComm
                 {body.trim() ? ' with your summary' : event === 'REQUEST_CHANGES' ? ' with a summary of your comments' : ''}
                 {count > 0 && `, and ${count} line comment${count > 1 ? 's' : ''}`}
                 {merging && event === 'APPROVE' && '; then merges it if it may'}
+                {viewing && `; marks ${unviewed === 1 ? 'the last file' : `the other ${unviewed} files`} viewed`}
                 {notify && slackTo && slackTo.length > 0 && `; messages ${slackTo.map((l) => '@' + l).join(', ')} on Slack`}.
                 {next && !authored && ' The next PR opens at once; this goes on in the background.'}
                 {lineComments.length > 0 && (

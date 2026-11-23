@@ -1215,6 +1215,17 @@ const agentGroup = (g: string, label: string, items: ComponentChildren[]) => (
   </details>
 );
 const LIST_ONE = listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-time', <Tg i="⏱" n="~10 min" />]]);
+// Two files read and scrolled past: their Viewed boxes as they're left.
+const SCROLLED = (on: boolean) => (
+  <div class="demo-footer">
+    {['OrderNotifier.kt', 'RetryPolicy.kt'].map((n) => (
+      <footer class="file-f">
+        <span class="file-f-name">{n}</span>
+        <label class={on ? 'viewed-box on' : 'viewed-box'}><Octicon name="eye" /></label>
+      </footer>
+    ))}
+  </div>
+);
 const SHORT_FILE = <File path="OrderNotifier.kt" add={1} del={1}><Rows rows={dedent(NESTED, 12)} /></File>;
 const TINY_FILE = <File path="Notify.kt" add={1} del={0}><Rows rows={[[' ', 40, 40, 'if (paid) {'], ['+', '', 41, '  ship()'], [' ', 41, 42, '}']]} /></File>;
 const LONG_ROW: Row[] = [['+', '', 41, 'notify(owner, PUSH, template = Templates.ORDER_PAID, locale = owner.locale)']];
@@ -1348,6 +1359,11 @@ Object.assign(DEMOS, {
         <div class="demo-idx">OrderNotifier.kt:41 <small>you</small></div>
       </div>
     ),
+  },
+  viewOnScroll: {
+    title: 'Mark files viewed as you scroll past them',
+    off: SCROLLED(false),
+    on: SCROLLED(true),
   },
   ticketOpen: { title: 'The Jira ticket, expanded', off: TICKET(false), on: TICKET(true) },
   jiraOnMerge: { title: 'Move the Jira ticket when you merge', off: MERGE(false), on: MERGE(true) },
