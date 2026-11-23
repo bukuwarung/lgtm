@@ -1338,10 +1338,14 @@ const readDismissed = (): Record<string, string> => {
     return {};
   }
 };
-const isDismissed = (i: QueueItem) => readDismissed()[`${i.repo}#${i.number}`] === i.updatedAt;
+// A PR in the list only for a mention stays dismissed until I'm mentioned again, not on any reply (GitHub's mention
+// events); others, until any new activity.
+const mentionOnly = (i: QueueItem) => !i.reviewing && !i.authored && !i.mine && !!i.mentioned && !!i.mentionAt;
+const dismissKey = (i: QueueItem) => (mentionOnly(i) ? `mention ${i.mentionAt}` : i.updatedAt);
+const isDismissed = (i: QueueItem) => readDismissed()[`${i.repo}#${i.number}`] === dismissKey(i);
 function setDismissed(i: QueueItem, on: boolean) {
   const d = readDismissed();
-  if (on) d[`${i.repo}#${i.number}`] = i.updatedAt;
+  if (on) d[`${i.repo}#${i.number}`] = dismissKey(i);
   else delete d[`${i.repo}#${i.number}`];
   try {
     localStorage.setItem(own('dismissedPRs'), JSON.stringify(Object.fromEntries(Object.entries(d).slice(-300))));
@@ -1354,14 +1358,14 @@ const groupOf = (i: QueueItem): Group =>
   : i.requested || backToMe(i) ? (agentBusy(i) ? 'agents' : 'needs')
   : i.myState === 'APPROVED' ? 'approved' : i.myState === 'CHANGES_REQUESTED' ? 'changes' : 'commented';
 
-// PRs that only @-mention me show until I open them after their latest activity (opening one records when).
+// PRs that only @-mention me show until I open them after my latest mention (opening one records when).
 const openedKey = (repo: string, n: number) => own(`opened:${repo}#${n}`);
 export const noteOpened = (repo: string, n: number) => {
   try {
     localStorage.setItem(openedKey(repo, n), String(Date.now()));
   } catch {}
 };
-const mentionNew = (i: QueueItem) => !i.reviewing && !i.authored && !!i.mentioned && Number(localStorage.getItem(openedKey(i.repo, i.number)) ?? 0) < Date.parse(i.updatedAt);
+const mentionNew = (i: QueueItem) => !i.reviewing && !i.authored && !!i.mentioned && Number(localStorage.getItem(openedKey(i.repo, i.number)) ?? 0) < Date.parse(i.mentionAt ?? i.updatedAt); // a new mention, not any reply (GitLab: any activity)
 const inReviewing = (i: QueueItem) => i.reviewing || mentionNew(i);
 
 // A group of the PR list: its open or folded kept (Fold), except a person's in the Team tab (they start folded).

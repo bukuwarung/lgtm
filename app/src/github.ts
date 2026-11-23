@@ -104,6 +104,7 @@ export type QueueItem = {
   viaTeam?: string[]; // asked of me only through teams (these, the PR's requested teams): no one by name
   reviewedBy?: string[]; // people who've reviewed it (their latest reviews; GitHub)
   noReviewers: boolean;
+  mentionAt?: string; // my latest mention in it (GitHub), for a PR in the list only for that
   mentioned?: boolean; // someone @-mentions me in it (shown, when that's all, until I open it after its latest activity) // nobody asked (people or teams) and no person has reviewed: bots don't count
   lastCommitAt: string; // the head commit's time
   headSha?: string; // the head commit
@@ -400,6 +401,7 @@ const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft review
   headRefName headRefOid baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login} ... on Team{slug}}}}
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
+  mentions:timelineItems(last:10,itemTypes:[MENTIONED_EVENT]){nodes{... on MentionedEvent{createdAt actor{login}}}}
   myPending:reviews(states:PENDING,first:1){nodes{comments{totalCount}}}
   latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
 // PRs read by id, 15 a query side by side. GitHub charges a query for what it could return (a search of up to 100 PRs
@@ -442,6 +444,9 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       assigned: assigned.has(p.id),
       authored: authored.has(p.id),
       mentioned: mentioned.has(p.id),
+      // When I was last mentioned (each mention is a timeline event, its actor the one mentioned): a mention-only PR
+      // comes back for a new mention, not for any reply.
+      mentionAt: p.mentions?.nodes.filter((e: any) => e?.actor?.login === me).map((e: any) => e.createdAt as string).sort().at(-1),
     }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
