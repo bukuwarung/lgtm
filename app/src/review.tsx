@@ -5131,13 +5131,24 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const [editingC, setEditingC] = useState<number | null>(null);
   const delC = (id: string) => void deletePosted(id, 'thread').then(() => dispatchEvent(new Event('lgtm:reload-talk')), (e: Error) => setErr(`Couldn't delete it: ${e.message}`));
 
-  // Sent in the background (it shows at once); a failure gives the text back.
-  const send = () => {
+  // An unsent reply is kept (on this machine) until it's sent: another PR, a reload or a crash don't lose it.
+  const replyKey = `reply:${t.id}`;
+  const loaded = useRef(false);
+  useEffect(() => {
+    loaded.current = false;
+    void storage.get<string>(replyKey).then((b) => (b && setBody((cur) => cur || b), (loaded.current = true)), () => (loaded.current = true));
+  }, [replyKey]);
+  useEffect(() => void (loaded.current && (body.trim() ? storage.set(replyKey, body) : storage.remove(replyKey))), [body]);
+  // Sent in the background (it shows at once); a failure gives the text back. andResolve: then resolved (⌘⇧↵).
+  const send = (andResolve = false) => {
     const b = body;
     setBody('');
     setErr('');
-    ctx.reply(t, b).catch((e: Error) => (setBody((cur) => (cur.trim() ? cur : b)), setErr(`Couldn't send it: ${e.message}`)));
+    ctx.reply(t, b)
+      .then(() => (andResolve && t.viewerCanResolve && !t.isResolved ? ctx.resolve(t, true) : undefined))
+      .catch((e: Error) => (setBody((cur) => (cur.trim() ? cur : b)), setErr(`Couldn't send it: ${e.message}`)));
   };
+  const canResolve = t.viewerCanResolve && !t.isResolved;
   const flip = (on: boolean) => (setErr(''), ctx.resolve(t, on).catch((e: Error) => setErr(e.message)));
   // Quote reply from one of its comments (quoteSelection): the quote in the reply box, after what's there.
   useEffect(() => {
@@ -5224,11 +5235,16 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       ))}
       {first?.state !== 'PENDING' && (
         <>
-        <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && send()} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder="Reply… (⌘↵ to send)" />
+        <Editor value={body} onInput={setBody} onSubmit={() => body.trim() && send()} onSubmitAlt={() => body.trim() && send(canResolve)} repo={ctx.repo} mentions={ctx.mentions} rows={2} placeholder={canResolve ? 'Reply… (⌘↵ to send, ⌘⇧↵ to send and resolve)' : 'Reply… (⌘↵ to send)'} />
         <div class="row">
           {body.trim() && (
-            <button onClick={send}>
+            <button onClick={() => send()} title="⌘↵">
               Reply
+            </button>
+          )}
+          {body.trim() && canResolve && (
+            <button onClick={() => send(true)} title="⌘⇧↵">
+              Reply and resolve
             </button>
           )}
           {fixes.length > 0 && !body.trim() && (

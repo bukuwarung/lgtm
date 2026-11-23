@@ -11,6 +11,7 @@ type Props = {
   value: string;
   onInput: (value: string) => void;
   onSubmit?: () => void; // ⌘↵
+  onSubmitAlt?: () => void; // ⌘⇧↵ (a thread's reply: send and resolve)
   onCancel?: () => void; // Esc
   repo: string; // for the preview's #refs and @mentions
   mentions: string[]; // logins offered after "@"
@@ -175,7 +176,7 @@ export function Editor(p: Props) {
     }
     if (mod && e.key === 'Enter') {
       e.preventDefault();
-      return p.onSubmit?.();
+      return e.shiftKey && p.onSubmitAlt ? p.onSubmitAlt() : p.onSubmit?.();
     }
     if (e.key === 'Escape') return p.onCancel?.();
     const k = mod && !e.shiftKey && e.key.toLowerCase();
