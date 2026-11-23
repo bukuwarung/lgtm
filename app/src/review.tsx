@@ -228,8 +228,8 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: s
 // On a draft, asking someone first marks it ready for review (GitHub doesn't tell reviewers about drafts).
 type Finding = { text: string; go: () => void };
 // What became of the Slack message when a review request was taken back (platform.ts slackDelete), as the end of a sentence.
-const slackGone = (r: { ok: boolean; error?: string; edited?: boolean }, had: boolean) =>
-  !had ? '.' : !r.ok ? `. The Slack message is still there: ${r.error}.` : r.edited ? `. Your Slack workspace doesn't allow deleting messages, so the Slack message now just says "-".` : ', and deleted its Slack message.';
+const slackGone = (r: { ok: boolean; error?: string; edited?: boolean; followedUp?: boolean }, had: boolean) =>
+  !had ? '.' : !r.ok ? `. The Slack message is still there: ${r.error}.` : r.followedUp ? `. Your Slack workspace allows neither deleting nor editing messages, so lgtm replied under it that the review isn't needed anymore.` : r.edited ? `. Your Slack workspace doesn't allow deleting messages, so the Slack message now just says "-".` : ', and deleted its Slack message.';
 
 function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void; findings?: Finding[]; files?: PRFile[] }) {
   // What lgtm found in my PR, shown once before the first ask: reviewers needn't point out the obvious.
@@ -285,7 +285,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       offerUndo(`Asked ${shownAt(login, repo)} to review`, async () => {
         try {
           await unrequestReview(repo, n, login);
-          const r: { ok: boolean; error?: string; edited?: boolean } = sent ? await slackDelete(`${repo}#${n}`, login, sent).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
+          const r: { ok: boolean; error?: string; edited?: boolean; followedUp?: boolean } = sent ? await slackDelete(`${repo}#${n}`, login, sent).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
           mark(login);
           onAsked(`Took back the review request for @${login}${slackGone(r, !!sent)}`, r.ok);
           dispatchEvent(new Event('lgtm:refresh'));
@@ -1959,7 +1959,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       setNotice({ ok: false, text: `Couldn't take back the request for @${login}: ${e.message}` });
       return false;
     }
-    const r: { ok: boolean; error?: string; edited?: boolean } = last ? await slackDelete(`${repo}#${n}`, login).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
+    const r: { ok: boolean; error?: string; edited?: boolean; followedUp?: boolean } = last ? await slackDelete(`${repo}#${n}`, login).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
     setNotice({ ok: r.ok, text: `Took back the review request for @${login}${slackGone(r, last)}` });
     dispatchEvent(new Event('lgtm:refresh'));
     void slackStatus(`${repo}#${n}`).then((st) => setSlackThreads(st.threads), () => {});

@@ -946,7 +946,25 @@ pub async fn slack_delete(pr: String, login: String, sent: Option<Value>) -> Res
             }
             let e = slackcli(&args, None);
             if !e.ok {
-                return Ok(json!({ "ok": false, "error": format!("Slack lets lgtm neither delete it ({}) nor edit it ({}), likely your workspace's settings: delete it in Slack yourself", out.error, e.error) }));
+                // Neither: a reply under it (in its thread) saying the ask is off.
+                let root = match (threads[&key]["ts"].as_str(), threads[&key]["channel"].as_str()) {
+                    (Some(r), Some(c)) if c == ch && re(r"^\d+\.\d+$").is_match(r) => r.to_string(),
+                    _ => ts.to_string(),
+                };
+                let (rc, rt) = (format!("--recipient-id={ch}"), format!("--thread-ts={root}"));
+                let mut args = vec!["messages", "send", rc.as_str(), rt.as_str(), "--message-file", "-", "--json"];
+                if dry {
+                    args.push("--dry-run");
+                }
+                let f = slackcli(&args, Some("No need to review this anymore, sorry for the noise."));
+                if !f.ok {
+                    return Ok(json!({ "ok": false, "error": format!("Slack lets lgtm neither delete it ({}) nor edit it ({}), and replying failed too ({}): delete it in Slack yourself", out.error, e.error, f.error) }));
+                }
+                if !dry && threads[&key]["last"]["ts"] == msg["ts"] {
+                    threads[&key].as_object_mut().map(|m| m.remove("last"));
+                    config::write("slack-threads.json", &threads)?;
+                }
+                return Ok(json!({ "ok": true, "followedUp": true }));
             }
             if !dry && threads[&key]["last"]["ts"] == msg["ts"] {
                 threads[&key].as_object_mut().map(|m| m.remove("last"));

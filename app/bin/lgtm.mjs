@@ -616,7 +616,14 @@ async function slackDelete({ pr, login, sent }) {
     // Some workspaces don't let people delete their messages; while it can still be edited, it's emptied to "-".
     if (!r.ok) {
       const e = await slackcli(['messages', 'edit', ...at, '--message', '-', '--json', ...dry]);
-      if (!e.ok) return { ok: false, error: `Slack lets lgtm neither delete it (${r.error}) nor edit it (${e.error}), likely your workspace's settings: delete it in Slack yourself` };
+      if (!e.ok) {
+        // Neither: a reply under it (in its thread) saying the ask is off.
+        const root = threads[key]?.ts && /^\d+\.\d+$/.test(threads[key].ts) && threads[key].channel === msg.channel ? threads[key].ts : msg.ts;
+        const f = await slackcli(['messages', 'send', `--recipient-id=${msg.channel}`, `--thread-ts=${root}`, '--message-file', '-', '--json', ...dry], 'No need to review this anymore, sorry for the noise.');
+        if (!f.ok) return { ok: false, error: `Slack lets lgtm neither delete it (${r.error}) nor edit it (${e.error}), and replying failed too (${f.error}): delete it in Slack yourself` };
+        if (!DRY_RUN && threads[key]?.last?.ts === msg.ts) (delete threads[key].last, await saveThreads(threads));
+        return { ok: true, followedUp: true };
+      }
       if (!DRY_RUN && threads[key]?.last?.ts === msg.ts) (delete threads[key].last, await saveThreads(threads));
       return { ok: true, edited: true };
     }
