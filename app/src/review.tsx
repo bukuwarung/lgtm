@@ -260,7 +260,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
     const d = new Date(s.until * 1000);
     return ` · until ${d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}`;
   };
-  const ask = async (login: string) => {
+  const askThem = async (login: string) => {
     mark(login, 'asking');
     setErr('');
     try {
@@ -302,7 +302,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
           </ul>
           <div class="row">
             <button onClick={() => setHeld(null)}>Fix first</button>
-            <button class="primary" onClick={() => (setCleared(true), setHeld(null), void ask(held))}>Ask anyway</button>
+            <button class="primary" onClick={() => (setCleared(true), setHeld(null), void askThem(held))}>Ask anyway</button>
           </div>
         </div>
       )}
@@ -318,7 +318,13 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
             class={`ix-item ix-person ${state[p.login] ?? ''}${away ? ' away' : ''}`}
             disabled={!!state[p.login]}
             title={`Ask @${p.login} to review: ${p.why}; ${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review${p.busy ? `. Busy on ${site(repo)}: ${p.busy}` : ''}${s?.text ? `. Slack: ${s.text}${until(s)}` : ''}${late ? `. It's ${late}` : ''}`}
-            onClick={() => (findings.length && !cleared ? setHeld(p.login) : ask(p.login))}
+            onClick={async () => {
+              // Away, busy or late where they are: asked first (a click on the wrong row shouldn't ask them).
+              const who = shownAt(p.login, repo);
+              const why = [p.busy && `${who} is busy on ${site(repo)} (${p.busy}).`, isAway(s) && `${who} is away${s?.text ? `: ${s.text}${until(s)}` : ''}.`, late && `It's ${late} where they are.`].filter(Boolean).join(' ');
+              if (why && !(await ask(`${why} Ask them anyway?`, 'Ask anyway'))) return;
+              findings.length && !cleared ? setHeld(p.login) : askThem(p.login);
+            }}
           >
             <span class="ix-label">
               <img src={faceOf(p.login)} alt="" />{shownAt(p.login, repo)}{' '}
