@@ -937,7 +937,24 @@ pub async fn slack_delete(pr: String, login: String, sent: Option<Value>) -> Res
         if dry {
             args.push("--dry-run");
         }
-        slackcli(&args, None)
+        let out = slackcli(&args, None);
+        if !out.ok {
+            // Some workspaces don't let people delete their messages; while it can still be edited, it's emptied to "-".
+            let mut args = vec!["messages", "edit", c.as_str(), t.as_str(), "--message", "-", "--json"];
+            if dry {
+                args.push("--dry-run");
+            }
+            let e = slackcli(&args, None);
+            if !e.ok {
+                return Ok(json!({ "ok": false, "error": format!("Slack lets lgtm neither delete it ({}) nor edit it ({}), likely your workspace's settings: delete it in Slack yourself", out.error, e.error) }));
+            }
+            if !dry && threads[&key]["last"]["ts"] == msg["ts"] {
+                threads[&key].as_object_mut().map(|m| m.remove("last"));
+                config::write("slack-threads.json", &threads)?;
+            }
+            return Ok(json!({ "ok": true, "edited": true }));
+        }
+        out
     };
     if !out.ok {
         return Ok(json!({ "ok": false, "error": out.error }));

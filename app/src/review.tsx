@@ -227,6 +227,10 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: s
 // busy first. A click asks them on GitHub and, unless unticked, on Slack too.
 // On a draft, asking someone first marks it ready for review (GitHub doesn't tell reviewers about drafts).
 type Finding = { text: string; go: () => void };
+// What became of the Slack message when a review request was taken back (platform.ts slackDelete), as the end of a sentence.
+const slackGone = (r: { ok: boolean; error?: string; edited?: boolean }, had: boolean) =>
+  !had ? '.' : !r.ok ? `. The Slack message is still there: ${r.error}.` : r.edited ? `. Your Slack workspace doesn't allow deleting messages, so the Slack message now just says "-".` : ', and deleted its Slack message.';
+
 function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void; findings?: Finding[]; files?: PRFile[] }) {
   // What lgtm found in my PR, shown once before the first ask: reviewers needn't point out the obvious.
   const [held, setHeld] = useState<string | null>(null);
@@ -281,9 +285,9 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       offerUndo(`Asked ${shownAt(login, repo)} to review`, async () => {
         try {
           await unrequestReview(repo, n, login);
-          const r = sent ? await slackDelete(`${repo}#${n}`, login, sent).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
+          const r: { ok: boolean; error?: string; edited?: boolean } = sent ? await slackDelete(`${repo}#${n}`, login, sent).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
           mark(login);
-          onAsked(r.ok ? `Took back the review request for @${login}${sent ? ', and its Slack message' : ''}.` : `Took back the review request for @${login}; the Slack message stays (${r.error}).`, r.ok);
+          onAsked(`Took back the review request for @${login}${slackGone(r, !!sent)}`, r.ok);
           dispatchEvent(new Event('lgtm:refresh'));
         } catch (e: any) {
           onAsked(`Couldn't take back the request for @${login}: ${e.message}`, false);
@@ -1955,8 +1959,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       setNotice({ ok: false, text: `Couldn't take back the request for @${login}: ${e.message}` });
       return false;
     }
-    const r = last ? await slackDelete(`${repo}#${n}`, login).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
-    setNotice({ ok: r.ok, text: r.ok ? `Took back the review request for @${login}${last ? ', and its Slack message' : ''}.` : `Took back the review request for @${login}; the Slack message stays (${r.error}).` });
+    const r: { ok: boolean; error?: string; edited?: boolean } = last ? await slackDelete(`${repo}#${n}`, login).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
+    setNotice({ ok: r.ok, text: `Took back the review request for @${login}${slackGone(r, last)}` });
     dispatchEvent(new Event('lgtm:refresh'));
     void slackStatus(`${repo}#${n}`).then((st) => setSlackThreads(st.threads), () => {});
     return true;
@@ -3813,7 +3817,7 @@ type Shot = { src: string; size?: string; note?: string; noLink?: boolean };
 function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () => void }) {
   const [shots, setShots] = useState<{ before: Shot | null; after: Shot | null } | null>(null);
   const [dims, setDims] = useState<Record<string, string>>({});
-  const [mode, setMode] = useStoredValue('imageCompare', 'side'); // a changed image: side by side, or swiped
+  const [mode, setMode] = useStoredValue('imageCompare', 'side'); // a changed image: side by side, swiped, faded, or its difference
   const [x, setX] = useState(50);
   const [h, setH] = useState(160); // the swipe's height: the new image's, small icons scaled up as side by side
   useEffect(() => {
@@ -3859,29 +3863,36 @@ function ImagePreview({ file, ctx, onFail }: { file: File; ctx: Ctx; onFail: () 
   const both = shots.before && shots.after;
   const modes = both && (
     <span class="set-seg img-modes" role="radiogroup" aria-label="Compare">
-      {([['side', 'Side by side'], ['swipe', 'Swipe']] as const).map(([v, name]) => (
+      {([['side', 'Side by side'], ['swipe', 'Swipe'], ['fade', 'Fade'], ['diff', 'Difference']] as const).map(([v, name]) => (
         <button role="radio" aria-checked={mode === v} class={mode === v ? 'on' : ''} onClick={() => setMode(v)}>{name}</button>
       ))}
     </span>
   );
-  // Swipe: the new version over the old, cut at the slider; left of it the old, right the new.
-  if (both && mode === 'swipe')
+  // Swipe: the new version over the old, cut at the slider; left of it the old, right the new. Fade: the new one over
+  // the old, as see-through as the slider says. Difference: what's the same goes black, what changed lights up.
+  if (both && (mode === 'swipe' || mode === 'fade' || mode === 'diff'))
     return (
       <div class="vector-preview swipe-preview">
         {modes}
-        <div class="img-swipe">
+        <div class={mode === 'diff' ? 'img-swipe diff' : 'img-swipe'}>
           <img src={shots.before!.src} alt={`Before: ${file.filename}`} data-name={shotName('Before', shots.before!)} style={{ height: `${h}px` }} />
           <img
             src={shots.after!.src}
             alt={`After: ${file.filename}`}
             data-name={shotName('After', shots.after!)}
-            style={{ height: `${h}px`, clipPath: `inset(0 0 0 ${x}%)` }}
+            style={{ height: `${h}px`, ...(mode === 'swipe' ? { clipPath: `inset(0 0 0 ${x}%)` } : mode === 'fade' ? { opacity: x / 100 } : { mixBlendMode: 'difference' }) }}
             onLoad={(e) => setH(Math.min(320, Math.max(96, e.currentTarget.naturalHeight)))}
           />
-          <span class="img-swipe-line" style={{ left: `${x}%` }} />
+          {mode === 'swipe' && <span class="img-swipe-line" style={{ left: `${x}%` }} />}
         </div>
-        <input type="range" min={0} max={100} value={x} onInput={(e) => setX(Number(e.currentTarget.value))} aria-label="Before ↔ after" />
-        <span class="img-swipe-labels"><span>Before</span><span>After</span></span>
+        {mode === 'diff' ? (
+          <span class="img-swipe-labels"><span>Black: unchanged · bright: changed</span></span>
+        ) : (
+          <>
+            <input type="range" min={0} max={100} value={x} onInput={(e) => setX(Number(e.currentTarget.value))} aria-label="Before ↔ after" />
+            <span class="img-swipe-labels"><span>Before</span><span>After</span></span>
+          </>
+        )}
         {note && <p class="note">{note}</p>}
       </div>
     );

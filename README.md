@@ -132,7 +132,7 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
 - **Changed words** highlighted inside a line.
 - **Whitespace** ignored (`w`).
 - **Markdown and doc comments** rendered (KDoc, Javadoc, JSDoc), still commentable line by line.
-- **Images** as pictures, Android vector drawables too.
+- **Images** as pictures, Android vector drawables too; a changed one side by side, swiped, faded, or as its difference (what changed lights up).
 - **Bot comments** from CI and AI reviewers behind one line.
 - **Archived specs** (an `archive/` folder of specs and their metadata) behind one row.
 

@@ -611,7 +611,15 @@ async function slackDelete({ pr, login, sent }) {
     r = await slackcli(['messages', 'delete-scheduled', msg.scheduled, '--yes', '--json', ...dry]);
   } else {
     if (!/^\d+\.\d+$/.test(msg.ts ?? '')) throw new Error('Bad Slack request');
-    r = await slackcli(['messages', 'delete', `--channel-id=${msg.channel}`, `--timestamp=${msg.ts}`, '--yes', '--json', ...dry]);
+    const at = [`--channel-id=${msg.channel}`, `--timestamp=${msg.ts}`];
+    r = await slackcli(['messages', 'delete', ...at, '--yes', '--json', ...dry]);
+    // Some workspaces don't let people delete their messages; while it can still be edited, it's emptied to "-".
+    if (!r.ok) {
+      const e = await slackcli(['messages', 'edit', ...at, '--message', '-', '--json', ...dry]);
+      if (!e.ok) return { ok: false, error: `Slack lets lgtm neither delete it (${r.error}) nor edit it (${e.error}), likely your workspace's settings: delete it in Slack yourself` };
+      if (!DRY_RUN && threads[key]?.last?.ts === msg.ts) (delete threads[key].last, await saveThreads(threads));
+      return { ok: true, edited: true };
+    }
   }
   if (!r.ok) return { ok: false, error: r.error };
   if (!DRY_RUN && threads[key] && !msg.scheduled) {

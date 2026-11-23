@@ -683,7 +683,8 @@ export async function notifySlack(recipients: { login: string; emails: string[];
 
 // Take back the message lgtm sent someone about a PR ("owner/repo#12"): `sent` as notifySlack gave it, else the last one
 // kept with their thread. A scheduled one is cancelled.
-export async function slackDelete(pr: string, login: string, sent?: SlackSent | null): Promise<{ ok: boolean; error?: string }> {
+// edited: Slack wouldn't let it be deleted (the workspace's settings), so it now just says "-".
+export async function slackDelete(pr: string, login: string, sent?: SlackSent | null): Promise<{ ok: boolean; error?: string; edited?: boolean }> {
   if (isDesktop) return command('slack_delete', { pr, login, sent: sent ?? null });
   const res = await fetch('/slack-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pr, login, sent }) });
   const d = await res.json();
