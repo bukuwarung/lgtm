@@ -643,6 +643,7 @@ type IndexProps = {
   slackAsk?: (login: string) => Promise<boolean>;
   slackWith?: Set<string>; // reviewers I already have a Slack thread with about this PR
   reRequest?: (login: string) => Promise<boolean>; // on my own PR: ask a reviewer who's reviewed to look again
+  withdraw?: (login: string) => Promise<boolean>; // take back a review request not answered yet (asks first)
   addMe?: () => Promise<unknown>; // on someone else's PR: ask myself for a review (it joins my queue)
   replace?: (login: string) => Promise<{ login: string; said: string }>; // on my own PR: ask someone free instead of a reviewer who's away; says who
   onViewed: OnViewed;
@@ -650,7 +651,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits, newFrom = -1, onNew, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits, newFrom = -1, onNew, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, withdraw, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -790,6 +791,11 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
             </button>
             {replace && r.tone === 'WAITING' && isAway(presence[who]) && <Replace login={who} replace={replace} />}
             {reRequest && r.id && r.tone !== 'WAITING' && <ReRequest login={who} again={reRequest} />}
+            {withdraw && r.tone === 'WAITING' && !who.startsWith('team ') && (
+              <button class="ix-icon-btn ix-withdraw" title={`Take back the review request for @${who}`} aria-label={`Take back the review request for @${who}`} onClick={() => void withdraw(who)}>
+                <Icon name="x" />
+              </button>
+            )}
             {slackAsk && !who.startsWith('team ') && !slackWith?.has(who) && <SlackAsk login={who} ask={slackAsk} />}
           </div>
         ))}

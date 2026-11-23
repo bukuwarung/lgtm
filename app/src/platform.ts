@@ -651,14 +651,15 @@ export async function fetchIntegrations(): Promise<Integrations> {
 // Slack DMs go through the local server, which runs slackcli (it holds the Slack sign-in).
 // Whether slackcli is signed in, and if not, why (shown in the submit panel instead of the Slack option).
 // `pr` ("owner/repo#12") also returns links to that PR's Slack threads.
-export type SlackThread = { login: string; url: string; name?: string; image?: string }; // name, image: their Slack profile
+export type SlackThread = { login: string; url: string; name?: string; image?: string; last?: boolean }; // name, image: their Slack profile; last: a message lgtm sent them it can take back
 export const slackStatus = (pr: string): Promise<{ configured: boolean; error?: string; threads: SlackThread[] }> =>
   isDesktop ? command<{ configured: boolean; error?: string; threads: SlackThread[] }>('slack_status', { pr }).then((d) => ({ ...d, error: d.error ?? undefined })) :
   fetch(`/slack?pr=${encodeURIComponent(pr)}`)
     .then((r) => r.json())
     .then((d) => ({ configured: !!d.configured, error: d.error, threads: d.threads ?? [] }), (e) => ({ configured: false, error: e.message, threads: [] }));
 
-export type SlackResult = { login: string; ok: boolean; threaded?: boolean; error?: string; at?: number }; // at: scheduled for then (Unix seconds)
+export type SlackSent = { channel: string; ts?: string; scheduled?: string }; // a message lgtm sent (ts), or scheduled (its id)
+export type SlackResult = { login: string; ok: boolean; threaded?: boolean; error?: string; at?: number; sent?: SlackSent | null }; // at: scheduled for then (Unix seconds)
 // `thread` ("owner/repo#12") keeps one Slack thread per PR and person; later reviews reply in it. `check`: a dry run,
 // nothing sent: can each be reached?
 let canSchedule: Promise<boolean> | undefined;
@@ -675,6 +676,16 @@ export async function notifySlack(recipients: { login: string; emails: string[];
   }
   if (isDesktop) return command<SlackResult[]>('slack_notify', { recipients, text, thread, check });
   const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text, thread, check }) });
+  const d = await res.json();
+  if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
+  return d;
+}
+
+// Take back the message lgtm sent someone about a PR ("owner/repo#12"): `sent` as notifySlack gave it, else the last one
+// kept with their thread. A scheduled one is cancelled.
+export async function slackDelete(pr: string, login: string, sent?: SlackSent | null): Promise<{ ok: boolean; error?: string }> {
+  if (isDesktop) return command('slack_delete', { pr, login, sent: sent ?? null });
+  const res = await fetch('/slack-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pr, login, sent }) });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error ?? 'Slack request failed');
   return d;

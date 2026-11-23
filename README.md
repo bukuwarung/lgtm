@@ -34,7 +34,7 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 - **It points things out.** Possible secrets, edited database migrations, text that won't be translated, a lockfile left behind, and more, each with a comment drafted for you.
 - **Review mode.** Your PRs to review, one after another, with nothing else on screen.
 - **An inbox.** Every thread and mention waiting on your reply, answered or put away without opening the PR.
-- **The right reviewers.** Suggested by who wrote the code you changed and who's least busy, asked on GitHub and Slack in one click.
+- **The right reviewers.** Suggested by who wrote the code you changed and who's least busy, asked on GitHub and Slack in one click (asked first when they're away; Undo, or × in the index later, takes the request and its Slack message back).
 - **Coding agents.** Claude Code or Codex reviews each PR before you do, explains a failed check, checks whether your comments were addressed, and writes fixes as suggested changes.
 - **Your whole loop.** Merge box, Jira tickets moved on merge, Slack nudges, QA requests, and your Claude Code sessions and Codex conversations linked to your PRs.
 

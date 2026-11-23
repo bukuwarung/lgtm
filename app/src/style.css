@@ -283,6 +283,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ix-icon-btn:hover:not(:disabled), .ix-icon-btn.on { color: var(--fg); background: var(--soft); }
 .ix-icon-btn.busy svg { animation: spin .8s linear infinite; }
 .ix-icon-btn.done { color: var(--pill-ok); }
+.ix-check .ix-withdraw { opacity: 0; } /* the ×: on hover, or focused */
+.ix-check:hover .ix-withdraw, .ix-withdraw:focus-visible { opacity: 1; }
 .ix-icon-btn.failed { color: var(--pill-bad); }
 .ix-log { margin: 2px 8px 8px 14px; padding: 6px 8px; max-height: 320px; overflow: auto; background: var(--soft); border-radius: 4px; font: calc(11px * var(--ts))/1.4 var(--mono); white-space: pre; }
 /* Jump targets land below the sticky bars, and flash briefly. */

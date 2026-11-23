@@ -24,6 +24,7 @@
     "allow-slack-notify",
     "allow-slack-post",
     "allow-slack-done",
+    "allow-slack-delete",
     "allow-slack-request",
     "allow-slack-asked",
     "allow-slack-reply",

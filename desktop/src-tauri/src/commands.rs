@@ -426,7 +426,8 @@ fn pr_threads(pr: &str) -> Vec<Value> {
             // "#qa": the QA request, in a channel: its name, no one's picture.
             let who = if login.starts_with('#') { Value::Null } else { t["user"].as_str().or(users[login].as_str()).and_then(slack_profile).unwrap_or(Value::Null) };
             let name = if who["name"].is_null() { t["name"].clone() } else { who["name"].clone() };
-            Some(json!({ "login": login, "url": format!("{base}archives/{channel}/p{}", ts.replace('.', "")), "name": name, "image": who["image"] }))
+            // last: a message lgtm can take back (slack_delete)
+            Some(json!({ "login": login, "url": format!("{base}archives/{channel}/p{}", ts.replace('.', "")), "name": name, "image": who["image"], "last": !t["last"].is_null() }))
         })
         .collect()
 }
@@ -850,7 +851,11 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
                         if re(r"^[CDG][A-Z0-9]+$").is_match(ch) && re(r"^\d+\.\d+$").is_match(ts) {
                             let out = send(vec![format!("--recipient-id={ch}"), format!("--thread-ts={ts}")], text, r.at);
                             if out.ok {
-                                return json!({ "login": r.login, "ok": true, "threaded": true, "at": r.at });
+                                let sent = if dry { Value::Null } else { sent_of(&out.stdout, r.at) };
+                                if !sent["ts"].is_null() {
+                                    threads.lock().unwrap()[&key]["last"] = json!({ "channel": sent["channel"], "ts": sent["ts"] }); // to take back
+                                }
+                                return json!({ "login": r.login, "ok": true, "threaded": true, "at": r.at, "sent": sent });
                             }
                         }
                     }
@@ -862,13 +867,12 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
                     for t in targets {
                         let out = send(vec![format!("--recipient-id={t}")], text, r.at);
                         if out.ok {
-                            if !dry && r.at.is_none() {
-                                if let Some(sent) = parse_json(&out.stdout) {
-                                    // Who it's with too, for their name and picture on the PR (pr_threads).
-                                    threads.lock().unwrap()[&key] = json!({ "channel": sent["channel_id"], "ts": sent["ts"], "user": t });
-                                }
+                            let sent = if dry { Value::Null } else { sent_of(&out.stdout, r.at) };
+                            if !sent["ts"].is_null() {
+                                // Who it's with too, for their name and picture on the PR (pr_threads).
+                                threads.lock().unwrap()[&key] = json!({ "channel": sent["channel"], "ts": sent["ts"], "user": t, "last": { "channel": sent["channel"], "ts": sent["ts"] } });
                             }
-                            return json!({ "login": r.login, "ok": true, "threaded": false, "at": r.at });
+                            return json!({ "login": r.login, "ok": true, "threaded": false, "at": r.at, "sent": sent });
                         }
                         error = out.error;
                     }
@@ -882,6 +886,71 @@ pub async fn slack_notify(recipients: Vec<Recipient>, text: String, thread: Stri
         config::write("slack-threads.json", &threads.into_inner().unwrap())?;
     }
     Ok(results)
+}
+
+/// What a send put in Slack (slackcli --json): a message (channel, ts), or scheduled, its id until it's posted.
+fn sent_of(stdout: &str, at: Option<i64>) -> Value {
+    let Some(d) = parse_json(stdout) else { return Value::Null };
+    let Some(ch) = d["channel_id"].as_str() else { return Value::Null };
+    match (at, d["scheduled_message_id"].as_str(), d["ts"].as_str()) {
+        (Some(_), Some(id), _) => json!({ "channel": ch, "scheduled": id }),
+        (None, _, Some(ts)) => json!({ "channel": ch, "ts": ts }),
+        _ => Value::Null,
+    }
+}
+
+/// Take back the message lgtm last sent someone about a PR (a review ask undone or withdrawn): `sent` as slack_notify
+/// gave it, else the last one kept with their thread. One that started the thread takes the thread with it. The
+/// server's slackDelete().
+#[tauri::command]
+pub async fn slack_delete(pr: String, login: String, sent: Option<Value>) -> Result<Value, String> {
+    if !re(PR_REF).is_match(&pr) || !re(r"^[\w.-]{1,100}$").is_match(&login) {
+        return Err("Bad Slack request".into());
+    }
+    let mut threads = config::read("slack-threads.json", false).unwrap_or(json!({}));
+    let key = format!("{pr}:{login}");
+    let msg = sent.filter(|v| !v.is_null()).unwrap_or_else(|| threads[&key]["last"].clone());
+    if msg.is_null() {
+        return Ok(json!({ "ok": false, "error": "no message from lgtm to take back" }));
+    }
+    let ch = msg["channel"].as_str().unwrap_or("");
+    if !re(r"^[CDG][A-Z0-9]+$").is_match(ch) {
+        return Err("Bad Slack request".into());
+    }
+    let dry = dry_run();
+    let out = if let Some(id) = msg["scheduled"].as_str() {
+        if !re(r"^Q[A-Z0-9]+$").is_match(id) {
+            return Err("Bad Slack request".into());
+        }
+        let mut args = vec!["messages", "delete-scheduled", id, "--yes", "--json"];
+        if dry {
+            args.push("--dry-run");
+        }
+        slackcli(&args, None)
+    } else {
+        let ts = msg["ts"].as_str().unwrap_or("");
+        if !re(r"^\d+\.\d+$").is_match(ts) {
+            return Err("Bad Slack request".into());
+        }
+        let (c, t) = (format!("--channel-id={ch}"), format!("--timestamp={ts}"));
+        let mut args = vec!["messages", "delete", c.as_str(), t.as_str(), "--yes", "--json"];
+        if dry {
+            args.push("--dry-run");
+        }
+        slackcli(&args, None)
+    };
+    if !out.ok {
+        return Ok(json!({ "ok": false, "error": out.error }));
+    }
+    if !dry && msg["scheduled"].is_null() && threads[&key].is_object() {
+        if threads[&key]["ts"] == msg["ts"] {
+            threads.as_object_mut().map(|m| m.remove(&key));
+        } else if threads[&key]["last"]["ts"] == msg["ts"] {
+            threads[&key].as_object_mut().map(|m| m.remove("last"));
+        }
+        config::write("slack-threads.json", &threads)?;
+    }
+    Ok(json!({ "ok": true }))
 }
 
 // --- Slack people (Settings) ---

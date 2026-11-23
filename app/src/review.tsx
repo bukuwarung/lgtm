@@ -33,7 +33,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, StatusMark, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
+import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { reviewNow } from './agentreview.ts';
@@ -276,13 +276,28 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       return setErr(`Couldn't ask @${login} on ${site(repo)}: ${e.message}`);
     }
     mark(login, 'asked');
-    if (!(slack && slackOk)) return onAsked(`Asked @${login} for a review.`, true);
+    // A wrong row clicked: Undo takes the request back, and the Slack message with it.
+    const undo = (sent?: SlackSent | null) =>
+      offerUndo(`Asked ${shownAt(login, repo)} to review`, async () => {
+        try {
+          await unrequestReview(repo, n, login);
+          const r = sent ? await slackDelete(`${repo}#${n}`, login, sent).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
+          mark(login);
+          onAsked(r.ok ? `Took back the review request for @${login}${sent ? ', and its Slack message' : ''}.` : `Took back the review request for @${login}; the Slack message stays (${r.error}).`, r.ok);
+          dispatchEvent(new Event('lgtm:refresh'));
+        } catch (e: any) {
+          onAsked(`Couldn't take back the request for @${login}: ${e.message}`, false);
+        }
+      });
+    if (!(slack && slackOk)) return onAsked(`Asked @${login} for a review.`, true), undo();
     try {
       const message = fillSlack(text, prValues({ repo, number: n, title: pr.title, url: pr.html_url, author: pr.user.login }));
       const [r] = await notifySlack(await slackRecipients(repo, [login]), message, `${repo}#${n}`);
       onAsked(r?.ok ? `Asked @${login} for a review, on ${site(repo)} and Slack.` : `Asked @${login} on ${site(repo)}; Slack didn't reach them (${r?.error ?? 'no reply'}).`, !!r?.ok);
+      undo(r?.sent);
     } catch (e: any) {
       onAsked(`Asked @${login} on ${site(repo)}; Slack failed (${e.message}).`, false);
+      undo();
     }
   };
   return (
@@ -1930,6 +1945,22 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const toggleViewed = (path: string) => markViewed([path], !viewed.has(path));
   // Ask a reviewer to look again, from the index (my own PR): a re-request on GitHub, then the "again" message on Slack
   // (in your thread with them; none if that message is emptied, or there's no Slack). The PR reloads to show them asked.
+  // A review request taken back (the index's ×), after asking; the Slack message lgtm sent them about it goes too.
+  async function withdraw(login: string): Promise<boolean> {
+    const last = slackThreads.some((t) => t.login === login && t.last);
+    if (!(await ask(`Take back the review request for ${shownAt(login, repo)}?${last ? ' The Slack message lgtm sent them about it is deleted too.' : ''}`, 'Take back'))) return false;
+    try {
+      await unrequestReview(repo, n, login);
+    } catch (e: any) {
+      setNotice({ ok: false, text: `Couldn't take back the request for @${login}: ${e.message}` });
+      return false;
+    }
+    const r = last ? await slackDelete(`${repo}#${n}`, login).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: true };
+    setNotice({ ok: r.ok, text: r.ok ? `Took back the review request for @${login}${last ? ', and its Slack message' : ''}.` : `Took back the review request for @${login}; the Slack message stays (${r.error}).` });
+    dispatchEvent(new Event('lgtm:refresh'));
+    void slackStatus(`${repo}#${n}`).then((st) => setSlackThreads(st.threads), () => {});
+    return true;
+  }
   async function reRequest(login: string): Promise<boolean> {
     try {
       await requestReview(repo, n, login);
@@ -2279,6 +2310,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
               slackWith={new Set(slackThreads.map((t) => t.login))}
               reRequest={!!me && pr.user.login === me ? reRequest : undefined}
+              withdraw={(!!me && pr.user.login === me) || rights?.update ? withdraw : undefined}
               replace={!!me && pr.user.login === me ? replaceReviewer : undefined}
               addMe={!!me && pr.user.login !== me ? () => takeReview(repo, n, (pr.requested_teams ?? []).map((t) => t.slug)).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
               me={me}

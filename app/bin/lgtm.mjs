@@ -162,7 +162,7 @@ async function prThreads(pr) {
       // Who it's with: as saved with the thread, else the Slack people mapping (threads from before it was saved).
       // "#qa": the QA request, in a channel: its name, no one's picture.
       const who = login.startsWith('#') ? null : await slackProfile(t.user ?? users[login]);
-      return { login, url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}`, name: who?.name ?? t.name, image: who?.image };
+      return { login, url: `${base}archives/${t.channel}/p${t.ts.replace('.', '')}`, name: who?.name ?? t.name, image: who?.image, ...(t.last ? { last: true } : {}) }; // last: a message lgtm can take back
     }),
   );
 }
@@ -563,7 +563,11 @@ async function notify({ recipients, text, thread, check }) {
       const prev = threads[key];
       if (prev && /^[CDG][A-Z0-9]+$/.test(prev.channel) && /^\d+\.\d+$/.test(prev.ts)) {
         const r = await send([`--recipient-id=${prev.channel}`, `--thread-ts=${prev.ts}`]);
-        if (r.ok) return { login, ok: true, threaded: true, ...(at ? { at } : {}), ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
+        if (r.ok) {
+          const sent = DRY ? null : sentOf(r.stdout, at);
+          if (sent?.ts) threads[key] = { ...threads[key], last: { channel: sent.channel, ts: sent.ts } }; // to take back (slackDelete)
+          return { login, ok: true, threaded: true, ...(at ? { at } : {}), ...(sent ? { sent } : {}), ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
+        }
       }
       const targets = [users[login], ...emails].filter((t) => typeof t === 'string' && SLACK_TARGET.test(t));
       if (!targets.length) return { login, ok: false, error: `no Slack user known: map @${login} in Settings → Slack → People` };
@@ -571,11 +575,9 @@ async function notify({ recipients, text, thread, check }) {
       for (const target of targets) {
         const r = await send([`--recipient-id=${target}`]);
         if (r.ok) {
-          if (!DRY && !at) {
-            const sent = parseJson(r.stdout);
-            if (sent?.channel_id) threads[key] = { channel: sent.channel_id, ts: sent.ts, user: target }; // who it's with, for their name and picture
-          }
-          return { login, ok: true, threaded: false, ...(at ? { at } : {}), ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
+          const sent = DRY ? null : sentOf(r.stdout, at);
+          if (sent?.ts) threads[key] = { channel: sent.channel, ts: sent.ts, user: target, last: { channel: sent.channel, ts: sent.ts } }; // who it's with, for their name and picture
+          return { login, ok: true, threaded: false, ...(at ? { at } : {}), ...(sent ? { sent } : {}), ...(DRY ? { dryRun: r.stdout.trim() } : {}) };
         }
         error = r.error;
       }
@@ -584,6 +586,40 @@ async function notify({ recipients, text, thread, check }) {
   );
   if (!DRY) await saveThreads(threads);
   return results;
+}
+
+// What a send put in Slack, from slackcli's --json: a message (channel, ts) or, scheduled, its id until it's posted.
+function sentOf(stdout, at) {
+  const d = parseJson(stdout);
+  if (!d?.channel_id) return null;
+  return at ? (d.scheduled_message_id ? { channel: d.channel_id, scheduled: d.scheduled_message_id } : null) : d.ts ? { channel: d.channel_id, ts: d.ts } : null;
+}
+
+// Take back the message lgtm last sent someone about a PR (a review ask undone or withdrawn): `sent` as notify gave
+// it, else the last one kept with their thread. A message that started the thread takes the thread with it.
+async function slackDelete({ pr, login, sent }) {
+  if (!PR_REF.test(pr ?? '') || typeof login !== 'string' || !/^[\w.-]{1,100}$/.test(login)) throw new Error('Bad Slack request');
+  const threads = await readThreads();
+  const key = `${pr}:${login}`;
+  const msg = sent ?? threads[key]?.last;
+  if (!msg) return { ok: false, error: 'no message from lgtm to take back' };
+  if (!/^[CDG][A-Z0-9]+$/.test(msg.channel ?? '')) throw new Error('Bad Slack request');
+  const dry = DRY_RUN ? ['--dry-run'] : [];
+  let r;
+  if (msg.scheduled) {
+    if (!/^Q[A-Z0-9]+$/.test(msg.scheduled)) throw new Error('Bad Slack request');
+    r = await slackcli(['messages', 'delete-scheduled', msg.scheduled, '--yes', '--json', ...dry]);
+  } else {
+    if (!/^\d+\.\d+$/.test(msg.ts ?? '')) throw new Error('Bad Slack request');
+    r = await slackcli(['messages', 'delete', `--channel-id=${msg.channel}`, `--timestamp=${msg.ts}`, '--yes', '--json', ...dry]);
+  }
+  if (!r.ok) return { ok: false, error: r.error };
+  if (!DRY_RUN && threads[key] && !msg.scheduled) {
+    if (threads[key].ts === msg.ts) delete threads[key];
+    else if (threads[key].last?.ts === msg.ts) delete threads[key].last;
+    await saveThreads(threads);
+  }
+  return { ok: true };
 }
 
 async function readJson(req) {
@@ -926,7 +962,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
     // A line of JSON per piece of the answer ({d}), then the whole of it ({text}) or why not ({error}).
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
@@ -990,6 +1026,14 @@ const server = createServer(async (req, res) => {
   if (path === '/slack-request' && req.method === 'POST') return readJson(req).then(requestReply).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-done' && req.method === 'POST') return readJson(req).then(markDone).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-post' && req.method === 'POST') return readJson(req).then(postToChannel).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
+  if (path === '/slack-delete') {
+    if (req.method !== 'POST') return res.writeHead(405).end();
+    try {
+      return json(res, 200, await slackDelete(await readJson(req)));
+    } catch (e) {
+      return json(res, 500, { error: e.message });
+    }
+  }
   if (path === '/slack') {
     try {
       if (req.method === 'GET') {
