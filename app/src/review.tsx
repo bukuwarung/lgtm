@@ -5132,7 +5132,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
   const delC = (id: string) => void deletePosted(id, 'thread').then(() => dispatchEvent(new Event('lgtm:reload-talk')), (e: Error) => setErr(`Couldn't delete it: ${e.message}`));
 
   // An unsent reply is kept (on this machine) until it's sent: another PR, a reload or a crash don't lose it.
-  const replyKey = `reply:${t.id}`;
+  const replyKey = `reply:${ctx.repo}#${ctx.pr.number}:${t.id}`; // by PR: the PR list marks the ones waiting
   const loaded = useRef(false);
   useEffect(() => {
     loaded.current = false;

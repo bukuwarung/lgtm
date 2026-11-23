@@ -1787,13 +1787,26 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     addEventListener('lgtm:storage', bump);
     return () => removeEventListener('lgtm:storage', bump);
   }, []);
-  const unsent = (i: QueueItem) => {
+  const comments = (i: QueueItem) => {
     try {
       return (JSON.parse(localStorage.getItem(own(`drafts:${i.repo}#${i.number}`)) ?? 'null')?.drafts.length ?? 0) + (i.myPending ?? 0); // here, and in my pending review
     } catch {
       return i.myPending ?? 0;
     }
   };
+  // Thread replies not sent yet (review.tsx ThreadView keeps them), by PR, and a review summary written but not sent.
+  const replies = new Map<string, number>();
+  for (let k = 0; k < localStorage.length; k++) {
+    const m = localStorage.key(k)?.match(/^reply:(.+#\d+):/);
+    if (m) replies.set(m[1], (replies.get(m[1]) ?? 0) + 1);
+  }
+  const unsentParts = (i: QueueItem) => {
+    const c = comments(i), r = replies.get(`${i.repo}#${i.number}`) ?? 0, sum = localStorage.getItem(own(`summary:${i.repo}#${i.number}`)) != null;
+    const parts = [c && [c, `comment${c > 1 ? 's' : ''}`], r && [r, `repl${r > 1 ? 'ies' : 'y'}`], sum && [1, 'review summary']].filter(Boolean) as [number, string][];
+    // One kind: "2 unsent replies"; more: "3 unsent: 2 comments, your review summary".
+    return { n: c + r + +sum, t: parts.length === 1 ? `unsent ${parts[0][1]}` : `unsent: ${parts.map(([k, w]) => (w === 'review summary' ? 'your review summary' : `${k} ${w}`)).join(', ')}` };
+  };
+  const unsent = (i: QueueItem) => unsentParts(i).n;
   const [again, setAgain] = useState(0); // a pill's action asks for the list again
   useEffect(() => void (showDrafts && setAgain((n) => n + 1)), [showDrafts]); // drafts on: the ones I own come in now
   useEffect(load, [version, again]);
@@ -1997,7 +2010,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         </span>
       </span>
       <span class="pills">
-        {unsent(i) > 0 && <span class="pill p-warn"><Tg i="unsent" n={unsent(i)} t={`unsent comment${unsent(i) > 1 ? 's' : ''}`} /></span>}
+        {unsent(i) > 0 && <span class="pill p-warn"><Tg i="unsent" n={unsent(i)} t={unsentParts(i).t} /></span>}
         {(i.thread?.awaiting ?? 0) > 0 && <span class="pill p-reply"><Tg i="reply" n={i.thread!.awaiting} t="awaiting your reply" /></span>}
         {kind === REVIEWING && reReview(i) && (
           <span class="pill p-strong" title={i.requested ? 'The author asked for your review again' : 'Every thread you commented in is resolved'}><Tg i="again" t="re-review" /></span>
