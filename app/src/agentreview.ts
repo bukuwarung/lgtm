@@ -8,7 +8,7 @@
 // (agents.ts runAgent). Its findings are checked against the diff: a line it names that the diff doesn't have goes on the
 // file instead. One run per PR and head commit, two at a time; the list shows the PRs being reviewed above "Needs your
 // review" (main.tsx), and each run is remembered per account (platform.ts own).
-import { postAgentFindings, getCompare, getRaw, getReviewGuides, guideDir, loadPR, type Draft, type PRFile, type QueueItem } from './github.ts';
+import { postAgentFindings, getCompare, getRaw, getReviewGuides, guideDir, repoPath, loadPR, type Draft, type PRFile, type QueueItem } from './github.ts';
 import { notifyAgentDone, own, term } from './platform.ts';
 import { AGENTS, agentIdOf, autoAgent, detectAgents, runAgent, type AgentId } from './agents.ts';
 import { parsePatch } from './diff.ts';
@@ -193,15 +193,27 @@ async function review(i: Target & { agent: AgentId; since?: string }, onText?: (
   // branch has them, so a PR can't rewrite the rules it's reviewed by. About 40 KB at most.
   const dirs = new Set(files.flatMap((f) => f.filename.split('/').slice(0, -1).map((_, k, parts) => parts.slice(0, k + 1).join('/'))));
   const guidePaths = (await getReviewGuides(i.repo, pr.base.sha).catch(() => [] as string[])).filter((p) => guideDir(p) === '.' || dirs.has(guideDir(p)));
-  let guideRoom = 40_000;
+  // About 100 KB at most; each file up to 60 KB. The Markdown files they link to come too, one level deep (AGENTS.md
+  // pointing at coding-guidelines.md): the agent has no tools to open them itself.
+  let guideRoom = 100_000;
   const guides: string[] = [];
-  for (const p of guidePaths.sort((a, b) => a.split('/').length - b.split('/').length)) {
-    if (guideRoom <= 0) break;
+  const read: [string, string][] = [];
+  const add = async (p: string) => {
+    if (guideRoom <= 0 || guides.some((g) => g.startsWith(`--- ${p}\n`))) return;
     const t = (await getRaw(i.repo, p, pr.base.sha).catch(() => null))?.trim();
-    if (!t || guides.some((g) => g.endsWith('\n' + t.slice(0, Math.min(20_000, guideRoom))))) continue; // a copy (CLAUDE.md as AGENTS.md)
-    guides.push(`--- ${p}\n${t.slice(0, Math.min(20_000, guideRoom))}`);
-    guideRoom -= t.length;
-  }
+    const cap = Math.min(60_000, guideRoom);
+    if (!t || guides.some((g) => g.endsWith('\n' + t.slice(0, cap)))) return; // a copy (CLAUDE.md as AGENTS.md)
+    guides.push(`--- ${p}\n${t.slice(0, cap)}`);
+    guideRoom -= Math.min(t.length, cap);
+    read.push([p, t]);
+  };
+  for (const p of guidePaths.sort((a, b) => a.split('/').length - b.split('/').length)) await add(p);
+  for (const [p, t] of read.slice())
+    for (const m of t.matchAll(/\]\(<?([^)\s>]+?\.md)>?(?:#[^)]*)?\)/gi)) {
+      const dir = guideDir(p);
+      const to = repoPath(m[1], dir === '.' ? '' : dir);
+      if (to) await add(to);
+    }
   // What's been said already: the open threads, people's and bots', and this agent's own earlier findings (sent, or
   // still in your pending review), so a run doesn't say them again.
   let saidRoom = 30_000;

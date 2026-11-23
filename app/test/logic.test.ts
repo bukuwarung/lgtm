@@ -1585,3 +1585,4 @@ test('interdiff: only the changes a push added, on the head\'s lines', () => {
   // A new file edited: just the edit, not the whole file.
   assert.equal(interdiff('@@ -0,0 +1,5 @@\n+a\n+b\n+c\n+d\n+e', '@@ -0,0 +1,5 @@\n+a\n+b\n+C\n+d\n+e', 1), '@@ -2,3 +2,3 @@\n b\n-c\n+C\n d');
 });
+
