@@ -675,6 +675,12 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
     )
   );
   const tiers = threadTiers(sortedThreads, me);
+  // Someone else's words with @me in them (GitHub's mentions: search counts those).
+  const atMeRe = me ? new RegExp(`@${me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'i') : null;
+  const atMe = {
+    conv: atMeRe ? conversation.flatMap((c, i) => (c.author !== me && atMeRe.test(textOf(c.html)) ? [{ c, i }] : [])) : [],
+    threads: atMeRe ? sortedThreads.filter((t) => t.comments.nodes.some((c) => c.author?.login !== me && atMeRe.test(c.bodyText ?? c.body ?? ''))) : [],
+  };
   const waitsOnMe = (t: Thread) => !!me && awaitsMe(t, me, pr.user.login === me); // listed first in its group
   // Threads an agent opened from a person's account (its comment starts with 🤖) fold together in their group, under
   // "yours" (from my account) and "from others", unless one waits on me.
@@ -821,6 +827,14 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
       <MilestoneSec repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
       <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} threads={tiers.mine.length > 0} />}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
+        {/* Where someone @-mentions me (why it's under "Mentioned you" in the list): their comments, and threads. */}
+        {(atMe.conv.length > 0 || atMe.threads.length > 0) && (
+          <Fold k="ix-at-me" class="ix-ckgroup">
+            <summary><Octicon name="mention" /> {atMe.conv.length + atMe.threads.length} mention{atMe.conv.length + atMe.threads.length === 1 ? 's' : ''} you</summary>
+            {atMe.threads.map((t) => threadEntry(t))}
+            {atMe.conv.map(({ c, i }) => convEntry(c, i))}
+          </Fold>
+        )}
         {myConv + drafts.length + tiers.mine.length > 0 && (
           <Fold k="ix-yours" class="ix-ckgroup">
             <summary><Octicon name="person" /> {myConv + drafts.length + tiers.mine.length} yours</summary>

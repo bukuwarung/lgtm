@@ -1651,6 +1651,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [byModule] = useStoredFlag('gradleModules', true);
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
+  // My own @name in comments stands out (GitHub links each mention to the person's page).
+  useEffect(() => {
+    if (!me || !/^[\w.-]+$/.test(me)) return;
+    const st = document.createElement('style');
+    st.textContent = `a.user-mention[href$="/${me}" i] { background: var(--mention-me); border-radius: 4px; padding: 0 3px; color: var(--fg); font-weight: 600; }`;
+    document.head.append(st);
+    return () => st.remove();
+  }, [me]);
   // My PR: the threads waiting on me whose lines a later commit changed (as ThreadView's "Fixed in"), each with those
   // commits, so one click answers them all.
   const fixable = useMemo(
