@@ -231,7 +231,7 @@ type Finding = { text: string; go: () => void };
 const slackGone = (r: { ok: boolean; error?: string; edited?: boolean; followedUp?: boolean }, had: boolean) =>
   !had ? '.' : !r.ok ? `. The Slack message is still there: ${r.error}.` : r.followedUp ? `. Your Slack workspace allows neither deleting nor editing messages, so lgtm replied under it that the review isn't needed anymore.` : r.edited ? `. Your Slack workspace doesn't allow deleting messages, so the Slack message now just says "-".` : ', and deleted its Slack message.';
 
-function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean) => void; findings?: Finding[]; files?: PRFile[] }) {
+function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean, asked?: string) => void; findings?: Finding[]; files?: PRFile[] }) {
   // What lgtm found in my PR, shown once before the first ask: reviewers needn't point out the obvious.
   const [held, setHeld] = useState<string | null>(null);
   const [cleared, setCleared] = useState(false);
@@ -280,6 +280,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       return setErr(`Couldn't ask @${login} on ${site(repo)}: ${e.message}`);
     }
     mark(login, 'asked');
+    onAsked(`Asked @${login} for a review.`, true, login); // the index lists them at once, then the PR reloads
     // A wrong row clicked: Undo takes the request back, and the Slack message with it.
     const undo = (sent?: SlackSent | null) =>
       offerUndo(`Asked ${shownAt(login, repo)} to review`, async () => {
@@ -2338,7 +2339,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                     n={n}
                     skip={new Set([me, ...bots, ...(pr.requested_reviewers ?? []).map((u) => u.login), ...conversation.filter((c) => c.state).map((c) => c.author)])}
                     slackOk={slackPeople !== null}
-                    onAsked={(text, ok) => setNotice({ ok, text })}
+                    onAsked={(text, ok, asked) => {
+                      setNotice({ ok, text });
+                      if (!asked) return;
+                      // Asked: among the reviewers now (as GitHub has them), while the PR loads again behind.
+                      setData((d) => d && ({ ...d, pr: { ...d.pr, requested_reviewers: [...(d.pr.requested_reviewers ?? []).filter((u) => u.login !== asked), { login: asked }] } }));
+                      dispatchEvent(new Event('lgtm:refresh'));
+                    }}
                   />
                 )
               }
