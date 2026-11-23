@@ -991,6 +991,8 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .md-ctl select { min-width: 0; }
 .md-val { font-size: calc(12px * var(--ts)); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .md-check { grid-template-columns: 9.5em 1fr; }
+.md-check > span:last-child { display: flex; align-items: center; gap: 6px; } /* the box centred on "Full width" */
+.md-check input[type=checkbox] { vertical-align: 0; }
 .md-colors { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 4px; }
 .md-color { display: flex; align-items: center; gap: 6px; font-size: calc(13px * var(--ts)); }
 .md-color input[type=color] { width: 28px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; }

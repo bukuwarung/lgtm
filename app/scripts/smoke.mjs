@@ -243,7 +243,7 @@ try {
   });
   // What only WebKit shows: an icon on the text baseline sits low there; macOS's own checkboxes are tiny and grey out
   // with the window; a preview's pills pinned like the PR page's bar slid over its code.
-  await step('layout in WebKit: icon buttons centred, checkboxes lgtm\'s own, previews\' pills in place', async () => {
+  await step('layout in WebKit: icon buttons centred, checkboxes lgtm\'s own and on their words, nothing sideways, previews\' pills in place', async () => {
     await evaluate(`location.hash = '/acme/shop/pull/1'`);
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
     const icons = (where) => evaluate(`[...document.querySelectorAll('button, summary, a')].filter((b) => b.querySelector('svg') && !b.textContent.trim() && b.offsetParent && !b.classList.contains('account-btn')).flatMap((b) => {
@@ -278,6 +278,24 @@ try {
       return out;
     })()`);
     const misaligned = await rows('the PR');
+    // A checkbox or radio centred on the first line of its words, within 1.5px (previews aside: they're miniatures).
+    const offWords = (where) => evaluate(`[...document.querySelectorAll('label input[type=checkbox], label input[type=radio]')].flatMap((i) => {
+      if (!i.offsetParent || i.closest('.demo-side')) return [];
+      // The first line of its words: its first text (an icon-only box, like a file's Viewed eye, has none).
+      const w = document.createTreeWalker(i.closest('label'), NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.textContent.trim() ? 1 : 3) });
+      const t = w.nextNode();
+      if (!t) return [];
+      const r = document.createRange();
+      r.selectNodeContents(t);
+      const line = [...r.getClientRects()].find((x) => x.width > 1 && x.height > 1);
+      if (!line) return [];
+      const b = i.getBoundingClientRect(), d = Math.abs(b.top + b.height / 2 - (line.top + line.height / 2));
+      return d > 1.5 ? [${JSON.stringify(where)} + ': "' + i.closest('label').textContent.trim().replace(/\\s+/g, ' ').slice(0, 30) + '" ' + d.toFixed(1) + 'px off'] : [];
+    })`);
+    // Nothing pushes the page, or the index, sideways (it scrolls only down).
+    const sideways = (where) => evaluate(`[document.scrollingElement, ...document.querySelectorAll('.side-scroll')].filter((e) => e && e.scrollWidth > e.clientWidth + 1).map((e) => ${JSON.stringify(where)} + ': ' + (e.className || 'the page') + ' ' + (e.scrollWidth - e.clientWidth) + 'px wider than it shows')`);
+    const unboxed = [...(await offWords('the PR')), ...(await offWords('the end of the PR'))];
+    const wide = await sideways('the PR');
     // A dropdown pill (its <details>) as tall as its pill, not sitting low on a text line.
     const low = await evaluate(`[...document.querySelectorAll('details.pill-menu')].filter((d) => d.offsetParent && Math.abs(d.getBoundingClientRect().height - d.querySelector('summary').getBoundingClientRect().height) > 1).length`);
     if (low) throw new Error(`${low} dropdown pills sit low in their row`);
@@ -290,14 +308,21 @@ try {
       return p.top < s.bottom && p.bottom > s.top && [p.left + 12, (p.left + p.right) / 2, p.right - 12].some((x) => !document.elementFromPoint(x, y)?.closest('.bar .panel'));
     })()`);
     if (under) throw new Error('the Finish review panel is under the pinned pill bar');
+    unboxed.push(...(await offWords('Finish review')));
+    wide.push(...(await sideways('Finish review')));
     await evaluate(`[...document.querySelectorAll('.bar button')].find((b) => b.textContent.trim().startsWith('Finish review')).click()`);
     await evaluate(`location.hash = '/settings'`);
     await until('Settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`);
     off.push(...(await icons('Settings')));
+    unboxed.push(...(await offWords('Settings')));
+    wide.push(...(await sideways('Settings')));
     await evaluate(`location.hash = '/'`);
     await until('the PR list', `!!document.querySelector('.pr-item')`);
     misaligned.push(...(await rows('the list')));
+    wide.push(...(await sideways('the list')));
     if (misaligned.length) throw new Error(`not lined up: ${misaligned.join('; ')}`);
+    if (unboxed.length) throw new Error(`checkboxes off their words: ${unboxed.slice(0, 8).join('; ')}`);
+    if (wide.length) throw new Error(`pushed sideways: ${wide.join('; ')}`);
     if (off.length) throw new Error(`icons off centre: ${off.join('; ')}`);
     // Previews are miniatures: only their look is checked. Under 13px: WebKit's small control font, not the page's.
     const boxes = await evaluate(`[...document.querySelectorAll('.page.settings input[type=checkbox]')].filter((c) => c.offsetParent && (getComputedStyle(c).appearance !== 'none' || (!c.closest('.demo-side') && c.getBoundingClientRect().width < 13))).map((c) => getComputedStyle(c).appearance + ' ' + c.getBoundingClientRect().width.toFixed(1) + 'px in ' + c.closest('[class]')?.className)`);
