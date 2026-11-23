@@ -130,6 +130,8 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .ix-status-emoji { width: 14px; height: 14px; }
 .ix-mark { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; vertical-align: middle; } /* a status beside a name; words on hover */
 .ix-mark img { width: 14px; height: 14px; }
+.ix-load { display: inline-flex; align-items: center; gap: 2px; } /* how many PRs wait on them; a check: none */
+.ix-load.free { color: var(--addfg); }
 .ix-mark-text { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .ix-mark.away .ix-mark-text { color: var(--c-away); }
 .ix-person.away > .ix-label { opacity: .6; }
