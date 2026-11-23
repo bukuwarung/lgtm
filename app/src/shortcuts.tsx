@@ -708,9 +708,11 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
     );
   };
   useEffect(() => void reviewersShown(), []);
-  // The file you're reading, marked in the files' list and kept in sight in the index as you scroll.
+  // The file you're reading, marked in the files' list and kept in sight in the index as you scroll. Not while you're
+  // using the index (the pointer over it, or a jump from it moments ago): going through its threads, you keep your place.
   useEffect(() => {
-    let raf = 0;
+    let raf = 0, used = 0;
+    const use = (e: Event) => (e.target as Element).closest?.('.index') && (used = Date.now());
     const mark = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
@@ -724,14 +726,16 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
         row.classList.add('cur');
         let box = row.parentElement;
         while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
-        if (!box) return;
+        if (!box || box.matches(':hover') || Date.now() - used < 2000) return;
         const r = row.getBoundingClientRect(), b = box.getBoundingClientRect();
         if (r.top < b.top + 40 || r.bottom > b.bottom - 8) box.scrollTop += r.top - b.top - b.height / 3;
       });
     };
     addEventListener('scroll', mark, { passive: true });
+    addEventListener('pointerdown', use, true);
+    addEventListener('keydown', use, true);
     mark();
-    return () => (removeEventListener('scroll', mark), cancelAnimationFrame(raf));
+    return () => (removeEventListener('scroll', mark), removeEventListener('pointerdown', use, true), removeEventListener('keydown', use, true), cancelAnimationFrame(raf));
   }, [files]);
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
   // Who's reviewing: each person's latest verdict, "waiting" for ones asked who haven't answered (again).
