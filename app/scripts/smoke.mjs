@@ -337,6 +337,23 @@ try {
     await until('Settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`);
     off.push(...(await icons('Settings')));
     unboxed.push(...(await offWords('Settings')));
+    // Checkboxes the run doesn't open (the merge box's admin bypass and options, New PR, the Close dialog, the ask
+    // list's Slack box, the keyboard help, a comment's task list), drawn here as the app draws them, then removed.
+    await evaluate(`(() => {
+      const d = document.createElement('div');
+      d.id = 'smoke-boxes';
+      d.innerHTML = \`
+        <dialog class="ask new-pr" open><div class="row"><label><input type="checkbox"> Draft</label><span class="spacer"></span><button>Cancel</button></div></dialog>
+        <div class="submit merge-bar"><div class="panel merge" style="position:static"><div class="merge-row"><button class="primary">Merge</button><button class="link merge-close">Close</button><label><input type="checkbox"> Merge without waiting for requirements</label></div>
+          <div class="merge-confirm"><div class="merge-opt"><label><input type="checkbox"> Move BUKU-1 to</label><select><option>Done</option></select></div><label class="merge-opt"><input type="checkbox"> Delete retry</label></div></div></div>
+        <aside class="side tree"><div class="side-scroll"><div class="index"><div class="ix-ask"><label class="ix-ask-slack"><span><input type="checkbox"> Also message them on Slack</span></label></div></div></div></aside>
+        <div class="help"><div class="row"><b>Keyboard shortcuts</b><span class="spacer"></span><label><input type="checkbox"> Ignore whitespace</label><button>Close</button></div></div>
+        <dialog class="ask" open><p>Close it?</p><form method="dialog"><input maxlength="500"><label><input type="checkbox"> Tell them on Slack</label><button>Cancel</button></form></dialog>
+        <div class="rich md"><ul class="contains-task-list"><li class="task-list-item"><label><input type="checkbox" disabled> Write the tests</label></li></ul></div>\`;
+      document.body.append(d);
+    })()`);
+    unboxed.push(...(await offWords('elsewhere')));
+    await evaluate(`document.getElementById('smoke-boxes').remove()`);
     wide.push(...(await sideways('Settings')));
     await evaluate(`location.hash = '/'`);
     await until('the PR list', `!!document.querySelector('.pr-item')`);
