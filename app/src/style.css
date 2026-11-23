@@ -1733,3 +1733,8 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .ix-top { display: flex; align-items: center; gap: 2px; padding: 4px 6px 2px; }
 .index input.label-find { width: calc(100% - 28px); } /* over the global input width (100%), which with its margins ran past the index */
 .commit-body { display: block; margin-top: 4px; white-space: pre-wrap; font-weight: 400; color: var(--muted); }
+
+/* Quote reply: under text selected in a comment */
+.quote-btn { position: fixed; z-index: 30; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: calc(12px * var(--ts)); background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px var(--shadow); cursor: pointer; }
+.quote-btn:hover { border-color: var(--accent); }
+.fixed-all button { margin-left: 4px; }

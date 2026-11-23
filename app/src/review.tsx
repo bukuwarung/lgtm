@@ -1626,6 +1626,21 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [byModule] = useStoredFlag('gradleModules', true);
   const modules = useMemo(() => modulesOf(data.files.map((f) => f.filename), roots), [data.files, roots]);
   const codeIx = useMemo(() => codeIndex(data.files), [data.files]);
+  // My PR: the threads waiting on me whose lines a later commit changed (as ThreadView's "Fixed in"), each with those
+  // commits, so one click answers them all.
+  const fixable = useMemo(
+    () => (!me || data.pr.user.login !== me ? [] : threads.filter((t) => awaitsMe(t, me, true) && !t.isResolved && (t.isOutdated || sinceComment.get(t.id)?.kind === 'changed') && t.comments.nodes.some((c) => c.author?.login !== me && c.state !== 'PENDING'))),
+    [threads, sinceComment, me, data.pr.user.login],
+  );
+  const [allFixes, setAllFixes] = useState<{ t: Thread; fixes: Fix[] }[]>([]);
+  useEffect(() => {
+    let live = true;
+    Promise.all(fixable.map((t) => {
+      const theirs = t.comments.nodes.findLast((c) => c.author?.login !== me && c.state !== 'PENDING')!;
+      return fixedIn(repo, data.pr.head.sha, t.path, t.line && !t.isOutdated ? [t.startLine ?? t.line, t.line] : null, theirs.createdAt).then((fixes) => ({ t, fixes }), () => ({ t, fixes: [] }));
+    })).then((r) => live && setAllFixes(r.filter((x) => x.fixes.length)));
+    return () => void (live = false);
+  }, [fixable, data.pr.head.sha]);
   // Settings → Reviewing: a file scrolled past, after a few seconds on screen, marked viewed (and left open, so nothing
   // above it folds and moves the page). Not on commits on their own or your threads (not the PR's files as they are).
   const [viewOnScroll] = useStoredFlag('viewOnScroll', false);
@@ -2118,6 +2133,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       nextFile: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
       prevFile: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
       // The next file not marked viewed (after the last, the first one left).
+      quoteReply: () => void (quoteSelection() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Select text in a comment to quote it', ms: 2500 } }))),
+      fixedAll: () => (allFixes.length > 1 ? dispatchEvent(new Event('lgtm:fixed-all')) : dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: allFixes.length ? 'One thread to answer: its own "Fixed in" button' : 'No threads waiting on you that later commits changed', ms: 3000 } }))),
       nextUnviewed: () => {
         const left = (s: HTMLElement) => !viewed.has(s.id.slice(2));
         const to = sections.slice(cur + 1).find(left) ?? sections.find(left);
@@ -2717,6 +2734,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <button class="primary" onClick={() => (setPushed(null), dispatchEvent(new Event('lgtm:refresh')))}>Reload</button>
             </p>
           )}
+          {!commitView && allFixes.length > 1 && <FixedAll fixes={allFixes} ctx={ctx} />}
+          <QuoteButton keyHint={hint(bindings.quoteReply)} />
           {!commitView && !!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} check={check} onRecheck={() => setCheckTry((k) => k + 1)} />}
           {(lastReviewed || fromSha) && (
             <div class={since ? 'since on' : 'since'}>
@@ -5020,6 +5039,79 @@ function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; dr
 
 // A thread that starts folded to its preview with bots folded: all bots', or one an agent opened from a person's
 // account (its first comment starts with 🤖) that doesn't wait on me and isn't in my review still to send.
+// Quote reply (GitHub's): the text selected in a comment, quoted, into the reply box of its thread, or for one in the
+// conversation (or the description), into the Finish review summary. False when nothing quotable is selected.
+function quoteSelection(): boolean {
+  const sel = getSelection();
+  const text = sel?.toString().trim();
+  const at = sel?.rangeCount ? sel.getRangeAt(0).commonAncestorContainer : null;
+  const el = at && (at instanceof Element ? at : at.parentElement);
+  const where = el?.closest('details.thread[id^="t-"] .comment, .comment[id^="cv-"], #pr-description');
+  if (!text || !where) return false;
+  const quote = text.split('\n').map((l) => `> ${l}`.trimEnd()).join('\n');
+  const thread = where.closest('details.thread[id^="t-"]');
+  sel!.removeAllRanges();
+  if (thread) dispatchEvent(new CustomEvent('lgtm:quote', { detail: { thread: thread.id.slice(2), quote } }));
+  else dispatchEvent(new CustomEvent('lgtm:finish', { detail: { append: quote } }));
+  return true;
+}
+// My PR: every thread waiting on me whose lines later commits changed, answered at once ("Fixed in …", then resolved,
+// as each thread's own button does), after asking.
+function FixedAll({ fixes, ctx }: { fixes: { t: Thread; fixes: Fix[] }[]; ctx: Ctx }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const go = async () => {
+    if (busy || !(await ask(`Reply "Fixed in …" to ${fixes.length} threads, each with the commits that changed its lines, and resolve them?`, 'Reply and resolve'))) return;
+    setBusy(true), setErr('');
+    let failed = 0;
+    for (const { t, fixes: f } of fixes)
+      await ctx.reply(t, `Fixed in ${f.map((x) => x.oid).join(', ')}`).then(() => (t.viewerCanResolve ? ctx.resolve(t, true) : undefined)).catch(() => failed++);
+    setBusy(false);
+    if (failed) setErr(`${failed} didn't go through: try those from the thread.`);
+  };
+  const run = useRef(go);
+  run.current = go;
+  useEffect(() => {
+    const on = () => void run.current();
+    addEventListener('lgtm:fixed-all', on);
+    return () => removeEventListener('lgtm:fixed-all', on);
+  }, []);
+  return (
+    <p class="note fixed-all">
+      {fixes.length} threads waiting on you have commits that changed their lines.{' '}
+      <button disabled={busy} onClick={go} title={`Each gets "Fixed in" with its commits, then is resolved${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fixedAll)}`}>
+        {busy ? 'Replying…' : `Reply "Fixed in" and resolve all ${fixes.length}`}
+      </button>
+      {err && <span class="error"> {err}</span>}
+    </p>
+  );
+}
+
+// The button under a selection in a comment.
+function QuoteButton({ keyHint }: { keyHint: string }) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const place = () => {
+      const sel = getSelection();
+      const node = sel?.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0).commonAncestorContainer : null;
+      const el = node && (node instanceof Element ? node : node.parentElement);
+      if (!el?.closest('details.thread[id^="t-"] .comment, .comment[id^="cv-"], #pr-description') || el.closest('textarea, input, .editor')) return setAt(null);
+      const r = sel!.getRangeAt(0).getBoundingClientRect();
+      setAt({ x: Math.max(8, Math.min(r.left, innerWidth - 140)), y: Math.min(r.bottom + 6, innerHeight - 36) });
+    };
+    const hide = () => setAt(null);
+    document.addEventListener('selectionchange', place);
+    addEventListener('scroll', hide, { passive: true });
+    return () => (document.removeEventListener('selectionchange', place), removeEventListener('scroll', hide));
+  }, []);
+  if (!at) return null;
+  return (
+    <button class="quote-btn" style={{ left: at.x, top: at.y }} onMouseDown={(e) => e.preventDefault()} onClick={() => (quoteSelection(), setAt(null))}>
+      <Octicon name="quote" /> Quote reply{keyHint}
+    </button>
+  );
+}
+
 const foldedAsBot = (t: Thread, waiting: boolean) =>
   t.comments.nodes.every((c) => c.author?.__typename === 'Bot') || (!waiting && t.comments.nodes[0]?.state !== 'PENDING' && agentSays(t.comments.nodes[0]?.body));
 function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
@@ -5047,6 +5139,19 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
     ctx.reply(t, b).catch((e: Error) => (setBody((cur) => (cur.trim() ? cur : b)), setErr(`Couldn't send it: ${e.message}`)));
   };
   const flip = (on: boolean) => (setErr(''), ctx.resolve(t, on).catch((e: Error) => setErr(e.message)));
+  // Quote reply from one of its comments (quoteSelection): the quote in the reply box, after what's there.
+  useEffect(() => {
+    const take = (e: Event) => {
+      const { thread, quote } = (e as CustomEvent<{ thread: string; quote: string }>).detail;
+      if (thread !== t.id) return;
+      setBody((b) => `${b.trim() ? `${b.trimEnd()}\n\n` : ''}${quote}\n\n`);
+      const box = document.getElementById('t-' + t.id) as HTMLDetailsElement | null;
+      if (box) box.open = true;
+      setTimeout(() => box?.querySelector<HTMLTextAreaElement>(':scope > textarea, .editor textarea')?.focus());
+    };
+    addEventListener('lgtm:quote', take);
+    return () => removeEventListener('lgtm:quote', take);
+  }, [t.id]);
   // My PR, a reviewer waiting on me, and the code under it changed since: the commit that did it, to say so in one click
   // (Fixed in abc1234, then resolved).
   const theirs = t.comments.nodes.findLast((c) => c.author?.login !== ctx.me && c.state !== 'PENDING');

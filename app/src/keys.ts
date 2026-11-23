@@ -29,6 +29,8 @@ export const ACTIONS = [
   ['nextCommit', 'Next commit on its own (from all changes: the first; after the last, all changes again)', '>'],
   ['newCommits', 'The commits pushed since your last review, together', 'C'],
   ['revertCommit', words('Revert the commit on show on its own (your PR; asks first)'), 'Z'],
+  ['quoteReply', 'Quote the text selected in a comment in a reply', 'Q'],
+  ['fixedAll', words('Reply "Fixed in" and resolve every thread later commits changed (your PR)'), 'F'],
   ['react', 'React 👍 to the comment under the mouse (again: take it back)', '+'],
   ['editComment', 'Edit your comment under the mouse', 'E'],
   ['commentMenu', 'The comment under the mouse: edit, delete, hide or dismiss it', 'H'],
