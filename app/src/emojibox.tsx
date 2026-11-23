@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEmojis } from './github.ts';
-import { composing, getSlackEmoji } from './platform.ts';
-import { slackParts } from './slackmsg.ts';
+import { composing, getSlackEmoji, type SlackPresence } from './platform.ts';
+import { isAway, slackParts, statusText } from './slackmsg.ts';
 
 // Slack emoji, to draw and suggest: the workspace's custom ones (aliases followed), then GitHub's standard set, whose
 // names mostly match Slack's. `names` puts the workspace's own first.
@@ -98,5 +98,21 @@ export function SlackPreview({ message, emoji }: { message: string; emoji: (name
         </div>
       ))}
     </div>
+  );
+}
+
+// Someone's Slack status, small, beside their name: its emoji (a few words when it has none, 🌴 when away without
+// one), 🌙 when it's late where they are; all of it in words on hover.
+export function StatusMark({ s, late, busy }: { s?: SlackPresence | null; late?: string | null; busy?: string }) {
+  const { emoji } = useSlackEmoji();
+  const away = !!busy || isAway(s);
+  const words = [s && (s.text || s.emoji) && statusText(s), busy && `Busy: ${busy}`, late && `It's ${late} where they are`].filter(Boolean).join(' · ');
+  if (!words) return null;
+  const img = s?.emoji ? emoji(s.emoji.replace(/:/g, '')) : undefined;
+  return (
+    <span class={away ? 'ix-mark away' : 'ix-mark'} title={words}>
+      {img ? <img src={img} alt="" /> : away ? '🌴' : s?.text && <span class="ix-mark-text">{s.text}</span>}
+      {late && !away && '🌙'}
+    </span>
   );
 }

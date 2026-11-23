@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { hint, readBindings } from './keys.ts';
 import { ask, composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
 import { isAway, lateFor, statusText } from './slackmsg.ts';
+import { StatusMark } from './emojibox.tsx';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
 import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold, Time } from './tags.tsx';
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
@@ -784,9 +785,8 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
               <span class="ix-label">
                 {!who.startsWith('team ') && <img src={faceOf(who)} alt="" />}
                 {who} <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
+                <StatusMark s={presence[who]} late={r.tone === 'WAITING' ? lateFor(presence[who]) : null} />
               </span>
-              {presence[who] && <span class={isAway(presence[who]) ? 'ix-status away' : 'ix-status'}>{isAway(presence[who]) && '🌴 '}{statusText(presence[who])}</span>}
-              {r.tone === 'WAITING' && !isAway(presence[who]) && lateFor(presence[who]) && <span class="ix-status">🌙 {lateFor(presence[who])}</span>}
             </button>
             {replace && r.tone === 'WAITING' && isAway(presence[who]) && <Replace login={who} replace={replace} />}
             {reRequest && r.id && r.tone !== 'WAITING' && <ReRequest login={who} again={reRequest} />}

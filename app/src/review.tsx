@@ -30,7 +30,7 @@ import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, rein
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slackTemplate, type SlackKind } from './slackmsg.ts';
-import { EmojiTextarea, SlackPreview, useSlackEmoji } from './emojibox.tsx';
+import { EmojiTextarea, SlackPreview, StatusMark, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
 import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
@@ -322,17 +322,9 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
           >
             <span class="ix-label">
               <img src={faceOf(p.login)} alt="" />{shownAt(p.login, repo)}{' '}
-              <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : state[p.login] === 'asked' ? <><Octicon name="check" /> asked</> : away ? 'away' : p.load ? `${p.load} waiting` : 'free'}</span>
+              {state[p.login] && <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : <><Octicon name="check" /> asked</>}</span>}
+              <StatusMark s={s} late={late} busy={p.busy} />
             </span>
-            {(s?.text || s?.emoji) && (
-              <span class={away ? 'ix-status away' : 'ix-status'}>
-                {s.emoji && emoji.emoji(s.emoji.replace(/:/g, '')) && <img class="ix-status-emoji" src={emoji.emoji(s.emoji.replace(/:/g, ''))} alt="" />}
-                {s.text || s.emoji}
-                {until(s)}
-              </span>
-            )}
-            {p.busy && !s?.text && <span class="ix-status away">Busy: {p.busy}</span>}
-            {late && !away && <span class="ix-status">🌙 {late}</span>}
           </button>
         ))}
       {slackOk ? (
