@@ -3190,28 +3190,33 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
               {stillOpen.length > 4 && ` and ${stillOpen.length - 4} more`}. You can still approve.
             </p>
           )}
-          {/* What GitHub (and Slack) will get, so nothing about submitting is a surprise. */}
-          <div class="sends">
-            {event !== 'APPROVE' && !body.trim() && !count && !(event === 'REQUEST_CHANGES' && mySummary) ? (
-              event === 'COMMENT' ? (myOpenThreads ? `Nothing new to send: your comments are already on ${site(repo)}. Submitting just moves on.` : 'Nothing to send yet: write a summary, or comment on lines.') : 'A change request needs to say what to change: write it above.'
-            ) : (
-              <>
-                Sends {authored ? 'a comment' : { COMMENT: 'a comment', APPROVE: 'an approval', REQUEST_CHANGES: 'a change request' }[event]}
-                {body.trim() ? ' with your summary' : event === 'REQUEST_CHANGES' ? ' with a summary of your comments' : ''}
-                {count > 0 && `, and ${count} line comment${count > 1 ? 's' : ''}`}
-                {merging && event === 'APPROVE' && '; then merges it if it may'}
-                {viewing && `; marks ${unviewed === 1 ? 'the last file' : `the other ${unviewed} files`} viewed`}
-                {notify && slackTo && slackTo.length > 0 && `; messages ${slackTo.map((l) => '@' + l).join(', ')} on Slack`}.
-                {next && !authored && ' The next PR opens at once; this goes on in the background.'}
+          {/* What submitting does beyond the obvious (the verdict and your summary): said only when there's some of it. */}
+          {(() => {
+            const nothing = event !== 'APPROVE' && !body.trim() && !count && !(event === 'REQUEST_CHANGES' && mySummary);
+            if (nothing && event === 'COMMENT') return myOpenThreads ? <div class="sends">Nothing new to send: your comments are already on {site(repo)}. Submitting just moves on.</div> : null;
+            if (nothing) return <div class="sends">A change request needs to say what to change: write it above.</div>;
+            const extra = [
+              event === 'REQUEST_CHANGES' && !body.trim() && 'a summary of your comments as its text',
+              count > 0 && `${count} line comment${count > 1 ? 's' : ''}`,
+              merging && event === 'APPROVE' && 'then merges it if it may',
+              notify && slackTo && slackTo.length > 0 && `messages ${slackTo.map((l) => '@' + l).join(', ')} on Slack`,
+              viewing && `marks ${unviewed === 1 ? 'the last file' : `the other ${unviewed} files`} viewed`,
+            ].filter(Boolean);
+            const moving = next && !authored;
+            if (!extra.length && !moving) return null;
+            return (
+              <div class="sends">
+                {extra.length > 0 && <>Also: {extra.join('; ')}.</>}
+                {moving && `${extra.length ? ' ' : ''}The next ${pageTerm().PR} opens at once; this goes on in the background.`}
                 {lineComments.length > 0 && (
                   <span class="sends-list">
                     {lineComments.slice(0, 6).map((d) => `${base(d.path)}${d.line ? ':' + d.line : ''}`).join(' · ')}
                     {lineComments.length > 6 ? ` · ${lineComments.length - 6} more` : ''}
                   </span>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+            );
+          })()}
           <button class="primary" disabled={!!busy || (inline && inFlight)} onClick={go}>
             {busy ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : authored ? 'Comment' : 'Submit review'}
           </button>
