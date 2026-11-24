@@ -2302,7 +2302,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it: your review goes on the newest.`;
       }}
       seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
-      canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft && (pr.user.type === 'Bot' || bots.has(pr.user.login) || pr.assignees.some((a) => a.login === me))} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
+      canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft && (pr.assignees.some((a) => a.login === me) || !!linkedSession(repo, n))} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
       unviewed={data.files.filter((f) => !viewed.has(f.filename)).length} viewAll={() => markViewed(data.files.map((f) => f.filename), true)} />
   );
   return (
