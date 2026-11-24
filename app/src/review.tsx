@@ -3122,7 +3122,7 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
 
   return (
     <div ref={root} class={inline ? 'submit-inline' : 'submit review-submit'}>
-      {inline ? <h3>{authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''}</h3> : <button class="primary" aria-expanded={open} disabled={inFlight} onClick={() => setOpen(!open)}>
+      {!inline && <button class="primary" aria-expanded={open} disabled={inFlight} onClick={() => setOpen(!open)}>
         {inFlight ? <><span class="btn-spin" aria-hidden="true" />Sending your review…</> : busy && !open ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : <>{authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" /></>}
       </button>}
       {(open || inline) && (
