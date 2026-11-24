@@ -32,9 +32,9 @@ export function blockers(s: MergeState, checks: Check[] | null): string[] {
 
 // Approve and merge (the Finish review panel): once my approval is in, merge it the repo's usual way if nothing else is
 // in the way; while only checks are left (or GitHub hasn't counted the approval yet), auto-merge. Failing checks, a
-// "do not merge" sign or another review still needed: not merged, and says why. GitHub takes a moment to count a new
+// "do not merge" sign or another review still needed: not merged, and says why (held: nothing failed, it's waiting). GitHub takes a moment to count a new
 // approval, so it looks again a few times.
-export async function mergeOnceApproved(repo: string, n: number, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<{ ok: boolean; text: string }> {
+export async function mergeOnceApproved(repo: string, n: number, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<{ ok: boolean; held?: boolean; text: string }> {
   let s = await getMergeState(repo, n);
   for (let i = 0; i < 5 && afterApproval(s) === 'wait'; i++) await wait(1500), (s = await getMergeState(repo, n));
   let next = afterApproval(s);
@@ -48,7 +48,7 @@ export async function mergeOnceApproved(repo: string, n: number, wait = (ms: num
   if (next === 'merge' || next === 'auto') await mergePR(s, m, s.message[m].title, s.message[m].body, next === 'auto');
   return next === 'merge' ? { ok: true, text: `Approved and merged (${VERB[m].toLowerCase()}).` }
     : next === 'auto' ? { ok: true, text: 'Approved; auto-merge is on: it merges once its checks pass.' }
-    : { ok: false, text: `Approved, not merged: ${next !== 'wait' ? next : s.reviewDecision === 'REVIEW_REQUIRED' ? 'it needs another approval' : `${site(repo)} hasn't worked out yet whether it can merge`}.` };
+    : { ok: false, held: true, text: `Approved, not merged: ${next !== 'wait' ? next : s.reviewDecision === 'REVIEW_REQUIRED' ? 'it needs another approval' : `${site(repo)} hasn't worked out yet whether it can merge`}.` };
 }
 export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) => !s.isDraft && ['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus);
 

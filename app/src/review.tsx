@@ -130,7 +130,7 @@ const prepare = (files: PRFile[], rules: ReturnType<typeof parseGeneratedRules>)
 
 const isFileLevel = (t: Thread) => t.subjectType === 'FILE' || t.line == null;
 
-type Notice = { text: string; ok: boolean };
+type Notice = { text: string; ok: boolean; held?: boolean }; // held: nothing failed, something's in the way (not merged yet)
 // Reviews on their way to GitHub after you moved on (submit): opening one again meanwhile waits for it, not sending twice.
 const sending = new Map<string, Promise<unknown>>();
 // Comments on their way into my pending review on the site, one after another (it keeps one pending review a person:
@@ -1623,8 +1623,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           said.push({ ok: false, text: `Review submitted, but Slack failed: ${e.message}` });
         }
       }
-      for (const s of said) if (!s.ok) reportError(s.text, { route: `/${repo}/pull/${n}`, name: `${repoLabel(repo)}${numRef(repo, n)}` }); // the review is in; Slack or the merge didn't go; named, as you may be on the next PR by now
-      return said.length ? { ok: said.every((s) => s.ok), text: said.map((s) => s.text).filter(Boolean).join(' ') } : null;
+      for (const s of said) if (!s.ok && !s.held) reportError(s.text, { route: `/${repo}/pull/${n}`, name: `${repoLabel(repo)}${numRef(repo, n)}` }); // the review is in; Slack or the merge didn't go; named, as you may be on the next PR by now
+      return said.length ? { ok: said.every((s) => s.ok || s.held), text: said.map((s) => s.text).filter(Boolean).join(' ') } : null;
     })();
     if (!(next || focus)) {
       setNotice(await job);
