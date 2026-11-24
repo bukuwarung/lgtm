@@ -3149,8 +3149,8 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
             </label>
           )}
           {canMerge && !authored && event === 'APPROVE' && (
-            <label title="Once your approval is in: merged the repo's usual way if nothing else is in the way, or auto-merge while only checks are left. Failing checks, a do-not-merge sign or another review still needed: not merged, and it says why">
-              <input type="checkbox" checked={mergeIt} onChange={toggleMergeIt} /> Then merge it, or turn on auto-merge while checks run
+            <label title="Once your approval is in: merged the repo's usual way if nothing else is in the way, or auto-merge while it waits on checks, another approval or open conversations. Failing checks, conflicts, a requested change or a do-not-merge sign: not merged, and it says why">
+              <input type="checkbox" checked={mergeIt} onChange={toggleMergeIt} /> Then merge it, or turn on auto-merge until it can
             </label>
           )}
           {unviewed > 0 && (

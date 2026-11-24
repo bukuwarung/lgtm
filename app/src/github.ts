@@ -1922,14 +1922,15 @@ export function notesOf(rules: Rule[], unresolved: number, decision: string | nu
 }
 
 export const CANT_MERGE_YET = "it can't merge yet";
-// Approve and merge: what to do once my approval is in. merge; auto (only checks left: auto-merge); wait (GitHub hasn't
-// counted the approval yet); else why it won't merge.
-export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeStateStatus' | 'reviewDecision' | 'viewerCanEnableAutoMerge' | 'autoMergeRequest' | 'mergeable' | 'reasons' | 'ruleNotes'>): 'merge' | 'auto' | 'wait' | string {
+// Approve and merge: what to do once my approval is in. merge; auto (blocked by what auto-merge waits for: checks,
+// another approval, a code owner's, open conversations); wait (GitHub hasn't counted the approval yet; `settled`: it's
+// had its time, so an approval still owed is someone else's); else why it won't merge.
+export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeStateStatus' | 'reviewDecision' | 'viewerCanEnableAutoMerge' | 'autoMergeRequest' | 'mergeable' | 'reasons' | 'ruleNotes'>, settled = false): 'merge' | 'auto' | 'wait' | string {
   if (s.holds.length) return `it's marked not to merge (${s.holds.join(', ')})`;
   if (s.isDraft) return "it's a draft";
-  if (s.mergeStateStatus === 'UNKNOWN' || (s.reviewDecision === 'REVIEW_REQUIRED' && s.mergeStateStatus === 'BLOCKED')) return 'wait';
+  if (s.mergeStateStatus === 'UNKNOWN' || (!settled && s.reviewDecision === 'REVIEW_REQUIRED' && s.mergeStateStatus === 'BLOCKED')) return 'wait';
   if (['CLEAN', 'HAS_HOOKS'].includes(s.mergeStateStatus)) return 'merge';
-  if (s.mergeStateStatus === 'BLOCKED' && s.reviewDecision === 'APPROVED' && s.viewerCanEnableAutoMerge && !s.autoMergeRequest) return 'auto';
+  if (s.mergeStateStatus === 'BLOCKED' && s.reviewDecision !== 'CHANGES_REQUESTED' && s.viewerCanEnableAutoMerge && !s.autoMergeRequest) return 'auto';
   if (s.mergeable === 'CONFLICTING' || s.mergeStateStatus === 'DIRTY') return 'it conflicts with its base branch';
   if (s.mergeStateStatus === 'BEHIND') return "it's behind its base branch";
   if (s.mergeStateStatus === 'UNSTABLE') return 'some checks are failing';

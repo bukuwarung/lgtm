@@ -1550,7 +1550,7 @@ test('teamLabel: the org left out unless another team listed has the same name',
   assert.equal(teamLabel('gitlab.co/grp/sub', ['gitlab.co/grp/sub', 'gitlab.co/grp/two']), 'sub');
 });
 
-test('approve and merge: merges when clear, auto-merge when only checks are left, else says why', () => {
+test('approve and merge: merges when clear, auto-merge while it waits on checks, approvals or conversations, else says why', () => {
   const s = { holds: [] as string[], isDraft: false, mergeStateStatus: 'CLEAN', reviewDecision: 'APPROVED', viewerCanEnableAutoMerge: true, autoMergeRequest: null, mergeable: 'MERGEABLE' } as any;
   assert.equal(afterApproval(s), 'merge');
   assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED' }), 'auto');
@@ -1560,6 +1560,12 @@ test('approve and merge: merges when clear, auto-merge when only checks are left
   assert.equal(afterApproval({ ...s, mergeStateStatus: 'DIRTY', mergeable: 'CONFLICTING' }), 'it conflicts with its base branch');
   assert.match(afterApproval({ ...s, holds: ['the “wip” label'] }), /marked not to merge/);
   assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED', viewerCanEnableAutoMerge: false }), "it can't merge yet");
+  // Another approval owed (a code owner's), once GitHub has had time to count mine: auto-merge waits for it.
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED', reviewDecision: 'REVIEW_REQUIRED' }, true), 'auto');
+  // Rulesets leave reviewDecision empty (a conversation open, a code owner's approval owed): auto-merge too.
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED', reviewDecision: null, ruleNotes: ['a code owner has to approve'] }, true), 'auto');
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED', reviewDecision: 'CHANGES_REQUESTED' }, true), 'someone requested changes');
+  assert.equal(afterApproval({ ...s, mergeStateStatus: 'BLOCKED', autoMergeRequest: { enabledAt: 'x' } }, true), 'auto-merge was already on');
 });
 
 test('splitPatch: a commit message, then each file of a git or plain diff', async () => {

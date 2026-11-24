@@ -31,13 +31,14 @@ export function blockers(s: MergeState, checks: Check[] | null): string[] {
 }
 
 // Approve and merge (the Finish review panel): once my approval is in, merge it the repo's usual way if nothing else is
-// in the way; while only checks are left (or GitHub hasn't counted the approval yet), auto-merge. Failing checks, a
+// in the way; while it waits on what auto-merge waits for (checks, another or a code owner's approval, conversations to
+// resolve), auto-merge, saying what's left. Failing checks, a
 // "do not merge" sign or another review still needed: not merged, and says why (held: nothing failed, it's waiting). GitHub takes a moment to count a new
 // approval, so it looks again a few times.
 export async function mergeOnceApproved(repo: string, n: number, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<{ ok: boolean; held?: boolean; text: string }> {
   let s = await getMergeState(repo, n);
   for (let i = 0; i < 5 && afterApproval(s) === 'wait'; i++) await wait(1500), (s = await getMergeState(repo, n));
-  let next = afterApproval(s);
+  let next = afterApproval(s, true);
   // Blocked for no reason GitHub names (checks still to pass where auto-merge isn't allowed, say): the checks' word.
   if (next === CANT_MERGE_YET) {
     const why = blockers(s, await getChecks(repo, n).catch(() => null)).filter((b) => b !== 'Blocked by branch rules').join(', ').toLowerCase();
@@ -46,8 +47,9 @@ export async function mergeOnceApproved(repo: string, n: number, wait = (ms: num
   }
   const m = s.methods[0];
   if (next === 'merge' || next === 'auto') await mergePR(s, m, s.message[m].title, s.message[m].body, next === 'auto');
+  const left = next === 'auto' ? blockers(s, await getChecks(repo, n).catch(() => null)).filter((b) => b !== 'Blocked by branch rules').join(', ').toLowerCase() : '';
   return next === 'merge' ? { ok: true, text: `Approved and merged (${VERB[m].toLowerCase()}).` }
-    : next === 'auto' ? { ok: true, text: 'Approved; auto-merge is on: it merges once its checks pass.' }
+    : next === 'auto' ? { ok: true, text: `Approved; auto-merge is on: it merges by itself once ${left ? `nothing's in the way (now: ${left})` : 'its checks pass'}.` }
     : { ok: false, held: true, text: `Approved, not merged: ${next !== 'wait' ? next : s.reviewDecision === 'REVIEW_REQUIRED' ? 'it needs another approval' : `${site(repo)} hasn't worked out yet whether it can merge`}.` };
 }
 export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) => !s.isDraft && ['CLEAN', 'HAS_HOOKS', 'UNSTABLE'].includes(s.mergeStateStatus);
