@@ -629,7 +629,7 @@ export async function getLabChecks(repo: string, n: number): Promise<Check[]> {
         name: `${j.stage?.name ? `${j.stage.name} / ` : ''}${j.name}`,
         state: allowed ? 'neutral' : raw,
         url: abs(host, j.webPath) ?? null,
-        summary: allowed ? 'failed (allowed to fail)' : j.status === 'MANUAL' ? 'manual: waits to be started' : String(j.detailedStatus?.label ?? j.status).toLowerCase(),
+        summary: allowed ? 'failed (allowed to fail)' : j.status === 'MANUAL' ? 'manual: waits to be started' : String(j.detailedStatus?.label ?? j.status).toLowerCase().replace(/_/g, ' '),
         jobId: num(j.id),
         run: String(num(p.id)),
         // A job waiting for someone to start it (deploy to staging, say), that I may start.

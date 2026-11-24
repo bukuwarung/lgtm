@@ -451,6 +451,19 @@ try {
     await evaluate(`document.querySelectorAll('[data-esc]').forEach((o) => delete o.dataset.esc)`);
     return out;
   };
+  // A value straight from GitHub's or GitLab's API on screen, not put into words: in_progress, REVIEW_REQUIRED, MERGEABLE…
+  // In lgtm's own text only: code, comments and descriptions (people's words), file and check names aside.
+  const RAW = /\b(?:[A-Z]{2,}(?:_[A-Z]+)+|in_progress|timed_out|action_required|startup_failure|waiting_for_resource|APPROVED|COMMENTED|DISMISSED|PENDING|MERGED|CLOSED|OPEN|CLEAN|BLOCKED|BEHIND|DIRTY|UNSTABLE|CONFLICTING|MERGEABLE|UNKNOWN|SUCCESS|FAILURE|NEUTRAL|SKIPPED|CANCELLED|COMPLETED|QUEUED|EXPECTED)\b/;
+  const raw = (where) => evaluate(`(() => {
+    const out = new Set(), w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let t; (t = w.nextNode()); ) {
+      const e = t.parentElement;
+      if (!e?.getClientRects().length || e.closest('pre, code, .md, .rich, table.diff, .code, svg, input, textarea, .file-h, .tree, .ix-check .ix-label, .branch')) continue;
+      const m = t.textContent.match(${RAW});
+      if (m) out.add(${JSON.stringify(where)} + ': "' + m[0] + '" in "' + t.textContent.trim().slice(0, 40) + '" (' + (e.className || e.tagName.toLowerCase()) + ')');
+    }
+    return [...out];
+  })()`);
   // The PR (each pill's menu open in turn), Settings and the list, each through these checks.
   const tour = async (label, checks) => {
     const found = [];
@@ -580,6 +593,10 @@ try {
   await step('Tab shows where it is: every stop on the PR, Settings and the list looks focused', async () => {
     const found = await tour('Tab', [unringed]);
     if (found.length) throw new Error(`${found.length} stops with no sign of focus: ${found.join('; ')}`);
+  });
+  await step("no raw API values on screen (in_progress, REVIEW_REQUIRED…) on the PR, its pills' menus, Settings and the list", async () => {
+    const found = await tour('raw', [raw]);
+    if (found.length) throw new Error(`shown as the API gives them: ${found.join('; ')}`);
   });
   await step('Escape closes each menu, panel and dialog on the PR, the list and Settings, and gives focus back to its opener', async () => {
     const found = [];
