@@ -1601,3 +1601,11 @@ test('notesOf: what a blocked PR still owes its branch rules', async () => {
   assert.deepEqual(notesOf(rules, 0, 'REVIEW_REQUIRED'), ['a code owner has to approve', 'it merges through the merge queue']);
   assert.deepEqual(notesOf([], 3, null), []);
 });
+
+test('signedUntil: when a GitHub attachment address (private-user-images…?jwt=) runs out', async () => {
+  const { signedUntil } = await import('../src/platform.ts');
+  const jwt = (o: object) => 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.' + Buffer.from(JSON.stringify(o)).toString('base64url') + '.sig';
+  assert.equal(signedUntil(`https://private-user-images.githubusercontent.com/1/2-7ab1aabd-45a5-47f9-87cc-2d0cfdff287a.mp4?jwt=${jwt({ iss: 'github.com', exp: 1795509919 })}`), 1795509919);
+  assert.equal(signedUntil('https://example.com/a.mp4'), 0);
+  assert.equal(signedUntil('https://x/a.mp4?jwt=not.a-jwt'), 0);
+});

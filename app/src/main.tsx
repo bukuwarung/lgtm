@@ -4,7 +4,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type AgentRun, agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
+import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
 import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
@@ -13,7 +13,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { claudeFolder, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { setResign, claudeFolder, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
 import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -29,6 +29,9 @@ import { Resizer } from './resizer.tsx';
 import { GistPage } from './gist.tsx';
 import { hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { movePending } from './merge.tsx';
+
+// A video's address GitHub signed for five minutes, signed again in the PR's repo when it runs out (platform.ts).
+setResign((src) => freshMedia(src, location.hash.match(/^#\/([\w.-]+\/[\w.-]+)\/pull\/\d+/)?.[1]));
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
 const T = term();

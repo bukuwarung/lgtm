@@ -1007,8 +1007,40 @@ async function openImages(img: HTMLImageElement) {
   const paths = await Promise.all([...all.slice(at), ...all.slice(0, at)].map(saveImage));
   await command('open_media', { paths, app: 'Preview' });
 }
+// When a signed address (GitHub's private-user-images…?jwt=…, good for five minutes) runs out, in seconds since 1970; 0
+// for any other address.
+export function signedUntil(src: string): number {
+  const p = src.match(/[?&]jwt=[\w-]+\.([\w-]+)\./)?.[1];
+  if (!p) return 0;
+  try {
+    return Number(JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(p.length / 4) * 4, '='))).exp) || 0;
+  } catch {
+    return 0;
+  }
+}
+// Signs such an address again (main.tsx: GitHub's Markdown API renders the attachment afresh); null when it can't.
+let resign: (src: string) => Promise<string | null> = async () => null;
+export function setResign(f: typeof resign) {
+  resign = f;
+  addEventListener('play', (e) => e.target instanceof HTMLVideoElement && void resignVideo(e.target, true), true);
+  addEventListener('error', (e) => e.target instanceof HTMLVideoElement && void resignVideo(e.target, true), true);
+}
+// A video in a description or comment whose address has run out (or is about to): given a fresh one, at the same
+// moment of it, playing on if it was asked to play. GitHub's last five minutes: a video played later than that after
+// the page loaded wouldn't load.
+export async function resignVideo(v: HTMLVideoElement, play = false): Promise<void> {
+  const src = v.currentSrc || v.src, until = signedUntil(src);
+  if (!until || until * 1000 > Date.now() + 15_000) return;
+  const fresh = await resign(src).catch(() => null);
+  if (!fresh) return;
+  const at = v.currentTime;
+  v.src = fresh;
+  if (at) v.addEventListener('loadedmetadata', () => (v.currentTime = at), { once: true });
+  if (play) await v.play().catch(() => {});
+}
 // A video in the default video player (IINA, QuickTime…): downloaded from the address it plays from.
 async function openVideo(v: HTMLVideoElement) {
+  await resignVideo(v);
   const src = v.currentSrc || v.src;
   const path = await command<string>('download_media', { url: src, name: mediaName(src) });
   await command('open_media', { paths: [path] });
