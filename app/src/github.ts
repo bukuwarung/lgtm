@@ -644,9 +644,12 @@ export async function searchRepos(q: string, orgs: string[]): Promise<string[]> 
 // An attachment's address GitHub signed for five minutes (private-user-images…/<id>.mp4?jwt=…), signed again: the
 // attachment rendered afresh by the Markdown API, in its repo (a private one's needs it). null for another address.
 export async function freshMedia(src: string, repo?: string): Promise<string | null> {
-  const id = src.match(/\/\d+-([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.\w+\?/i)?.[1];
+  const [, id, ext] = src.match(/\/\d+-([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.(\w+)\?/i) ?? [];
   if (!id) return null;
-  const res = await gh('/markdown', { method: 'POST', body: JSON.stringify({ text: `https://github.com/user-attachments/assets/${id}`, mode: 'gfm', ...(repo ? { context: repo } : {}) }) });
+  // A video's bare address is embedded; a picture's only as an image (alone, it stays a link).
+  const url = `https://github.com/user-attachments/assets/${id}`;
+  const text = /^(mp4|mov|webm)$/i.test(ext) ? url : `![](${url})`;
+  const res = await gh('/markdown', { method: 'POST', body: JSON.stringify({ text, mode: 'gfm', ...(repo ? { context: repo } : {}) }) });
   return (await (await ok(res)).text()).match(/<(?:video|img)[^>]*\ssrc="([^"]+)"/)?.[1]?.replace(/&amp;/g, '&') ?? null;
 }
 // GitHub statuses set to busy (aliased u0, u1… in `d`, in the order of `logins`): their messages.

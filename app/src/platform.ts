@@ -990,7 +990,12 @@ const mediaName = (src: string, alt = '') => (decodeURIComponent(new URL(src, lo
 // An image saved as a temp file from the bytes the page already has (the browser's cached copy: nothing downloaded
 // again), handed over raw. Back: its path.
 async function saveImage(img: HTMLImageElement): Promise<string> {
-  const bytes = new Uint8Array(await (await fetch(img.currentSrc, { cache: 'force-cache' })).arrayBuffer());
+  // As shown (cached); if that copy's gone and its address has run out (GitHub's last five minutes), from a fresh one.
+  let res = await fetch(img.currentSrc, { cache: 'force-cache' }).catch(() => null);
+  const fresh = !res?.ok ? await resignImage(img) : null;
+  if (fresh) res = await fetch(fresh);
+  if (!res?.ok) throw new Error(`Couldn't get the picture (${res?.status ?? 'no answer'})`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
   const { invoke } = await import('@tauri-apps/api/core');
   return invoke<string>('save_media', bytes, { headers: { 'x-name': img.dataset.name?.replace(/[^\w. -]/g, '_') || mediaName(img.currentSrc, img.alt) } });
 }
@@ -1023,7 +1028,16 @@ let resign: (src: string) => Promise<string | null> = async () => null;
 export function setResign(f: typeof resign) {
   resign = f;
   addEventListener('play', (e) => e.target instanceof HTMLVideoElement && void resignVideo(e.target, true), true);
-  addEventListener('error', (e) => e.target instanceof HTMLVideoElement && void resignVideo(e.target, true), true);
+  addEventListener('error', (e) => (e.target instanceof HTMLVideoElement ? void resignVideo(e.target, true) : e.target instanceof HTMLImageElement && void resignImage(e.target)), true);
+}
+// A picture whose address has run out (one in a copy of the page saved earlier, or not loaded until scrolled to): a
+// fresh address, which it loads from. The new address, or null when it wasn't one or couldn't be signed again.
+async function resignImage(img: HTMLImageElement): Promise<string | null> {
+  const src = img.src || img.currentSrc, until = signedUntil(src); // src: the one asked for (currentSrc: the last that loaded)
+  if (!until || until * 1000 > Date.now() + 15_000) return null;
+  const fresh = await resign(src).catch(() => null);
+  if (fresh) img.src = fresh;
+  return fresh;
 }
 // A video in a description or comment whose address has run out (or is about to): given a fresh one, at the same
 // moment of it, playing on if it was asked to play. GitHub's last five minutes: a video played later than that after
