@@ -5,9 +5,9 @@
 :root, .lgtm-colors { /* .lgtm-colors: lgtm's own colours again inside another theme (its preview card) */
   color-scheme: light dark;
   --bg: light-dark(#fff, #2b2b2b); --soft: light-dark(#f6f8fa, #313335); --border: light-dark(#d1d9e0, #45484a);
-  --fg: light-dark(#1f2328, #bbbbbb); --code-fg: light-dark(#1f2328, #a9b7c6); --muted: light-dark(#59636e, #808080);
+  --fg: light-dark(#1f2328, #bbbbbb); --code-fg: light-dark(#1f2328, #a9b7c6); --muted: light-dark(#59636e, #9e9e9e);
   --add: light-dark(#dafbe1, #294436); --del: light-dark(#ffebe9, #4a3536); --warn: light-dark(#fff8c5, #52503a);
-  --addfg: light-dark(#1a7f37, #629755); --delfg: light-dark(#d1242f, #c75450); --modfg: light-dark(#bf8700, #6897bb);
+  --addfg: light-dark(#1a7f37, #78b06a); --delfg: light-dark(#d1242f, #e87a75); --modfg: light-dark(#bf8700, #6897bb);
   --accent: light-dark(#0969da, #589df6); --primary: light-dark(#1f883d, #3d6b45); --on-primary: light-dark(#fff, #e6e6e6);
   --shadow: light-dark(#0003, #0008);
   /* More of what a theme (themes.ts) sets: amber text, word highlights, find matches, the image checkerboard, the test
@@ -955,7 +955,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 }
 .demo-theme { padding: 8px 12px; border-radius: 8px; background: var(--bg); color: var(--fg); }
 .demo-theme p { margin: 6px 0; }
-:root, .lgtm-colors { --pill-ok: light-dark(#1a7f37, #7fc27a); --pill-bad: light-dark(#cf222e, #f08a84); --pill-warn: light-dark(#9a6700, #e8a95c); --pill-info: light-dark(#0969da, #79b4ff); }
+:root, .lgtm-colors { --pill-ok: light-dark(#1a7f37, #7fc27a); --pill-bad: light-dark(#cf222e, #f08a84); --pill-warn: light-dark(#865a00, #e8a95c); --pill-info: light-dark(#0860c8, #79b4ff); }
 .pill { color: color-mix(in srgb, var(--fg) 88%, var(--bg)); background: var(--soft); border-color: var(--border); }
 .pill.p-ok, .pill.p-agent { color: var(--pill-ok); }
 .pill.p-bad { color: var(--pill-bad); }

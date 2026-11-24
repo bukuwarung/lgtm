@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useStoredFlag, useStoredValue } from './platform.ts';
-import { BUILTIN_THEMES, themeProps, type AppTheme } from './themes.ts';
+import { BUILTIN_THEMES, contrast, themeProps, type AppTheme } from './themes.ts';
 
 // Code colours and font, picked in Settings → Appearance. A theme is a light and a dark palette for the
 // highlighter's tokens (style.css --hl-*); the app's own light/dark choice picks which one shows.
@@ -148,14 +148,6 @@ const MARKS: [mark: string, token: string, light: string, dark: string][] = [
   ['--c-quiet', '--muted', '#57606a', '#9da7b3'], ['--c-given', '--accent', '#0b5cad', '#79b8ff'], ['--c-when', '--warnfg', '#8a5300', '#e3b341'],
   ['--c-then', '--addfg', '#1a7f37', '#56d364'],
 ];
-const rgb = (c?: string) => c?.match(/^#([0-9a-f]{6})/i)?.[1].match(/../g)!.map((h) => parseInt(h, 16) / 255);
-const lum = (c: number[]) => c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
-export function contrast(a?: string, b?: string): number {
-  const x = rgb(a), y = rgb(b);
-  if (!x || !y) return 0;
-  const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p);
-  return (hi + 0.05) / (lo + 0.05);
-}
 export function markProps(t: AppTheme): Record<string, string> {
   const pick = (mode: 'light' | 'dark', token: string, own: string) => (contrast(t[mode][token], t[mode]['--bg']) >= 4.5 ? t[mode][token] : own);
   const props = Object.fromEntries(MARKS.map(([v, tok, l, d]) => [v, `light-dark(${pick('light', tok, l)}, ${pick('dark', tok, d)})`]));

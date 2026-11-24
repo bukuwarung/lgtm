@@ -1176,10 +1176,18 @@ test('earlierVerdicts: a person\'s replaced verdicts fold under their latest', a
 });
 
 test('markProps: a theme\'s colours for lgtm\'s marks only where they read at 4.5:1', async () => {
-  const { markProps, contrast } = await import('../src/look.ts');
-  const { BUILTIN_THEMES } = await import('../src/themes.ts');
+  const { markProps } = await import('../src/look.ts');
+  const { BUILTIN_THEMES, contrast } = await import('../src/themes.ts');
   const ayu = markProps(BUILTIN_THEMES.ayu)['--c-attn'];
-  assert.match(ayu, /^light-dark\(#9a6700, /); // Ayu Light's amber is too pale: lgtm's own
+  // Ayu Light's amber, too pale on white as the theme has it, darkened toward its text until it reads (themes.ts).
+  assert.ok(contrast(ayu.match(/^light-dark\((#\w+),/)![1], BUILTIN_THEMES.ayu.light['--bg']) >= 4.5);
+  assert.notEqual(BUILTIN_THEMES.ayu.light['--warnfg'], '#f1ad49');
+  // Every theme's text colours read on its background, and text on its primary colour (the nav's count) reads too.
+  for (const t of Object.values(BUILTIN_THEMES))
+    for (const m of [t.light, t.dark]) {
+      for (const k of ['--muted', '--accent', '--addfg', '--delfg', '--warnfg', '--pill-ok', '--pill-bad', '--pill-warn', '--pill-info']) if (m[k]) assert.ok(contrast(m[k], m['--bg']) >= 4.5, `${t.name} ${k}`);
+      assert.ok(contrast(m['--on-primary'], m['--primary']) >= 4.5, `${t.name} --on-primary`);
+    }
   assert.ok(!ayu.endsWith('#d29922)')); // Ayu Dark's reads well: the theme's
   for (const t of Object.values(BUILTIN_THEMES))
     for (const [k, v] of Object.entries(markProps(t)))

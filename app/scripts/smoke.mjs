@@ -250,71 +250,134 @@ try {
     for (const end = Date.now() + 5000; !(sent.includes('POST fajar') && sent.includes('DELETE bayu')); await sleep(200)) if (Date.now() > end) throw new Error(`Timed out: fajar asked, bayu taken off (sent: ${sent.join(', ')})`);
     await until('the pill says so', `[...document.querySelectorAll('.pill-drop .p-ok')].some((b) => b.textContent.includes('asked someone else') && b.title === 'Asked @fajar instead of @bayu.')`, 2000);
   });
+  const icons = (where) => evaluate(`[...document.querySelectorAll('button, summary, a')].filter((b) => b.querySelector('svg') && !b.textContent.trim() && b.offsetParent && !b.classList.contains('account-btn')).flatMap((b) => {
+    const r = b.getBoundingClientRect(), i = b.querySelector('svg').getBoundingClientRect();
+    const d = Math.max(Math.abs(i.top + i.height / 2 - r.top - r.height / 2), Math.abs(i.left + i.width / 2 - r.left - r.width / 2));
+    return r.width && i.width && d > 1 ? [${JSON.stringify(where)} + ': ' + (b.getAttribute('aria-label') || b.title || b.className) + ' ' + d.toFixed(1) + 'px off'] : [];
+  })`);
+  // Every row that lines things up (the top bar, the title bar, the pill bar, file headers, the PR list's pills): the
+  // items on each line of it centred on one another, within a pixel. Lines found by where items sit (the pill bar wraps).
+  const rows = (where) => evaluate(`(() => {
+    const out = [];
+    for (const row of document.querySelectorAll('.top, .bar, .pr-status, .file-h, .pr-item .pills, .pr-item .pr-meta')) {
+      if (!row.offsetParent && getComputedStyle(row).position !== 'fixed') continue;
+      const items = [...row.children].filter((c) => { const st = getComputedStyle(c), r = c.getBoundingClientRect(); return r.width > 1 && r.height > 1 && !['absolute', 'fixed'].includes(st.position) && st.visibility !== 'hidden'; })
+        .map((c) => { const b = c.getBoundingClientRect(), st = getComputedStyle(c); return { c, r: { top: b.top + parseFloat(st.paddingTop), bottom: b.bottom - parseFloat(st.paddingBottom), get height() { return this.bottom - this.top; } } }; }); // content, not padding: room left for a badge isn't misalignment
+      const lines = [];
+      for (const it of items.sort((a, b) => a.r.top - b.r.top)) {
+        const line = lines.find((l) => it.r.top < l.bottom - 2 && it.r.bottom > l.top + 2);
+        line ? (line.items.push(it), (line.top = Math.min(line.top, it.r.top)), (line.bottom = Math.max(line.bottom, it.r.bottom))) : lines.push({ top: it.r.top, bottom: it.r.bottom, items: [it] });
+      }
+      for (const l of lines) {
+        if (l.items.length < 2) continue;
+        const mids = l.items.map((it) => it.r.top + it.r.height / 2), lo = Math.min(...mids), hi = Math.max(...mids);
+        if (hi - lo > 1) {
+          const name = (e) => (e.getAttribute('aria-label') || e.title || e.textContent.trim() || e.className || e.tagName).toString().replace(/\\s+/g, ' ').slice(0, 24);
+          const odd = l.items[mids.indexOf(Math.abs(hi - mids.reduce((a, b) => a + b) / mids.length) > Math.abs(lo - mids.reduce((a, b) => a + b) / mids.length) ? hi : lo)];
+          out.push(${JSON.stringify(where)} + ' ' + (row.className.split(' ')[0]) + ': ' + name(odd.c) + ' ' + (hi - lo).toFixed(1) + 'px off');
+        }
+      }
+    }
+    return out;
+  })()`);
+  // A checkbox or radio centred on the first line of its words, within 1.5px (previews aside: they're miniatures).
+  const offWords = (where) => evaluate(`[...document.querySelectorAll('label input[type=checkbox], label input[type=radio]')].flatMap((i) => {
+    if (!i.offsetParent || i.closest('.demo-side')) return [];
+    // The first line of its words: its first text (an icon-only box, like a file's Viewed eye, has none).
+    const w = document.createTreeWalker(i.closest('label'), NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.textContent.trim() ? 1 : 3) });
+    const t = w.nextNode();
+    if (!t) return [];
+    const r = document.createRange();
+    r.selectNodeContents(t);
+    const line = [...r.getClientRects()].find((x) => x.width > 1 && x.height > 1);
+    if (!line) return [];
+    const b = i.getBoundingClientRect(), d = Math.abs(b.top + b.height / 2 - (line.top + line.height / 2));
+    return d > 1.5 ? [${JSON.stringify(where)} + ': "' + i.closest('label').textContent.trim().replace(/\\s+/g, ' ').slice(0, 30) + '" ' + d.toFixed(1) + 'px off'] : [];
+  })`);
+  // Nothing pushes the page, or the index, sideways (it scrolls only down).
+  const sideways = (where) => evaluate(`[document.scrollingElement, ...document.querySelectorAll('.side-scroll')].filter((e) => e && e.scrollWidth > e.clientWidth + 1).map((e) => ${JSON.stringify(where)} + ': ' + (e.className || 'the page') + ' ' + (e.scrollWidth - e.clientWidth) + 'px wider than it shows')`);
+  // Text cut off without its "…" (which shows it in full on hover): a box narrower or shorter than its words that hides
+  // the rest, or scrolls sideways to show it. Code, which scrolls on purpose, aside; so are previews (miniatures).
+  const clipped = (where) => evaluate(`[...document.querySelectorAll('body *')].flatMap((e) => {
+    if (!e.getClientRects().length || e.closest('.demo-side, pre, table.diff, .code, svg, [aria-hidden=true]')) return [];
+    const st = getComputedStyle(e), r = e.getBoundingClientRect();
+    if (r.width < 3 || r.height < 3 || !e.textContent.trim() || st.visibility === 'hidden') return [];
+    const x = e.scrollWidth > e.clientWidth + 1 && st.overflowX !== 'visible' && st.textOverflow !== 'ellipsis';
+    const y = e.clientHeight > 0 && e.scrollHeight > e.clientHeight + 1 && ['hidden', 'clip'].includes(st.overflowY) && st.webkitLineClamp === 'none';
+    if (!x && !y) return [];
+    const name = (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase());
+    return [${JSON.stringify(where)} + ': ' + name + ' "' + e.textContent.trim().replace(/\\s+/g, ' ').slice(0, 30) + '" ' + (x ? (e.scrollWidth - e.clientWidth) + 'px wide' : '') + (y ? (e.scrollHeight - e.clientHeight) + 'px tall' : '') + ' (' + (x ? st.overflowX : st.overflowY) + ')'];
+  })`);
+  // An icon button with no name: no tooltip on hover, and "button" to a screen reader.
+  const unnamed = (where) => evaluate(`[...document.querySelectorAll('button, summary, a, [role=button]')].filter((b) => b.getClientRects().length && !b.closest('.demo-side') && b.querySelector('svg') && !b.textContent.trim() && !(b.getAttribute('aria-label') || b.title || b.getAttribute('aria-labelledby') || b.closest('[title]'))).map((b) => ${JSON.stringify(where)} + ': ' + (b.className || b.tagName.toLowerCase()) + ' in ' + (b.parentElement.className || b.parentElement.tagName.toLowerCase()))`);
+  // Text too faint to read on what's behind it: under 4.5:1 (3:1 from 24px, or 18.7px bold), WCAG's minimum. Colours
+  // read through a canvas (any CSS colour to sRGB), the background the boxes behind it laid one over another. Previews,
+  // code (its theme's colours), what's disabled or greyed out (opacity: a switch's sub-switches while it's off) aside.
+  const faint = (where) => evaluate(`(() => {
+    const cx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    const rgba = (c) => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1); const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+    const over = (top, under) => top.slice(0, 3).map((v, k) => v * top[3] + under[k] * (1 - top[3])).concat(1);
+    const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const out = new Map();
+    for (const e of document.querySelectorAll('body *')) {
+      if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || !e.getClientRects().length) continue;
+      if (e.closest('.demo-side, pre, table.diff, .code, svg, [disabled], [aria-disabled=true], [aria-hidden=true], option, .slack-preview, mark.wd-add, mark.wd-del')) continue; // word highlights: code
+      if (!/[\\p{L}\\p{N}]/u.test(e.textContent)) continue; // an emoji or a mark: its colour isn't what's read
+      const st = getComputedStyle(e);
+      if (st.visibility === 'hidden') continue;
+      const layers = [];
+      let unknown = false;
+      for (let a = e; a; a = a.parentElement) {
+        const s = getComputedStyle(a);
+        if (parseFloat(s.opacity) < 1) { unknown = true; break; }
+        if (s.backgroundImage !== 'none') { unknown = true; break; }
+        const bg = rgba(s.backgroundColor);
+        if (bg[3] > 0) layers.push(bg);
+        if (bg[3] >= 1) break;
+      }
+      if (unknown) continue;
+      let bg = [255, 255, 255, 1];
+      if (!layers.length || layers.at(-1)[3] < 1) bg = rgba(getComputedStyle(document.documentElement).backgroundColor)[3] ? rgba(getComputedStyle(document.documentElement).backgroundColor) : bg;
+      for (const l of layers.reverse()) bg = over(l, bg);
+      const fg = over(rgba(st.color), bg);
+      const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a), ratio = (hi + 0.05) / (lo + 0.05);
+      const px = parseFloat(st.fontSize), big = px >= 24 || (px >= 18.66 && parseInt(st.fontWeight) >= 700);
+      if (ratio >= (big ? 3 : 4.5)) continue;
+      const name = (typeof e.className === 'string' && e.className ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase());
+      const hex = (c) => '#' + c.slice(0, 3).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+      const key = hex(fg) + ' on ' + hex(bg);
+      if (!out.has(key)) out.set(key, ${JSON.stringify(where)} + ': ' + key + ' ' + ratio.toFixed(2) + ':1, ' + name + ' "' + e.textContent.trim().replace(/\\s+/g, ' ').slice(0, 24) + '"');
+    }
+    return [...out.values()];
+  })()`);
+  // The PR (each pill's menu open in turn), Settings and the list, each through these checks.
+  const tour = async (label, checks) => {
+    const found = [];
+    const at = async (where) => { for (const c of checks) found.push(...(await c(`${label}, ${where}`))); };
+    await evaluate(`location.hash = '/acme/shop/pull/1'`);
+    await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
+    await at('the PR');
+    for (let k = 0; k < (await evaluate(`document.querySelectorAll('.pr-status details.pill-menu').length`)); k++) {
+      await evaluate(`(() => { const d = document.querySelectorAll('.pr-status details.pill-menu')[${k}]; d.open = true; d.dispatchEvent(new Event('toggle')); })()`);
+      await sleep(150);
+      await at("a pill's menu");
+      await evaluate(`document.querySelectorAll('.pr-status details.pill-menu')[${k}].open = false`);
+    }
+    await evaluate(`location.hash = '/settings'`);
+    await until('Settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`);
+    await at('Settings');
+    await evaluate(`location.hash = '/'`);
+    await until('the PR list', `!!document.querySelector('.pr-item')`);
+    await at('the list');
+    return [...new Set(found)];
+  };
   // What only WebKit shows: an icon on the text baseline sits low there; macOS's own checkboxes are tiny and grey out
   // with the window; a preview's pills pinned like the PR page's bar slid over its code.
   await step('layout in WebKit: icon buttons centred, checkboxes lgtm\'s own and on their words, nothing sideways, no text cut off without its …, previews\' pills in place', async () => {
     await evaluate(`location.hash = '/acme/shop/pull/1'`);
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
-    const icons = (where) => evaluate(`[...document.querySelectorAll('button, summary, a')].filter((b) => b.querySelector('svg') && !b.textContent.trim() && b.offsetParent && !b.classList.contains('account-btn')).flatMap((b) => {
-      const r = b.getBoundingClientRect(), i = b.querySelector('svg').getBoundingClientRect();
-      const d = Math.max(Math.abs(i.top + i.height / 2 - r.top - r.height / 2), Math.abs(i.left + i.width / 2 - r.left - r.width / 2));
-      return r.width && i.width && d > 1 ? [${JSON.stringify(where)} + ': ' + (b.getAttribute('aria-label') || b.title || b.className) + ' ' + d.toFixed(1) + 'px off'] : [];
-    })`);
     const off = await icons('the PR');
-    // Every row that lines things up (the top bar, the title bar, the pill bar, file headers, the PR list's pills): the
-    // items on each line of it centred on one another, within a pixel. Lines found by where items sit (the pill bar wraps).
-    const rows = (where) => evaluate(`(() => {
-      const out = [];
-      for (const row of document.querySelectorAll('.top, .bar, .pr-status, .file-h, .pr-item .pills, .pr-item .pr-meta')) {
-        if (!row.offsetParent && getComputedStyle(row).position !== 'fixed') continue;
-        const items = [...row.children].filter((c) => { const st = getComputedStyle(c), r = c.getBoundingClientRect(); return r.width > 1 && r.height > 1 && !['absolute', 'fixed'].includes(st.position) && st.visibility !== 'hidden'; })
-          .map((c) => { const b = c.getBoundingClientRect(), st = getComputedStyle(c); return { c, r: { top: b.top + parseFloat(st.paddingTop), bottom: b.bottom - parseFloat(st.paddingBottom), get height() { return this.bottom - this.top; } } }; }); // content, not padding: room left for a badge isn't misalignment
-        const lines = [];
-        for (const it of items.sort((a, b) => a.r.top - b.r.top)) {
-          const line = lines.find((l) => it.r.top < l.bottom - 2 && it.r.bottom > l.top + 2);
-          line ? (line.items.push(it), (line.top = Math.min(line.top, it.r.top)), (line.bottom = Math.max(line.bottom, it.r.bottom))) : lines.push({ top: it.r.top, bottom: it.r.bottom, items: [it] });
-        }
-        for (const l of lines) {
-          if (l.items.length < 2) continue;
-          const mids = l.items.map((it) => it.r.top + it.r.height / 2), lo = Math.min(...mids), hi = Math.max(...mids);
-          if (hi - lo > 1) {
-            const name = (e) => (e.getAttribute('aria-label') || e.title || e.textContent.trim() || e.className || e.tagName).toString().replace(/\\s+/g, ' ').slice(0, 24);
-            const odd = l.items[mids.indexOf(Math.abs(hi - mids.reduce((a, b) => a + b) / mids.length) > Math.abs(lo - mids.reduce((a, b) => a + b) / mids.length) ? hi : lo)];
-            out.push(${JSON.stringify(where)} + ' ' + (row.className.split(' ')[0]) + ': ' + name(odd.c) + ' ' + (hi - lo).toFixed(1) + 'px off');
-          }
-        }
-      }
-      return out;
-    })()`);
     const misaligned = await rows('the PR');
-    // A checkbox or radio centred on the first line of its words, within 1.5px (previews aside: they're miniatures).
-    const offWords = (where) => evaluate(`[...document.querySelectorAll('label input[type=checkbox], label input[type=radio]')].flatMap((i) => {
-      if (!i.offsetParent || i.closest('.demo-side')) return [];
-      // The first line of its words: its first text (an icon-only box, like a file's Viewed eye, has none).
-      const w = document.createTreeWalker(i.closest('label'), NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.textContent.trim() ? 1 : 3) });
-      const t = w.nextNode();
-      if (!t) return [];
-      const r = document.createRange();
-      r.selectNodeContents(t);
-      const line = [...r.getClientRects()].find((x) => x.width > 1 && x.height > 1);
-      if (!line) return [];
-      const b = i.getBoundingClientRect(), d = Math.abs(b.top + b.height / 2 - (line.top + line.height / 2));
-      return d > 1.5 ? [${JSON.stringify(where)} + ': "' + i.closest('label').textContent.trim().replace(/\\s+/g, ' ').slice(0, 30) + '" ' + d.toFixed(1) + 'px off'] : [];
-    })`);
-    // Nothing pushes the page, or the index, sideways (it scrolls only down).
-    const sideways = (where) => evaluate(`[document.scrollingElement, ...document.querySelectorAll('.side-scroll')].filter((e) => e && e.scrollWidth > e.clientWidth + 1).map((e) => ${JSON.stringify(where)} + ': ' + (e.className || 'the page') + ' ' + (e.scrollWidth - e.clientWidth) + 'px wider than it shows')`);
-    // Text cut off without its "…" (which shows it in full on hover): a box narrower or shorter than its words that hides
-    // the rest, or scrolls sideways to show it. Code, which scrolls on purpose, aside; so are previews (miniatures).
-    const clipped = (where) => evaluate(`[...document.querySelectorAll('body *')].flatMap((e) => {
-      if (!e.getClientRects().length || e.closest('.demo-side, pre, table.diff, .code, svg, [aria-hidden=true]')) return [];
-      const st = getComputedStyle(e), r = e.getBoundingClientRect();
-      if (r.width < 3 || r.height < 3 || !e.textContent.trim() || st.visibility === 'hidden') return [];
-      const x = e.scrollWidth > e.clientWidth + 1 && st.overflowX !== 'visible' && st.textOverflow !== 'ellipsis';
-      const y = e.clientHeight > 0 && e.scrollHeight > e.clientHeight + 1 && ['hidden', 'clip'].includes(st.overflowY) && st.webkitLineClamp === 'none';
-      if (!x && !y) return [];
-      const name = (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase());
-      return [${JSON.stringify(where)} + ': ' + name + ' "' + e.textContent.trim().replace(/\\s+/g, ' ').slice(0, 30) + '" ' + (x ? (e.scrollWidth - e.clientWidth) + 'px wide' : '') + (y ? (e.scrollHeight - e.clientHeight) + 'px tall' : '') + ' (' + (x ? st.overflowX : st.overflowY) + ')'];
-    })`);
     const unboxed = [...(await offWords('the PR')), ...(await offWords('the end of the PR'))];
     const wide = await sideways('the PR');
     const cut = await clipped('the PR');
@@ -395,6 +458,25 @@ try {
     if (boxes.length) throw new Error(`${boxes.length} checkboxes drawn by macOS or under 13px (${[...new Set(boxes)].slice(0, 6).join(', ')})`);
     const pinned = await evaluate(`[...document.querySelectorAll('.demo-side .pr-status')].filter((p) => getComputedStyle(p).position !== 'static').length`);
     if (pinned) throw new Error(`${pinned} previews' pills pinned over their code`);
+  });
+  await step('at the narrowest window (900px): lined up, nothing sideways, no text cut off, checkboxes on their words, icon buttons named', async () => {
+    await page.setViewportSize({ width: 900, height: 700 });
+    const found = await tour('900px', [rows, sideways, clipped, offWords, unnamed]);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    if (found.length) throw new Error(`at 900px: ${found.slice(0, 15).join('; ')}`);
+  });
+  await step("text readable on its background, light and dark, in lgtm's look and each theme", async () => {
+    const found = [];
+    for (const app of ['lgtm', 'one', 'ayu', 'gruvbox']) // themes.ts: lgtm's own, then BUILTIN_THEMES
+      for (const mode of ['light', 'dark']) {
+        await evaluate(`localStorage.setItem('appTheme', ${JSON.stringify(app)}); localStorage.setItem('theme', ${JSON.stringify(mode)})`);
+        await page.reload();
+        await until('the app again', `!!document.querySelector('.top')`);
+        found.push(...(await tour(`${app} ${mode}`, [faint])));
+      }
+    await evaluate(`localStorage.removeItem('appTheme'); localStorage.removeItem('theme')`);
+    const pairs = new Map(found.map((f) => [f.replace(/, [^:]+: /, ': ').replace(/, \S+ ".*$/, ''), f]));
+    if (pairs.size) throw new Error(`${pairs.size} colours too faint on their background:\n    ${[...pairs.values()].join('\n    ')}`);
   });
 } catch (e) {
   failed = true;

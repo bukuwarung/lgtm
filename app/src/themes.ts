@@ -10,6 +10,26 @@ export type AppTheme = { name: string; light: Tokens; dark: Tokens; credit?: str
 
 const opaque = (c?: string) => (c && /^#[0-9a-f]{8}$/i.test(c) && c.endsWith('ff') ? c.slice(0, 7) : c);
 
+const rgb = (c?: string) => c?.match(/^#([0-9a-f]{6})/i)?.[1].match(/../g)!.map((h) => parseInt(h, 16) / 255);
+const lum = (c: number[]) => c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+export function contrast(a?: string, b?: string): number {
+  const x = rgb(a), y = rgb(b);
+  if (!x || !y) return 0;
+  const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p);
+  return (hi + 0.05) / (lo + 0.05);
+}
+// `a` mixed with `b`, `p` of it `a`, as #rrggbb.
+const mixHex = (a: string, b: string, p: number) => '#' + rgb(a)!.map((v, k) => Math.round((v * p + rgb(b)![k] * (1 - p)) * 255).toString(16).padStart(2, '0')).join('');
+// `c` moved toward `fg` (5% at a time) until it reads at 4.5:1 (WCAG's minimum for text) on each of `on(c)`.
+function readable(c: string | undefined, fg: string | undefined, on: (c: string) => (string | undefined)[]): string | undefined {
+  if (!rgb(c) || !rgb(fg)) return c;
+  for (let p = 1; p > 0; p -= 0.05) {
+    const m = p === 1 ? c! : mixHex(c!, fg!, p);
+    if (on(m).every((b) => !rgb(b) || contrast(m, b) >= 4.5)) return m;
+  }
+  return fg;
+}
+
 // One Zed theme variant's colours as lgtm's tokens. Tints (diff lines, word highlights) are mixed from its added /
 // removed colours over its background, so every theme reads alike.
 export function fromZed(s: any): Tokens {
@@ -60,6 +80,14 @@ export function fromZed(s: any): Tokens {
     '--hl-arg': syn('variable.parameter', 'variable.special', 'number'),
     '--hl-it': syn('variable.special', 'keyword'),
   };
+  // Its colours that colour text, made readable where the theme's own are too faint for it (Ayu's green on white): on the
+  // page and on raised surfaces; a pill's, also on its own tint (style.css: 13% of it). Text on the primary colour: the
+  // theme's background or text, or white or black when neither reads (Ayu's light green), whichever reads best.
+  const fg = opaque(t['--fg']), soft = opaque(t['--soft']);
+  for (const k of ['--muted', '--accent', '--addfg', '--delfg', '--modfg', '--warnfg', '--test', '--g-commented']) t[k] = readable(opaque(t[k]), fg, () => [bg, soft]);
+  for (const k of ['--pill-ok', '--pill-bad', '--pill-warn', '--pill-info']) t[k] = readable(opaque(t[k]), fg, (c) => [bg, soft, rgb(bg) ? mixHex(c, bg!, 0.13) : undefined]);
+  const p = opaque(t['--primary']);
+  if (contrast(t['--on-primary'], p) < 4.5) t['--on-primary'] = [fg, '#ffffff', '#000000'].reduce((best, c) => (contrast(c, p) >= 4.5 && contrast(best, p) < 4.5 ? c : best), t['--on-primary']);
   return Object.fromEntries(Object.entries(t).filter((e): e is [string, string] => !!e[1]).map(([k, v]) => [k, opaque(v)!]));
 }
 
