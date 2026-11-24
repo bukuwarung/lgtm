@@ -2906,36 +2906,43 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           ) : (
           <>
           {inOrder.map(section)}
-          {generated.length > 0 &&
-            (genOpen ? generated.map(section) : (
-              <button class="gen-row" onClick={() => setShowGenerated(true)}>
-                {generated.length} generated file{generated.length > 1 ? 's' : ''} hidden. Show
-              </button>
-            ))}
-          {archived.length > 0 &&
-            (showArchived ? archived.map(section) : (
-              <button class="gen-row" onClick={() => setShowArchived(true)}>
-                {archived.length} archived spec{archived.length > 1 ? 's' : ''} hidden. Show
-              </button>
-            ))}
-          {noDiff.length > 0 &&
-            (noDiffOpen ? noDiff.map(section) : (
-              <button class="gen-row" onClick={() => setShowNoDiff(true)}>
-                {noDiff.length} file{noDiff.length > 1 ? 's' : ''} with no content change (renamed, moved or empty) hidden. Show
-              </button>
-            ))}
-          {wsOnly.length > 0 &&
-            (showWsOnly ? wsOnly.map(section) : (
-              <button class="gen-row" onClick={() => setShowWsOnly(true)}>
-                {wsOnly.length} file{wsOnly.length > 1 ? 's' : ''} with only whitespace changes hidden. Show
-              </button>
-            ))}
-          {importOnly.length > 0 &&
-            (showImportsOnly ? importOnly.map(section) : (
-              <button class="gen-row" onClick={() => setShowImportsOnly(true)}>
-                {importOnly.length} file{importOnly.length > 1 ? 's' : ''} with only import changes hidden. Show
-              </button>
-            ))}
+          {(() => {
+            // Files kept out of sight, by kind: each shown where it'd be once opened; the closed ones in one row (more
+            // than one kind: "73 files hidden: 1 generated · 70 with no content change · … · Show all").
+            const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+            const kinds = [
+              { files: generated, open: genOpen, show: () => setShowGenerated(true), alone: (n: number) => plural(n, 'generated file', 'generated files'), part: (n: number) => `${n} generated` },
+              { files: archived, open: showArchived, show: () => setShowArchived(true), alone: (n: number) => plural(n, 'archived spec', 'archived specs'), part: (n: number) => plural(n, 'archived spec', 'archived specs') },
+              { files: noDiff, open: noDiffOpen, show: () => setShowNoDiff(true), alone: (n: number) => `${plural(n, 'file', 'files')} with no content change (renamed, moved or empty)`, part: (n: number) => `${n} with no content change` },
+              { files: wsOnly, open: showWsOnly, show: () => setShowWsOnly(true), alone: (n: number) => `${plural(n, 'file', 'files')} with only whitespace changes`, part: (n: number) => `${n} with only whitespace changes` },
+              { files: importOnly, open: showImportsOnly, show: () => setShowImportsOnly(true), alone: (n: number) => `${plural(n, 'file', 'files')} with only import changes`, part: (n: number) => `${n} with only import changes` },
+            ].filter((k) => k.files.length > 0);
+            const closed = kinds.filter((k) => !k.open);
+            const total = closed.reduce((n, k) => n + k.files.length, 0);
+            return (
+              <>
+                {kinds.filter((k) => k.open).map((k) => k.files.map(section))}
+                {closed.length === 1 && (
+                  <button class="gen-row" onClick={closed[0].show}>
+                    {closed[0].alone(closed[0].files.length)} hidden. Show
+                  </button>
+                )}
+                {closed.length > 1 && (
+                  <div class="gen-row gen-many">
+                    {plural(total, 'file', 'files')} hidden:{' '}
+                    {closed.map((k, i) => (
+                      <>
+                        {i ? ' · ' : ''}
+                        <button class="link" onClick={k.show}>{k.part(k.files.length)}</button>
+                      </>
+                    ))}
+                    {' · '}
+                    <button class="link" onClick={() => closed.forEach((k) => k.show())}>Show all</button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           </>
           )}
           {!commitView && !onlyMine && <div class="review-end">{submitPanel(true)}</div>}
