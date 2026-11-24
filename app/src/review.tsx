@@ -2271,7 +2271,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 
   // The dependency pill: with the amber findings when a major jump or an unpinned version is marked, else with the info.
   const depsPill = deps.length > 0 && (
-    <PillMenu cls={deps.some((d) => d.major || d.unpinned) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved to another version (major jumps and versions not pinned marked):">
+    <PillMenu cls={deps.some((d) => d.major || d.unpinned) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved (major jumps and unpinned versions marked):">
       {deps.map((d) => (
         <div class="pill-row">
           <button onClick={() => jumpToLine(d.path, d.removed ? undefined : d.line)} title={`${d.path}:${d.line}`}>
