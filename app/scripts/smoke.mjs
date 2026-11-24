@@ -350,6 +350,34 @@ try {
     }
     return [...out.values()];
   })()`);
+  // Every stop Tab reaches shows it's there: how it and its box look focused, against how they look once Tab has moved
+  // on (an outline, a ring, a border, a background, or what only shows on focus), or the box it's in, up to three levels
+  // out (an editor's border). Up to 600 stops a page.
+  const unringed = async (where) => {
+    await evaluate(`(() => {
+      document.activeElement?.blur();
+      window.__look = (e) => e ? [e, e.parentElement, e.parentElement?.parentElement, e.parentElement?.parentElement?.parentElement].filter(Boolean).map((x) => { const s = getComputedStyle(x); return [s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0 ? s.outlineColor + s.outlineWidth : '', s.boxShadow, s.borderColor, s.backgroundColor, s.color, s.opacity, s.visibility, s.textDecorationLine].join('|'); }).join('/') : '';
+      window.__stops = [];
+    })()`);
+    const out = [];
+    for (let k = 0; k < 600; k++) {
+      await page.keyboard.press('Alt+Tab'); // ⌥⇥, as in Safari: plain Tab skips buttons and links there
+      const r = await evaluate(`(() => {
+        const e = document.activeElement, last = window.__stops.at(-1);
+        let miss = null;
+        if (last && last.e !== e && last.e.isConnected && window.__look(last.e) === last.look) {
+          const x = last.e;
+          miss = (x.getAttribute('aria-label') || x.title || x.textContent.trim().replace(/\\s+/g, ' ').slice(0, 24) || x.placeholder || '') + ' (' + x.tagName.toLowerCase() + (typeof x.className === 'string' && x.className ? '.' + x.className.split(' ')[0] : '') + ')';
+        }
+        if (!e || e === document.body || window.__stops.some((s) => s.e === e)) return { miss, done: true };
+        window.__stops.push({ e, look: window.__look(e) });
+        return { miss, done: false };
+      })()`);
+      if (r.miss && !r.miss.includes('demo')) out.push(`${where}: ${r.miss}`);
+      if (r.done) break;
+    }
+    return out;
+  };
   // The PR (each pill's menu open in turn), Settings and the list, each through these checks.
   const tour = async (label, checks) => {
     const found = [];
@@ -464,6 +492,23 @@ try {
     const found = await tour('900px', [rows, sideways, clipped, offWords, unnamed]);
     await page.setViewportSize({ width: 1400, height: 900 });
     if (found.length) throw new Error(`at 900px: ${found.slice(0, 15).join('; ')}`);
+  });
+  await step('at the largest text size (20px), wide and narrow: lined up, nothing sideways, no text cut off, checkboxes on their words', async () => {
+    await evaluate(`localStorage.setItem('textSize', '20')`); // Settings → Appearance's largest
+    await page.reload();
+    await until('the app again', `!!document.querySelector('.top')`);
+    const found = await tour('20px text', [rows, sideways, clipped, offWords]);
+    await page.setViewportSize({ width: 900, height: 700 });
+    found.push(...(await tour('20px text, 900px', [rows, sideways, clipped, offWords])));
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await evaluate(`localStorage.removeItem('textSize')`);
+    await page.reload();
+    await until('the app again', `!!document.querySelector('.top')`);
+    if (found.length) throw new Error(`at 20px text: ${[...new Set(found)].slice(0, 20).join('; ')}`);
+  });
+  await step('Tab shows where it is: every stop on the PR, Settings and the list looks focused', async () => {
+    const found = await tour('Tab', [unringed]);
+    if (found.length) throw new Error(`${found.length} stops with no sign of focus: ${found.join('; ')}`);
   });
   await step("text readable on its background, light and dark, in lgtm's look and each theme", async () => {
     const found = [];
