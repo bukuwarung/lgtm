@@ -1256,24 +1256,32 @@ pub async fn clipboard_pr() -> Option<String> {
 /// agentText()). `on_text`: each piece of Claude's answer as it's written (Codex's comes whole, at the end).
 #[tauri::command]
 /// Its answer, and with a checkout read, the repo files it opened there (`read`, relative; a skill as "skill: name").
-pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>, local: Option<Local>, on_text: tauri::ipc::Channel<String>) -> Result<Value, String> {
+pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>, local: Option<Local>, keep: Option<bool>, on_text: tauri::ipc::Channel<String>) -> Result<Value, String> {
     if input.is_empty() || input.len() > 800_000 {
         return Err("Bad request for Claude".into());
     }
     // A checkout of the repo here: the agent reads it, with the prompt made for that. Claude restricted to it; Codex's
     // shell under a profile that reads only it (codex_text).
-    let wt = local.as_ref().and_then(review_worktree);
+    let wt = local.as_ref().and_then(|l| review_worktree(l, None));
+    let keep = keep == Some(true); // its session kept to open later (Settings → Coding agents)
+    let mut session_id: Option<String> = None;
     let input = match (&wt, &local) {
         (Some(_), Some(l)) if !l.input.is_empty() && l.input.len() <= 800_000 => l.input.clone(),
         _ => input,
     };
     let cwd = wt.as_ref().map(|w| w.dir.clone());
     let mut read: Vec<String> = vec![];
-    let res = if agent.as_deref() == Some("codex") { codex_text(&input, model, effort, cwd.clone(), &mut read) } else { claude_text(&input, model, effort, cwd.clone(), &on_text, &mut read) };
+    let codex = agent.as_deref() == Some("codex");
+    let res = if codex { codex_text(&input, model, effort, cwd.clone(), &mut read, keep, &mut session_id) } else { claude_text(&input, model, effort, cwd.clone(), &on_text, &mut read, keep, &mut session_id) };
     if let Some(w) = wt {
         w.done();
     }
-    res.map(|text| json!({ "text": text, "read": if cwd.is_some() { json!(read) } else { Value::Null } }))
+    // The session kept: its agent, id, and where it ran (the review's copy: made again there to open it).
+    let session = session_id.map(|id| match (&cwd, &local) {
+        (Some(d), Some(l)) => json!({ "agent": if codex { "codex" } else { "claude" }, "id": id, "dir": d, "repo": l.repo, "sha": l.sha }),
+        _ => json!({ "agent": if codex { "codex" } else { "claude" }, "id": id }),
+    });
+    res.map(|text| json!({ "text": text, "read": if cwd.is_some() { json!(read) } else { Value::Null }, "session": session }))
 }
 
 /// A path inside `dir` (as given, or as macOS resolves /var to /private/var), relative to it; None outside it.
@@ -1294,7 +1302,7 @@ fn rel_to(dir: &str, p: &str) -> Option<String> {
     [dir.to_string(), real].iter().filter(|d| !d.is_empty()).find_map(|d| n.strip_prefix(&format!("{d}/")).map(String::from))
 }
 
-fn claude_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>, on_text: &tauri::ipc::Channel<String>, read: &mut Vec<String>) -> Result<String, String> {
+fn claude_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>, on_text: &tauri::ipc::Channel<String>, read: &mut Vec<String>, keep: bool, session_id: &mut Option<String>) -> Result<String, String> {
     // The model and effort Settings picked for this prompt; none, Claude Code's own.
     let model = model.filter(|m| !m.is_empty());
     let effort = effort.filter(|e| !e.is_empty());
@@ -1307,7 +1315,13 @@ fn claude_text(input: &str, model: Option<String>, effort: Option<String>, cwd: 
     } else {
         args.extend(["--tools", ""]);
     }
-    args.extend(["--no-session-persistence", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
+    let id = keep.then(new_uuid);
+    match id.as_deref() {
+        Some(i) => args.extend(["--session-id", i]),
+        None => args.push("--no-session-persistence"),
+    }
+    *session_id = id.clone();
+    args.extend(["--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
     if let Some(m) = model.as_deref() {
         args.extend(["--model", m]);
     }
@@ -1468,7 +1482,7 @@ impl Worktree {
 /// The repo at the PR's base commit (its rules as they were before the PR), as a detached worktree of your checkout in a
 /// folder of its own: your branch and files untouched. The commit fetched first when the checkout hasn't it. The
 /// server's reviewWorktree().
-fn review_worktree(l: &Local) -> Option<Worktree> {
+fn review_worktree(l: &Local, at: Option<String>) -> Option<Worktree> {
     if !re(r"^[\w.-]+(/[\w.-]+)+$").is_match(&l.repo) || !re(r"^[0-9a-f]{40}$").is_match(&l.sha) || l.folder.as_deref().is_some_and(|f| !f.starts_with('/')) {
         return None;
     }
@@ -1478,9 +1492,65 @@ fn review_worktree(l: &Local) -> Option<Worktree> {
         git(&main, &["fetch", "--quiet", "--no-tags", &remote, &l.sha]).ok()?;
     }
     let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("lgtm-review-{}-{nonce}", std::process::id())).to_string_lossy().to_string();
+    let dir = at.unwrap_or_else(|| std::env::temp_dir().join(format!("lgtm-review-{}-{nonce}", std::process::id())).to_string_lossy().to_string());
+    let _ = git(&main, &["worktree", "prune"]); // a copy of it removed before: its old record goes first
     git(&main, &["worktree", "add", "--detach", "--quiet", &dir, &l.sha]).ok()?;
     Some(Worktree { dir, main })
+}
+
+fn new_uuid() -> String {
+    let mut b = [0u8; 16];
+    let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0) ^ ((std::process::id() as u128) << 64);
+    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
+        use std::io::Read;
+        let _ = f.read_exact(&mut b);
+    } else {
+        b = n.to_le_bytes();
+    }
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    format!("{}-{}-{}-{}-{}", &h[0..8], &h[8..12], &h[12..16], &h[16..20], &h[20..32])
+}
+
+#[derive(Deserialize)]
+pub struct Session {
+    agent: String,
+    id: String,
+    dir: Option<String>,
+    repo: Option<String>,
+    sha: Option<String>,
+}
+/// A kept agent-review session, resumed in Terminal where it ran: its copy of the repo made again there first (same
+/// path and commit; not removed after, it's yours to explore), else your home folder. The server's openAgentSession().
+#[tauri::command]
+pub async fn agent_session(session: Session, folder: Option<String>) -> Result<(), String> {
+    let s = session;
+    if !["claude", "codex"].contains(&s.agent.as_str()) || !re(r"^[\w-]{8,64}$").is_match(&s.id) {
+        return Err("Bad session".into());
+    }
+    let mut at = home().to_string_lossy().to_string();
+    if let Some(dir) = s.dir {
+        if !re(r"^/[\w./-]+/lgtm-review-[\w-]+$").is_match(&dir) {
+            return Err("Bad session".into());
+        }
+        if !std::path::Path::new(&dir).exists() {
+            let l = Local { repo: s.repo.unwrap_or_default(), sha: s.sha.unwrap_or_default(), folder, input: String::new() };
+            let repo = l.repo.clone();
+            review_worktree(&l, Some(dir.clone())).ok_or(format!("No checkout of {repo} here to open it in"))?;
+        }
+        at = dir;
+    }
+    // A .command file Terminal opens and runs: no permission to script Terminal needed.
+    let file = std::env::temp_dir().join(format!("lgtm-session-{}.command", s.id));
+    std::fs::write(&file, format!("#!/bin/zsh -l\ncd '{at}' && {} {}\n", if s.agent == "codex" { "codex resume" } else { "claude --resume" }, s.id)).map_err(|e| e.to_string())?;
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())?;
+    }
+    let path = file.to_string_lossy().to_string();
+    let out = run("open", &["-a", "Terminal", &path], None, std::time::Duration::from_secs(15));
+    if out.ok { Ok(()) } else { Err(last_line(&out.stderr)) }
 }
 
 /// The coding agents' CLIs installed (Settings → Coding agents): each one's --version, or null. The server's detectAgents().
@@ -1516,7 +1586,7 @@ fn codex_models() -> Value {
 /// The same through Codex's CLI (`codex login`): its last message back. Every tool it has switched off (shell, browser,
 /// computer use, apps, images, MCP servers, web search), read-only, in an empty folder: like Claude above, it only
 /// reads what it's given. The server's codexText().
-fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>, read: &mut Vec<String>) -> Result<String, String> {
+fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>, read: &mut Vec<String>, keep: bool, session_id: &mut Option<String>) -> Result<String, String> {
     let model = model.filter(|m| !m.is_empty());
     let effort = effort.filter(|e| !e.is_empty());
     if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !CODEX_EFFORTS.contains(&e)) {
@@ -1544,7 +1614,10 @@ fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: O
         }
         format!("permissions.lgtm_review.filesystem={{{}}}", read.iter().map(|p| format!("{}=\"read\"", serde_json::to_string(p).unwrap_or_default())).collect::<Vec<_>>().join(","))
     });
-    let mut args: Vec<&str> = vec!["exec", "--skip-git-repo-check", "--ephemeral"];
+    let mut args: Vec<&str> = vec!["exec", "--skip-git-repo-check"];
+    if !keep {
+        args.push("--ephemeral");
+    }
     match fs.as_deref() {
         Some(f) => args.extend(["-c", "default_permissions=\"lgtm_review\"", "-c", f]),
         None => args.extend(["--sandbox", "read-only"]),
@@ -1563,8 +1636,8 @@ fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: O
     if let Some(e) = effort_c.as_deref() {
         args.extend(["-c", e]);
     }
-    if cwd.is_some() {
-        args.push("--json"); // its events: the commands it ran, for what it read
+    if cwd.is_some() || keep {
+        args.push("--json"); // its events: the commands it ran (what it read), its session's id
     }
     args.extend(["-o", &out_s, "-"]);
     let res = crate::cli::run_in("codex", &args, Some(input), std::time::Duration::from_secs(if cwd.is_some() { 600 } else { 300 }), cwd.as_deref());
@@ -1579,6 +1652,9 @@ fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: O
             return Err("Codex isn't signed in: run `codex login` in Terminal, then try again".into());
         }
         return Err(last);
+    }
+    if keep {
+        *session_id = res.stdout.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).find(|e| e["type"] == "thread.started").and_then(|e| e["thread_id"].as_str().map(String::from));
     }
     // Reading the repo: each command's words that are files of the repo, as what it read.
     if let Some(dir) = cwd.as_deref() {

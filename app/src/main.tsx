@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -12,8 +13,8 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
-import { AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
+import { claudeFolder, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -1632,9 +1633,34 @@ function AgentPill({ i }: { i: QueueItem }) {
       </span>
     );
   const where = r.posted === 'pending' ? 'in your pending review (Finish review sends them)' : 'as comments';
+  const title = (r.findings ? `${r.by ?? 'The agent'}'s adversarial review: ${r.findings} finding${r.findings > 1 ? 's' : ''}, ${where}` : `${r.by ?? 'The agent'} found nothing to point out`) + readOf(r);
+  const face = r.findings ? <Tg i={mark} n={r.findings} t={`finding${r.findings > 1 ? 's' : ''}`} /> : <Tg i={mark} t="nothing found" />;
+  if (!r.session) return <span class={r.findings ? 'pill p-agent' : 'pill p-ok'} title={title}>{face}</span>;
+  return <SessionPill cls={r.findings ? 'pill p-agent' : 'pill p-ok'} title={`${title}\n\nClick: open its session`} face={face} open={() => openAgentSession(r.session!, claudeFolder(i.repo))} />;
+}
+// A review whose session was kept: its pill opens a little menu with "Open the session" (a stray click does nothing).
+function SessionPill({ cls, title, face, open }: { cls: string; title: string; face: ComponentChildren; open: () => Promise<void> }) {
+  const [menu, setMenu] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const away = (e: Event) => (e.type === 'keydown' ? (e as KeyboardEvent).key === 'Escape' : !box.current?.contains(e.target as Node)) && setMenu(false);
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', away);
+    return () => (document.removeEventListener('pointerdown', away), document.removeEventListener('keydown', away));
+  }, [menu]);
+  const stop = (e: Event) => (e.preventDefault(), e.stopPropagation());
   return (
-    <span class={r.findings ? 'pill p-agent' : 'pill p-ok'} title={(r.findings ? `${r.by ?? 'The agent'}'s adversarial review: ${r.findings} finding${r.findings > 1 ? 's' : ''}, ${where}` : `${r.by ?? 'The agent'} found nothing to point out`) + readOf(r)}>
-      {r.findings ? <Tg i={mark} n={r.findings} t={`finding${r.findings > 1 ? 's' : ''}`} /> : <Tg i={mark} t="nothing found" />}
+    <span class="pill-drop" ref={box}>
+      <button class={cls} title={title} aria-expanded={menu} onClick={(e) => (stop(e), setMenu(!menu))}>
+        {face}
+        <span class="caret" aria-hidden="true" />
+      </button>
+      {menu && (
+        <button class="quick-menu" onClick={(e) => (stop(e), setMenu(false), open().catch((err: Error) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Couldn't open the session: ${err.message}` } }))))}>
+          Open the session
+        </button>
+      )}
     </span>
   );
 }

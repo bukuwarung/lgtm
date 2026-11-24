@@ -31,6 +31,7 @@ export const ACTIONS = [
   ['revertCommit', words('Revert the commit on show on its own (your PR; asks first)'), 'Z'],
   ['quoteReply', 'Quote the text selected in a comment in a reply', 'Q'],
   ['fixedAll', words('Reply "Fixed in" and resolve every thread later commits changed (your PR)'), 'F'],
+  ['agentSession', words("Open the PR's agent review session (Settings → Coding agents → Keep agent review sessions)"), 'W'],
   ['react', 'React 👍 to the comment under the mouse (again: take it back)', '+'],
   ['editComment', 'Edit your comment under the mouse', 'E'],
   ['commentMenu', 'The comment under the mouse: edit, delete, hide or dismiss it', 'H'],

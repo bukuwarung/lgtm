@@ -117,8 +117,11 @@ export function useAgents() {
 // local: read the repo too, from a checkout of it on this machine at `sha` (lgtm.mjs reviewWorktree), with `input` as the
 // prompt then; with none here, the plain one.
 export type AgentLocal = { repo: string; sha: string; folder?: string; input: string };
-// onRead: the repo files it opened there (relative; a skill as "skill: name"), when it read the repo.
-export async function runAgent(input: string, id: AgentId, onText?: (soFar: string) => void, local?: AgentLocal, onRead?: (files: string[]) => void): Promise<string> {
+// A kept session (Settings → Coding agents): its agent, its id, and where it ran (a review's copy of the repo).
+export type AgentSession = { agent: 'claude' | 'codex'; id: string; dir?: string; repo?: string; sha?: string };
+// onInfo: the repo files it opened there (relative; a skill as "skill: name"), when it read the repo, and its session,
+// when `keep` keeps it.
+export async function runAgent(input: string, id: AgentId, onText?: (soFar: string) => void, local?: AgentLocal, onInfo?: (i: { read?: string[]; session?: AgentSession }) => void, keep = false): Promise<string> {
   await detectAgents();
   const model = agentModel(id) || undefined, agent = id;
   const effort = effortsOf(id, model ?? '').includes(agentEffort(id)) ? agentEffort(id) : undefined; // one the model takes
@@ -128,16 +131,16 @@ export async function runAgent(input: string, id: AgentId, onText?: (soFar: stri
     if (isDesktop) {
       const { Channel } = await import('@tauri-apps/api/core');
       const onPiece = new Channel<string>(more);
-      const r = await command<string | { text: string; read?: string[] | null }>('agent_text', { input, model, effort, agent, local: local ?? null, onText: onPiece });
+      const r = await command<string | { text: string; read?: string[] | null; session?: AgentSession | null }>('agent_text', { input, model, effort, agent, local: local ?? null, keep, onText: onPiece });
       if (typeof r === 'string') return r;
-      if (r.read) onRead?.(r.read);
+      onInfo?.({ read: r.read ?? undefined, session: r.session ?? undefined });
       return r.text;
     }
     // A line of JSON per piece ({d}), then the answer ({text}) or why not ({error}): lgtm.mjs /agent-text.
-    const res = await fetch('/agent-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent, local }) });
+    const res = await fetch('/agent-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, model, effort, agent, local, keep }) });
     if (!res.ok || !res.body) throw new Error(res.statusText || `${AGENTS[id].name} failed`);
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buf = '', end: { text?: string; error?: string; read?: string[] } = {};
+    let buf = '', end: { text?: string; error?: string; read?: string[]; session?: AgentSession } = {};
     for (let r = await reader.read(); !r.done; r = await reader.read()) {
       buf += r.value;
       for (let n; (n = buf.indexOf('\n')) >= 0; buf = buf.slice(n + 1)) {
@@ -147,9 +150,16 @@ export async function runAgent(input: string, id: AgentId, onText?: (soFar: stri
       }
     }
     if (typeof end.text !== 'string') throw new Error(end.error ?? `${AGENTS[id].name} failed`);
-    if (end.read) onRead?.(end.read);
+    onInfo?.({ read: end.read, session: end.session });
     return end.text;
   } finally {
     over = true;
   }
+}
+
+// A kept session, resumed in Terminal where it ran (its copy of the repo made again there).
+export async function openAgentSession(s: AgentSession, folder?: string): Promise<void> {
+  if (isDesktop) return command('agent_session', { session: s, folder: folder ?? null });
+  const res = await fetch('/agent-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s, folder }) });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Couldn't open it");
 }

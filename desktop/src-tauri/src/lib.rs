@@ -149,6 +149,7 @@ pub fn run() {
             commands::slack_post,
             commands::slack_done,
             commands::slack_delete,
+            commands::agent_session,
             commands::slack_request,
             commands::slack_asked,
             commands::slack_reply,

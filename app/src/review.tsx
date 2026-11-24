@@ -36,8 +36,8 @@ import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modules
 import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
-import { reviewNow } from './agentreview.ts';
-import { AGENTS, askAgent, autoAgent, detectAgents, setAskAgent, runAgent, useAgents, type AgentId } from './agents.ts';
+import { agentRunOf, reviewNow } from './agentreview.ts';
+import { openAgentSession, AGENTS, askAgent, autoAgent, detectAgents, setAskAgent, runAgent, useAgents, type AgentId } from './agents.ts';
 import { checkThreads, savedCheck, type ThreadCheck, type Verdict } from './threadcheck.ts';
 import { toPerson } from './person.tsx';
 import { SymbolNav } from './symbolnav.tsx';
@@ -2184,6 +2184,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       prevFile: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
       // The next file not marked viewed (after the last, the first one left).
       quoteReply: () => void (quoteSelection() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Select text in a comment to quote it', ms: 2500 } }))),
+      agentSession: () => {
+        const sess = agentRunOf({ id: pr.node_id })?.session;
+        const say = (text: string) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, ms: 3500 } }));
+        if (!sess) return say(`No kept session for this ${pageTerm().PR}'s agent review (Settings → Coding agents → Keep agent review sessions)`);
+        openAgentSession(sess, claudeFolder(repo)).catch((e: Error) => say(`Couldn't open the session: ${e.message}`));
+      },
       fixedAll: () => (allFixes.length > 1 ? dispatchEvent(new Event('lgtm:fixed-all')) : dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: allFixes.length ? 'One thread to answer: its own "Fixed in" button' : 'No threads waiting on you that later commits changed', ms: 3000 } }))),
       nextUnviewed: () => {
         const left = (s: HTMLElement) => !viewed.has(s.id.slice(2));

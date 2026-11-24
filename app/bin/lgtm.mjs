@@ -2,7 +2,7 @@
 // lgtm: serve the review UI on 127.0.0.1 and hand it the GitHub CLI's token.
 // Usage: lgtm [https://github.com/owner/repo/pull/123]
 import { execFile, execFileSync, spawn } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -685,13 +685,15 @@ const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'x
 // its skills, what they point to. Restricted (no shell, none of the repo's settings or hooks), reading only.
 // `read`: filled with the repo files it opened there (relative to it; a skill as "skill: name"), to show which rules it
 // went by.
-function agentText(input, model, effort, agent, onDelta, cwd, read = []) {
+// `keep`: its session kept to open later (Settings → Coding agents), its id put in keep.id.
+function agentText(input, model, effort, agent, onDelta, cwd, read = [], keep = null) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
-  if (agent === 'codex') return codexText(input, model, effort, cwd, read);
+  if (agent === 'codex') return codexText(input, model, effort, cwd, read, keep);
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !EFFORTS.includes(effort))) return Promise.reject(new Error('Bad request for Claude'));
   return new Promise((resolve, reject) => {
     const tools = cwd ? ['--restricted', '--tools', 'Read,Grep,Glob,Skill', '--allowedTools', 'Read,Grep,Glob,Skill', '--strict-mcp-config'] : ['--tools', ''];
-    const args = ['-p', ...tools, '--no-session-persistence', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])];
+    if (keep) keep.id = randomUUID();
+    const args = ['-p', ...tools, ...(keep ? ['--session-id', keep.id] : ['--no-session-persistence']), '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])];
     const child = spawn('claude', args, { cwd: cwd ?? homedir() });
     let text = '', result = null, err = '', buf = '', late = false;
     const timer = setTimeout(() => ((late = true), child.kill()), cwd ? 600000 : 300000); // reading the repo takes longer
@@ -751,7 +753,7 @@ const CODEX_OFF = ['shell_tool', 'unified_exec', 'browser_use', 'browser_use_ext
 // `cwd`: the repo's copy (reviewWorktree), read through its shell under a permission profile that lets it read only
 // that copy, the system's basics (:minimal) and Codex's own install, and write nothing, no network: not your home
 // folder (your GitHub token, keys). Without one, no shell at all.
-async function codexText(input, model, effort, cwd, read = []) {
+async function codexText(input, model, effort, cwd, read = [], keep = null) {
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !CODEX_EFFORTS.includes(effort))) throw new Error('Bad request for Codex');
   const dir = await mkdtemp(join(tmpdir(), 'lgtm-codex-'));
   const off = cwd ? CODEX_OFF.filter((f) => !['shell_tool', 'unified_exec'].includes(f)) : CODEX_OFF;
@@ -765,14 +767,15 @@ async function codexText(input, model, effort, cwd, read = []) {
     await new Promise((resolve, reject) => {
       const child = execFile(
         'codex',
-        ['exec', '--skip-git-repo-check', '--ephemeral', ...sandbox, '--color', 'never', '-C', cwd ?? dir, ...off.flatMap((f) => ['--disable', f]),
-          '-c', 'mcp_servers={}', '-c', 'web_search="disabled"', ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort=${effort}`] : []), ...(cwd ? ['--json'] : []), '-o', out, '-'],
+        ['exec', '--skip-git-repo-check', ...(keep ? [] : ['--ephemeral']), ...sandbox, '--color', 'never', '-C', cwd ?? dir, ...off.flatMap((f) => ['--disable', f]),
+          '-c', 'mcp_servers={}', '-c', 'web_search="disabled"', ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort=${effort}`] : []), ...(cwd || keep ? ['--json'] : []), '-o', out, '-'],
         { cwd: cwd ?? dir, maxBuffer: 1 << 26, timeout: cwd ? 600000 : 300000 },
         (err, stdout, stderr) => {
           if (err?.code === 'ENOENT') return reject(new Error("Codex isn't installed (brew install codex), or not on the PATH"));
           const last = (stderr || stdout).trim().split('\n').pop() || err?.message;
           if (err && /log ?in|auth|unauthori[sz]ed|401/i.test(last ?? '')) return reject(new Error("Codex isn't signed in: run `codex login` in Terminal, then try again"));
           if (err) return reject(new Error(last));
+          if (keep) keep.id = stdout.match(/"type":"thread\.started","thread_id":"([\w-]+)"/)?.[1] ?? null; // to resume it
           // Reading the repo: its events (--json), each command's words that are files of the repo, as what it read.
           if (cwd)
             for (const line of stdout.split('\n')) {
@@ -866,14 +869,31 @@ async function localCheckout(repo, folder) {
 // The repo at `sha` (the PR's base: its rules as they were before the PR), as a worktree of the user's checkout in a
 // folder of its own, detached: their branch and files untouched. The commit fetched first when the checkout hasn't it.
 // done() removes it. Null: no checkout of the repo here.
-async function reviewWorktree({ repo, sha, folder }) {
+async function reviewWorktree({ repo, sha, folder }, at = null) {
   if (typeof repo !== 'string' || !/^[\w.-]+(\/[\w.-]+)+$/.test(repo) || !/^[0-9a-f]{40}$/.test(sha ?? '') || (folder && (typeof folder !== 'string' || !folder.startsWith('/')))) return null;
   const co = await localCheckout(repo, folder);
   if (!co) return null;
   if (!(await git(co.dir, ['cat-file', '-e', `${sha}^{commit}`]).then(() => true, () => false))) await git(co.dir, ['fetch', '--quiet', '--no-tags', co.remote, sha]);
-  const dir = join(tmpdir(), `lgtm-review-${randomBytes(6).toString('hex')}`);
+  const dir = at ?? join(tmpdir(), `lgtm-review-${randomBytes(6).toString('hex')}`);
+  await git(co.dir, ['worktree', 'prune']); // a copy of it removed before: its old record goes first
   await git(co.dir, ['worktree', 'add', '--detach', '--quiet', dir, sha]);
   return { dir, done: () => git(co.dir, ['worktree', 'remove', '--force', dir]).catch(() => rm(dir, { recursive: true, force: true })) };
+}
+
+// A kept agent-review session, resumed in Terminal where it ran: its copy of the repo made again there first (same
+// path and commit; it isn't removed after, it's yours to explore), else your home folder.
+async function openAgentSession({ agent, id, dir, repo, sha, folder }) {
+  if (!['claude', 'codex'].includes(agent) || !/^[\w-]{8,64}$/.test(id ?? '')) throw new Error('Bad session');
+  let at = homedir();
+  if (dir) {
+    if (typeof dir !== 'string' || !/^\/[\w./-]+\/lgtm-review-[0-9a-f]+$/.test(dir)) throw new Error('Bad session');
+    if (!statSync(dir, { throwIfNoEntry: false })) await reviewWorktree({ repo, sha, folder }, dir).then((w) => w ?? Promise.reject(new Error(`No checkout of ${repo} here to open it in`)));
+    at = dir;
+  }
+  // A .command file Terminal opens and runs: no permission to script Terminal needed.
+  const file = join(tmpdir(), `lgtm-session-${id}.command`);
+  await writeFile(file, `#!/bin/zsh -l\ncd '${at}' && ${agent === 'codex' ? 'codex resume' : 'claude --resume'} ${id}\n`, { mode: 0o700 });
+  await new Promise((resolve, reject) => execFile('open', ['-a', 'Terminal', file], { timeout: 15000 }, (err, _o, stderr) => (err ? reject(new Error(stderr.trim() || err.message)) : resolve())));
 }
 
 // A Jira ticket, via the Atlassian CLI (`acli jira auth login`), which owns the sign-in like gh and slackcli do.
@@ -1089,7 +1109,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/agent-session', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
     // A line of JSON per piece of the answer ({d}), then the whole of it ({text}) or why not ({error}).
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
@@ -1099,11 +1119,13 @@ const server = createServer(async (req, res) => {
     return readJson(req)
       .then(async (b) => {
         wt = b?.local ? await reviewWorktree(b.local).catch(() => null) : null;
-        const read = [];
-        const text = await agentText(wt && typeof b.local.input === 'string' ? b.local.input : b?.input, b?.model, b?.effort, b?.agent, (d) => say({ d }), wt?.dir, read);
-        return { text, read: wt ? read : undefined };
+        const read = [], keep = b?.keep ? {} : null;
+        const text = await agentText(wt && typeof b.local.input === 'string' ? b.local.input : b?.input, b?.model, b?.effort, b?.agent, (d) => say({ d }), wt?.dir, read, keep);
+        // The session kept: its agent, id, and where it ran (the review's copy: made again there to open it).
+        const session = keep?.id ? { agent: b.agent === 'codex' ? 'codex' : 'claude', id: keep.id, ...(wt ? { dir: wt.dir, repo: b.local.repo, sha: b.local.sha } : {}) } : undefined;
+        return { text, read: wt ? read : undefined, session };
       })
-      .then(({ text, read }) => say({ text, read }), (e) => say({ error: e.message }))
+      .then(({ text, read, session }) => say({ text, read, session }), (e) => say({ error: e.message }))
       .finally(() => (wt?.done(), res.end()));
   }
   if (path === '/job-log') {
@@ -1160,6 +1182,7 @@ const server = createServer(async (req, res) => {
   if (path === '/slack-request' && req.method === 'POST') return readJson(req).then(requestReply).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-done' && req.method === 'POST') return readJson(req).then(markDone).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-post' && req.method === 'POST') return readJson(req).then(postToChannel).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
+  if (path === '/agent-session' && req.method === 'POST') return readJson(req).then(openAgentSession).then(() => json(res, 200, { ok: true }), (e) => json(res, 500, { error: e.message }));
   if (path === '/slack-delete') {
     if (req.method !== 'POST') return res.writeHead(405).end();
     try {

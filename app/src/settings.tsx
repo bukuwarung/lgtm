@@ -604,6 +604,7 @@ export function Settings() {
           <AgentPost />
           <AgentLimit />
         </Flag>
+        <Flag k="keepAgentSessions" initial={false} label="Keep agent review sessions" hint="To open one later from its pill (W on the PR), in Terminal, in a copy of the repo as it reviewed it: to see what it read and thought, or ask it why. Sessions take space where Claude Code and Codex keep theirs." demo />
         <Flag
           k="agentThreads"
           initial={true}

@@ -10,7 +10,7 @@
 // review" (main.tsx), and each run is remembered per account (platform.ts own).
 import { postAgentFindings, getCompare, getRaw, getReviewGuides, guideDir, repoPath, loadPR, type Draft, type PRFile, type QueueItem } from './github.ts';
 import { claudeFolder, notifyAgentDone, own, term } from './platform.ts';
-import { AGENTS, agentIdOf, autoAgent, detectAgents, runAgent, type AgentId } from './agents.ts';
+import { type AgentSession, AGENTS, agentIdOf, autoAgent, detectAgents, runAgent, type AgentId } from './agents.ts';
 import { parsePatch } from './diff.ts';
 import { fillPrompt, prFields, promptTemplate, reindent } from './prompts.ts';
 
@@ -26,6 +26,7 @@ export type AgentRun = {
   findings?: number;
   found?: number; // while it runs: the findings written so far
   read?: string[]; // the repo files it opened, in its checkout (a skill as "skill: name")
+  session?: AgentSession; // kept to open (Settings → Coding agents → Keep agent review sessions)
   posted?: 'pending' | 'comment';
   error?: string;
 };
@@ -171,8 +172,9 @@ const say = (text: string) => (dispatchEvent(new CustomEvent('lgtm:toast', { det
 type Finding = { path: string; line?: number; start_line?: number; side?: 'RIGHT' | 'LEFT'; severity?: string; title: string; body: string; fix?: string };
 const SKIP = /(^|\/)([\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.(min\.js|map|svg|png|jpe?g|gif|webp|pdf|zip|jar)$/i;
 
-async function review(i: Target & { agent: AgentId; since?: string }, onText?: (soFar: string) => void): Promise<Pick<AgentRun, 'findings' | 'posted' | 'read'>> {
+async function review(i: Target & { agent: AgentId; since?: string }, onText?: (soFar: string) => void): Promise<Pick<AgentRun, 'findings' | 'posted' | 'read' | 'session'>> {
   let opened: string[] | undefined; // what it read of the repo, in its checkout
+  let session: AgentSession | undefined;
   const { pr, files, threads } = await loadPR(i.repo, i.number);
   // A re-review reads the changes since the last run, in the PR's files; after a rebase (no shared history), all of it.
   // ponytail: a merge of the base branch in those commits shows its changes to the PR's files too.
@@ -243,7 +245,7 @@ async function review(i: Target & { agent: AgentId; since?: string }, onText?: (
     `The diff, each line numbered (R: the new file, L: the old):\n${shown.map((f) => numbered(f)).join('\n\n')}`.slice(0, 200_000),
     texts.join('\n\n'),
   ].filter(Boolean).join('\n\n');
-  const answer = await runAgent(build(guideNote), i.agent, onText, { repo: i.repo, sha: pr.base.sha, folder: claudeFolder(i.repo), input: build(repoNote) }, (f) => (opened = f));
+  const answer = await runAgent(build(guideNote), i.agent, onText, { repo: i.repo, sha: pr.base.sha, folder: claudeFolder(i.repo), input: build(repoNote) }, (x) => ((opened = x.read), (session = x.session)), localStorage.getItem(own('keepAgentSessions')) === '1');
   const json = answer.slice(answer.indexOf('{'), answer.lastIndexOf('}') + 1);
   let parsed: { summary?: string; findings?: Finding[] };
   try {
@@ -267,7 +269,7 @@ async function review(i: Target & { agent: AgentId; since?: string }, onText?: (
   const mode = postMode();
   const summary = `🤖 ${since ? `Re-review of the changes since ${since.slice(0, 7)}` : 'Adversarial review'} by ${AGENTS[i.agent].name} (from lgtm): ${drafts.length ? `${drafts.length} finding${drafts.length > 1 ? 's' : ''}` : 'nothing found'}.${parsed.summary ? `\n\n${parsed.summary}` : ''}`;
   if (drafts.length || mode === 'pending') await postAgentFindings(i.repo, i.number, pr, drafts, summary, mode);
-  return { findings: drafts.length, posted: mode, read: opened };
+  return { findings: drafts.length, posted: mode, read: opened, session };
 }
 
 // The diff with every line numbered, as the agent is asked to cite it.

@@ -25,6 +25,7 @@
     "allow-slack-post",
     "allow-slack-done",
     "allow-slack-delete",
+    "allow-agent-session",
     "allow-slack-request",
     "allow-slack-asked",
     "allow-slack-reply",

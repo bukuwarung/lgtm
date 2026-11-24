@@ -1360,6 +1360,15 @@ Object.assign(DEMOS, {
       </div>
     ),
   },
+  keepAgentSessions: {
+    title: 'Keep agent review sessions',
+    off: <div class="pills"><span class="pill p-agent"><Tg i="🤖" n={2} t="findings" /></span></div>,
+    on: (
+      <div class="pills">
+        <span class="pill-drop"><span class="pill p-agent"><Tg i="🤖" n={2} t="findings" /> <span class="caret" aria-hidden="true" /></span><span class="quick-menu">Open the session</span></span>
+      </div>
+    ),
+  },
   hideEmptyGroups: {
     title: 'Hide empty groups',
     off: (
