@@ -238,7 +238,8 @@ export const setOffline = (v: boolean, where = 'GitHub') => {
 // A cheap look (it doesn't count against the limits) to see whether GitHub, or the GitLab out of reach, answers again.
 export const pingGitHub = () => (offlineSite !== 'GitHub' ? lab.pingLab(offlineSite) : gh('/rate_limit').then(() => true, () => false));
 
-async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') {
+// A read GitHub answered 502/503/504 (a moment's hiccup): asked once more, a second later. Writes never.
+async function gh(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json', again = true): Promise<Response> {
   if (practice && writes(path, init)) throw new Error('Practice run: nothing is sent to GitHub');
   const bucket = bucketOf(path.replace(/^https:\/\/api\.github\.com/, ''));
   if (Date.now() < (limited.get(bucket)?.until ?? 0)) throw limitError(bucket);
@@ -259,6 +260,7 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
     throw new Error(`Couldn't reach GitHub (${e.message})`, { cause: e });
   });
   setOffline(false);
+  if (again && [502, 503, 504].includes(res.status) && !writes(path, init)) return new Promise((r) => setTimeout(r, 1000)).then(() => gh(path, init, accept, false));
   if (res.status === 401) throw new Error('GitHub rejected the gh token. Run `gh auth login`, then reload.');
   noteLimit(res, path.replace(/^https:\/\/api\.github\.com/, '').split('?')[0], typeof init.body === 'string' ? init.body : undefined);
   return res;
@@ -303,10 +305,13 @@ async function paginate<T>(path: string, accept?: string): Promise<T[]> {
 
 // partial: return what resolved even if some fields errored (they come back null).
 type GqlError = { message: string; type?: string; path?: (string | number)[] };
-async function graphqlFull(query: string, variables: Record<string, unknown>): Promise<{ data?: any; errors?: GqlError[] }> {
+async function graphqlFull(query: string, variables: Record<string, unknown>, again = true): Promise<{ data?: any; errors?: GqlError[] }> {
   // A query asks its own cost too (free), for Settings → Accounts' "what used it".
   const asked = /^\s*mutation/.test(query) ? query : query.replace('{', '{rateLimit{cost} ');
   const r = await json('/graphql', { method: 'POST', body: JSON.stringify({ query: asked, variables }) });
+  // A query GitHub timed out on ("Something went wrong while executing your query"): asked once more. Mutations never.
+  if (again && asked !== query && !r.data && r.errors?.some((e: GqlError) => /^Something went wrong while executing your query/.test(e.message)))
+    return new Promise((res) => setTimeout(res, 1000)).then(() => graphqlFull(query, variables, false));
   if (asked !== query) {
     spend('graphql', areaOf('/graphql', JSON.stringify({ query })), r.data?.rateLimit?.cost ?? 1);
     delete r.data?.rateLimit;
@@ -314,7 +319,7 @@ async function graphqlFull(query: string, variables: Record<string, unknown>): P
   if (r.errors?.some((e: GqlError) => e.type === 'RATE_LIMITED') && (limited.get('graphql')?.until ?? 0) > Date.now()) throw limitError('graphql');
   // Logged, but not what lgtm expects and handles: a bot or app asked for as a user (it comes back empty), and a scope
   // gh's login lacks (lookups go without it; Settings → Accounts names it).
-  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Could not resolve to a User with the login|^Could not resolve head ref/.test(e.message)); // a pushed branch since deleted (getPushedBranches)
+  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Could not resolve to a User with the login|^Could not resolve head ref|^Could not resolve to a node with the global id/.test(e.message)); // …a node: a comment deleted since the page loaded (getSocial reloads the talk) // a pushed branch since deleted (getPushedBranches)
   if (real?.length) recordError(`GitHub GraphQL: ${real[0].message}`);
   return r;
 }
@@ -1267,7 +1272,25 @@ export function applySuggestions(src: string, list: Pick<Suggestion, 'path' | 's
 
 // Suggestions committed to the PR's branch as one commit, like GitHub's "Commit suggestions": each file read at the
 // head, its suggestions applied bottom up, the authors credited. Refused if the branch moved (expectedHeadOid).
-export async function commitSuggestions(headRepo: string, branch: string, head: string, list: Suggestion[], me: string) {
+// A push since the page loaded makes GitHub refuse a commit made on the head it saw ("Expected branch to point to …"):
+// the branch's head now, when nothing pushed since touched `paths` (the commit is still right on it); else null.
+const STALE = /Expected branch to point to|head sha didn't match/i;
+async function freshHead(headRepo: string, branch: string, head: string, paths: string[]): Promise<string | null> {
+  const now: string = (await json(`/repos/${headRepo}/git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`)).object.sha;
+  if (now === head) return null;
+  const since = await getCompare(headRepo, head, now);
+  return since.files.some((f) => paths.includes(f.filename) || paths.includes(f.previous_filename ?? '')) ? null : now;
+}
+export async function commitSuggestions(headRepo: string, branch: string, head: string, list: Suggestion[], me: string): Promise<void> {
+  try {
+    return await commitSuggestionsOn(headRepo, branch, head, list, me);
+  } catch (e) {
+    const now = STALE.test((e as Error).message) && !isLab(headRepo) ? await freshHead(headRepo, branch, head, list.map((x) => x.path)).catch(() => null) : null;
+    if (!now) throw STALE.test((e as Error).message) ? new Error('New commits on the branch changed these files since you loaded it: reload, then apply them again') : e;
+    return commitSuggestionsOn(headRepo, branch, now, list, me);
+  }
+}
+async function commitSuggestionsOn(headRepo: string, branch: string, head: string, list: Suggestion[], me: string) {
   const files = [];
   for (const path of new Set(list.map((x) => x.path))) {
     const src = await getRaw(headRepo, path, head);
@@ -1296,7 +1319,18 @@ export async function commitSuggestions(headRepo: string, branch: string, head: 
 
 // A commit undone on the PR's branch, as `git revert` (one new commit, signed by GitHub). Refused when a file it
 // changed has changed after it (that takes a merge: revert it locally) or is binary (only text goes through here).
-export async function revertCommit(headRepo: string, branch: string, head: string, sha: string, headline: string) {
+export async function revertCommit(headRepo: string, branch: string, head: string, sha: string, headline: string): Promise<void> {
+  try {
+    return await revertCommitOn(headRepo, branch, head, sha, headline);
+  } catch (e) {
+    if (isLab(headRepo) || !STALE.test((e as Error).message)) throw e;
+    // A push since: again on the branch's head now (it checks again that nothing since touched its files).
+    const now: string = (await json(`/repos/${headRepo}/git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`)).object.sha;
+    if (now === head) throw e;
+    return revertCommitOn(headRepo, branch, now, sha, headline);
+  }
+}
+async function revertCommitOn(headRepo: string, branch: string, head: string, sha: string, headline: string) {
   if (isLab(headRepo)) return void (await lab.revertLabCommit(headRepo, branch, sha));
   const [c, since] = await Promise.all([json(`/repos/${headRepo}/commits/${sha}`), getCompare(headRepo, sha, head)]);
   const files: PRFile[] = c.files ?? [];
@@ -1683,8 +1717,20 @@ export async function renderGfm(text: string, repo: string): Promise<string> {
   return res.text();
 }
 
-export const reply = (repo: string, n: number, commentId: number, body: string) =>
-  isLab(repo) ? lab.replyLab(repo, n, commentId, body) : json(`/repos/${repo}/pulls/${n}/comments/${commentId}/replies`, { method: 'POST', body: JSON.stringify({ body }) });
+// With a review of mine in progress on the PR, GitHub refuses a reply on its own ("one pending review per pull
+// request") and keeps any reply in that review: it goes there (by the thread), sent with it. Says so: true.
+export const reply = async (repo: string, n: number, commentId: number, body: string, threadId?: string): Promise<boolean> => {
+  if (isLab(repo)) return void (await lab.replyLab(repo, n, commentId, body)), false;
+  try {
+    await json(`/repos/${repo}/pulls/${n}/comments/${commentId}/replies`, { method: 'POST', body: JSON.stringify({ body }) });
+    return false;
+  } catch (e) {
+    if (!threadId || !/422/.test((e as Error).message) || !(await getPendingReview(repo, n).catch(() => null))) throw e;
+    await graphql(`mutation($t:ID!,$b:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t,body:$b}){comment{id}}}`, { t: threadId, b: body });
+    dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'You have a review in progress on this PR, so GitHub keeps your reply in it: Finish review sends it.', ms: 6000 } }));
+    return true;
+  }
+};
 
 // A comment (a line, lines, or the whole file) added to a pending review.
 const addReviewThread = (reviewId: string, x: Draft) =>
@@ -2271,6 +2317,7 @@ export async function getGist(id: string): Promise<Gist> {
 export type Social = { canReact: boolean; groups: { content: string; mine: boolean; n: number }[]; hidden: string | null; canHide: boolean; canUnhide: boolean; canEdit: boolean; canDelete: boolean; target?: string }; // target: where a reaction goes, when not the ID itself (a GitLab MR)
 // The page's: GitHub's by node ID, GitLab's from the MR's discussions (gitlab.ts getLabSocial).
 export const getPageSocial = (repo: string, n: number, prNode: string, ids: string[]) => (isLab(repo) ? lab.getLabSocial(repo, n, prNode) : getSocial(ids));
+let socialGone = false; // asked the page to drop deleted comments already (once a session: no loop if one won't go)
 export async function getSocial(ids: string[]): Promise<Map<string, Social>> {
   const out = new Map<string, Social>();
   for (let i = 0; i < ids.length; i += 100) {
@@ -2278,6 +2325,8 @@ export async function getSocial(ids: string[]): Promise<Map<string, Social>> {
       `query($ids:[ID!]!){nodes(ids:$ids){id ...on Reactable{viewerCanReact reactionGroups{content viewerHasReacted reactors{totalCount}}} ...on Minimizable{isMinimized minimizedReason viewerCanMinimize viewerCanUnminimize} ...on Updatable{viewerCanUpdate} ...on Deletable{viewerCanDelete}}}`,
       { ids: ids.slice(i, i + 100) },
     );
+    // A comment deleted since the page loaded: its conversation and threads load again, once, so it goes.
+    if (r.errors?.some((e) => /^Could not resolve to a node/.test(e.message)) && !socialGone) (socialGone = true), dispatchEvent(new Event('lgtm:reload-talk'));
     for (const x of r.data?.nodes ?? [])
       if (x?.id)
         out.set(x.id, {

@@ -1845,8 +1845,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       const temp: GhComment = { databaseId: -Date.now(), url: '', body, bodyText: body, bodyHTML: `<p style="white-space: pre-wrap">${esc}</p>`, createdAt: new Date().toISOString(), author: me ? { login: me } : null, state: 'SENDING' };
       const put = (f: (c: GhComment[]) => GhComment[]) => setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, comments: { nodes: f(x.comments.nodes) } } : x)));
       put((c) => [...c, temp]);
-      return reply(repo, n, t.comments.nodes[0].databaseId, body).then(
-        () => void getThreads(repo, n).then(setThreads, () => {}),
+      return reply(repo, n, t.comments.nodes[0].databaseId, body, t.id).then(
+        (pendingNow) => {
+          void getThreads(repo, n).then(setThreads, () => {});
+          if (pendingNow) void getPendingReview(repo, n).then(setPending, () => {}); // it went into my review in progress
+        },
         (e) => {
           put((c) => c.filter((x) => x !== temp));
           throw e;

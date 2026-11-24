@@ -158,7 +158,7 @@ function InboxThread({ t, names, item, me, current, onPick, onDone }: { t: Threa
     const back = onDone(undo && 'Thread resolved', undo);
     run().then(() => unsentReplies.delete(t.id), (e) => (back(), reportError(`Couldn't ${FAILED[what]}: ${e.message}`)));
   };
-  const send = () => text.trim() && (unsentReplies.set(t.id, text.trim()), act('reply', () => reply(item.repo, item.number, t.comments.nodes[0].databaseId, text.trim())));
+  const send = () => text.trim() && (unsentReplies.set(t.id, text.trim()), act('reply', () => reply(item.repo, item.number, t.comments.nodes[0].databaseId, text.trim(), t.id)));
   return (
     <div class={current ? 'inbox-thread cur' : 'inbox-thread'} onPointerDown={onPick} onFocusIn={onPick}>
       <div class="inbox-where">
