@@ -1670,15 +1670,14 @@ const DOCK = (n: number, inbox: boolean) => (
 DEMOS.badgeInbox = { title: 'The Dock badge', off: DOCK(2, false), on: DOCK(5, true) };
 // A PR waiting for your review, opened: with the index, or without it (the showIndex scenes, the other way round).
 // Finish review's panel, with "then the next PR" ticked or not.
+// What follows Submit review: this PR stays, or the next one waiting opens.
 const NEXT_PANEL = (next: boolean) => (
-  <div class="submit review-submit">
-    <div class="panel" style={{ position: 'static' }}>
-      <label><input type="checkbox" checked={next} disabled /> Then open the next {T.PR} that needs my review</label>
-      <div class="row"><button class="primary">Submit review</button></div>
-    </div>
+  <div class="demo-panel">
+    <p class="notice">{next ? <>Review sent. <b>#418 Faster checkout</b> opened, the next {T.PR} waiting for you.</> : <>Review sent. Still on <b>#412 Retry failed payments</b>.</>}</p>
   </div>
 );
 DEMOS.nextAfterReview = { title: `After a review, the next ${T.PR}`, off: NEXT_PANEL(false), on: NEXT_PANEL(true) };
+DEMOS.viewAllOnSubmit = { title: "After a review, the files you didn't view", off: SCROLLED(false), on: SCROLLED(true) };
 DEMOS.unfoldBotsOnMine = { title: `Bot comments on your own ${T.PR}`, off: DEMOS.foldBots.on, on: DEMOS.foldBots.off };
 DEMOS.hideIndexToReview = { title: `A ${T.PR} waiting for your review, opened`, off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
 

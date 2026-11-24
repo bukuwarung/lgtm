@@ -2302,7 +2302,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it: your review goes on the newest.`;
       }}
       seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
-      canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
+      canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft && (pr.user.type === 'Bot' || bots.has(pr.user.login) || pr.assignees.some((a) => a.login === me))} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
       unviewed={data.files.filter((f) => !viewed.has(f.filename)).length} viewAll={() => markViewed(data.files.map((f) => f.filename), true)} />
   );
   return (
@@ -3011,9 +3011,9 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
     return () => o.disconnect();
   }, [inline]);
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
-  const [next, toggleNext] = useStoredFlag('nextAfterReview', true);
+  const [next] = useStoredFlag('nextAfterReview', true); // Settings → Reviewing
   const [mergeIt, toggleMergeIt] = useStoredFlag('mergeOnApprove', false);
-  const [viewRest, toggleViewRest] = useStoredFlag('viewAllOnSubmit', false);
+  const [viewRest] = useStoredFlag('viewAllOnSubmit', false); // Settings → Reviewing
   const viewing = viewRest && unviewed > 0;
   const merging = canMerge && mergeIt && !authored;
   const want = useRef<ReviewEvent | null>(null); // the verdict asked for (A: Approve), picked as it opens
@@ -3153,16 +3153,6 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
               <input type="checkbox" checked={mergeIt} onChange={toggleMergeIt} /> Then merge it, or turn on auto-merge until it can
             </label>
           )}
-          {unviewed > 0 && (
-            <label>
-              <input type="checkbox" checked={viewRest} onChange={toggleViewRest} /> Then mark the rest viewed ({unviewed === 1 ? '1 file' : `${unviewed} files`})
-            </label>
-          )}
-          {!authored && (
-            <label>
-              <input type="checkbox" checked={next} onChange={toggleNext} /> Then open the next PR that needs my review
-            </label>
-          )}
           {slackNote && <p class="note">{slackNote}</p>}
           {notify && slackWarn && <p class="warn">{slackWarn}</p>}
           {landed && (
@@ -3198,16 +3188,11 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
             const extra = [
               event === 'REQUEST_CHANGES' && !body.trim() && 'a summary of your comments as its text',
               count > 0 && `${count} line comment${count > 1 ? 's' : ''}`,
-              merging && event === 'APPROVE' && 'then merges it if it may',
-              notify && slackTo && slackTo.length > 0 && `messages ${slackTo.map((l) => '@' + l).join(', ')} on Slack`,
-              viewing && `marks ${unviewed === 1 ? 'the last file' : `the other ${unviewed} files`} viewed`,
             ].filter(Boolean);
-            const moving = next && !authored;
-            if (!extra.length && !moving) return null;
+            if (!extra.length) return null;
             return (
               <div class="sends">
-                {extra.length > 0 && <>Also: {extra.join('; ')}.</>}
-                {moving && `${extra.length ? ' ' : ''}The next ${pageTerm().PR} opens at once; this goes on in the background.`}
+                Also: {extra.join('; ')}.
                 {lineComments.length > 0 && (
                   <span class="sends-list">
                     {lineComments.slice(0, 6).map((d) => `${base(d.path)}${d.line ? ':' + d.line : ''}`).join(' · ')}

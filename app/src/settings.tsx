@@ -507,6 +507,7 @@ export function Settings() {
         <Flag k="gradleModules" initial={true} label="Group files by module" hint="Folders with their own build file: Gradle, npm, Go, Rust, Python."  demo />
         <Flag k="commentNow" initial={false} label="Post comments at once" hint="Off: they wait as drafts until Finish review."  demo />
         <Flag k="nextAfterReview" initial={true} label={`After a review, open the next ${T.PR} that needs it`} demo />
+        <Flag k="viewAllOnSubmit" initial={false} label="After a review, mark the files you haven't viewed as viewed" demo />
         <Flag k="resumePosition" initial={false} label={`Reopen a ${T.PR} where you left off`} />
         <SavedReplies />
       </section>
