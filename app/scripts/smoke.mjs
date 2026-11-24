@@ -41,6 +41,12 @@ const files = [
   { filename: 'gradle/libs.versions.toml', status: 'modified', additions: 1, deletions: 1, changes: 2, sha: 'f3', blob_url: 'https://github.com/acme/shop/blob/x/gradle/libs.versions.toml', patch: '@@ -4,1 +4,1 @@\n-firebase-crashlytics-buildtools = { module = "com.google.firebase.crashlytics:firebase-crashlytics-buildtools-gradle-plugin-extended", version = "2.9.9" }\n+firebase-crashlytics-buildtools = { module = "com.google.firebase.crashlytics:firebase-crashlytics-buildtools-gradle-plugin-extended", version = "3.0.2" }' },
 ];
 const empty = { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] };
+// acme/shop#9, big: 300 Kotlin files of 50 new lines each (15,000 lines), for the speed check.
+const bigLine = (f, k) => `    val total${k} = items${f}.filter { it.qty != ${k} }.sumOf { it.price * it.qty } + fee // line ${k}`;
+const bigFiles = Array.from({ length: 300 }, (_, f) => {
+  const path = `src/big/m${String(f).padStart(3, '0')}/Total${f}.kt`;
+  return { filename: path, status: 'added', additions: 50, deletions: 0, changes: 50, sha: `b${f}`, blob_url: `https://github.com/acme/shop/blob/x/${path}`, patch: '@@ -0,0 +1,50 @@\n' + Array.from({ length: 50 }, (_, k) => '+' + bigLine(f, k)).join('\n') };
+});
 // acme/shop#2, mine, with two threads waiting on my reply; #4, a review request that arrives at the second refresh.
 const mineNode = { ...node, id: 'PR_2', number: 2, title: 'Faster checkout', author: { __typename: 'User', login: 'tester' }, reviewRequests: { nodes: [{ requestedReviewer: { login: 'bayu' } }] } }; // bayu: busy on GitHub
 const laterNode = { ...node, id: 'PR_4', number: 4, title: 'Log declined cards' };
@@ -94,6 +100,9 @@ function rest(path, request) {
   if (path === '/repos/acme/shop/pulls/2/comments/21/replies') return sent.push('reply'), [201, { id: 99 }];
   if (path === '/repos/acme/shop/pulls/1') return [200, pr];
   if (path.startsWith('/repos/acme/shop/pulls/1/files')) return [200, files];
+  if (path === '/repos/acme/shop/pulls/9') return [200, { ...pr, number: 9, node_id: 'PR_9', title: 'A big change', html_url: 'https://github.com/acme/shop/pull/9', additions: 15000, deletions: 0, changed_files: 300 }];
+  if (path.startsWith('/repos/acme/shop/pulls/9/files')) return [200, bigFiles];
+  if (/\/(issues\/9\/comments|pulls\/9\/reviews|pulls\/9\/comments|pulls\/9\/commits)/.test(path)) return [200, []];
   if (/\/(issues\/1\/comments|pulls\/1\/reviews|pulls\/1\/comments|pulls\/1\/commits)/.test(path)) return [200, []];
   if (path === '/rate_limit') return [200, { resources: { core: { limit: 5000, remaining: 5000, used: 0, reset: 9e9 }, graphql: { limit: 5000, remaining: 5000, used: 0, reset: 9e9 } } }];
   if (path === '/emojis') return [200, {}];
@@ -119,7 +128,7 @@ let failed = false;
 const browser = await webkit.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-  page.on('pageerror', (e) => problems.push(`Uncaught: ${e.message}`));
+  page.on('pageerror', (e) => /^ResizeObserver loop/.test(e.message) || problems.push(`Uncaught: ${e.message}`)); // that one's a notice (platform.ts)
   await page.route('**/*', (route) => {
     const request = route.request();
     const u = new URL(request.url());
@@ -378,6 +387,61 @@ try {
     }
     return out;
   };
+  // Escape closes what it opened, and gives focus back to what opened it: each opener on the page (a dropdown's summary,
+  // a button with a menu or a panel) opened from the keyboard; what floats up from it (a menu, a panel, a dialog) has to
+  // go with one Escape, the page stay where it was, and the opener hold focus again.
+  const escapes = async (where) => {
+    const n = await evaluate(`(() => {
+      window.__float = (e) => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return (['absolute', 'fixed'].includes(s.position) || e.matches('dialog[open]')) && s.visibility !== 'hidden' && s.display !== 'none' && r.width > 40 && r.height > 20 && !e.closest('.demo-side'); };
+      const os = [...document.querySelectorAll('summary, [aria-haspopup]:not([aria-haspopup=false]), [aria-expanded]')].filter((o) => o.getClientRects().length && getComputedStyle(o).visibility !== 'hidden' && !o.closest('.demo-side, [inert]'));
+      os.forEach((o, k) => (o.dataset.esc = k));
+      return os.length;
+    })()`);
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const name = await evaluate(`(() => {
+        const o = document.querySelector('[data-esc="${k}"]');
+        if (!o || !o.getClientRects().length) return null;
+        window.__was = new Set([...document.querySelectorAll('body *')].filter(window.__float));
+        window.__hash = location.hash;
+        o.focus();
+        return (o.getAttribute('aria-label') || o.title || o.textContent.trim().replace(/\\s+/g, ' ')).slice(0, 30) || o.className;
+      })()`);
+      if (!name) continue;
+      await page.keyboard.press('Enter');
+      await sleep(200);
+      if (await evaluate(`location.hash !== window.__hash`)) {
+        // It went somewhere (Back): not an opener. Back to the page, its openers marked again.
+        await evaluate(`location.hash = window.__hash`);
+        await sleep(600);
+        await evaluate(`[...document.querySelectorAll('summary, [aria-haspopup]:not([aria-haspopup=false]), [aria-expanded]')].filter((o) => o.getClientRects().length && getComputedStyle(o).visibility !== 'hidden' && !o.closest('.demo-side, [inert]')).forEach((o, k) => (o.dataset.esc = k))`);
+        continue;
+      }
+      const opened = await evaluate(`[...document.querySelectorAll('body *')].some((e) => window.__float(e) && !window.__was.has(e) && ![...window.__was].some((w) => w.contains(e)))`);
+      if (!opened) {
+        // A disclosure (a section that folds), or nothing: put it back as it was.
+        if (await evaluate(`(() => { const o = document.querySelector('[data-esc="${k}"]'); return !!o && (o.closest('details')?.open && o.tagName === 'SUMMARY' || o.getAttribute('aria-expanded') === 'true'); })()`)) await page.keyboard.press('Enter');
+        continue;
+      }
+      await page.keyboard.press('Escape');
+      await sleep(200);
+      const r = await evaluate(`(() => {
+        const o = document.querySelector('[data-esc="${k}"]'), a = document.activeElement;
+        const left = [...document.querySelectorAll('body *')].filter((e) => window.__float(e) && !window.__was.has(e) && ![...window.__was].some((w) => w.contains(e)));
+        return { left: left.map((e) => e.className || e.tagName).slice(0, 2).join(', '), moved: location.hash !== window.__hash, focus: !o || o === a || o.contains(a) ? '' : (a === document.body ? 'nothing' : (a.getAttribute('aria-label') || a.className || a.tagName)) };
+      })()`);
+      if (r.moved) {
+        out.push(`${where}: "${name}": Escape left the page`);
+        await evaluate(`location.hash = window.__hash`);
+        await sleep(500);
+      }
+      if (r.left) out.push(`${where}: "${name}": ${r.left} still open after Escape`);
+      else if (r.focus) out.push(`${where}: "${name}": focus on ${r.focus} after Escape, not back on it`);
+      if (r.left) await evaluate(`(() => { const o = document.querySelector('[data-esc="${k}"]'); const d = o?.closest('details'); if (d) d.open = false; else o?.click(); })()`), await sleep(150);
+    }
+    await evaluate(`document.querySelectorAll('[data-esc]').forEach((o) => delete o.dataset.esc)`);
+    return out;
+  };
   // The PR (each pill's menu open in turn), Settings and the list, each through these checks.
   const tour = async (label, checks) => {
     const found = [];
@@ -509,6 +573,32 @@ try {
   await step('Tab shows where it is: every stop on the PR, Settings and the list looks focused', async () => {
     const found = await tour('Tab', [unringed]);
     if (found.length) throw new Error(`${found.length} stops with no sign of focus: ${found.join('; ')}`);
+  });
+  await step('Escape closes each menu, panel and dialog on the PR, the list and Settings, and gives focus back to its opener', async () => {
+    const found = [];
+    for (const [where, hash, ready] of [['the PR', '/acme/shop/pull/1', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`], ['the list', '/', `!!document.querySelector('.pr-item')`], ['Settings', '/settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`]]) {
+      await evaluate(`location.hash = ${JSON.stringify(hash)}`);
+      await until(where, ready);
+      found.push(...(await escapes(where)));
+    }
+    if (found.length) throw new Error(`${found.length} not closed by Escape as they should be: ${found.join('; ')}`);
+  });
+  // A big PR (15,000 lines in 300 files): open in 3s, j to the next file and each screenful of scrolling within 100ms
+  // (a keypress or scroll to the frame drawn after it).
+  await step('a 15,000-line PR: opens in 3s, j and scrolling answer within 100ms', async () => {
+    const frame = `new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`;
+    const t0 = Date.now();
+    await evaluate(`location.hash = '/acme/shop/pull/9'`);
+    await until('the big diff', `!!document.querySelector('[id="f-src/big/m000/Total0.kt"] tr.ln.a') && document.querySelectorAll('.file').length >= 300`, 20000);
+    await evaluate(frame);
+    const open = Date.now() - t0;
+    const keys = [], scrolls = [];
+    for (let k = 0; k < 10; k++) keys.push(await evaluate(`(async () => { const t = performance.now(); document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true })); await ${frame}; return performance.now() - t; })()`));
+    for (let k = 0; k < 15; k++) scrolls.push(await evaluate(`(async () => { const t = performance.now(); scrollBy(0, innerHeight * 3); await ${frame}; return performance.now() - t; })()`));
+    const worst = (xs) => Math.round(Math.max(...xs));
+    console.log(`    (opened in ${open}ms; j at worst ${worst(keys)}ms; a scroll at worst ${worst(scrolls)}ms)`);
+    const slow = [open > 3000 && `opened in ${open}ms`, worst(keys) > 100 && `j took ${worst(keys)}ms`, worst(scrolls) > 100 && `a scroll took ${worst(scrolls)}ms`].filter(Boolean);
+    if (slow.length) throw new Error(`the big PR is slow: ${slow.join('; ')}`);
   });
   await step("text readable on its background, light and dark, in lgtm's look and each theme", async () => {
     const found = [];

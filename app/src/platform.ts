@@ -530,7 +530,17 @@ export function useDismiss(open: boolean, close: () => void, inside: string) {
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => !(e.target as Element).closest?.(inside) && close();
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    // Escape gives focus back to what opened it (focused as it opened), unless it's gone somewhere else meanwhile; a click
+    // away leaves it where the click put it.
+    const from = document.activeElement as HTMLElement | null;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      close();
+      setTimeout(() => {
+        const a = document.activeElement;
+        if (from?.isConnected && from !== document.body && (!a || a === document.body || a.closest(inside))) from.focus();
+      });
+    };
     addEventListener('pointerdown', away);
     addEventListener('keydown', esc);
     return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
@@ -1354,7 +1364,9 @@ export function recordError(text: string) {
   } catch {}
 }
 if (typeof window !== 'undefined') {
-  addEventListener('error', (e) => recordError(`error: ${e.message}`));
+  // Not "ResizeObserver loop…": a notice, not a failure (the sizes it held back arrive the next frame), raised when keeping
+  // your place as files draw above it (review.tsx) draws more of them in the same frame.
+  addEventListener('error', (e) => !/^ResizeObserver loop/.test(e.message ?? '') && recordError(`error: ${e.message}`));
   addEventListener('unhandledrejection', (e) => recordError(`unhandled: ${e.reason?.message ?? e.reason}`));
 }
 

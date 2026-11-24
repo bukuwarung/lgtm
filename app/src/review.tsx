@@ -3132,7 +3132,7 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
             value={body}
             onInput={(b: string) => (setBody(b), keep(b, event), (kept.current = b.trim() ? { body: b, event } : null))}
             onSubmit={() => !busy && go()}
-            onCancel={() => !inline && setOpen(false)}
+            onCancel={() => !inline && (setOpen(false), setTimeout(() => root.current?.querySelector<HTMLElement>(':scope > button.primary')?.focus()))} // Escape: back on Finish review
             repo={repo}
             mentions={mentions}
             autoFocus={!inline}
