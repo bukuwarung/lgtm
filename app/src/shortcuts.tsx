@@ -548,9 +548,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
           <span class="ix-label">
             <CheckMark state={c.state} /> {c.name}
           </span>
-          {/* Its words only when it failed (what failed, say): running or passed, they're "being built", "in progress", its
-              name again. On hover always. */}
-          {c.state === 'failure' && c.summary && c.summary.toLowerCase() !== c.name.toLowerCase() && <span class="ix-sub">{c.summary}</span>}
+          {/* Its own words ("being built", its name again…) on hover only. */}
           {c.onBase && c.onBase !== 'neutral' && <span class="ix-sub"><OnBase c={c} branch={base} /></span>}
         </a>
         {c.manual && c.jobId && (

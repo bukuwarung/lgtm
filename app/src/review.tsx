@@ -2555,9 +2555,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {failingChecks > 0 && (
               <PillMenu cls="p-bad" label={<Tg i="ci" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
                 {checks!.filter((c) => c.state === 'failure').map((c) => (
-                  <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary}>
+                  <a href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary || undefined}>
                     <CheckMark state="failure" /> {c.name}
-                    {c.summary && <small>{c.summary}</small>}
                     <OnBase c={c} branch={pr.base.ref} />
                   </a>
                 ))}
