@@ -1900,13 +1900,20 @@ export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeSt
 }
 
 // expectedHeadOid: refuse if commits were pushed after the state I looked at.
+// Refused because commits were pushed since the page loaded (on purpose: nothing merged or sent unseen). The page shows
+// it with "See what changed" and "Reload" (isStalePush).
+export const STALE_PUSH = 'New commits were pushed since you loaded this';
+export const isStalePush = (m?: string) => !!m?.startsWith(STALE_PUSH);
+const staleMerge = (term: string) => (e: Error) => {
+  throw /Head branch was modified|head ref was modified|SHA does not match HEAD|expected head/i.test(e.message) ? new Error(`${STALE_PUSH} ${term}, so it wasn't merged: look at them first.`) : e;
+};
 export const mergePR = (s: MergeState, method: MergeMethod, title: string, body: string, auto: boolean) =>
-  isLabId(s.id) ? lab.mergeLab(s, method, title, body, auto) : graphql(
+  (isLabId(s.id) ? lab.mergeLab(s, method, title, body, auto) : graphql(
     auto
       ? `mutation($id:ID!,$m:PullRequestMergeMethod,$t:String,$b:String,$oid:GitObjectID){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:$m,commitHeadline:$t,commitBody:$b,expectedHeadOid:$oid}){clientMutationId}}`
       : `mutation($id:ID!,$m:PullRequestMergeMethod,$t:String,$b:String,$oid:GitObjectID){mergePullRequest(input:{pullRequestId:$id,mergeMethod:$m,commitHeadline:$t,commitBody:$b,expectedHeadOid:$oid}){clientMutationId}}`,
     { id: s.id, m: method, t: method === 'REBASE' ? null : title, b: method === 'REBASE' ? null : body, oid: s.headRefOid },
-  );
+  )).catch(staleMerge(isLabId(s.id) ? 'MR' : 'PR'));
 // The bottom layer of a stack merged from the stack overview: GitHub's usual method and message, then the next layer
 // pointed at what it merged into, then its branch deleted (unless the repo does that, or another PR builds on it).
 export async function mergeLayer(repo: string, n: number, next?: number) {

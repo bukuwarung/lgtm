@@ -13,7 +13,7 @@ import { addedLines, interdiff, hiddenChanges, moveRuns, wholeFromPatch, type Mo
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
   getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
-  awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, prCommits, revertCommit, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
+  isStalePush, awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, prCommits, revertCommit, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
   ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
@@ -22,7 +22,7 @@ import { isMarkdown, md, onDocClick, renderChunks, tidyDoc, toggleTask } from '.
 import { CommentMenu, ReactPick, Reactions, editUnderMouse, loadSocial, menuUnderMouse, reactUnderMouse, useSocial } from './social.tsx';
 import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
-import { MergeBox, mergeOnceApproved } from './merge.tsx';
+import { StaleActions, MergeBox, mergeOnceApproved } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
 import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode, CodeSnippet } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
@@ -1291,6 +1291,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     showCommit(commits[next]?.sha ?? null);
   };
   const commitView = since && !!toSha;
+  // A merge or review refused for commits pushed since the page loaded (merge.tsx StaleActions): just what they changed.
+  useEffect(() => {
+    const see = () => data && (showSince(data.pr.head.sha), dispatchEvent(new Event('lgtm:refresh')));
+    addEventListener('lgtm:see-new', see);
+    return () => removeEventListener('lgtm:see-new', see);
+  }, [data?.pr.head.sha]);
   const newFrom = lastReviewed && ci(lastReviewed) >= 0 && ci(lastReviewed) < commits.length - 1 ? ci(lastReviewed) + 1 : -1; // the first commit pushed since my last review
   const commitTarget = async (t: Target | null) => {
     const no = (text: string) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, ms: 4000 } }));
@@ -3202,7 +3208,7 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
           <button class="primary" disabled={!!busy || (inline && inFlight)} onClick={go}>
             {busy ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : authored ? 'Comment' : 'Submit review'}
           </button>
-          {err && <p class="error">{err}</p>}
+          {err && <p class="error">{err}{isStalePush(err) && <> <StaleActions /></>}</p>}
         </div>
       )}
     </div>

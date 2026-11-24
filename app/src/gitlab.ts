@@ -5,7 +5,7 @@
 // A GitLab repo is "host/group/…/project" (gitlab.com/gitlab-org/cli): GitHub owners have no dots, so a dot in the
 // first part says GitLab. An MR is that repo and its iid. GitLab's global IDs travel as "gl:host|gid://…", an MR's as
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
-import { collapseReviews, setOffline, revertOf } from './github.ts';
+import { collapseReviews, setOffline, revertOf, STALE_PUSH } from './github.ts';
 import { kept, fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
 import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview, Social, Pushed } from './github.ts';
 
@@ -422,7 +422,7 @@ export async function submitLabReview(prId: string, commitOID: string, event: Re
   const { host } = split(repo);
   const base = `/projects/${pid(repo)}/merge_requests/${n}`;
   const refs = (await getMR(repo, n, 'diffRefs{baseSha headSha startSha}')).diffRefs;
-  if (refs.headSha !== commitOID) throw new Error('New commits were pushed while you reviewed: reload to see them, then send again');
+  if (refs.headSha !== commitOID) throw new Error(`${STALE_PUSH} MR: nothing was sent. Look at them, then send again.`);
   const files = drafts.some((x) => x.line) ? await getLabFiles(repo, n) : [];
   for (const x of drafts) {
     const f = files.find((f) => f.filename === x.path);

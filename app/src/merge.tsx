@@ -3,7 +3,7 @@ import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview, closedOnSlack, WHY_CLOSE, askText } from './platform.ts';
-import { afterApproval, CANT_MERGE_YET, getChecks, closeWithReason, deleteBranch, disableAutoMerge, getMergeState, getPushPoints, prCommits, markReady, mergePR, neverRan, requiredChecks, updateBranchAndWait, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { isStalePush, afterApproval, CANT_MERGE_YET, getChecks, closeWithReason, deleteBranch, disableAutoMerge, getMergeState, getPushPoints, prCommits, markReady, mergePR, neverRan, requiredChecks, updateBranchAndWait, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -139,7 +139,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
         )}
         {moved && <p class="ok">{moved}</p>}
         {s.state === 'MERGED' && tickets.map((k) => <TicketMove key={k} id={k} />)}
-        {err && <p class="error">{err}</p>}
+        {err && <p class="error">{err}{isStalePush(err) && <> <StaleActions /></>}</p>}
       </div>,
     );
 
@@ -331,7 +331,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
           )}
         </div>
       )}
-      {err && <p class="error">{err}</p>}
+      {err && <p class="error">{err}{isStalePush(err) && <> <StaleActions /></>}</p>}
     </div>,
     () => ready && !s.autoMergeRequest && open('merge'), // ready: straight to the commit message
   );
@@ -419,5 +419,16 @@ function TicketMove({ id }: { id: string }) {
         </>
       )}
     </form>
+  );
+}
+
+// Commits pushed since the page loaded stopped a merge or a review: what changed (only the new commits), or the PR again.
+export function StaleActions() {
+  return (
+    <>
+      <button class="link" onClick={() => dispatchEvent(new Event('lgtm:see-new'))}>See what changed</button>
+      {' · '}
+      <button class="link" onClick={() => dispatchEvent(new Event('lgtm:refresh'))}>Reload</button>
+    </>
   );
 }
