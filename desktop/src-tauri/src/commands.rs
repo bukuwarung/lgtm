@@ -1255,7 +1255,8 @@ pub async fn clipboard_pr() -> Option<String> {
 /// Ask Claude: the page's prompt through Claude Code's CLI, without tools or a saved session (as the server's
 /// agentText()). `on_text`: each piece of Claude's answer as it's written (Codex's comes whole, at the end).
 #[tauri::command]
-pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>, local: Option<Local>, on_text: tauri::ipc::Channel<String>) -> Result<String, String> {
+/// Its answer, and with a checkout read, the repo files it opened there (`read`, relative; a skill as "skill: name").
+pub async fn agent_text(input: String, model: Option<String>, effort: Option<String>, agent: Option<String>, local: Option<Local>, on_text: tauri::ipc::Channel<String>) -> Result<Value, String> {
     if input.is_empty() || input.len() > 800_000 {
         return Err("Bad request for Claude".into());
     }
@@ -1267,14 +1268,33 @@ pub async fn agent_text(input: String, model: Option<String>, effort: Option<Str
         _ => input,
     };
     let cwd = wt.as_ref().map(|w| w.dir.clone());
-    let res = if agent.as_deref() == Some("codex") { codex_text(&input, model, effort, cwd) } else { claude_text(&input, model, effort, cwd, &on_text) };
+    let mut read: Vec<String> = vec![];
+    let res = if agent.as_deref() == Some("codex") { codex_text(&input, model, effort, cwd.clone(), &mut read) } else { claude_text(&input, model, effort, cwd.clone(), &on_text, &mut read) };
     if let Some(w) = wt {
         w.done();
     }
-    res
+    res.map(|text| json!({ "text": text, "read": if cwd.is_some() { json!(read) } else { Value::Null } }))
 }
 
-fn claude_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>, on_text: &tauri::ipc::Channel<String>) -> Result<String, String> {
+/// A path inside `dir` (as given, or as macOS resolves /var to /private/var), relative to it; None outside it.
+fn rel_to(dir: &str, p: &str) -> Option<String> {
+    let full = if p.starts_with('/') { std::path::PathBuf::from(p) } else { std::path::Path::new(dir).join(p) };
+    let mut parts: Vec<String> = vec![];
+    for c in full.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                parts.pop();
+            }
+            std::path::Component::Normal(x) => parts.push(x.to_string_lossy().to_string()),
+            _ => {}
+        }
+    }
+    let n = format!("/{}", parts.join("/"));
+    let real = std::fs::canonicalize(dir).map(|r| r.to_string_lossy().to_string()).unwrap_or_default();
+    [dir.to_string(), real].iter().filter(|d| !d.is_empty()).find_map(|d| n.strip_prefix(&format!("{d}/")).map(String::from))
+}
+
+fn claude_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>, on_text: &tauri::ipc::Channel<String>, read: &mut Vec<String>) -> Result<String, String> {
     // The model and effort Settings picked for this prompt; none, Claude Code's own.
     let model = model.filter(|m| !m.is_empty());
     let effort = effort.filter(|e| !e.is_empty());
@@ -1304,6 +1324,19 @@ fn claude_text(input: &str, model: Option<String>, effort: Option<String>, cwd: 
             let _ = on_text.send(d.to_string());
         } else if e["type"] == "result" {
             result = e;
+        } else if let (Some(dir), "assistant") = (cwd.as_deref(), e["type"].as_str().unwrap_or("")) {
+            for c in e["message"]["content"].as_array().into_iter().flatten() {
+                let f = match (c["type"].as_str(), c["name"].as_str()) {
+                    (Some("tool_use"), Some("Read")) => c["input"]["file_path"].as_str().and_then(|p| rel_to(dir, p)),
+                    (Some("tool_use"), Some("Skill")) => c["input"]["skill"].as_str().map(|n| format!("skill: {n}")),
+                    _ => None,
+                };
+                if let Some(f) = f {
+                    if !read.contains(&f) {
+                        read.push(f);
+                    }
+                }
+            }
         }
     });
     if out.missing {
@@ -1483,7 +1516,7 @@ fn codex_models() -> Value {
 /// The same through Codex's CLI (`codex login`): its last message back. Every tool it has switched off (shell, browser,
 /// computer use, apps, images, MCP servers, web search), read-only, in an empty folder: like Claude above, it only
 /// reads what it's given. The server's codexText().
-fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>) -> Result<String, String> {
+fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: Option<String>, read: &mut Vec<String>) -> Result<String, String> {
     let model = model.filter(|m| !m.is_empty());
     let effort = effort.filter(|e| !e.is_empty());
     if model.as_deref().is_some_and(|m| !re(r"^[\w.\[\]-]{1,80}$").is_match(m)) || effort.as_deref().is_some_and(|e| !CODEX_EFFORTS.contains(&e)) {
@@ -1530,6 +1563,9 @@ fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: O
     if let Some(e) = effort_c.as_deref() {
         args.extend(["-c", e]);
     }
+    if cwd.is_some() {
+        args.push("--json"); // its events: the commands it ran, for what it read
+    }
     args.extend(["-o", &out_s, "-"]);
     let res = crate::cli::run_in("codex", &args, Some(input), std::time::Duration::from_secs(if cwd.is_some() { 600 } else { 300 }), cwd.as_deref());
     let text = std::fs::read_to_string(&out).unwrap_or_default();
@@ -1543,6 +1579,23 @@ fn codex_text(input: &str, model: Option<String>, effort: Option<String>, cwd: O
             return Err("Codex isn't signed in: run `codex login` in Terminal, then try again".into());
         }
         return Err(last);
+    }
+    // Reading the repo: each command's words that are files of the repo, as what it read.
+    if let Some(dir) = cwd.as_deref() {
+        let split = Regex::new(r#"[\s'"|;&<>()]+"#).unwrap();
+        for line in res.stdout.lines().filter(|l| l.contains("command_execution")) {
+            let Ok(e) = serde_json::from_str::<Value>(line) else { continue };
+            for w in split.split(e["item"]["command"].as_str().unwrap_or("")) {
+                if w.is_empty() || w.starts_with('-') {
+                    continue;
+                }
+                if let Some(f) = rel_to(dir, w) {
+                    if std::path::Path::new(dir).join(&f).is_file() && !read.contains(&f) {
+                        read.push(f);
+                    }
+                }
+            }
+        }
     }
     Ok(text.trim().to_string())
 }

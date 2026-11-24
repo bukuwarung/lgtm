@@ -683,9 +683,11 @@ const CLAUDE_MODEL = /^[\w.[\]-]{1,80}$/, EFFORTS = ['low', 'medium', 'high', 'x
 // comes whole, at the end).
 // `cwd`: a read-only checkout of the repo (reviewWorktree) to read it from, as in a terminal: its CLAUDE.md or AGENTS.md,
 // its skills, what they point to. Restricted (no shell, none of the repo's settings or hooks), reading only.
-function agentText(input, model, effort, agent, onDelta, cwd) {
+// `read`: filled with the repo files it opened there (relative to it; a skill as "skill: name"), to show which rules it
+// went by.
+function agentText(input, model, effort, agent, onDelta, cwd, read = []) {
   if (typeof input !== 'string' || !input || input.length > 800_000) return Promise.reject(new Error('Bad request for Claude'));
-  if (agent === 'codex') return codexText(input, model, effort, cwd);
+  if (agent === 'codex') return codexText(input, model, effort, cwd, read);
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !EFFORTS.includes(effort))) return Promise.reject(new Error('Bad request for Claude'));
   return new Promise((resolve, reject) => {
     const tools = cwd ? ['--restricted', '--tools', 'Read,Grep,Glob,Skill', '--allowedTools', 'Read,Grep,Glob,Skill', '--strict-mcp-config'] : ['--tools', ''];
@@ -704,6 +706,11 @@ function agentText(input, model, effort, agent, onDelta, cwd) {
         }
         if (e.type === 'stream_event' && e.event?.delta?.type === 'text_delta') (text += e.event.delta.text), onDelta?.(e.event.delta.text);
         else if (e.type === 'result') result = e;
+        else if (cwd && e.type === 'assistant')
+          for (const c of e.message?.content ?? []) {
+            const f = c?.type === 'tool_use' && (c.name === 'Read' ? relTo(cwd, c.input?.file_path) : c.name === 'Skill' && c.input?.skill ? `skill: ${c.input.skill}` : null);
+            if (f && !read.includes(f)) read.push(f);
+          }
       }
     });
     child.stderr.setEncoding('utf8').on('data', (d) => (err = (err + d).slice(-8000)));
@@ -744,7 +751,7 @@ const CODEX_OFF = ['shell_tool', 'unified_exec', 'browser_use', 'browser_use_ext
 // `cwd`: the repo's copy (reviewWorktree), read through its shell under a permission profile that lets it read only
 // that copy, the system's basics (:minimal) and Codex's own install, and write nothing, no network: not your home
 // folder (your GitHub token, keys). Without one, no shell at all.
-async function codexText(input, model, effort, cwd) {
+async function codexText(input, model, effort, cwd, read = []) {
   if ((model && !CLAUDE_MODEL.test(model)) || (effort && !CODEX_EFFORTS.includes(effort))) throw new Error('Bad request for Codex');
   const dir = await mkdtemp(join(tmpdir(), 'lgtm-codex-'));
   const off = cwd ? CODEX_OFF.filter((f) => !['shell_tool', 'unified_exec'].includes(f)) : CODEX_OFF;
@@ -759,13 +766,25 @@ async function codexText(input, model, effort, cwd) {
       const child = execFile(
         'codex',
         ['exec', '--skip-git-repo-check', '--ephemeral', ...sandbox, '--color', 'never', '-C', cwd ?? dir, ...off.flatMap((f) => ['--disable', f]),
-          '-c', 'mcp_servers={}', '-c', 'web_search="disabled"', ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort=${effort}`] : []), '-o', out, '-'],
-        { cwd: cwd ?? dir, maxBuffer: 1 << 24, timeout: cwd ? 600000 : 300000 },
+          '-c', 'mcp_servers={}', '-c', 'web_search="disabled"', ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort=${effort}`] : []), ...(cwd ? ['--json'] : []), '-o', out, '-'],
+        { cwd: cwd ?? dir, maxBuffer: 1 << 26, timeout: cwd ? 600000 : 300000 },
         (err, stdout, stderr) => {
           if (err?.code === 'ENOENT') return reject(new Error("Codex isn't installed (brew install codex), or not on the PATH"));
           const last = (stderr || stdout).trim().split('\n').pop() || err?.message;
           if (err && /log ?in|auth|unauthori[sz]ed|401/i.test(last ?? '')) return reject(new Error("Codex isn't signed in: run `codex login` in Terminal, then try again"));
           if (err) return reject(new Error(last));
+          // Reading the repo: its events (--json), each command's words that are files of the repo, as what it read.
+          if (cwd)
+            for (const line of stdout.split('\n')) {
+              let cmd = null;
+              try {
+                cmd = line.includes('command_execution') ? JSON.parse(line)?.item?.command : null;
+              } catch {}
+              for (const w of typeof cmd === 'string' ? cmd.split(/[\s'"|;&<>()]+/) : []) {
+                const f = w && !w.startsWith('-') && relTo(cwd, join(cwd, w));
+                if (f && !read.includes(f) && statSync(join(cwd, f), { throwIfNoEntry: false })?.isFile()) read.push(f);
+              }
+            }
           resolve();
         },
       );
@@ -776,6 +795,14 @@ async function codexText(input, model, effort, cwd) {
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+// A path inside `dir` as relative to it; null outside it.
+const relTo = (dir, p) => {
+  if (typeof p !== 'string' || !p) return null;
+  const n = normalize(p.startsWith('/') ? p : join(dir, p));
+  for (const d of [dir, realpathSync(dir)]) if (n.startsWith(d + sep)) return n.slice(d.length + 1); // /var is /private/var on macOS
+  return null;
+};
 
 // A checkout of a repo ("owner/name" on GitHub, "host/group/name" on GitLab) on this machine: the folder Settings names
 // for it, else one a Claude Code session worked in (its main checkout first; worktrees share its git data) whose remote
@@ -1072,9 +1099,11 @@ const server = createServer(async (req, res) => {
     return readJson(req)
       .then(async (b) => {
         wt = b?.local ? await reviewWorktree(b.local).catch(() => null) : null;
-        return agentText(wt && typeof b.local.input === 'string' ? b.local.input : b?.input, b?.model, b?.effort, b?.agent, (d) => say({ d }), wt?.dir);
+        const read = [];
+        const text = await agentText(wt && typeof b.local.input === 'string' ? b.local.input : b?.input, b?.model, b?.effort, b?.agent, (d) => say({ d }), wt?.dir, read);
+        return { text, read: wt ? read : undefined };
       })
-      .then((text) => say({ text }), (e) => say({ error: e.message }))
+      .then(({ text, read }) => say({ text, read }), (e) => say({ error: e.message }))
       .finally(() => (wt?.done(), res.end()));
   }
   if (path === '/job-log') {

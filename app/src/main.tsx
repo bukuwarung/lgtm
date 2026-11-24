@@ -1,7 +1,7 @@
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
+import { type AgentRun, agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
 import { isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
 import { Editor } from './editor.tsx';
@@ -1615,6 +1615,8 @@ let revertsAsked = 0; // when reverts of my PRs were last asked about (github.ts
 
 // A coding agent's review of a PR waiting for mine (Settings → Reviewing, agentreview.ts), with its mark: under way,
 // what it found and where it put it, or why it couldn't (a click tries again).
+// What it read of the repo, in its checkout (agentreview.ts AgentRun.read): the rules it went by. None: it was given them.
+const readOf = (r: AgentRun) => (!r.read ? '' : r.read.length ? `\n\nRead in the repo: ${r.read.join(', ')}` : "\n\nIt didn't open any of the repo's files.");
 function AgentPill({ i }: { i: QueueItem }) {
   const r = agentRunOf(i);
   if (!r) return null;
@@ -1631,7 +1633,7 @@ function AgentPill({ i }: { i: QueueItem }) {
     );
   const where = r.posted === 'pending' ? 'in your pending review (Finish review sends them)' : 'as comments';
   return (
-    <span class={r.findings ? 'pill p-agent' : 'pill p-ok'} title={r.findings ? `${r.by ?? 'The agent'}'s adversarial review: ${r.findings} finding${r.findings > 1 ? 's' : ''}, ${where}` : `${r.by ?? 'The agent'} found nothing to point out`}>
+    <span class={r.findings ? 'pill p-agent' : 'pill p-ok'} title={(r.findings ? `${r.by ?? 'The agent'}'s adversarial review: ${r.findings} finding${r.findings > 1 ? 's' : ''}, ${where}` : `${r.by ?? 'The agent'} found nothing to point out`) + readOf(r)}>
       {r.findings ? <Tg i={mark} n={r.findings} t={`finding${r.findings > 1 ? 's' : ''}`} /> : <Tg i={mark} t="nothing found" />}
     </span>
   );

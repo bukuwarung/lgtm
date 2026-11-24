@@ -25,6 +25,7 @@ export type AgentRun = {
   since?: string; // a re-review: the commit it read the changes from (the last run's)
   findings?: number;
   found?: number; // while it runs: the findings written so far
+  read?: string[]; // the repo files it opened, in its checkout (a skill as "skill: name")
   posted?: 'pending' | 'comment';
   error?: string;
 };
@@ -170,7 +171,8 @@ const say = (text: string) => (dispatchEvent(new CustomEvent('lgtm:toast', { det
 type Finding = { path: string; line?: number; start_line?: number; side?: 'RIGHT' | 'LEFT'; severity?: string; title: string; body: string; fix?: string };
 const SKIP = /(^|\/)([\w.-]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.(min\.js|map|svg|png|jpe?g|gif|webp|pdf|zip|jar)$/i;
 
-async function review(i: Target & { agent: AgentId; since?: string }, onText?: (soFar: string) => void): Promise<Pick<AgentRun, 'findings' | 'posted'>> {
+async function review(i: Target & { agent: AgentId; since?: string }, onText?: (soFar: string) => void): Promise<Pick<AgentRun, 'findings' | 'posted' | 'read'>> {
+  let opened: string[] | undefined; // what it read of the repo, in its checkout
   const { pr, files, threads } = await loadPR(i.repo, i.number);
   // A re-review reads the changes since the last run, in the PR's files; after a rebase (no shared history), all of it.
   // ponytail: a merge of the base branch in those commits shows its changes to the PR's files too.
@@ -241,7 +243,7 @@ async function review(i: Target & { agent: AgentId; since?: string }, onText?: (
     `The diff, each line numbered (R: the new file, L: the old):\n${shown.map((f) => numbered(f)).join('\n\n')}`.slice(0, 200_000),
     texts.join('\n\n'),
   ].filter(Boolean).join('\n\n');
-  const answer = await runAgent(build(guideNote), i.agent, onText, { repo: i.repo, sha: pr.base.sha, folder: claudeFolder(i.repo), input: build(repoNote) });
+  const answer = await runAgent(build(guideNote), i.agent, onText, { repo: i.repo, sha: pr.base.sha, folder: claudeFolder(i.repo), input: build(repoNote) }, (f) => (opened = f));
   const json = answer.slice(answer.indexOf('{'), answer.lastIndexOf('}') + 1);
   let parsed: { summary?: string; findings?: Finding[] };
   try {
@@ -265,7 +267,7 @@ async function review(i: Target & { agent: AgentId; since?: string }, onText?: (
   const mode = postMode();
   const summary = `🤖 ${since ? `Re-review of the changes since ${since.slice(0, 7)}` : 'Adversarial review'} by ${AGENTS[i.agent].name} (from lgtm): ${drafts.length ? `${drafts.length} finding${drafts.length > 1 ? 's' : ''}` : 'nothing found'}.${parsed.summary ? `\n\n${parsed.summary}` : ''}`;
   if (drafts.length || mode === 'pending') await postAgentFindings(i.repo, i.number, pr, drafts, summary, mode);
-  return { findings: drafts.length, posted: mode };
+  return { findings: drafts.length, posted: mode, read: opened };
 }
 
 // The diff with every line numbered, as the agent is asked to cite it.
