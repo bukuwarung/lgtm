@@ -2046,9 +2046,17 @@ export const updateBranch = (s: { id: string; headRefOid?: string }) =>
   isLabId(s.id) ? lab.rebaseLab(s.id) : graphql(`mutation($id:ID!,$oid:GitObjectID){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}`, { id: s.id, oid: s.headRefOid });
 // Then wait for the new head: GitHub (GitLab's rebase too) makes it a moment later; half a minute at most. So what
 // reloads after is the updated branch, its checks included.
+// A push since the PR was loaded makes GitHub refuse the head it was told ("head sha didn't match"): asked again with the
+// branch's head now (updating only merges the base in, so nothing pushed is lost).
 export async function updateBranchAndWait(repo: string, n: number, s: { id: string; headRefOid?: string }) {
-  await updateBranch(s);
-  const was = s.headRefOid;
+  let was = s.headRefOid;
+  try {
+    await updateBranch(s);
+  } catch (e) {
+    if (!/head sha didn't match|expected head/i.test((e as Error).message)) throw e;
+    was = await getHead(repo, n);
+    await updateBranch({ ...s, headRefOid: was });
+  }
   for (let k = 0; was && k < 15 && (await getHead(repo, n).catch(() => was)) === was; k++) await new Promise((r) => setTimeout(r, 2000));
 }
 export const markReady = (id: string) =>
