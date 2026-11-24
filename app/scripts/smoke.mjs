@@ -128,7 +128,16 @@ let failed = false;
 const browser = await webkit.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-  page.on('pageerror', (e) => /^ResizeObserver loop/.test(e.message) || problems.push(`Uncaught: ${e.message}`)); // that one's a notice (platform.ts)
+  // A ResizeObserver loop is a notice (platform.ts); a request cut off by the run's own reload isn't the app's failure.
+  let reloading = false;
+  page.on('pageerror', (e) => /^ResizeObserver loop/.test(e.message) || (reloading && /access control checks|Load failed|cancelled/i.test(e.message)) || problems.push(`Uncaught: ${e.message}`));
+  const reload = async () => {
+    reloading = true;
+    await page.reload();
+    await until('the app again', `!!document.querySelector('.top')`);
+    await sleep(300);
+    reloading = false;
+  };
   await page.route('**/*', (route) => {
     const request = route.request();
     const u = new URL(request.url());
@@ -559,15 +568,13 @@ try {
   });
   await step('at the largest text size (20px), wide and narrow: lined up, nothing sideways, no text cut off, checkboxes on their words', async () => {
     await evaluate(`localStorage.setItem('textSize', '20')`); // Settings → Appearance's largest
-    await page.reload();
-    await until('the app again', `!!document.querySelector('.top')`);
+    await reload();
     const found = await tour('20px text', [rows, sideways, clipped, offWords]);
     await page.setViewportSize({ width: 900, height: 700 });
     found.push(...(await tour('20px text, 900px', [rows, sideways, clipped, offWords])));
     await page.setViewportSize({ width: 1400, height: 900 });
     await evaluate(`localStorage.removeItem('textSize')`);
-    await page.reload();
-    await until('the app again', `!!document.querySelector('.top')`);
+    await reload();
     if (found.length) throw new Error(`at 20px text: ${[...new Set(found)].slice(0, 20).join('; ')}`);
   });
   await step('Tab shows where it is: every stop on the PR, Settings and the list looks focused', async () => {
@@ -605,8 +612,7 @@ try {
     for (const app of ['lgtm', 'one', 'ayu', 'gruvbox']) // themes.ts: lgtm's own, then BUILTIN_THEMES
       for (const mode of ['light', 'dark']) {
         await evaluate(`localStorage.setItem('appTheme', ${JSON.stringify(app)}); localStorage.setItem('theme', ${JSON.stringify(mode)})`);
-        await page.reload();
-        await until('the app again', `!!document.querySelector('.top')`);
+        await reload();
         found.push(...(await tour(`${app} ${mode}`, [faint])));
       }
     await evaluate(`localStorage.removeItem('appTheme'); localStorage.removeItem('theme')`);
