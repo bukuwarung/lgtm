@@ -1387,9 +1387,9 @@ dialog.ask form > input, dialog.ask form > label { flex: 1 0 100%; margin-bottom
 .manifest-sum .risky { color: var(--c-attn); }
 /* The dependencies pill's rows: the change (a jump to its line), its page */
 .pill-pop .pill-row { display: flex; align-items: center; }
-.pill-pop .pill-row > button, .pill-pop .pill-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a long row: … at the dropdown's edge */
+.pill-pop .pill-row > button:not(.say-it), .pill-pop .pill-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a long row: … at the dropdown's edge */
 .pill-pop .pill-row > button > :is(b, small) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.pill-pop .pill-row > button { flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill-pop .pill-row > button:not(.say-it) { flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill-pop .pill-row > button:hover, .pill-pop .pill-row > a:hover { background: var(--soft); }
 .pill-pop .pill-row > span { flex: 1; padding: 5px 8px; font-size: calc(13px * var(--ts)); white-space: nowrap; }
 .pill-pop .pill-row > a { padding: 5px 8px; border-radius: 6px; color: var(--muted); }

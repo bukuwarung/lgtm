@@ -37,6 +37,8 @@ const pr = {
 const files = [
   { filename: 'src/Pay.kt', status: 'modified', additions: 3, deletions: 1, changes: 4, sha: 'f1', blob_url: 'https://github.com/acme/shop/blob/x/src/Pay.kt', patch: PATCH },
   { filename: 'web/docs/retry.md', status: 'added', additions: 1, deletions: 0, changes: 1, sha: 'f2', blob_url: 'https://github.com/acme/shop/blob/x/web/docs/retry.md', patch: '@@ -0,0 +1 @@\n+Retries a failed charge three times.' },
+  // A library moved a major version, its name long: the dependencies pill's menu keeps it inside (… and in full on hover).
+  { filename: 'gradle/libs.versions.toml', status: 'modified', additions: 1, deletions: 1, changes: 2, sha: 'f3', blob_url: 'https://github.com/acme/shop/blob/x/gradle/libs.versions.toml', patch: '@@ -4,1 +4,1 @@\n-firebase-crashlytics-buildtools = { module = "com.google.firebase.crashlytics:firebase-crashlytics-buildtools-gradle-plugin-extended", version = "2.9.9" }\n+firebase-crashlytics-buildtools = { module = "com.google.firebase.crashlytics:firebase-crashlytics-buildtools-gradle-plugin-extended", version = "3.0.2" }' },
 ];
 const empty = { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] };
 // acme/shop#2, mine, with two threads waiting on my reply; #4, a review request that arrives at the second refresh.
@@ -250,7 +252,7 @@ try {
   });
   // What only WebKit shows: an icon on the text baseline sits low there; macOS's own checkboxes are tiny and grey out
   // with the window; a preview's pills pinned like the PR page's bar slid over its code.
-  await step('layout in WebKit: icon buttons centred, checkboxes lgtm\'s own and on their words, nothing sideways, previews\' pills in place', async () => {
+  await step('layout in WebKit: icon buttons centred, checkboxes lgtm\'s own and on their words, nothing sideways, no text cut off without its …, previews\' pills in place', async () => {
     await evaluate(`location.hash = '/acme/shop/pull/1'`);
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
     const icons = (where) => evaluate(`[...document.querySelectorAll('button, summary, a')].filter((b) => b.querySelector('svg') && !b.textContent.trim() && b.offsetParent && !b.classList.contains('account-btn')).flatMap((b) => {
@@ -301,8 +303,28 @@ try {
     })`);
     // Nothing pushes the page, or the index, sideways (it scrolls only down).
     const sideways = (where) => evaluate(`[document.scrollingElement, ...document.querySelectorAll('.side-scroll')].filter((e) => e && e.scrollWidth > e.clientWidth + 1).map((e) => ${JSON.stringify(where)} + ': ' + (e.className || 'the page') + ' ' + (e.scrollWidth - e.clientWidth) + 'px wider than it shows')`);
+    // Text cut off without its "…" (which shows it in full on hover): a box narrower or shorter than its words that hides
+    // the rest, or scrolls sideways to show it. Code, which scrolls on purpose, aside; so are previews (miniatures).
+    const clipped = (where) => evaluate(`[...document.querySelectorAll('body *')].flatMap((e) => {
+      if (!e.getClientRects().length || e.closest('.demo-side, pre, table.diff, .code, svg, [aria-hidden=true]')) return [];
+      const st = getComputedStyle(e), r = e.getBoundingClientRect();
+      if (r.width < 3 || r.height < 3 || !e.textContent.trim() || st.visibility === 'hidden') return [];
+      const x = e.scrollWidth > e.clientWidth + 1 && st.overflowX !== 'visible' && st.textOverflow !== 'ellipsis';
+      const y = e.clientHeight > 0 && e.scrollHeight > e.clientHeight + 1 && ['hidden', 'clip'].includes(st.overflowY) && st.webkitLineClamp === 'none';
+      if (!x && !y) return [];
+      const name = (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase());
+      return [${JSON.stringify(where)} + ': ' + name + ' "' + e.textContent.trim().replace(/\\s+/g, ' ').slice(0, 30) + '" ' + (x ? (e.scrollWidth - e.clientWidth) + 'px wide' : '') + (y ? (e.scrollHeight - e.clientHeight) + 'px tall' : '') + ' (' + (x ? st.overflowX : st.overflowY) + ')'];
+    })`);
     const unboxed = [...(await offWords('the PR')), ...(await offWords('the end of the PR'))];
     const wide = await sideways('the PR');
+    const cut = await clipped('the PR');
+    // Each dropdown pill, open: its rows and heading inside it.
+    for (let k = 0; k < (await evaluate(`document.querySelectorAll('.pr-status details.pill-menu').length`)); k++) {
+      await evaluate(`(() => { const d = document.querySelectorAll('.pr-status details.pill-menu')[${k}]; d.open = true; d.dispatchEvent(new Event('toggle')); })()`);
+      await new Promise((r) => setTimeout(r, 150));
+      cut.push(...(await clipped('a pill\'s menu')));
+      await evaluate(`document.querySelectorAll('.pr-status details.pill-menu')[${k}].open = false`);
+    }
     // Each picker the index's top row opens (a label, an assignee, a milestone): open, it stays inside the index.
     await evaluate(`document.querySelector('.side.collapsed') && document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', bubbles: true }))`);
     await until('the index\'s add buttons', `document.querySelectorAll('.ix-top .ix-head-btn').length >= 3`, 5000);
@@ -315,6 +337,7 @@ try {
       })()`);
       if (out.length) wide.push(`the ${which} picker: ${out.join(', ')} outside the index `);
       wide.push(...(await sideways(`the ${which} picker`)));
+      cut.push(...(await clipped(`the ${which} picker`)));
       await evaluate(`document.querySelector('.index input.label-find').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
       await until(`the ${which} picker closed`, `!document.querySelector('.index input.label-find')`, 2000);
     }
@@ -332,6 +355,7 @@ try {
     if (under) throw new Error('the Finish review panel is under the pinned pill bar');
     unboxed.push(...(await offWords('Finish review')));
     wide.push(...(await sideways('Finish review')));
+    cut.push(...(await clipped('Finish review')));
     await evaluate(`[...document.querySelectorAll('.bar button')].find((b) => b.textContent.trim().startsWith('Finish review')).click()`);
     await evaluate(`location.hash = '/settings'`);
     await until('Settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`);
@@ -355,14 +379,17 @@ try {
     unboxed.push(...(await offWords('elsewhere')));
     await evaluate(`document.getElementById('smoke-boxes').remove()`);
     wide.push(...(await sideways('Settings')));
+    cut.push(...(await clipped('Settings')));
     await evaluate(`location.hash = '/'`);
     await until('the PR list', `!!document.querySelector('.pr-item')`);
     misaligned.push(...(await rows('the list')));
     wide.push(...(await sideways('the list')));
+    cut.push(...(await clipped('the list')));
     if (misaligned.length) throw new Error(`not lined up: ${misaligned.join('; ')}`);
     if (unboxed.length) throw new Error(`checkboxes off their words: ${unboxed.slice(0, 8).join('; ')}`);
     if (wide.length) throw new Error(`pushed sideways: ${wide.join('; ')}`);
     if (off.length) throw new Error(`icons off centre: ${off.join('; ')}`);
+    if (cut.length) throw new Error(`text cut off without its …: ${[...new Set(cut)].join('; ')}`);
     // Previews are miniatures: only their look is checked. Under 13px: WebKit's small control font, not the page's.
     const boxes = await evaluate(`[...document.querySelectorAll('.page.settings input[type=checkbox]')].filter((c) => c.offsetParent && (getComputedStyle(c).appearance !== 'none' || (!c.closest('.demo-side') && c.getBoundingClientRect().width < 13))).map((c) => getComputedStyle(c).appearance + ' ' + c.getBoundingClientRect().width.toFixed(1) + 'px in ' + c.closest('[class]')?.className)`);
     if (boxes.length) throw new Error(`${boxes.length} checkboxes drawn by macOS or under 13px (${[...new Set(boxes)].slice(0, 6).join(', ')})`);
