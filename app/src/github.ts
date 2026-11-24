@@ -1523,7 +1523,7 @@ export async function getChecks(repo: string, n: number): Promise<Check[]> {
             state: c.status === 'COMPLETED' ? RUN_STATE[c.conclusion] ?? 'neutral' : 'pending',
             url: c.detailsUrl,
             jobId: c.checkSuite?.app?.slug === 'github-actions' ? c.databaseId : undefined,
-            summary: c.title || (c.status === 'COMPLETED' ? c.conclusion : c.status).toLowerCase(),
+            summary: c.title ?? '', // its own words, if any (not its state again: the mark shows that)
           }
         : { name: c.context, state: STATUS_STATE[c.state] ?? 'neutral', url: c.targetUrl, summary: c.description ?? '' },
   );

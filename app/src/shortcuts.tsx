@@ -544,11 +544,13 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
   return (
     <>
       <div class="ix-check">
-        <a class="ix-item" href={c.url ?? undefined} target="_blank" rel="noopener" title={`${c.name}: ${c.summary}`}>
+        <a class="ix-item" href={c.url ?? undefined} target="_blank" rel="noopener" title={c.summary ? `${c.name}: ${c.summary}` : c.name}>
           <span class="ix-label">
             <CheckMark state={c.state} /> {c.name}
           </span>
-          {c.summary && <span class="ix-sub">{c.summary}</span>}
+          {/* Its words only when it failed (what failed, say): running or passed, they're "being built", "in progress", its
+              name again. On hover always. */}
+          {c.state === 'failure' && c.summary && c.summary.toLowerCase() !== c.name.toLowerCase() && <span class="ix-sub">{c.summary}</span>}
           {c.onBase && c.onBase !== 'neutral' && <span class="ix-sub"><OnBase c={c} branch={base} /></span>}
         </a>
         {c.manual && c.jobId && (
