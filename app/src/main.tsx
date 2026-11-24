@@ -366,7 +366,7 @@ function BellMenu() {
               </button>
             </>
           ) : (
-            <p class="note bell-empty">Nothing new. What lgtm would notify you about stays here until you open its {T.PR}.</p>
+            <p class="note bell-empty">Nothing new.</p>
           )}
         </div>
       )}
@@ -524,7 +524,7 @@ const STATE_ICON = { merged: 'git-merge', closed: 'git-pull-request-closed', dra
 function RecentList({ max, onGo }: { max: number; onGo?: () => void }) {
   const here = location.hash.slice(1);
   const list = useRecentPRs().filter((r) => `/${r.repo}/pull/${r.n}` !== here).slice(0, max);
-  if (!list.length) return onGo ? <p class="note bell-empty">{T.PRs} you open show here, and stay after a relaunch.</p> : null;
+  if (!list.length) return onGo ? <p class="note bell-empty">None yet.</p> : null;
   const row = (r: RecentPR) => (
     <a class="recent-row" href={`#/${r.repo}/pull/${r.n}`} onClick={onGo}>
       <Octicon name={r.state ? STATE_ICON[r.state] : 'git-pull-request'} class={`recent-${r.state ?? 'open'}`} />

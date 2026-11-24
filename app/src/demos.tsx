@@ -1343,11 +1343,8 @@ Object.assign(DEMOS, {
     off: (
       <div class="demo-index">
         <b>Labels 0</b>
-        <div class="demo-idx"><small>None.</small></div>
         <b>Assignees 0</b>
-        <div class="demo-idx"><small>Nobody.</small></div>
         <b>Milestone 0</b>
-        <div class="demo-idx"><small>None.</small></div>
         <b>Conversation 2</b>
         <div class="demo-idx">OrderNotifier.kt:41 <small>you</small></div>
       </div>

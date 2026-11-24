@@ -196,7 +196,6 @@ function Labels({ repo, n, labels, canEdit, onDone }: { repo: string; n: number;
             {canEdit && <button class="label-x" aria-label={`Remove ${l.name}`} title={`Remove ${l.name}`} onClick={() => flip(l, false)}>×</button>}
           </span>
         ))}
-        {!on.length && <span class="note">None.</span>}
       </div>
       {err && <p class="warn ix-pad">{err}</p>}
     </Section>
@@ -268,7 +267,6 @@ function Assignees({ repo, n, canEdit, hideEmpty }: { repo: string; n: number; c
             {canEdit && <button class="label-x" aria-label={`Unassign ${l}`} title={`Unassign ${l}`} onClick={() => set(meta.assignees.filter((x) => x !== l))}>×</button>}
           </span>
         ))}
-        {!meta.assignees.length && <span class="note">Nobody.</span>}
       </div>
     </Section>
   );
@@ -299,7 +297,7 @@ function MilestoneSec({ repo, n, canEdit, hideEmpty }: { repo: string; n: number
             <Octicon name="milestone" /> {meta.milestone.title}
             {canEdit && <button class="label-x" aria-label="Remove the milestone" title="Remove the milestone" onClick={() => set(null)}>×</button>}
           </span>
-        ) : <span class="note">None.</span>}
+        ) : null}
       </div>
     </Section>
   );
@@ -817,11 +815,10 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
             </details>
           ) : (
             <>
-              <p class="note ix-pad">Nobody's been asked yet{pr.draft ? ' (asking someone marks it ready for review)' : ''}. Least busy first:</p>
+              <p class="note ix-pad">{pr.draft ? 'Asking someone marks it ready for review. ' : ''}Least busy first:</p>
               {ask}
             </>
           ))}
-        {!ask && !reviewers.size && <p class="note ix-pad">Nobody yet.</p>}
         {addMe && !reviewers.has(me) && <AddMe add={addMe} teams={(pr.requested_teams ?? []).map((t) => t.slug)} />}
       </Section>}
 
@@ -925,9 +922,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
           <div class="ix-pad"><Lines /></div>
         ) : checksErr ? (
           <p class="note ix-pad">Couldn't load the checks: {checksErr} <Retry onClick={onRefreshChecks} /></p>
-        ) : !checks.length ? (
-          <p class="note ix-pad">No checks.</p>
-        ) : (
+        ) : !checks.length ? null : (
           <>
             {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
             {([['success', 'passed'], ['neutral', 'skipped or cancelled']] as const).map(([state, label]) => {
