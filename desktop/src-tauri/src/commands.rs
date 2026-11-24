@@ -1521,7 +1521,7 @@ pub struct Session {
     repo: Option<String>,
     sha: Option<String>,
 }
-/// A kept agent-review session, resumed in Terminal where it ran: its copy of the repo made again there first (same
+/// A kept agent-review session, resumed where it ran (Claude's in the Claude desktop app, else Terminal): its copy of the repo made again there first (same
 /// path and commit; not removed after, it's yours to explore), else your home folder. The server's openAgentSession().
 #[tauri::command]
 pub async fn agent_session(session: Session, folder: Option<String>) -> Result<(), String> {
@@ -1540,6 +1540,11 @@ pub async fn agent_session(session: Session, folder: Option<String>) -> Result<(
             review_worktree(&l, Some(dir.clone())).ok_or(format!("No checkout of {repo} here to open it in"))?;
         }
         at = dir;
+    }
+    // Claude's: in the Claude desktop app, which imports a CLI session from its claude://resume link (where it ran: the
+    // copy made again above). Codex's, or with no desktop app: Terminal.
+    if s.agent == "claude" && re(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").is_match(&s.id) && run("open", &[&format!("claude://resume?session={}", s.id)], None, std::time::Duration::from_secs(15)).ok {
+        return Ok(());
     }
     // A .command file Terminal opens and runs: no permission to script Terminal needed.
     let file = std::env::temp_dir().join(format!("lgtm-session-{}.command", s.id));

@@ -880,7 +880,7 @@ async function reviewWorktree({ repo, sha, folder }, at = null) {
   return { dir, done: () => git(co.dir, ['worktree', 'remove', '--force', dir]).catch(() => rm(dir, { recursive: true, force: true })) };
 }
 
-// A kept agent-review session, resumed in Terminal where it ran: its copy of the repo made again there first (same
+// A kept agent-review session, resumed where it ran (Claude's in the Claude desktop app, else Terminal): its copy of the repo made again there first (same
 // path and commit; it isn't removed after, it's yours to explore), else your home folder.
 async function openAgentSession({ agent, id, dir, repo, sha, folder }) {
   if (!['claude', 'codex'].includes(agent) || !/^[\w-]{8,64}$/.test(id ?? '')) throw new Error('Bad session');
@@ -890,10 +890,14 @@ async function openAgentSession({ agent, id, dir, repo, sha, folder }) {
     if (!statSync(dir, { throwIfNoEntry: false })) await reviewWorktree({ repo, sha, folder }, dir).then((w) => w ?? Promise.reject(new Error(`No checkout of ${repo} here to open it in`)));
     at = dir;
   }
+  // Claude's: in the Claude desktop app, which imports a CLI session from its claude://resume link (where it ran: the
+  // copy made again above). Codex's, or with no desktop app: Terminal.
+  const run = (args) => new Promise((resolve, reject) => execFile('open', args, { timeout: 15000 }, (err, _o, stderr) => (err ? reject(new Error(stderr.trim() || err.message)) : resolve())));
+  if (agent === 'claude' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) && (await run([`claude://resume?session=${id}`]).then(() => true, () => false))) return;
   // A .command file Terminal opens and runs: no permission to script Terminal needed.
   const file = join(tmpdir(), `lgtm-session-${id}.command`);
   await writeFile(file, `#!/bin/zsh -l\ncd '${at}' && ${agent === 'codex' ? 'codex resume' : 'claude --resume'} ${id}\n`, { mode: 0o700 });
-  await new Promise((resolve, reject) => execFile('open', ['-a', 'Terminal', file], { timeout: 15000 }, (err, _o, stderr) => (err ? reject(new Error(stderr.trim() || err.message)) : resolve())));
+  await run(['-a', 'Terminal', file]);
 }
 
 // A Jira ticket, via the Atlassian CLI (`acli jira auth login`), which owns the sign-in like gh and slackcli do.
