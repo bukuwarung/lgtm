@@ -1586,3 +1586,10 @@ test('interdiff: only the changes a push added, on the head\'s lines', () => {
   assert.equal(interdiff('@@ -0,0 +1,5 @@\n+a\n+b\n+c\n+d\n+e', '@@ -0,0 +1,5 @@\n+a\n+b\n+C\n+d\n+e', 1), '@@ -2,3 +2,3 @@\n b\n-c\n+C\n d');
 });
 
+test('notesOf: what a blocked PR still owes its branch rules', async () => {
+  const { notesOf } = await import('../src/github.ts');
+  const rules = [{ type: 'pull_request', parameters: { required_review_thread_resolution: true, require_code_owner_review: true, required_approving_review_count: 1 } }, { type: 'merge_queue' }];
+  assert.deepEqual(notesOf(rules, 2, 'APPROVED'), ["2 conversations aren't resolved (the branch rules ask for all of them)", 'it merges through the merge queue']);
+  assert.deepEqual(notesOf(rules, 0, 'REVIEW_REQUIRED'), ['a code owner has to approve', 'it merges through the merge queue']);
+  assert.deepEqual(notesOf([], 3, null), []);
+});

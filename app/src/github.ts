@@ -1802,6 +1802,7 @@ export type MergeState = {
   viewerCanEnableAutoMerge: boolean;
   viewerCanDisableAutoMerge: boolean;
   viewerCanUpdateBranch: boolean;
+  ruleNotes?: string[]; // what the base branch's rules still ask (unresolved conversations, a code owner…): why BLOCKED
   viewerCanDeleteHeadRef: boolean; // only once merged or closed
   isCrossRepository: boolean; // from a fork: its branch isn't ours to delete
   headRefName: string;
@@ -1865,13 +1866,16 @@ const MERGE_STATE = `query($owner:String!,$name:String!,$n:Int!){repository(owne
     autoMergeRequest{mergeMethod enabledBy{login}}
     viewerCanMergeAsAdmin viewerCanEnableAutoMerge viewerCanDisableAutoMerge viewerCanUpdateBranch
     mt:viewerMergeHeadlineText(mergeType:MERGE) mb:viewerMergeBodyText(mergeType:MERGE)
-    st:viewerMergeHeadlineText(mergeType:SQUASH) sb:viewerMergeBodyText(mergeType:SQUASH)}}}`;
+    st:viewerMergeHeadlineText(mergeType:SQUASH) sb:viewerMergeBodyText(mergeType:SQUASH)
+    open:reviewThreads(first:100){nodes{isResolved}}}}}`;
 
 export async function getMergeState(repo: string, n: number): Promise<MergeState> {
   if (isLab(repo)) return lab.getLabMergeState(repo, n, holdSigns);
   const [owner, name] = repo.split('/');
   const r = (await graphql(MERGE_STATE, { owner, name, n })).repository;
-  const { mt, mb, st, sb, title, labels, commits, ...pr } = r.pullRequest;
+  const { mt, mb, st, sb, title, labels, commits, open, ...pr } = r.pullRequest;
+  const unresolved = (open?.nodes ?? []).filter((t: { isResolved: boolean }) => !t.isResolved).length;
+  const ruleNotes = pr.mergeStateStatus === 'BLOCKED' ? await branchRules(repo, pr.baseRefName).then((rs) => notesOf(rs, unresolved, pr.reviewDecision), () => []) : [];
   const allowed = (['MERGE', 'SQUASH', 'REBASE'] as const).filter((m) => r[`${m.toLowerCase()}${m === 'MERGE' ? 'Commit' : 'Merge'}Allowed`]);
   return {
     ...pr,
@@ -1879,13 +1883,40 @@ export async function getMergeState(repo: string, n: number): Promise<MergeState
     holds: holdSigns(title, labels.nodes.map((l: { name: string }) => l.name), commits.nodes[0]?.commit.messageHeadline ?? ''),
     methods: allowed.sort((a, b) => +(b === r.viewerDefaultMergeMethod) - +(a === r.viewerDefaultMergeMethod)),
     message: { MERGE: { title: mt, body: mb }, SQUASH: { title: st, body: sb }, REBASE: { title: '', body: '' } },
+    ruleNotes,
   };
+}
+
+// The rules on a branch (rulesets: readable by anyone who can read the repo; classic branch protection isn't), kept ten
+// minutes. None where GitHub won't say (a free private repo).
+type Rule = { type: string; parameters?: any };
+const rulesSeen = new Map<string, { at: number; rules: Promise<Rule[]> }>();
+export function branchRules(repo: string, branch: string): Promise<Rule[]> {
+  const k = `${repo}:${branch}`, hit = rulesSeen.get(k);
+  if (hit && Date.now() - hit.at < 600_000) return hit.rules;
+  const rules = gh(`/repos/${repo}/rules/branches/${branch.split('/').map(encodeURIComponent).join('/')}`).then((r) => (r.ok ? r.json() : []), () => []);
+  rulesSeen.set(k, { at: Date.now(), rules });
+  return rules;
+}
+// What a BLOCKED PR still owes its branch's rules, in words (none: nothing they'd explain).
+export function notesOf(rules: Rule[], unresolved: number, decision: string | null): string[] {
+  const has = (t: string) => rules.find((r) => r.type === t);
+  const pr = has('pull_request')?.parameters ?? {};
+  const deploy: string[] = has('required_deployments')?.parameters?.required_deployment_environments ?? [];
+  return [
+    pr.required_review_thread_resolution && unresolved > 0 && `${unresolved} conversation${unresolved > 1 ? 's aren\'t' : ' isn\'t'} resolved (the branch rules ask for all of them)`,
+    pr.require_code_owner_review && decision !== 'APPROVED' && 'a code owner has to approve',
+    (pr.required_approving_review_count ?? 0) > 1 && decision !== 'APPROVED' && `it needs ${pr.required_approving_review_count} approvals`,
+    has('merge_queue') && 'it merges through the merge queue',
+    has('required_signatures') && 'its commits have to be signed',
+    deploy.length > 0 && `a deployment to ${deploy.join(', ')} has to succeed`,
+  ].filter((x): x is string => !!x);
 }
 
 export const CANT_MERGE_YET = "it can't merge yet";
 // Approve and merge: what to do once my approval is in. merge; auto (only checks left: auto-merge); wait (GitHub hasn't
 // counted the approval yet); else why it won't merge.
-export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeStateStatus' | 'reviewDecision' | 'viewerCanEnableAutoMerge' | 'autoMergeRequest' | 'mergeable' | 'reasons'>): 'merge' | 'auto' | 'wait' | string {
+export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeStateStatus' | 'reviewDecision' | 'viewerCanEnableAutoMerge' | 'autoMergeRequest' | 'mergeable' | 'reasons' | 'ruleNotes'>): 'merge' | 'auto' | 'wait' | string {
   if (s.holds.length) return `it's marked not to merge (${s.holds.join(', ')})`;
   if (s.isDraft) return "it's a draft";
   if (s.mergeStateStatus === 'UNKNOWN' || (s.reviewDecision === 'REVIEW_REQUIRED' && s.mergeStateStatus === 'BLOCKED')) return 'wait';
@@ -1896,7 +1927,7 @@ export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeSt
   if (s.mergeStateStatus === 'UNSTABLE') return 'some checks are failing';
   if (s.reviewDecision === 'CHANGES_REQUESTED') return 'someone requested changes';
   if (s.autoMergeRequest) return 'auto-merge was already on';
-  return s.reasons?.map((r) => r.text.toLowerCase()).join(', ') || CANT_MERGE_YET;
+  return s.reasons?.map((r) => r.text.toLowerCase()).join(', ') || s.ruleNotes?.join(', ') || CANT_MERGE_YET;
 }
 
 // expectedHeadOid: refuse if commits were pushed after the state I looked at.

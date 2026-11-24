@@ -26,7 +26,8 @@ export function blockers(s: MergeState, checks: Check[] | null): string[] {
     failing > 0 && `${failing} failing check${failing > 1 ? 's' : ''}`,
     pending > 0 && `${pending} check${pending > 1 ? 's' : ''} running`,
   ].filter((x): x is string => !!x);
-  return s.mergeStateStatus === 'BLOCKED' && !out.length ? ['Blocked by branch rules'] : out;
+  if (s.mergeStateStatus !== 'BLOCKED' || out.length) return out;
+  return s.ruleNotes?.length ? s.ruleNotes.map((x) => x[0].toUpperCase() + x.slice(1)) : ['Blocked by branch rules'];
 }
 
 // Approve and merge (the Finish review panel): once my approval is in, merge it the repo's usual way if nothing else is
@@ -39,8 +40,9 @@ export async function mergeOnceApproved(repo: string, n: number, wait = (ms: num
   let next = afterApproval(s);
   // Blocked for no reason GitHub names (checks still to pass where auto-merge isn't allowed, say): the checks' word.
   if (next === CANT_MERGE_YET) {
-    const why = blockers(s, await getChecks(repo, n).catch(() => null)).join(', ').toLowerCase();
-    next = s.mergeStateStatus === 'BLOCKED' && !s.viewerCanEnableAutoMerge ? `${why}, and auto-merge isn't available here` : why;
+    const why = blockers(s, await getChecks(repo, n).catch(() => null)).filter((b) => b !== 'Blocked by branch rules').join(', ').toLowerCase();
+    next = !why ? `${site(repo)} doesn't say what's blocking it (its merge box on ${site(repo)} may)`
+      : s.mergeStateStatus === 'BLOCKED' && !s.viewerCanEnableAutoMerge ? `${why}, and auto-merge isn't turned on for this repo` : why;
   }
   const m = s.methods[0];
   if (next === 'merge' || next === 'auto') await mergePR(s, m, s.message[m].title, s.message[m].body, next === 'auto');
