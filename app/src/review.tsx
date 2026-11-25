@@ -502,7 +502,7 @@ function StateMenu({ askQa, rights, ...p }: { rights: PrRights | null; draft: bo
   );
 }
 
-function PillMenu({ cls = '', label, head, children }: { cls?: string; label: ComponentChildren; head: string; children: ComponentChildren }) {
+function PillMenu({ cls = '', label, head, children, sum, tip }: { cls?: string; label: ComponentChildren; head: string; children: ComponentChildren; sum?: string; tip?: string }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const pop = useRef<HTMLDivElement>(null);
   // Opened near the window's right edge: it opens leftward, from the pill's right end, so none of it is cut off.
@@ -526,7 +526,7 @@ function PillMenu({ cls = '', label, head, children }: { cls?: string; label: Co
       ref={ref}
       onToggle={() => ref.current?.open && (fit(), document.querySelectorAll<HTMLDetailsElement>('.pill-menu[open]').forEach((d) => d !== ref.current && (d.open = false)))}
     >
-      <summary class={`pill ${cls}`}>
+      <summary class={sum ?? `pill ${cls}`} title={tip}>
         {label} <span class="caret" aria-hidden="true" />
       </summary>
       <div class="pill-pop" ref={pop} onClick={(e) => (e.target as Element).closest('a, button') && ref.current && (ref.current.open = false)}>
@@ -2383,11 +2383,50 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             <Octicon name={centered ? 'screen-full' : 'screen-normal'} />
           </button>
           {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
-          {/* Merged, closed or a draft: small, and in view as you scroll (the banner below has who, when, Revert). */}
-          {(pr.merged || pr.state === 'closed' || pr.draft) && (
-            <span class={`state-chip ${pr.merged ? 'merged' : pr.state === 'closed' ? 'closed' : 'draft'}`} title={pr.merged ? `Merged${pr.merged_by ? ` by @${pr.merged_by.login}` : ''} into ${pr.base.ref}${pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}` : pr.state === 'closed' ? `Closed without merging${pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}` : 'A draft: not ready for review yet'}>
-              <Octicon name={pr.merged ? 'git-merge' : pr.state === 'closed' ? 'git-pull-request-closed' : 'git-pull-request-draft'} />
-              {pr.merged ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Draft'}
+          {/* Merged or closed: a small tag, in view as you scroll; who, when and the revert on hover, and its actions (Revert,
+              Reopen, tell the review thread) in its menu. A draft: the tag alone (its banner below has Ready for review). */}
+          {(pr.merged || pr.state === 'closed') && ((tip, acts) => (acts.length ? (
+            <PillMenu sum={`state-chip ${pr.merged ? 'merged' : 'closed'}`} tip={tip} head={tip} label={<><Octicon name={pr.merged ? 'git-merge' : 'git-pull-request-closed'} /> {pr.merged ? (undoneBy?.merged ? 'Reverted' : 'Merged') : 'Closed'}</>}>
+              {acts}
+            </PillMenu>
+          ) : (
+            <span class={`state-chip ${pr.merged ? 'merged' : 'closed'}`} title={tip}>
+              <Octicon name={pr.merged ? 'git-merge' : 'git-pull-request-closed'} /> {pr.merged ? (undoneBy?.merged ? 'Reverted' : 'Merged') : 'Closed'}
+            </span>
+          )))(
+            pr.merged
+              ? `Merged${pr.merged_by ? ` by ${shownName(pr.merged_by.login, repo)}` : ''} into ${pr.base.ref}${pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}.${undoneBy ? ` ${undoneBy.merged ? 'Reverted' : 'Being reverted'} by ${numRef(repo, undoneBy.number)}${undoneBy.merged ? `, merged ${ago(undoneBy.at)}` : ', still open'}.` : ''}`
+              : `Closed without merging${pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}.`,
+            [
+              pr.merged && undoneBy && <a href={`#/${repo}/pull/${undoneBy.number}`}>Open the revert, {numRef(repo, undoneBy.number)}</a>,
+              pr.merged && !undoneBy && (
+                <button disabled={reverting} title={`A new ${pageTerm().PR} that undoes this one on ${pr.base.ref}, to review and merge like any other`} onClick={() => void revert(pr.node_id, pr.base.ref)}>
+                  {reverting ? 'Reverting…' : 'Revert'}
+                </button>
+              ),
+              !pr.merged && (rights?.reopen || rights?.restore) && (
+                <button disabled={!!acting} title={rights.reopen ? undefined : `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`} onClick={() => void stateAct(rights.reopen ? 'reopen' : 'restore')}>
+                  {acting ? 'Reopening…' : rights.reopen ? 'Reopen' : 'Restore branch and reopen'}
+                </button>
+              ),
+              !pr.merged && closeWhere && (
+                <button
+                  title={`Reply in your review request's thread in ${closeWhere}, tagging the reviewers asked, that it's closed and needs no review`}
+                  onClick={() =>
+                    closedOnSlack(`${repo}#${n}`, (pr.requested_reviewers ?? []).map((u) => u.login)).then(
+                      (w) => (setCloseWhere(null), w && setNotice({ ok: true, text: `Said so in your review request's thread in ${w}.` })),
+                      (e) => setNotice({ ok: false, text: `Couldn't reply on Slack: ${e.message}` }),
+                    )
+                  }
+                >
+                  Tell the review thread
+                </button>
+              ),
+            ].filter(Boolean) as ComponentChildren[],
+          )}
+          {pr.draft && !pr.merged && pr.state !== 'closed' && (
+            <span class="state-chip draft" title="A draft: not ready for review yet">
+              <Octicon name="git-pull-request-draft" /> Draft
             </span>
           )}
           <h1 onContextMenu={titleMenu}>
@@ -2445,43 +2484,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         <DocCodeJump files={shown} />
         <HoldPlace />
         <main class={onlyMine ? 'only-mine' : undefined}>
-          {pr.merged ? (
-            <p class="pr-state merged">
-              <Octicon name="git-merge" size={16} /> <span><b>Merged</b>{pr.merged_by && <> by <Who login={pr.merged_by.login} /></>} into <CopyCode>{pr.base.ref}</CopyCode>{pr.merged_at && <> <Time at={pr.merged_at} /></>}.
-                {undoneBy && (
-                  <>
-                    {' '}<b>{undoneBy.merged ? 'Reverted' : 'Being reverted'}</b> by <a href={`#/${repo}/pull/${undoneBy.number}`}>{numRef(repo, undoneBy.number)}</a>
-                    {undoneBy.merged ? <>, merged <Time at={undoneBy.at} /></> : ', still open'}.
-                  </>
-                )}</span>
-              {!undoneBy && <button class="pr-state-act" disabled={reverting} title={`A new ${pageTerm().PR} that undoes this one on ${pr.base.ref}, to review and merge like any other`} onClick={() => void revert(pr.node_id, pr.base.ref)}>
-                {reverting ? 'Reverting…' : 'Revert'}
-              </button>}
-            </p>
-          ) : pr.state === 'closed' ? (
-            <p class="pr-state closed">
-              <Octicon name="git-pull-request-closed" size={16} /> <span><b>Closed without merging</b>{pr.closed_at && <> <Time at={pr.closed_at} /></>}.</span>
-              {(rights?.reopen || rights?.restore) && (
-                <button class="pr-state-act" disabled={!!acting} title={rights.reopen ? undefined : `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`} onClick={() => void stateAct(rights.reopen ? 'reopen' : 'restore')}>
-                  {acting ? 'Reopening…' : rights.reopen ? 'Reopen' : 'Restore branch and reopen'}
-                </button>
-              )}
-              {closeWhere && (
-                <button
-                  class="pr-state-act"
-                  title={`Reply in your review request's thread in ${closeWhere}, tagging the reviewers asked, that it's closed and needs no review`}
-                  onClick={() =>
-                    closedOnSlack(`${repo}#${n}`, (pr.requested_reviewers ?? []).map((u) => u.login)).then(
-                      (w) => (setCloseWhere(null), w && setNotice({ ok: true, text: `Said so in your review request's thread in ${w}.` })),
-                      (e) => setNotice({ ok: false, text: `Couldn't reply on Slack: ${e.message}` }),
-                    )
-                  }
-                >
-                  Tell the review thread
-                </button>
-              )}
-            </p>
-          ) : idleDays >= 30 && rights?.close ? (
+          {pr.merged || pr.state === 'closed' ? null /* the tag in the bar: details on hover, actions in its menu */ : idleDays >= 30 && rights?.close ? (
             <p class="pr-state idle">
               <Octicon name="hourglass" size={16} /> <span><b>No activity for {idleDays} days.</b> Close it if it's not going anywhere, or {pr.draft ? 'pick it up again' : 'make it a draft until it is'}.</span>
               <span class="pr-state-act"><StateActs rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} /></span>
