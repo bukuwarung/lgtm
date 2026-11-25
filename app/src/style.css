@@ -262,7 +262,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .member-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
 .layer { color: var(--fg); font-weight: 600; }
 .pr-item.cur { background: var(--soft); outline: 1px solid var(--border); }
-.pr-title { font-size: calc(13px * var(--ts)); line-height: 1.35; }
+.pr-title { font-size: calc(13px * var(--ts)); line-height: 1.35; font-weight: 500; } /* the row's title above its grey author line and pills */
 .pr-item .meta { font-size: calc(11px * var(--ts)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pills:empty { display: none; }
 /* A pill's one-item menu (Update branch, Re-run failed jobs), just under it. */
@@ -321,7 +321,7 @@ tr.flash { animation: none; }
 tr.flash > td { animation: flash-bg 2.2s ease-out; }
 section.file.flash { animation: flash-ring 2.2s ease-out; }
 section.file.flash > .file-h { animation: flash-bg 2.2s ease-out; }
-.viewed-box { position: relative; display: inline-grid; place-items: center; padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); color: var(--muted); cursor: pointer; }
+.viewed-box { position: relative; display: inline-grid; place-items: center; padding: 3px 7px; border: 1px solid var(--btn-edge); border-bottom-color: var(--btn-edge-low); border-radius: 6px; background: var(--btn-bg); color: var(--muted); cursor: pointer; } /* as the buttons beside it */
 .viewed-box:hover { color: var(--fg); }
 .viewed-box.on { color: var(--addfg); border-color: currentColor; }
 .viewed-box input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
@@ -1097,7 +1097,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .account-check { margin-left: auto; color: var(--accent); }
 .account-menu .note { margin: 4px 8px 2px; font-size: calc(12px * var(--ts)); }
 /* The index's Reviewers: people with their avatar; who to ask on my own PR. */
-.ix-person img { width: 16px; height: 16px; margin-right: 5px; border-radius: 50%; vertical-align: -3px; }
+.ix-person img { width: 16px; height: 16px; margin-right: 5px; border-radius: 50%; vertical-align: middle; } /* in the line, not below it (it made the row 2-3px taller) */
 .ix-person.asked .ix-meta { color: var(--pill-ok); }
 .ix-person.dim-click { cursor: default; }
 .ix-add-me { color: var(--accent); }
@@ -1808,3 +1808,6 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .pill-group > .pill, .pill-group > details > summary.pill { margin-right: 0; }
 /* A link inside a pill (behind · Update branch) as tall as the pill's own text. */
 .pill button.link { padding: 0; font: inherit; line-height: inherit; vertical-align: baseline; }
+/* The index's rows one height: a section's items, people and files alike (a second line adds its own). */
+.ix-item, .tree-file { min-height: 24px; }
+.ix-item { align-content: center; }

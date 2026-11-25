@@ -1,8 +1,10 @@
 /* Styles for rendered markdown files (Settings → Markdown files). Adapted from the
    themes of markdown.style (https://markdown.style/themes, Apache 2.0): its shared base, scoped to .rich.mdt, and each
    theme as .rich.mdt-<id>; fonts are bundled (fontsource) instead of Google Fonts. Plus lgtm's own theme. */
+/* Only the document's own content: lgtm's threads, drafts and comment boxes inside it keep lgtm's look. */
+@scope (.rich.mdt) to (.thread, .draft, .agent-draft, .editor, .react-pick, .agents-menu) {
 
-.rich.mdt {
+:scope {
   --doc-font-body: Georgia, 'Times New Roman', serif;
   --doc-font-heading: var(--doc-font-body);
   --doc-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
@@ -39,17 +41,17 @@
   -webkit-font-smoothing: antialiased;
 }
 
-.rich.mdt .chunk > * {
+:scope .chunk > * {
   max-width: var(--doc-measure);
   margin-left: auto;
   margin-right: auto;
 }
 
-.rich.mdt .chunk:first-child > :first-child {
+:scope .chunk:first-child > :first-child {
   margin-top: 0;
 }
 
-.rich.mdt h1, .rich.mdt h2, .rich.mdt h3, .rich.mdt h4, .rich.mdt h5, .rich.mdt h6 {
+:scope h1, :scope h2, :scope h3, :scope h4, :scope h5, :scope h6 {
   font-family: var(--doc-font-heading);
   font-weight: var(--doc-heading-weight);
   color: var(--doc-heading);
@@ -58,35 +60,35 @@
   margin-bottom: calc(var(--doc-space) * 0.6);
 }
 
-.rich.mdt h1 { font-size: 2.25em; }
-.rich.mdt h2 { font-size: 1.6em; }
-.rich.mdt h3 { font-size: 1.3em; }
-.rich.mdt h4 { font-size: 1.1em; }
-.rich.mdt h5, .rich.mdt h6 { font-size: 1em; }
+:scope h1 { font-size: 2.25em; }
+:scope h2 { font-size: 1.6em; }
+:scope h3 { font-size: 1.3em; }
+:scope h4 { font-size: 1.1em; }
+:scope h5, :scope h6 { font-size: 1em; }
 
-.rich.mdt p, .rich.mdt ul, .rich.mdt ol, .rich.mdt blockquote, .rich.mdt pre, .rich.mdt table,
-.rich.mdt .table-scroll, .rich.mdt hr, .rich.mdt details, .rich.mdt figure, .rich.mdt .csv-note {
+:scope p, :scope ul, :scope ol, :scope blockquote, :scope pre, :scope table,
+:scope .table-scroll, :scope hr, :scope details, :scope figure, :scope .csv-note {
   margin-top: 0;
   margin-bottom: var(--doc-space);
 }
 
-.rich.mdt ul, .rich.mdt ol { padding-left: 1.5em; }
-.rich.mdt li + li { margin-top: 0.3em; }
-.rich.mdt li > ul, .rich.mdt li > ol { margin-top: 0.3em; margin-bottom: 0; }
-.rich.mdt li.task { list-style: none; margin-left: -1.4em; }
-.rich.mdt li.task input { margin: 0 0.5em 0 0; vertical-align: middle; }
+:scope ul, :scope ol { padding-left: 1.5em; }
+:scope li + li { margin-top: 0.3em; }
+:scope li > ul, :scope li > ol { margin-top: 0.3em; margin-bottom: 0; }
+:scope li.task { list-style: none; margin-left: -1.4em; }
+:scope li.task input { margin: 0 0.5em 0 0; vertical-align: middle; }
 
-.rich.mdt a { color: var(--doc-link); text-decoration: underline; text-underline-offset: 0.15em; }
-.rich.mdt strong { font-weight: 700; }
+:scope a { color: var(--doc-link); text-decoration: underline; text-underline-offset: 0.15em; }
+:scope strong { font-weight: 700; }
 
-.rich.mdt blockquote {
+:scope blockquote {
   border-left: 4px solid var(--doc-accent);
   padding: 0.3em 1.1em;
   color: var(--doc-muted);
 }
-.rich.mdt blockquote > :last-child { margin-bottom: 0; }
+:scope blockquote > :last-child { margin-bottom: 0; }
 
-.rich.mdt code {
+:scope code {
   font-family: var(--doc-font-mono);
   font-size: 0.88em;
   background: var(--doc-code-bg);
@@ -94,7 +96,7 @@
   padding: 0.12em 0.4em;
   border-radius: var(--doc-radius);
 }
-.rich.mdt pre {
+:scope pre {
   background: var(--doc-code-bg);
   color: var(--doc-code-fg);
   padding: 1em 1.2em;
@@ -102,26 +104,26 @@
   overflow-x: auto;
   line-height: 1.5;
 }
-.rich.mdt pre code { background: none; padding: 0; font-size: 0.88em; color: inherit; }
+:scope pre code { background: none; padding: 0; font-size: 0.88em; color: inherit; }
 
-.rich.mdt table { border-collapse: collapse; width: 100%; font-size: 0.94em; line-height: 1.4; }
-.rich.mdt th, .rich.mdt td {
+:scope table { border-collapse: collapse; width: 100%; font-size: 0.94em; line-height: 1.4; }
+:scope th, :scope td {
   border: 1px solid var(--doc-border);
   padding: 0.5em 0.75em;
   text-align: left;
   vertical-align: top;
 }
-.rich.mdt th { background: var(--doc-th-bg); font-weight: 700; }
-.rich.mdt .table-scroll { overflow-x: auto; }
-.rich.mdt .table-scroll table { margin-bottom: 0; }
-.rich.mdt .csv-note { margin-bottom: 0.4em; font-size: 0.85em; color: var(--doc-muted); }
+:scope th { background: var(--doc-th-bg); font-weight: 700; }
+:scope .table-scroll { overflow-x: auto; }
+:scope .table-scroll table { margin-bottom: 0; }
+:scope .csv-note { margin-bottom: 0.4em; font-size: 0.85em; color: var(--doc-muted); }
 
-.rich.mdt hr { border: 0; border-top: 1px solid var(--doc-border); }
-.rich.mdt img { max-width: 100%; height: auto; border-radius: var(--doc-radius); }
-.rich.mdt details { border: 1px solid var(--doc-border); border-radius: var(--doc-radius); padding: 0.6em 1em; }
-.rich.mdt summary { cursor: pointer; font-weight: 600; }
-.rich.mdt details[open] summary { margin-bottom: 0.6em; }
-.rich.mdt kbd {
+:scope hr { border: 0; border-top: 1px solid var(--doc-border); }
+:scope img { max-width: 100%; height: auto; border-radius: var(--doc-radius); }
+:scope details { border: 1px solid var(--doc-border); border-radius: var(--doc-radius); padding: 0.6em 1em; }
+:scope summary { cursor: pointer; font-weight: 600; }
+:scope details[open] summary { margin-bottom: 0.6em; }
+:scope kbd {
   font-family: var(--doc-font-mono);
   font-size: 0.85em;
   border: 1px solid var(--doc-border);
@@ -130,30 +132,30 @@
   padding: 0.05em 0.4em;
   background: var(--doc-code-bg);
 }
-.rich.mdt .rich.mdt-empty { color: var(--doc-muted); font-style: italic; }
+:scope :scope.mdt-empty { color: var(--doc-muted); font-style: italic; }
 
-.rich.mdt .hljs-keyword, .rich.mdt .hljs-selector-tag, .rich.mdt .hljs-built_in, .rich.mdt .hljs-type { color: var(--doc-tok-keyword); }
-.rich.mdt .hljs-string, .rich.mdt .hljs-attr, .rich.mdt .hljs-regexp { color: var(--doc-tok-string); }
-.rich.mdt .hljs-comment, .rich.mdt .hljs-quote { color: var(--doc-tok-comment); font-style: italic; }
-.rich.mdt .hljs-number, .rich.mdt .hljs-literal, .rich.mdt .hljs-symbol { color: var(--doc-tok-number); }
-.rich.mdt .hljs-title, .rich.mdt .hljs-function, .rich.mdt .hljs-name, .rich.mdt .hljs-tag { color: var(--doc-tok-title); }
+:scope .hljs-keyword, :scope .hljs-selector-tag, :scope .hljs-built_in, :scope .hljs-type { color: var(--doc-tok-keyword); }
+:scope .hljs-string, :scope .hljs-attr, :scope .hljs-regexp { color: var(--doc-tok-string); }
+:scope .hljs-comment, :scope .hljs-quote { color: var(--doc-tok-comment); font-style: italic; }
+:scope .hljs-number, :scope .hljs-literal, :scope .hljs-symbol { color: var(--doc-tok-number); }
+:scope .hljs-title, :scope .hljs-function, :scope .hljs-name, :scope .hljs-tag { color: var(--doc-tok-title); }
 
 /* Footnotes, math and diagrams */
-.rich.mdt .footnotes-sep { margin: 2.5em 0 1em; }
-.rich.mdt .footnotes { font-size: 0.85em; }
-.rich.mdt .footnotes-list { padding-left: 1.6em; }
-.rich.mdt .footnote-item p { margin: 0.3em 0; }
-.rich.mdt sup.footnote-ref { font-size: 0.75em; line-height: 0; }
-.rich.mdt .footnote-ref a, .rich.mdt .footnote-backref { text-decoration: none; }
-.rich.mdt math { font-size: 1.05em; }
-.rich.mdt .katex-display { display: block; margin: 1em 0; overflow-x: auto; text-align: center; }
-.rich.mdt pre.mermaid { white-space: pre-wrap; }
-.rich.mdt pre.mermaid-error { border-left: 3px solid #c0392b; }
-.rich.mdt .mermaid-diagram { margin: 1.4em 0; overflow-x: auto; text-align: center; }
-.rich.mdt .mermaid-diagram svg { max-width: 100%; height: auto; }
+:scope .footnotes-sep { margin: 2.5em 0 1em; }
+:scope .footnotes { font-size: 0.85em; }
+:scope .footnotes-list { padding-left: 1.6em; }
+:scope .footnote-item p { margin: 0.3em 0; }
+:scope sup.footnote-ref { font-size: 0.75em; line-height: 0; }
+:scope .footnote-ref a, :scope .footnote-backref { text-decoration: none; }
+:scope math { font-size: 1.05em; }
+:scope .katex-display { display: block; margin: 1em 0; overflow-x: auto; text-align: center; }
+:scope pre.mermaid { white-space: pre-wrap; }
+:scope pre.mermaid-error { border-left: 3px solid #c0392b; }
+:scope .mermaid-diagram { margin: 1.4em 0; overflow-x: auto; text-align: center; }
+:scope .mermaid-diagram svg { max-width: 100%; height: auto; }
 
 /* lgtm: follows the app's own colours and theme (light or dark). */
-.rich.mdt-lgtm {
+:scope.mdt-lgtm {
   --doc-font-body: var(--sans);
   --doc-font-mono: var(--mono);
   --doc-size: 15px;
@@ -177,14 +179,14 @@
   --doc-tok-number: var(--hl-const);
   --doc-tok-title: var(--hl-fn);
 }
-.rich.mdt-lgtm h1 { font-size: 1.75em; padding-bottom: .3em; border-bottom: 1px solid var(--doc-border); }
-.rich.mdt-lgtm h2 { font-size: 1.35em; padding-bottom: .25em; border-bottom: 1px solid var(--doc-border); }
-.rich.mdt-lgtm h3 { font-size: 1.12em; }
-.rich.mdt-lgtm tbody tr:nth-child(even) > td { background: color-mix(in srgb, var(--soft) 55%, transparent); }
-.rich.mdt-lgtm blockquote { color: color-mix(in srgb, var(--fg) 80%, var(--bg)); background: color-mix(in srgb, var(--accent) 6%, transparent); border-left-width: 3px; border-radius: 0 6px 6px 0; }
+:scope.mdt-lgtm h1 { font-size: 1.75em; padding-bottom: .3em; border-bottom: 1px solid var(--doc-border); }
+:scope.mdt-lgtm h2 { font-size: 1.35em; padding-bottom: .25em; border-bottom: 1px solid var(--doc-border); }
+:scope.mdt-lgtm h3 { font-size: 1.12em; }
+:scope.mdt-lgtm tbody tr:nth-child(even) > td { background: color-mix(in srgb, var(--soft) 55%, transparent); }
+:scope.mdt-lgtm blockquote { color: color-mix(in srgb, var(--fg) 80%, var(--bg)); background: color-mix(in srgb, var(--accent) 6%, transparent); border-left-width: 3px; border-radius: 0 6px 6px 0; }
 
 /* Atlas */
-.rich.mdt-atlas {
+:scope.mdt-atlas {
   --doc-font-body: 'Public Sans Variable', 'Segoe UI', Arial, sans-serif;
   --doc-size: 16px;
   --doc-leading: 1.6;
@@ -201,12 +203,12 @@
   --doc-th-bg: #102a43;
   --doc-radius: 3px;
 }
-.rich.mdt-atlas h1 { padding-bottom: 0.3em; border-bottom: 3px solid var(--doc-accent); }
-.rich.mdt-atlas h2 { padding-top: 0.6em; border-top: 1px solid var(--doc-border); }
-.rich.mdt-atlas th { color: #ffffff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+:scope.mdt-atlas h1 { padding-bottom: 0.3em; border-bottom: 3px solid var(--doc-accent); }
+:scope.mdt-atlas h2 { padding-top: 0.6em; border-top: 1px solid var(--doc-border); }
+:scope.mdt-atlas th { color: #ffffff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 
 /* Meridian */
-.rich.mdt-meridian {
+:scope.mdt-meridian {
   --doc-font-body: 'Manrope Variable', 'Segoe UI', Arial, sans-serif;
   --doc-size: 16px;
   --doc-leading: 1.65;
@@ -222,12 +224,12 @@
   --doc-th-bg: #e9f2ed;
   --doc-radius: 6px;
 }
-.rich.mdt-meridian h1 { font-size: 2.3em; letter-spacing: -0.02em; }
-.rich.mdt-meridian h2 { color: var(--doc-accent); }
-.rich.mdt-meridian table { border: 1px solid var(--doc-border); }
+:scope.mdt-meridian h1 { font-size: 2.3em; letter-spacing: -0.02em; }
+:scope.mdt-meridian h2 { color: var(--doc-accent); }
+:scope.mdt-meridian table { border: 1px solid var(--doc-border); }
 
 /* Signal */
-.rich.mdt-signal {
+:scope.mdt-signal {
   --doc-font-body: 'DM Sans Variable', 'Segoe UI', Arial, sans-serif;
   --doc-size: 16px;
   --doc-leading: 1.6;
@@ -243,11 +245,11 @@
   --doc-th-bg: #fff1e8;
   --doc-radius: 2px;
 }
-.rich.mdt-signal h1 { padding-left: 0.45em; border-left: 6px solid var(--doc-accent); line-height: 1.1; }
-.rich.mdt-signal h2::after { content: ''; display: block; width: 2.5em; height: 3px; margin-top: 0.3em; background: var(--doc-accent); }
+:scope.mdt-signal h1 { padding-left: 0.45em; border-left: 6px solid var(--doc-accent); line-height: 1.1; }
+:scope.mdt-signal h2::after { content: ''; display: block; width: 2.5em; height: 3px; margin-top: 0.3em; background: var(--doc-accent); }
 
 /* Handbook */
-.rich.mdt-handbook {
+:scope.mdt-handbook {
   --doc-font-body: 'IBM Plex Sans Variable', 'Segoe UI', Arial, sans-serif;
   --doc-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --doc-size: 16px;
@@ -265,12 +267,12 @@
   --doc-th-bg: #f0f1f5;
   --doc-radius: 6px;
 }
-.rich.mdt-handbook h2 { padding-bottom: 0.25em; border-bottom: 1px solid var(--doc-border); }
-.rich.mdt-handbook pre { border-left: 3px solid var(--doc-accent); }
-.rich.mdt-handbook :not(pre) > code { border: 1px solid var(--doc-border); }
+:scope.mdt-handbook h2 { padding-bottom: 0.25em; border-bottom: 1px solid var(--doc-border); }
+:scope.mdt-handbook pre { border-left: 3px solid var(--doc-accent); }
+:scope.mdt-handbook :not(pre) > code { border: 1px solid var(--doc-border); }
 
 /* Mono */
-.rich.mdt-mono {
+:scope.mdt-mono {
   --doc-font-body: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   --doc-font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   --doc-size: 15px;
@@ -287,13 +289,13 @@
   --doc-code-bg: #f0f0f0;
   --doc-radius: 0;
 }
-.rich.mdt-mono h1, .rich.mdt-mono h2, .rich.mdt-mono h3 { letter-spacing: 0.02em; text-transform: uppercase; }
-.rich.mdt-mono h1 { font-size: 1.6em; }
-.rich.mdt-mono h2 { font-size: 1.25em; }
-.rich.mdt-mono h3 { font-size: 1.05em; }
+:scope.mdt-mono h1, :scope.mdt-mono h2, :scope.mdt-mono h3 { letter-spacing: 0.02em; text-transform: uppercase; }
+:scope.mdt-mono h1 { font-size: 1.6em; }
+:scope.mdt-mono h2 { font-size: 1.25em; }
+:scope.mdt-mono h3 { font-size: 1.05em; }
 
 /* Repo */
-.rich.mdt-repo {
+:scope.mdt-repo {
   --doc-font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --doc-font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
   --doc-size: 16px;
@@ -312,11 +314,11 @@
   --doc-th-bg: #f6f8fa;
   --doc-radius: 6px;
 }
-.rich.mdt-repo h1, .rich.mdt-repo h2 { border-bottom: 1px solid var(--doc-border); padding-bottom: 0.3em; }
-.rich.mdt-repo tbody tr:nth-child(even) { background: #f6f8fa; }
+:scope.mdt-repo h1, :scope.mdt-repo h2 { border-bottom: 1px solid var(--doc-border); padding-bottom: 0.3em; }
+:scope.mdt-repo tbody tr:nth-child(even) { background: #f6f8fa; }
 
 /* Folio */
-.rich.mdt-folio {
+:scope.mdt-folio {
   --doc-font-heading: 'Fraunces Variable', Georgia, serif;
   --doc-font-body: 'Libre Baskerville', Georgia, serif;
   --doc-size: 16px;
@@ -334,12 +336,12 @@
   --doc-th-bg: #ebe4d8;
   --doc-radius: 3px;
 }
-.rich.mdt-folio h1 { text-align: center; font-size: 2.6em; }
-.rich.mdt-folio h2 { font-size: 1.6em; }
-.rich.mdt-folio hr { width: 12rem; margin-inline: auto; }
+:scope.mdt-folio h1 { text-align: center; font-size: 2.6em; }
+:scope.mdt-folio h2 { font-size: 1.6em; }
+:scope.mdt-folio hr { width: 12rem; margin-inline: auto; }
 
 /* Journal */
-.rich.mdt-journal {
+:scope.mdt-journal {
   --doc-font-body: 'Crimson Pro Variable', Georgia, serif;
   --doc-size: 18px;
   --doc-leading: 1.6;
@@ -356,12 +358,12 @@
   --doc-th-bg: #efe9dd;
   --doc-radius: 2px;
 }
-.rich.mdt-journal h1 { text-align: center; font-size: 2.1em; }
-.rich.mdt-journal h2 { font-variant-caps: small-caps; letter-spacing: 0.04em; }
-.rich.mdt-journal table, .rich.mdt-journal .footnotes { font-size: 0.9em; }
+:scope.mdt-journal h1 { text-align: center; font-size: 2.1em; }
+:scope.mdt-journal h2 { font-variant-caps: small-caps; letter-spacing: 0.04em; }
+:scope.mdt-journal table, :scope.mdt-journal .footnotes { font-size: 0.9em; }
 
 /* Paper */
-.rich.mdt-paper {
+:scope.mdt-paper {
   --doc-font-heading: 'Lora Variable', Georgia, serif;
   --doc-font-body: 'Source Serif 4 Variable', Georgia, serif;
   --doc-size: 18px;
@@ -376,10 +378,10 @@
   --doc-code-bg: #f1ebe0;
   --doc-th-bg: #efe7d9;
 }
-.rich.mdt-paper h1 { border-bottom: 1px solid var(--doc-border); padding-bottom: 0.3em; }
+:scope.mdt-paper h1 { border-bottom: 1px solid var(--doc-border); padding-bottom: 0.3em; }
 
 /* Scholar */
-.rich.mdt-scholar {
+:scope.mdt-scholar {
   --doc-font-body: 'EB Garamond Variable', Garamond, Georgia, serif;
   --doc-size: 19px;
   --doc-leading: 1.55;
@@ -395,12 +397,12 @@
   --doc-code-bg: #f5f0e6;
   --doc-radius: 2px;
 }
-.rich.mdt-scholar h1 { text-align: center; font-size: 2em; }
-.rich.mdt-scholar h2 { font-size: 1.4em; }
-.rich.mdt-scholar p { text-align: justify; hyphens: auto; }
+:scope.mdt-scholar h1 { text-align: center; font-size: 2em; }
+:scope.mdt-scholar h2 { font-size: 1.4em; }
+:scope.mdt-scholar p { text-align: justify; hyphens: auto; }
 
 /* Linen */
-.rich.mdt-linen {
+:scope.mdt-linen {
   --doc-font-body: 'Karla Variable', 'Segoe UI', Arial, sans-serif;
   --doc-size: 17px;
   --doc-leading: 1.7;
@@ -416,12 +418,12 @@
   --doc-th-bg: #efece6;
   --doc-radius: 8px;
 }
-.rich.mdt-linen h1 { font-size: 2em; letter-spacing: -0.01em; }
-.rich.mdt-linen h2 { font-size: 1.35em; }
-.rich.mdt-linen blockquote { background: var(--doc-code-bg); border-radius: var(--doc-radius); }
+:scope.mdt-linen h1 { font-size: 2em; letter-spacing: -0.01em; }
+:scope.mdt-linen h2 { font-size: 1.35em; }
+:scope.mdt-linen blockquote { background: var(--doc-code-bg); border-radius: var(--doc-radius); }
 
 /* Minimal */
-.rich.mdt-minimal {
+:scope.mdt-minimal {
   --doc-font-body: 'Inter Variable', system-ui, sans-serif;
   --doc-size: 16px;
   --doc-leading: 1.75;
@@ -439,12 +441,12 @@
   --doc-code-bg: #f7f7f7;
   --doc-radius: 3px;
 }
-.rich.mdt-minimal h1 { font-size: 1.9em; }
-.rich.mdt-minimal h2 { font-size: 1.35em; }
-.rich.mdt-minimal th { background: transparent; border-bottom-width: 2px; }
+:scope.mdt-minimal h1 { font-size: 1.9em; }
+:scope.mdt-minimal h2 { font-size: 1.35em; }
+:scope.mdt-minimal th { background: transparent; border-bottom-width: 2px; }
 
 /* Slate */
-.rich.mdt-slate {
+:scope.mdt-slate {
   --doc-font-body: 'Inter Variable', system-ui, sans-serif;
   --doc-size: 16px;
   --doc-leading: 1.6;
@@ -457,10 +459,10 @@
   --doc-code-bg: #f3f4f6;
   --doc-radius: 6px;
 }
-.rich.mdt-slate h1, .rich.mdt-slate h2, .rich.mdt-slate h3 { letter-spacing: -0.01em; }
+:scope.mdt-slate h1, :scope.mdt-slate h2, :scope.mdt-slate h3 { letter-spacing: -0.01em; }
 
 /* Editorial */
-.rich.mdt-editorial {
+:scope.mdt-editorial {
   --doc-font-heading: 'Playfair Display Variable', Georgia, serif;
   --doc-font-body: 'Source Sans 3 Variable', 'Helvetica Neue', Arial, sans-serif;
   --doc-size: 17px;
@@ -476,12 +478,12 @@
   --doc-code-bg: #f5f5f5;
   --doc-radius: 2px;
 }
-.rich.mdt-editorial h1 { font-size: 3em; letter-spacing: -0.02em; line-height: 1.05; }
-.rich.mdt-editorial h2 { font-size: 1.8em; }
-.rich.mdt-editorial blockquote { font-family: var(--doc-font-heading); font-style: italic; font-size: 1.15em; border-left-width: 3px; }
+:scope.mdt-editorial h1 { font-size: 3em; letter-spacing: -0.02em; line-height: 1.05; }
+:scope.mdt-editorial h2 { font-size: 1.8em; }
+:scope.mdt-editorial blockquote { font-family: var(--doc-font-heading); font-style: italic; font-size: 1.15em; border-left-width: 3px; }
 
 /* Pop */
-.rich.mdt-pop {
+:scope.mdt-pop {
   --doc-font-heading: 'Space Grotesk Variable', system-ui, sans-serif;
   --doc-font-body: 'Work Sans Variable', system-ui, sans-serif;
   --doc-size: 17px;
@@ -497,13 +499,13 @@
   --doc-th-bg: #ffe08a;
   --doc-radius: 10px;
 }
-.rich.mdt-pop h1 { font-size: 3em; line-height: 1; }
-.rich.mdt-pop h1::after { content: ''; display: block; width: 3em; height: 0.18em; margin-top: 0.25em; background: var(--doc-accent); border-radius: 999px; }
-.rich.mdt-pop blockquote { background: var(--doc-code-bg); border-radius: var(--doc-radius); color: var(--doc-fg); }
-.rich.mdt-pop a { text-decoration-color: var(--doc-accent); text-decoration-thickness: 2px; }
+:scope.mdt-pop h1 { font-size: 3em; line-height: 1; }
+:scope.mdt-pop h1::after { content: ''; display: block; width: 3em; height: 0.18em; margin-top: 0.25em; background: var(--doc-accent); border-radius: 999px; }
+:scope.mdt-pop blockquote { background: var(--doc-code-bg); border-radius: var(--doc-radius); color: var(--doc-fg); }
+:scope.mdt-pop a { text-decoration-color: var(--doc-accent); text-decoration-thickness: 2px; }
 
 /* Swiss */
-.rich.mdt-swiss {
+:scope.mdt-swiss {
   --doc-font-body: 'Archivo Variable', Helvetica, Arial, sans-serif;
   --doc-size: 16px;
   --doc-leading: 1.5;
@@ -518,13 +520,13 @@
   --doc-code-bg: #f2f2f2;
   --doc-radius: 0;
 }
-.rich.mdt-swiss h1 { font-size: 2.6em; text-transform: uppercase; letter-spacing: 0.02em; line-height: 1; }
-.rich.mdt-swiss h2 { font-size: 1.5em; text-transform: uppercase; letter-spacing: 0.04em; }
-.rich.mdt-swiss hr { border-top: 3px solid var(--doc-border); }
-.rich.mdt-swiss th { background: var(--doc-fg); color: var(--doc-bg); border-color: var(--doc-fg); }
+:scope.mdt-swiss h1 { font-size: 2.6em; text-transform: uppercase; letter-spacing: 0.02em; line-height: 1; }
+:scope.mdt-swiss h2 { font-size: 1.5em; text-transform: uppercase; letter-spacing: 0.04em; }
+:scope.mdt-swiss hr { border-top: 3px solid var(--doc-border); }
+:scope.mdt-swiss th { background: var(--doc-fg); color: var(--doc-bg); border-color: var(--doc-fg); }
 
 /* Carbon */
-.rich.mdt-carbon {
+:scope.mdt-carbon {
   --doc-font-body: 'Inter Variable', system-ui, sans-serif;
   --doc-font-mono: 'JetBrains Mono Variable', ui-monospace, Menlo, monospace;
   --doc-size: 16px;
@@ -548,7 +550,7 @@
 }
 
 /* Ember */
-.rich.mdt-ember {
+:scope.mdt-ember {
   --doc-font-body: 'Figtree Variable', 'Segoe UI', Arial, sans-serif;
   --doc-size: 17px;
   --doc-leading: 1.65;
@@ -570,10 +572,10 @@
   --doc-tok-number: #f2c27f;
   --doc-tok-title: #ffd27f;
 }
-.rich.mdt-ember h1 { padding-bottom: 0.3em; border-bottom: 2px solid var(--doc-accent); }
+:scope.mdt-ember h1 { padding-bottom: 0.3em; border-bottom: 2px solid var(--doc-accent); }
 
 /* Nocturne */
-.rich.mdt-nocturne {
+:scope.mdt-nocturne {
   --doc-font-body: 'Newsreader Variable', Georgia, serif;
   --doc-size: 18px;
   --doc-leading: 1.7;
@@ -595,10 +597,10 @@
   --doc-tok-number: #f2a97e;
   --doc-tok-title: #9cc7ff;
 }
-.rich.mdt-nocturne h1 { font-size: 2.4em; }
+:scope.mdt-nocturne h1 { font-size: 2.4em; }
 
 /* Terminal */
-.rich.mdt-terminal {
+:scope.mdt-terminal {
   --doc-font-body: 'JetBrains Mono Variable', ui-monospace, Menlo, monospace;
   --doc-font-mono: 'JetBrains Mono Variable', ui-monospace, Menlo, monospace;
   --doc-size: 15px;
@@ -621,15 +623,15 @@
   --doc-tok-number: #ffa657;
   --doc-tok-title: #d2a8ff;
 }
-.rich.mdt-terminal h1, .rich.mdt-terminal h2, .rich.mdt-terminal h3 { text-transform: uppercase; letter-spacing: 0.06em; }
-.rich.mdt-terminal h1 { font-size: 1.5em; }
-.rich.mdt-terminal h2 { font-size: 1.2em; }
-.rich.mdt-terminal h1::before, .rich.mdt-terminal h2::before { content: '> '; color: var(--doc-accent); }
+:scope.mdt-terminal h1, :scope.mdt-terminal h2, :scope.mdt-terminal h3 { text-transform: uppercase; letter-spacing: 0.06em; }
+:scope.mdt-terminal h1 { font-size: 1.5em; }
+:scope.mdt-terminal h2 { font-size: 1.2em; }
+:scope.mdt-terminal h1::before, :scope.mdt-terminal h2::before { content: '> '; color: var(--doc-accent); }
 
 /* Night versions: lgtm's dark companions to the light themes above (not from markdown.style). Each keeps its
    theme's fonts, sizes and rules (both classes apply) and swaps only the colours; Linen Night's are hand-picked,
    the rest derived from the theme's own (same hues, lightness turned around). */
-.rich.mdt-atlas-night {
+:scope.mdt-atlas-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #242a30;
   --doc-th-bg: #102a43;
@@ -646,7 +648,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-meridian-night {
+:scope.mdt-meridian-night {
   --doc-bg: #23201a;
   --doc-code-bg: #2e2c26;
   --doc-th-bg: #2a342f;
@@ -663,7 +665,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-signal-night {
+:scope.mdt-signal-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #2a2a2a;
   --doc-th-bg: #392d26;
@@ -680,7 +682,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-handbook-night {
+:scope.mdt-handbook-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #27292d;
   --doc-th-bg: #2b2d33;
@@ -697,7 +699,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-mono-night {
+:scope.mdt-mono-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #2a2a2a;
   --doc-th-bg: #2f2f2f;
@@ -714,7 +716,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-repo-night {
+:scope.mdt-repo-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #252a2f;
   --doc-th-bg: #2a2f35;
@@ -731,7 +733,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-folio-night {
+:scope.mdt-folio-night {
   --doc-bg: #23201a;
   --doc-code-bg: #302b24;
   --doc-th-bg: #353129;
@@ -748,7 +750,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-journal-night {
+:scope.mdt-journal-night {
   --doc-bg: #23201a;
   --doc-code-bg: #302c24;
   --doc-th-bg: #363128;
@@ -765,7 +767,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-paper-night {
+:scope.mdt-paper-night {
   --doc-bg: #23211a;
   --doc-code-bg: #302c24;
   --doc-th-bg: #373127;
@@ -782,7 +784,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-scholar-night {
+:scope.mdt-scholar-night {
   --doc-bg: #23211a;
   --doc-code-bg: #312c23;
   --doc-th-bg: #373227;
@@ -799,7 +801,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-linen-night {
+:scope.mdt-linen-night {
   --doc-bg: #23211e;
   --doc-fg: #d8d2c8;
   --doc-muted: #9a9389;
@@ -816,7 +818,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-minimal-night {
+:scope.mdt-minimal-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #2a2a2a;
   --doc-th-bg: #2f2f2f;
@@ -833,7 +835,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-slate-night {
+:scope.mdt-slate-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #28292c;
   --doc-th-bg: #2c2e32;
@@ -850,7 +852,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-editorial-night {
+:scope.mdt-editorial-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #2a2a2a;
   --doc-th-bg: #2f2f2f;
@@ -867,7 +869,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-pop-night {
+:scope.mdt-pop-night {
   --doc-bg: #23221a;
   --doc-code-bg: #322e22;
   --doc-th-bg: #393426;
@@ -884,7 +886,7 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-swiss-night {
+:scope.mdt-swiss-night {
   --doc-bg: #1f1f1f;
   --doc-code-bg: #2a2a2a;
   --doc-th-bg: #2f2f2f;
@@ -901,17 +903,18 @@
   --doc-tok-number: #e2b37f;
   --doc-tok-title: #9fbde0;
 }
-.rich.mdt-repo-night tbody tr:nth-child(even) { background: var(--doc-code-bg); }
+:scope.mdt-repo-night tbody tr:nth-child(even) { background: var(--doc-code-bg); }
 
 /* lgtm's own pieces inside a styled file: the theme's page colour behind the whole body, changed blocks tinted from the
    page colour (not the app's), and comment threads keeping the app's look. */
-.rich.mdt { background: var(--doc-bg); border-radius: 0 0 6px 6px; }
-.rich.mdt [data-chg]:not(:has([data-chg])) {
+:scope { background: var(--doc-bg); border-radius: 0 0 6px 6px; }
+:scope [data-chg]:not(:has([data-chg])) {
   background: color-mix(in srgb, #2da44e 16%, var(--doc-bg)); box-shadow: -6px 0 0 color-mix(in srgb, #2da44e 16%, var(--doc-bg)), 6px 0 0 color-mix(in srgb, #2da44e 16%, var(--doc-bg));
 }
-.rich.mdt .note-host { font: calc(14px * var(--ts))/1.5 var(--sans); color: var(--fg); }
-.rich.mdt .note-host :is(p, ul, ol) { margin: 0 0 .5em; max-width: none; }
-.rich.mdt .md-gap { max-width: none; font-family: var(--sans); }
+:scope .note-host { font: calc(14px * var(--ts))/1.5 var(--sans); color: var(--fg); }
+:scope .note-host :is(p, ul, ol) { margin: 0 0 .5em; max-width: none; }
+:scope .md-gap { max-width: none; font-family: var(--sans); }
 .rich.pr-desc { padding: 12px 16px; margin-top: 6px; border-radius: 6px; }
 /* Diagrams follow the app's light or dark (mermaid.ts), not the doc's: give them the app's page behind them. */
-.rich.mdt .mermaid-svg { background: var(--bg); border-radius: var(--doc-radius); padding: 8px; }
+:scope .mermaid-svg { background: var(--bg); border-radius: var(--doc-radius); padding: 8px; }
+}
