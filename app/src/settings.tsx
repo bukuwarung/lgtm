@@ -887,9 +887,9 @@ function ThemeGallery({ look }: { look: Look }) {
           <span class="thm-name" title={preview.t.name}>{preview.t.name}</span>
         </span>
         <span class="row">
-          <button class="primary" onClick={() => install(preview.key, preview.t)}>Add</button>
-          <button title="See it on the whole app first: look around, then keep it or not" onClick={() => setTrial(preview)}>Try</button>
           <button onClick={() => setPreview(null)}>Cancel</button>
+          <button title="See it on the whole app first: look around, then keep it or not" onClick={() => setTrial(preview)}>Try</button>
+          <button class="primary" onClick={() => install(preview.key, preview.t)}>Add</button>
         </span>
       </div>
     ) : null;

@@ -209,6 +209,32 @@ try {
     await until('the index', `!document.querySelector('.review:not(.skel)').classList.contains('no-index')`, 2000);
     await evaluate(`localStorage.removeItem('hideIndexToReview')`);
   });
+  // Rows of buttons (two or more side by side in one box): the main (green) one last, as macOS has it, and the gaps
+  // between them. Collected as each panel and menu opens, and on each page of the tour.
+  const rowsSeen = new Map();
+  const rowsIn = async (where) => {
+    const rows = await evaluate(`(() => {
+      const vis = (b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden' && !b.closest('.demo-side, [inert], [aria-hidden=true], .top, .bar, .pr-list, .side, .pr-status, .file-h, .tree-row');
+      const out = [];
+      for (const box of document.querySelectorAll('*')) {
+        const bs = [...box.children].filter((c) => c.matches('button:not(.link), a.button') && vis(c));
+        if (bs.length < 2) continue;
+        const name = (e) => (e.getAttribute('aria-label') || e.textContent.trim() || e.title || '').replace(/\\s+/g, ' ').slice(0, 30);
+        const p = bs.findIndex((b) => b.classList.contains('primary'));
+        const gaps = [];
+        for (let i = 1; i < bs.length; i++) { const a = bs[i - 1].getBoundingClientRect(), b = bs[i].getBoundingClientRect(); if (Math.abs(a.top - b.top) < 4) gaps.push(Math.round(b.left - a.right)); }
+        out.push({ primary: p >= 0, box: (box.className && typeof box.className === 'string' ? '.' + box.className.split(' ').join('.') : box.tagName.toLowerCase()), names: bs.map(name), late: p >= 0 && p < bs.length - 1 ? name(bs[p]) : null, gaps });
+      }
+      return out;
+    })()`);
+    for (const r of rows) rowsSeen.set(r.box + ' ' + r.names.join('|'), { ...r, where });
+    return [];
+  };
+  // A form's row (a main button or a Cancel in it, not a toast's): the main one last, 8px apart.
+  const rowFaults = () => [...rowsSeen.values()]
+    .filter((r) => !/toast/.test(r.box) && (r.primary || r.names.includes('Cancel')))
+    .flatMap((r) => [r.late && `${r.where}: "${r.late}" before ${r.names.slice(r.names.indexOf(r.late) + 1).map((x) => `"${x}"`).join(', ')}`, r.gaps.some((g) => g !== 8) && `${r.where}: ${r.names.join(' · ')} ${r.gaps.join('/')}px apart`])
+    .filter(Boolean);
   await step('a line comment goes into the review', async () => {
     await evaluate(`document.querySelector('[id="f-src/Pay.kt"] tr.ln.a td.num:nth-child(2)').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
     await until('the comment box', `!!document.querySelector('[id="f-src/Pay.kt"] textarea')`);
@@ -218,6 +244,7 @@ try {
       t.dispatchEvent(new Event('input', { bubbles: true }));
     })()`);
     await sleep(300); // the button comes alive once the text is in
+    await rowsIn('a comment form');
     await evaluate(`[...document.querySelectorAll('[id="f-src/Pay.kt"] button')].find((b) => b.textContent.trim() === 'Add to review').click()`);
     await until('the draft', `[...document.querySelectorAll('button')].some((b) => /^Finish review \\(1\\)/.test(b.textContent.trim()))`);
     await until('Finish review green, with a comment unsent', `[...document.querySelectorAll('.review-submit > button')].some((b) => b.classList.contains('primary'))`);
@@ -469,6 +496,7 @@ try {
         continue;
       }
       twins.push(...(await twinsIn(`${where}, ${name}`)));
+      await rowsIn(`${where}, ${name}`);
       await page.keyboard.press('Escape');
       await sleep(200);
       const r = await evaluate(`(() => {
@@ -504,7 +532,7 @@ try {
   // The PR (each pill's menu open in turn), Settings and the list, each through these checks.
   const tour = async (label, checks) => {
     const found = [];
-    const at = async (where) => { for (const c of checks) found.push(...(await c(`${label}, ${where}`))); };
+    const at = async (where) => { for (const c of checks) found.push(...(await c(`${label}, ${where}`))); await rowsIn(`${label}, ${where}`); };
     await evaluate(`location.hash = '/acme/shop/pull/1'`);
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
     await at('the PR');
@@ -672,6 +700,10 @@ try {
     }
     await evaluate(`localStorage.removeItem('glass')`);
     await reload();
+    if (found.length) throw new Error(found.join('; '));
+  });
+  await step("a form's buttons as macOS has them: Cancel, then the main one last, 8px apart", async () => {
+    const found = rowFaults();
     if (found.length) throw new Error(found.join('; '));
   });
   await step('no two buttons say the same thing at once, in each menu and panel as it opens', async () => {

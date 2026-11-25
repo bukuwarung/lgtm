@@ -5419,9 +5419,9 @@ function PendingComment({ c, ctx, path, t }: { c: Thread['comments']['nodes'][nu
     return (
       <>
         <Editor value={text} onInput={setText} onSubmit={() => text.trim() && save(text)} onCancel={() => setText(null)} repo={ctx.repo} mentions={ctx.mentions} autoFocus />
-        <div class="row">
-          <button class="primary" disabled={busy || !text.trim()} onClick={() => save(text)}>Update comment</button>
+        <div class="acts">
           <button onClick={() => setText(null)}>Cancel</button>
+          <button class="primary" disabled={busy || !text.trim()} onClick={() => save(text)}>Update comment</button>
         </div>
         {err && <p class="error">{err}</p>}
       </>
@@ -5457,10 +5457,10 @@ function SuggestionActions({ t, c, ctx }: { t: Thread; c: Thread['comments']['no
   const picked = ctx.batch.some((x) => x.id === s.id);
   const commit = () => (setBusy(true), setErr(''), ctx.applySuggestions([s]).catch((e) => setErr(e.message)).finally(() => setBusy(false)));
   return (
-    <div class="row sug-actions">
-      <button class="primary" disabled={busy} onClick={commit}>{busy ? 'Committing…' : 'Commit suggestion'}</button>
-      <button disabled={busy} onClick={() => ctx.toggleBatch!(s)}>{picked ? 'Remove from batch' : 'Add to batch'}</button>
+    <div class="acts sug-actions">
       {err && <span class="error">{err}</span>}
+      <button disabled={busy} onClick={() => ctx.toggleBatch!(s)}>{picked ? 'Remove from batch' : 'Add to batch'}</button>
+      <button class="primary" disabled={busy} onClick={commit}>{busy ? 'Committing…' : 'Commit suggestion'}</button>
     </div>
   );
 }
@@ -5716,10 +5716,8 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
         autoFocus
       />
       {posting && posting !== 'posting' && <p class="error">{posting}</p>}
-      <div class="row">
-        <button class="primary" disabled={!body.trim() || posting === 'posting'} onClick={() => save()}>
-          {target.editId ? 'Update comment' : now ? (posting === 'posting' ? 'Posting…' : 'Comment') : 'Add to review'}
-        </button>
+      <div class="acts">
+        <button onClick={() => ctx.setTarget(null)}>Cancel</button>
         {!target.editId && (
           <button
             disabled={!body.trim() || posting === 'posting' || (!now && ctx.pending)}
@@ -5729,7 +5727,9 @@ function DraftForm({ ctx }: { ctx: Ctx }) {
             {now ? 'Add to review' : 'Comment now'}
           </button>
         )}
-        <button onClick={() => ctx.setTarget(null)}>Cancel</button>
+        <button class="primary" disabled={!body.trim() || posting === 'posting'} onClick={() => save()}>
+          {target.editId ? 'Update comment' : now ? (posting === 'posting' ? 'Posting…' : 'Comment') : 'Add to review'}
+        </button>
       </div>
     </div>
   );
@@ -6241,10 +6241,10 @@ function EditPosted({ body, repo, mentions, save, onDone }: { body: string; repo
   return (
     <div class="edit-posted">
       <Editor value={text} onInput={setText} onSubmit={go} onCancel={onDone} repo={repo} mentions={mentions} rows={5} autoFocus placeholder="⌘↵ to save · Esc to cancel" />
-      <div class="row">
-        <button class="primary" disabled={busy || !text.trim()} onClick={go}>{busy ? 'Saving…' : 'Save'}</button>
-        <button disabled={busy} onClick={onDone}>Cancel</button>
+      <div class="acts">
         {err && <span class="error">{err}</span>}
+        <button disabled={busy} onClick={onDone}>Cancel</button>
+        <button class="primary" disabled={busy || !text.trim()} onClick={go}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );
@@ -6268,10 +6268,10 @@ function EditDescription({ pr, repo, mentions, onDone }: { pr: PR; repo: string;
     <div class="edit-desc">
       <input value={title} onInput={(e) => setTitle(e.currentTarget.value)} aria-label="Title" />
       <Editor value={body} onInput={setBody} onSubmit={save} onCancel={onDone} repo={repo} mentions={mentions} rows={14} autoFocus placeholder="Describe the change · ⌘↵ to save" doc />
-      <div class="row">
-        <button class="primary" disabled={busy || !title.trim()} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
-        <button disabled={busy} onClick={onDone}>Cancel</button>
+      <div class="acts">
         {err && <span class="error">{err}</span>}
+        <button disabled={busy} onClick={onDone}>Cancel</button>
+        <button class="primary" disabled={busy || !title.trim()} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );

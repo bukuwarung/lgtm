@@ -66,6 +66,9 @@ code, pre { font-family: var(--mono); }
 /* Code ligatures (=>, !=, ===, ->) via the font's contextual alternates. */
 .diff .code, pre, code { font-variant-ligatures: contextual; font-feature-settings: "calt" 1; }
 .row { display: flex; gap: 8px; align-items: center; }
+/* A form's buttons, as macOS has them: on the right, the main one last, Cancel before it; 8px apart. */
+.acts { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.acts > .error { margin: 0 auto 0 0; }
 .note { color: var(--muted); }
 .error { color: var(--delfg); }
 .warn { background: var(--warn); padding: 8px 12px; border-radius: 6px; }

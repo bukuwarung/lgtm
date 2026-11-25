@@ -277,7 +277,8 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
               {m === 'SQUASH' && <button class="link" style="justify-self: start" onClick={fromCommits} title="Each commit's headline, as a list, in the message (⌥C)">From the commits</button>}
             </>
           )}
-          <div class="merge-row">
+          <div class="acts">
+            <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
             <button
               class="primary"
               disabled={!!busy}
@@ -295,7 +296,6 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
             >
               {busy === 'merge' ? 'Working…' : confirm === 'auto' ? `Enable auto-merge (${VERB[m].toLowerCase()})` : `Confirm ${VERB[m].toLowerCase()}${admin ? ' as admin' : ''}`}
             </button>
-            <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
           </div>
           {openTickets.length > 0 && (
             <div class="merge-opt">

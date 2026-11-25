@@ -147,8 +147,8 @@ function TrialBar({ look }: { look: ReturnType<typeof useCodeLook> }) {
   return (
     <div class="toast trial" role="status">
       Trying <b>{tried.t.name}</b>
-      <button class="primary" onClick={() => (saveTheme(look, tried.key, tried.t), setTrial(null))}>Keep it</button>
       <button onClick={() => setTrial(null)}>Back to yours</button>
+      <button class="primary" onClick={() => (saveTheme(look, tried.key, tried.t), setTrial(null))}>Keep it</button>
     </div>
   );
 }
@@ -280,7 +280,7 @@ function StaleBranches() {
         <>
           <p>Delete these branches on {viewAs() ? 'GitLab' : 'GitHub'}? Their {T.PRs} are merged.</p>
           <ul>{list.map((b) => <li><CopyCode>{b.headRefName}</CopyCode> <small>{repoLabel(b.repo)}#{b.number}</small></li>)}</ul>
-          <button class="primary" onClick={go}>Delete {list.length} branch{list.length > 1 ? 'es' : ''}</button> <button onClick={() => setStep('')}>Cancel</button>
+          <div class="acts"><button onClick={() => setStep('')}>Cancel</button><button class="primary" onClick={go}>Delete {list.length} branch{list.length > 1 ? 'es' : ''}</button></div>
         </>
       ) : (
         <button class="link" disabled={step === 'deleting'} onClick={() => setStep('confirm')}>
