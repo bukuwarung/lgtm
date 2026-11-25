@@ -4,7 +4,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type AgentRun, agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, getNeverRan, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
+import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, getNeverRan, getThreads, getConversation, jobLog, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
 import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
@@ -13,7 +13,8 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { setResign, claudeFolder, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { setResign, claudeFolder, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { unblockPrompt } from './prompts.ts';
 import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
@@ -1522,6 +1523,39 @@ async function autoMerge(i: QueueItem) {
   const m = s.methods[0];
   await mergePR(s, m, s.message[m].title, s.message[m].body, true);
 }
+// My held-up PR (To fix) back to the session that wrote it: what's in the way, with the details it needs (the failing
+// checks' log ends, what the reviewers asked for), left for it as "Send it your review" does, and the session opened.
+async function askToFix(i: QueueItem): Promise<string> {
+  const l = linkedSession(i.repo, i.number)!;
+  const out: string[] = [];
+  if (i.mergeState === 'DIRTY') out.push(`conflicts with ${i.base}: bring ${i.base} in and resolve them`);
+  if (i.mergeState === 'BEHIND') out.push(`behind ${i.base}, which the branch rules don't allow: bring ${i.base} in`);
+  if (i.neverRan?.length) out.push(`required checks that never ran on this commit (a path or branch filter skipped them): ${i.neverRan.join(', ')}`);
+  if (i.queue?.state === 'UNMERGEABLE') out.push('the merge queue refused it (failed checks or conflicts there)');
+  if (i.ci === 'FAILURE' || i.ci === 'ERROR') {
+    const failing = (await getChecks(i.repo, i.number).catch(() => [])).filter((c) => c.state === 'failure');
+    for (const [k, c] of failing.entries()) {
+      const log = k < 3 && c.jobId ? await jobLog(i.repo, c.jobId).catch(() => '') : '';
+      out.push(`the check "${c.name}" fails${c.url ? ` (${c.url})` : ''}${log ? `. The end of its log:\n\n\`\`\`\n${log.slice(-3000)}\n\`\`\`` : ''}`);
+    }
+    if (!failing.length) out.push('failing checks');
+  }
+  if (i.reviewDecision === 'CHANGES_REQUESTED') {
+    const [conv, threads] = await Promise.all([getConversation(i.repo, i.number).catch(() => []), getThreads(i.repo, i.number).catch(() => [])]);
+    const latest = new Map<string, string>();
+    for (const c of conv) if (c.state && c.state !== 'COMMENTED') latest.set(c.author, c.state === 'CHANGES_REQUESTED' ? (c.body ?? '').trim() : '\0');
+    const asked = [...latest].filter(([, b]) => b !== '\0');
+    const open = threads.filter((t) => !t.isResolved && !t.isOutdated && t.comments.nodes[0]?.author?.login !== i.author);
+    out.push(
+      [
+        `changes requested by ${asked.map(([who]) => '@' + who).join(', ') || 'a reviewer'}`,
+        ...asked.filter(([, b]) => b).map(([who, b]) => `  @${who}: ${b.replace(/\s+/g, ' ').slice(0, 800)}`),
+        ...open.slice(0, 20).map((t) => `  \`${t.path}${t.line ? `:${t.line}` : ''}\`: ${(t.comments.nodes[0]?.bodyText ?? '').replace(/\s+/g, ' ').slice(0, 400)}`),
+      ].join('\n'),
+    );
+  }
+  return backToSession(l.id, unblockPrompt({ html_url: prWebUrl(i.repo, i.number), title: i.title, number: i.number }, out), l.agent);
+}
 // Whoever requested changes, asked to review again on GitHub, then sent the "again" message on Slack (as the PR
 // view's re-request does; none if that message is emptied or Slack isn't set up).
 async function askAgain(i: QueueItem): Promise<string> {
@@ -2142,6 +2176,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           ))
         )}
         {kind === REVIEWING && <AgentPill i={i} />}
+        {kind === MINE && stuck(i).length > 0 && !!linkedSession(i.repo, i.number) && (
+          <QuickPill icon={linkedSession(i.repo, i.number)?.agent === 'codex' ? 'codex' : '✳'} tone="" idle="its session" action="Ask its session to fix it" busy="asking…" done="asked" title={`What's in the way (${stuck(i).join(', ')}), left for the ${linkedSession(i.repo, i.number)?.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'} that wrote it`} run={() => askToFix(i)} />
+        )}
         {claudeWaiting(i) && <span class="pill p-session-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && (linkedSession(i.repo, i.number)?.agent === 'codex'
           ? <span class="pill p-agent" title="Its Codex conversation pushed commits since you last opened it here"><Tg i="codex" t="updated" /></span>

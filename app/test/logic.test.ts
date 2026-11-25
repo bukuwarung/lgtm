@@ -1628,3 +1628,12 @@ test("stuck: what's mine to fix before merging, not a draft nor waiting on revie
   assert.deepEqual(stuck({ ...i, isDraft: true, ci: 'FAILURE' }), []);
   assert.deepEqual(stuck({ ...i, neverRan: ['ci / build'] }), ['required checks that never ran']);
 });
+
+test("unblockPrompt: what holds my PR up, for the session that wrote it", async () => {
+  const { unblockPrompt } = await import('../src/prompts.ts');
+  const t = unblockPrompt({ html_url: 'https://github.com/o/r/pull/7', title: 'Retry payments', number: 7 }, ['conflicts with main: bring main in and resolve them', 'the check "ci / test" fails']);
+  assert.match(t, /pull\/7/);
+  assert.match(t, /- conflicts with main/);
+  assert.match(t, /- the check "ci \/ test" fails/);
+  assert.match(t, /push/);
+});

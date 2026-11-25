@@ -68,7 +68,6 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
   const [method, setMethod] = useState<MergeMethod | null>(null);
   const [confirm, setConfirm] = useState<'merge' | 'auto' | null>(null);
   const [msg, setMsg] = useState({ title: '', body: '' });
-  const [bypass, setBypass] = useState(false);
   const [dropBranch, toggleDropBranch] = useStoredFlag('deleteBranch', true);
   // Its Jira tickets that aren't done, moved as it merges when ticked (Settings → Reviewing ticks it to start with).
   const [moveOnMerge] = useStoredFlag('jiraOnMerge', true);
@@ -152,6 +151,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
   const missing = neverRan(required, checks);
   const why = [...blockers(s, checks).filter((w) => !missing.length || w !== 'Blocked by branch rules'), ...(missing.length ? [`required ${missing.length > 1 ? 'checks' : 'check'} never ran`] : [])];
   const conflict = s.mergeable === 'CONFLICTING' || s.mergeStateStatus === 'DIRTY';
+  const admin = !ready && !s.isDraft && !conflict && s.viewerCanMergeAsAdmin; // can merge past the branch rules
   const tone = conflict ? 'bad' : ready ? 'ok' : 'wait';
   const headline =
     s.mergeStateStatus === 'UNKNOWN' ? 'Checking mergeability…'
@@ -164,7 +164,6 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
     try {
       await f();
       setConfirm(null);
-      setBypass(false);
       onChange();
     } catch (e: any) {
       setErr(e.message);
@@ -262,14 +261,10 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
             {s.methods.map((x) => <option value={x}>{VERB[x]}</option>)}
           </select>
         )}
-        <button class="primary" disabled={!!busy || !(ready || bypass)} onClick={() => open('merge')}>{VERB[m]}</button>
+        {/* Not ready, but I'm an admin here: one button merges past what's in the way (after the confirm). */}
+        <button class={ready ? 'primary' : undefined} disabled={!!busy || !(ready || admin)} title={admin ? "You're an admin here: merge even though requirements aren't met" : undefined} onClick={() => open('merge')}>{admin ? `${VERB[m]} as admin` : VERB[m]}</button>
         {!ready && !s.autoMergeRequest && s.viewerCanEnableAutoMerge && !missing.length && !conflict && ( // never-run checks or conflicts: auto-merge would wait for ever
           <button disabled={!!busy} onClick={() => open('auto')}>Enable auto-merge</button>
-        )}
-        {!ready && !s.isDraft && !conflict && s.viewerCanMergeAsAdmin && (
-          <label title="You're an admin here: merge even though requirements aren't met">
-            <input type="checkbox" checked={bypass} onChange={() => setBypass(!bypass)} /> Merge without waiting for requirements
-          </label>
         )}
       </div>}
       {confirm && (
@@ -298,7 +293,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
                 })
               }
             >
-              {busy === 'merge' ? 'Working…' : confirm === 'auto' ? `Enable auto-merge (${VERB[m].toLowerCase()})` : `Confirm ${VERB[m].toLowerCase()}`}
+              {busy === 'merge' ? 'Working…' : confirm === 'auto' ? `Enable auto-merge (${VERB[m].toLowerCase()})` : `Confirm ${VERB[m].toLowerCase()}${admin ? ' as admin' : ''}`}
             </button>
             <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
           </div>

@@ -191,3 +191,14 @@ export function reviewDonePrompt(
   ].filter(Boolean).join('\n\n');
   return text.length > 8000 ? text.slice(0, 7999) + '…' : text;
 }
+
+// My PR held up (the list's To fix), handed back to the session that wrote it: what's in the way, each with its
+// details, to fix and push.
+export function unblockPrompt(pr: { html_url: string; title: string; number?: number }, blockers: string[]): string {
+  const text = [
+    `My pull request ${pr.html_url} (${prFields(pr).ref} ${pr.title}) can't merge yet. lgtm shows it held up by:`,
+    blockers.map((b) => `- ${b}`).join('\n'),
+    "Fix what's yours to fix on its branch and push. If something isn't fixable from the code (a reviewer's call, a check that shouldn't run here), say so instead. Then tell me what changed.",
+  ].join('\n\n');
+  return text.length > 12000 ? text.slice(0, 11999) + '…' : text;
+}
