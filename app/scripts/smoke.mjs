@@ -753,7 +753,10 @@ try {
     for (let k = 0; k < 15; k++) scrolls.push(await evaluate(`(async () => { const t = performance.now(); scrollBy(0, innerHeight * 3); await ${frame}; return performance.now() - t; })()`));
     const worst = (xs) => Math.round(Math.max(...xs));
     console.log(`    (opened in ${open}ms; j at worst ${worst(keys)}ms; a scroll at worst ${worst(scrolls)}ms)`);
-    const slow = [open > 3000 && `opened in ${open}ms`, worst(keys) > 100 && `j took ${worst(keys)}ms`, worst(scrolls) > 100 && `a scroll took ${worst(scrolls)}ms`].filter(Boolean);
+    // On CI's shared machines (CI set) four times the budget: they run 2-3x slower than a Mac and vary with load, so a
+    // tight budget there failed on their noise; a real slowdown still shows, and the times are in the log either way.
+    const x = process.env.CI ? 4 : 1;
+    const slow = [open > 3000 * x && `opened in ${open}ms`, worst(keys) > 100 * x && `j took ${worst(keys)}ms`, worst(scrolls) > 100 * x && `a scroll took ${worst(scrolls)}ms`].filter(Boolean);
     if (slow.length) throw new Error(`the big PR is slow: ${slow.join('; ')}`);
   });
   await step("text readable on its background, light and dark, in lgtm's look and each theme", async () => {
