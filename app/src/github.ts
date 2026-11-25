@@ -1738,7 +1738,7 @@ export const reply = async (repo: string, n: number, commentId: number, body: st
   } catch (e) {
     if (!threadId || !/422/.test((e as Error).message) || !(await getPendingReview(repo, n).catch(() => null))) throw e;
     await graphql(`mutation($t:ID!,$b:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t,body:$b}){comment{id}}}`, { t: threadId, b: body });
-    dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'You have a review in progress on this PR, so GitHub keeps your reply in it: Finish review sends it.', ms: 6000 } }));
+    dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Your reply went into your unsent review. Finish review sends it.', ms: 6000 } }));
     return true;
   }
 };
