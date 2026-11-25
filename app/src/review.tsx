@@ -33,7 +33,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, StatusMark, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, archiveLinked, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, shortLogin, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
+import { closeOnBackdrop, checkSlackChannel, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, archiveLinked, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, shortLogin, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { agentRunOf, reviewNow } from './agentreview.ts';
@@ -147,6 +147,8 @@ let jiraSite: Promise<string | undefined> | undefined;
 function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: string; n: number; onPosted: () => void; kind?: Extract<SlackKind, 'qa' | 'channel'>; inMenu?: boolean }) {
   const review = kind === 'channel';
   const [channel] = useStoredValue(review ? 'reviewChannel' : 'qaChannel', review ? '' : QA_CHANNEL);
+  const [chName, setChName] = useState(''); // the channel's name, as Slack gives it, for the heading (its address on hover)
+  useEffect(() => void (channel && checkSlackChannel(channel).then((r) => setChName(r.name ?? ''), () => {})), [channel]);
   const reviewers = (pr.requested_reviewers ?? []).map((u) => u.login);
   const [unmatched, setUnmatched] = useState<string[]>([]); // named, but lgtm can't tag them
   const [text, setText] = useState<string | null>(null);
@@ -198,7 +200,7 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: s
       {text != null && (
         <dialog ref={box} class="ask qa-dialog" aria-label={review ? 'Ask for review' : 'Ask QA'} onClose={() => setText(null)}>
           <p>
-            <b>{review ? 'Ask for review' : 'Ask QA'}</b> in <code>{channel || 'no channel yet'}</code>
+            <b>{review ? 'Ask for review' : 'Ask QA'}</b> {channel ? <span title={channel}>in {chName ? `#${chName.replace(/^#/, '')}` : 'its Slack channel'}</span> : <span class="warn-text">· no channel set yet (Settings → Slack)</span>}
           </p>
           {editing ? (
             <textarea rows={12} value={text} onInput={(e) => setText(e.currentTarget.value)} disabled={busy} />
@@ -2483,11 +2485,16 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               mine && pr.merged && <MergedActions repo={repo} n={n} tickets={jiraKeys(pr.title, pr.head.ref)} />,
             ].filter(Boolean) as ComponentChildren[],
           )}
-          {pr.draft && !pr.merged && pr.state !== 'closed' && (
-            <span class="state-chip draft" title="A draft: not ready for review yet">
-              <Octicon name="git-pull-request-draft" /> Draft
-            </span>
-          )}
+          {/* A draft, as Merged and Closed: the tag says it, its menu has Ready for review (no banner below). */}
+          {pr.draft && !pr.merged && pr.state !== 'closed' && ((tip) => (rights?.update && rights.close ? (
+            <PillMenu sum="state-chip draft" tip={tip} head={tip} label={<><Octicon name="git-pull-request-draft" /> Draft</>}>
+              <button disabled={!!acting} title={`Reviewers are notified${hint(bindings.ready)}`} onClick={() => void stateAct('ready')}>
+                <Octicon name="git-pull-request" /> {acting === 'ready' ? 'Marking…' : 'Ready for review'}
+              </button>
+            </PillMenu>
+          ) : (
+            <span class="state-chip draft" title={tip}><Octicon name="git-pull-request-draft" /> Draft</span>
+          )))(me && pr.user.login === me ? 'A draft: reviewers aren\'t asked until it\'s ready.' : 'A draft: it may still change.')}
           {/* Approved as its repo's rules count it (GitHub's review decision), like Draft: in view as you scroll. */}
           {!pr.draft && pr.state === 'open' && status?.reviewDecision === 'APPROVED' && (
             <span class="state-chip approved" title="Approved: the approvals its branch rules ask for are in">
@@ -2553,15 +2560,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             <p class="pr-state idle">
               <Octicon name="hourglass" size={16} /> <span><b>No activity for {idleDays} days.</b> Close it if it's not going anywhere, or {pr.draft ? 'pick it up again' : 'make it a draft until it is'}.</span>
               <span class="pr-state-act"><StateActs rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} only={['close', 'draft', 'ready']} /></span>
-            </p>
-          ) : pr.draft ? (
-            <p class="pr-state draft">
-              <Octicon name="git-pull-request-draft" size={16} /> <span><b>Draft.</b> {me && pr.user.login === me ? null : "It may still change."}</span>
-              {rights?.update && rights.close && (
-                <button class="pr-state-act" disabled={!!acting} title={`Mark it ready: reviewers are notified${hint(bindings.ready)}`} onClick={() => void stateAct('ready')}>
-                  {acting === 'ready' ? 'Marking…' : 'Ready for review'}
-                </button>
-              )}
             </p>
           ) : null}
           <div class="pills pr-status" ref={pillsRef}>

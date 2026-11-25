@@ -1727,6 +1727,8 @@ input:is([type=checkbox], [type=radio]):disabled { cursor: not-allowed; opacity:
 /* The PR's title bar: icons centred in their buttons (inline, they sat on the text baseline, low in WebKit), icon-only
    buttons square. */
 .bar :is(button, summary):has(> svg) { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-block-size: calc(1lh + 8px); }
+/* A menu's items, opened from the bar, still start at the left with their icons (Agents, ⋯). */
+.bar .account-menu > :is(button, a) { display: flex; justify-content: flex-start; min-block-size: 0; }
 .bar :is(button, summary) > svg { display: block; flex: none; }
 .bar .bar-index { min-inline-size: calc(1lh + 8px); padding: 0; }
 /* Icon-only buttons elsewhere, centred the same way: a comment's copy-link and session buttons, the refresh button, a
