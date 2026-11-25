@@ -176,13 +176,11 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
   // What's in the way, each with what does something about it: bring the base in, ask for a review, run the failed
   // GitHub Actions jobs again (checks still running, conflicts and the like: nothing here does).
   const reruns = [...new Set((checks ?? []).filter((c) => c.state === 'failure' && c.jobId).map(runOf).filter(Boolean))] as string[];
+  const reasonIcon = (w: string) =>
+    /^Behind/.test(w) ? 'git-branch' : /^Review required|approval|review/i.test(w) ? 'person' : /failing/.test(w) ? 'x-circle' : /running/.test(w) ? 'dot-fill'
+    : /^required/.test(w) ? 'skip' : /^Conflicts/.test(w) ? 'alert' : /^Changes requested/.test(w) ? 'comment-discussion' : /conversation/i.test(w) ? 'comment-discussion' : 'alert';
   const fixFor = (w: string) => {
-    const go = (label: string, f: () => unknown, title: string) => (
-      <>
-        {' '}
-        <button class="link" disabled={!!busy} title={title} onClick={f}>{label}</button>
-      </>
-    );
+    const go = (label: string, f: () => unknown, title: string) => <button class="link" disabled={!!busy} title={title} onClick={f}>{label}</button>;
     if (w === 'Behind the base branch' && s.viewerCanUpdateBranch)
       return go(busy === 'update' ? (s.reasons ? 'Rebasing…' : 'Updating…') : s.reasons ? 'Rebase' : 'Update branch', () => run('update', () => updateBranchAndWait(repo, n, s).then(() => dispatchEvent(new Event('lgtm:refresh')))), `Bring ${s.baseRefName} in`);
     if (w === 'Review required') return go('Ask reviewers', () => (setShown(false), showReviewers(location.hash.slice(1))), "Who's free to review, in the index");
@@ -212,29 +210,24 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
       <div class="merge-head">
         <b>{headline}</b>
         {loading && <Updating />}
-        {!ready && why.length > 0 && (
-          <span class="merge-why">
-            {why.map((w, k) => (
-              <>
-                {k > 0 && ' · '}
-                <span class="why-item">{w}{fixFor(w)}</span>
-              </>
-            ))}
-          </span>
-        )}
       </div>
+      {/* What's in the way, a row each: its icon, what it is, and on the right what does something about it. */}
+      {!ready && why.map((w) => (
+        <div class="merge-row merge-reason">
+          <Octicon name={reasonIcon(w)} />
+          {w.startsWith('required') ? (
+            <span class="merge-reason-t" title={missing.join('\n')}>
+              {missing.length} required check{missing.length > 1 ? 's' : ''} never ran <span class="merge-why">· skipped by a path or branch filter, so {site(repo)} waits for ever</span>
+            </span>
+          ) : (
+            <span class="merge-reason-t">{w}</span>
+          )}
+          {fixFor(w)}
+        </div>
+      ))}
       {s.holds.length > 0 && (
         <div class="merge-row merge-hold">
           <Octicon name="alert" /> <b>Marked not to merge:</b> {s.holds.join(', ')}
-        </div>
-      )}
-      {missing.length > 0 && (
-        <div class="merge-row merge-hold">
-          <Octicon name="alert" />{' '}
-          <span>
-            Skipped by a path or branch filter, so GitHub waits for ever. {s.viewerCanMergeAsAdmin ? 'Merge as an admin below.' : 'Ask an admin to merge.'}
-            <span class="merge-why merge-missing">{missing.join(' · ')}</span>
-          </span>
         </div>
       )}
       {openThreads.length > 0 && (() => {
@@ -276,9 +269,12 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
         </div>
       )}
       {s.autoMergeRequest && (
-        <div class="merge-row">
-          Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{s.autoMergeRequest.enabledBy && <>, enabled by <Who login={s.autoMergeRequest.enabledBy.login} /></>}{missing.length ? ', but it waits for ever for the checks that never ran' : ''}.
-          {s.viewerCanDisableAutoMerge && <button disabled={!!busy} onClick={() => run('disable', () => disableAutoMerge(s.id))}>Disable auto-merge</button>}
+        <div class="merge-row merge-reason">
+          <Octicon name="git-merge-queue" />
+          <span class="merge-reason-t" title={s.autoMergeRequest.enabledBy ? `Turned on by @${s.autoMergeRequest.enabledBy.login}` : undefined}>
+            Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{missing.length ? <span class="merge-why"> · it can't fire while those checks never run</span> : ''}
+          </span>
+          {s.viewerCanDisableAutoMerge && <button class="link" disabled={!!busy} onClick={() => run('disable', () => disableAutoMerge(s.id))}>{busy === 'disable' ? 'Turning off…' : 'Turn off'}</button>}
         </div>
       )}
       {!confirm && <div class="merge-row">

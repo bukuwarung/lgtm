@@ -577,6 +577,11 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; }
 .merge-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
 .merge-why { color: var(--muted); }
 .merge-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* A reason it can't merge: icon, what, and its action at the row's end. */
+.merge-reason { flex-wrap: nowrap; align-items: baseline; }
+.merge-reason > svg { flex: none; align-self: center; color: var(--muted); }
+.merge-reason-t { flex: 1; min-width: 0; }
+.merge-reason > button.link { flex: none; }
 .merge-confirm { display: grid; gap: 6px; }
 .merge-confirm input:not([type="checkbox"]), .merge-confirm textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .merge-opt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -1798,4 +1803,3 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .merge-missing { display: block; margin-top: 2px; font-weight: 400; }
 /* Viewed marks hidden (Settings → Reviewing). */
 .review.no-marks :is(.viewed-box, .vmark, .plan-bar, .plan-n, .plan-viewed) { display: none; }
-.why-item { white-space: nowrap; } /* a reason and its action on one line; the list wraps between them */
