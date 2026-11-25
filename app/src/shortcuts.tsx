@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { hint, readBindings } from './keys.ts';
-import { ask, composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm } from './platform.ts';
+import { ask, composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm, shortLogin } from './platform.ts';
 import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { StatusMark } from './emojibox.tsx';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
-import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold, Time } from './tags.tsx';
+import { AgentMark, BotMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold, Time } from './tags.tsx';
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
@@ -738,7 +738,8 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
   const pending = checks?.filter((c) => c.state === 'pending').length ?? 0;
   // Who's reviewing: each person's latest verdict, "waiting" for ones asked who haven't answered (again).
   const reviewers = new Map<string, { meta: string; icon: string; tone: string; id?: string }>();
-  for (const c of conversation) if (c.state && !c.bot && c.author !== pr.user.login) reviewers.set(c.author, { meta: VERDICT[c.state][1], icon: VERDICT[c.state][0], tone: c.state, id: c.id });
+  // A bot's approval or change request counts where the repo's rules count it (its comments alone don't make it one).
+  for (const c of conversation) if (c.state && (!c.bot || c.state === 'APPROVED' || c.state === 'CHANGES_REQUESTED') && c.author !== pr.user.login) reviewers.set(c.author, { meta: VERDICT[c.state][1], icon: VERDICT[c.state][0], tone: c.state, id: c.id });
   for (const r of pr.requested_reviewers ?? [])
     if (r.type !== 'Bot') reviewers.set(r.login, { meta: reviewers.has(r.login) ? 'asked again' : 'waiting', icon: 'waiting', tone: 'WAITING', id: reviewers.get(r.login)?.id });
   for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting', icon: 'waiting', tone: 'WAITING' });
@@ -793,12 +794,12 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
               <span class="ix-label">
                 {!who.startsWith('team ') && <img src={faceOf(who)} alt="" />}
-                {who} <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
+                {who.startsWith('team ') ? who : shortLogin(who)}<BotMark login={who} /> <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
                 <StatusMark s={presence[who]} late={r.tone === 'WAITING' ? lateFor(presence[who]) : null} />
               </span>
             </button>
             {replace && r.tone === 'WAITING' && isAway(presence[who]) && <Replace login={who} replace={replace} />}
-            {reRequest && r.id && r.tone !== 'WAITING' && <ReRequest login={who} again={reRequest} />}
+            {reRequest && r.id && r.tone !== 'WAITING' && !who.endsWith('[bot]') && <ReRequest login={who} again={reRequest} />}
             {withdraw && r.tone === 'WAITING' && !who.startsWith('team ') && (
               <button class="ix-icon-btn ix-withdraw" title={`Take back the review request for @${who}`} aria-label={`Take back the review request for @${who}`} onClick={() => void withdraw(who)}>
                 <Icon name="x" />

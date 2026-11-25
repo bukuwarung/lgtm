@@ -2481,6 +2481,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <Octicon name="git-pull-request-draft" /> Draft
             </span>
           )}
+          {/* Approved as its repo's rules count it (GitHub's review decision), like Draft: in view as you scroll. */}
+          {!pr.draft && pr.state === 'open' && status?.reviewDecision === 'APPROVED' && (
+            <span class="state-chip approved" title="Approved: the approvals its branch rules ask for are in">
+              <Octicon name="check" /> Approved
+            </span>
+          )}
           <h1 onContextMenu={titleMenu}>
             <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on ${site(repo)}`}>
               <span class="pr-num">{numRef(repo, n)}</span> {pr.title}
@@ -3160,7 +3166,7 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
   return (
     <div ref={root} class={inline ? 'submit-inline' : 'submit review-submit'}>
       {!inline && <button class={count ? 'primary' : 'finish-quiet'} aria-expanded={open} disabled={inFlight} onClick={() => setOpen(!open)}>
-        {inFlight ? <><span class="btn-spin" aria-hidden="true" />Sending your review…</> : busy && !open ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : <>{authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" /></>}
+        {inFlight ? <><span class="btn-spin" aria-hidden="true" />Sending your review…</> : busy && !open ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : <><Octicon name={authored ? 'comment' : 'code-review'} /> {authored ? 'Comment' : 'Finish review'}{count ? ` (${count})` : ''} <span class="caret" aria-hidden="true" /></>}
       </button>}
       {(open || inline) && (
         <div class="panel">

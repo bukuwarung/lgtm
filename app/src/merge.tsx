@@ -127,7 +127,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
   const [required, setRequired] = useState<string[]>([]);
   useEffect(() => void (s?.baseRefName && requiredChecks(repo, s.baseRefName).then(setRequired)), [repo, s?.baseRefName]);
 
-  if (!s) return err ? bar('Merge', '', `Couldn't load the merge status: ${err}`, <div class="panel merge m-bad"><p class="error">Couldn't load the merge status: {err} <Retry onClick={() => (setErr(''), load())} /></p></div>) : null;
+  if (!s) return err ? bar(<><Octicon name="git-merge" /> Merge</>, '', `Couldn't load the merge status: ${err}`, <div class="panel merge m-bad"><p class="error">Couldn't load the merge status: {err} <Retry onClick={() => (setErr(''), load())} /></p></div>) : null;
   if (s.state !== 'OPEN')
     return bar(
       s.state === 'MERGED' ? <><Octicon name="git-merge" /> Merged</> : <><Octicon name="git-pull-request-closed" /> Closed</>,
@@ -188,7 +188,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
   };
 
   return bar(
-    s.isDraft ? 'Draft' : s.autoMergeRequest ? 'Auto-merge on' : 'Merge',
+    s.isDraft ? <><Octicon name="git-pull-request-draft" /> Draft</> : s.autoMergeRequest ? <><Octicon name="git-merge-queue" /> Auto-merge on</> : <><Octicon name="git-merge" /> Merge</>,
     ready && !s.holds.length ? 'primary' : `merge-state m-${ready ? 'wait' : tone}`,
     [headline, ...(ready ? [] : why), ...(s.holds.length ? [`marked not to merge (${s.holds.join(', ')})`] : [])].join(' · '),
     <div class={`panel merge m-${tone}`}>

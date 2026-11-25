@@ -731,6 +731,7 @@ dialog.base-dialog input { width: 100%; box-sizing: border-box; }
 .state-chip.merged { background: light-dark(#8250df, #8957e5); }
 .state-chip.closed { background: light-dark(#cf222e, #da3633); }
 .state-chip.draft { background: light-dark(#59636e, #6e7681); }
+.state-chip.approved { background: light-dark(#1a7f37, #238636); }
 .stack-k { padding: 0 6px; font-size: calc(12px * var(--ts)); background: none; color: inherit; }
 .panel.stack-panel { left: 0; right: auto; width: min(640px, calc(100vw - 32px)); gap: 2px; padding: 6px; white-space: normal; }
 .stack-row { display: grid; grid-template-columns: 1.4em minmax(0, 1fr) 1.2em auto auto; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; color: var(--fg); font-size: calc(13px * var(--ts)); }
