@@ -1102,12 +1102,8 @@ function SetupCheck() {
   return (
     <div class="whats-new-back" onMouseDown={(e) => e.target === e.currentTarget && done()}>
       <div class="whats-new" role="dialog" aria-label="Set up lgtm">
-        <div class="row">
-          <b>Welcome to lgtm</b>
-          <span class="spacer" />
-          <button onClick={check}>Check again</button>
-          <button class="primary" onClick={done}>Done</button>
-        </div>
+        <h3 class="whats-new-h">Welcome to lgtm</h3>
+        <div class="welcome-body">
         <p class="note">Uses these tools' sign-ins, stores no tokens. GitHub or GitLab is required; the rest is optional.</p>
         {row(hub, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', <pre>brew install gh && gh auth login</pre>)}
         {row(labs == null ? null : labs.length > 0, 'GitLab', labs?.length ? `MRs, reviews and comments, through the GitLab CLI (${labs.map((a) => a.host).join(', ')}).` : 'MRs, reviews and comments, through the GitLab CLI, on gitlab.com or your own GitLab.', <pre>brew install glab && glab auth login</pre>)}
@@ -1127,6 +1123,11 @@ function SetupCheck() {
             <button onClick={() => agentSkill(true, a).then((x) => setSkills((s) => ({ ...s, [a]: x })), () => {})}>{skills[a]!.installed ? 'Update its skill' : 'Install its skill'}</button>
           </div>
         ))}
+        </div>
+        <div class="acts">
+          <button onClick={check}>Check again</button>
+          <button class="primary" onClick={done}>Done</button>
+        </div>
       </div>
     </div>
   );

@@ -496,7 +496,7 @@ const Bar = ({ linked, menu }: { linked?: boolean; menu?: boolean }) => (
     </div>
     <div class="bar-group bar-actions">
       <div class="submit">
-        <button class="primary">Finish review</button>
+        <button class="primary"><Octicon name="code-review" /> Finish review (2)</button>
       </div>
     </div>
   </div>
@@ -685,15 +685,16 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
     body: (
       <div class="merge m-wait">
         <div class="merge-head">
-          <b>Waiting on requirements</b>
-          <span class="merge-why">1 approving review required · 2 checks running</span>
+          <b>Not ready to merge</b>
         </div>
+        <div class="merge-row merge-reason"><Octicon name="git-branch" /><span class="merge-reason-t">Behind the base branch</span><button class="link">Update branch</button></div>
+        <div class="merge-row merge-reason"><Octicon name="person" /><span class="merge-reason-t">Review required</span><button class="link">Ask reviewers</button></div>
+        <div class="merge-row merge-reason"><Octicon name="dot-fill" /><span class="merge-reason-t">2 checks running</span></div>
         <div class="merge-row">
-          <button>Update branch</button>
           <select>
             <option>Squash and merge</option>
           </select>
-          <button class="primary" disabled>Squash and merge</button>
+          <button disabled>Squash and merge</button>
           <button>Enable auto-merge</button>
         </div>
         <div class="merge-row merge-qa qa-signed">
@@ -779,7 +780,7 @@ SCENES.reviewmode = {
         </h1>
         <div class="bar-group bar-actions">
           <div class="submit">
-            <button class="primary" aria-expanded="true">Finish review <span class="caret" aria-hidden="true" /></button>
+            <button class="primary" aria-expanded="true"><Octicon name="code-review" /> Finish review (2) <span class="caret" aria-hidden="true" /></button>
             <div class="panel">
               <textarea rows={4}>{'Please address my comments:\n\n- Keep the attempts configurable (RetryPolicy.kt:18)\n- A declined card shouldn\'t be retried (PaymentService.kt:33)'}</textarea>
               <label><input type="radio" name="ev" /> Comment</label>
@@ -787,9 +788,11 @@ SCENES.reviewmode = {
               <label><input type="radio" name="ev" checked /> Request changes</label>
               <label><input type="checkbox" checked /> Message @rina on Slack</label>
               <div class="sends">
-                Sends a change request with your summary; messages @rina on Slack.
+                <span class="sends-list">RetryPolicy.kt:18 · PaymentService.kt:33</span>
               </div>
-              <button class="primary">Submit review</button>
+              <div class="acts">
+                <button class="primary">Submit review</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1240,14 +1243,14 @@ const MERGE = (tick: boolean) => (
   <div class="demo-panel merge-confirm">
     <input value="Retry failed payments with backoff (#412)" aria-label="Commit title" />
     <div class="merge-opt"><label><input type="checkbox" checked={tick} /> Move BUKU-4120 to</label> <select><option>Done</option></select></div>
-    <div class="merge-row"><button class="primary">Confirm squash and merge</button> <button>Cancel</button></div>
+    <div class="acts"><button>Cancel</button><button class="primary">Confirm squash and merge</button></div>
   </div>
 );
 const SUBMIT = (tick: boolean) => (
   <div class="demo-panel">
     <label><input type="radio" checked /> Approve</label>
     <label><input type="checkbox" checked={tick} /> Message @rina on Slack</label>
-    <button class="primary">Submit review</button>
+    <div class="acts"><button class="primary">Submit review</button></div>
   </div>
 );
 const GLASS = (on: boolean) => (
@@ -1255,7 +1258,7 @@ const GLASS = (on: boolean) => (
     <Rows rows={dedent(NESTED, 12)} />
     <div class="bar">
       <button><Octicon name="dependabot" /> Agents</button>
-      <button class="primary">Finish review</button>
+      <button class="primary"><Octicon name="code-review" /> Finish review (1)</button>
     </div>
   </div>
 );
