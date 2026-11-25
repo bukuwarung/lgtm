@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, rangeChange, interdiff, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
-import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef, afterApproval } from '../src/github.ts';
+import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef, afterApproval, stuck } from '../src/github.ts';
+import type { QueueItem } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, uniqueNames, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
@@ -1614,4 +1615,12 @@ test('signedUntil: when a GitHub attachment address (private-user-images…?jwt=
   assert.equal(signedUntil(`https://private-user-images.githubusercontent.com/1/2-7ab1aabd-45a5-47f9-87cc-2d0cfdff287a.mp4?jwt=${jwt({ iss: 'github.com', exp: 1795509919 })}`), 1795509919);
   assert.equal(signedUntil('https://example.com/a.mp4'), 0);
   assert.equal(signedUntil('https://x/a.mp4?jwt=not.a-jwt'), 0);
+});
+
+test("stuck: what's mine to fix before merging, not a draft nor waiting on reviewers", () => {
+  const i = { isDraft: false, reviewDecision: 'REVIEW_REQUIRED', ci: 'PENDING', mergeState: 'BLOCKED', queue: null } as unknown as QueueItem;
+  assert.deepEqual(stuck(i), []);
+  assert.deepEqual(stuck({ ...i, reviewDecision: 'CHANGES_REQUESTED', ci: 'FAILURE', mergeState: 'DIRTY' }), ['changes requested', 'checks failing', 'conflicts']);
+  assert.deepEqual(stuck({ ...i, mergeState: 'BEHIND' }), ['behind its base']);
+  assert.deepEqual(stuck({ ...i, isDraft: true, ci: 'FAILURE' }), []);
 });

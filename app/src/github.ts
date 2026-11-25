@@ -2254,6 +2254,17 @@ export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
 // My PR approved, its checks passed and GitHub willing to merge it, with nothing (auto-merge, the queue) merging it for me.
 export const readyToMerge = (i: QueueItem) =>
   i.authored && !i.isDraft && i.reviewDecision === 'APPROVED' && i.ci === 'SUCCESS' && ['CLEAN', 'HAS_HOOKS'].includes(i.mergeState) && !i.autoMerge && !i.queue;
+// What stands between my PR and merging that's mine to fix (not reviewers yet to look, nor a draft): its reasons, none if nothing.
+export const stuck = (i: QueueItem): string[] =>
+  i.isDraft
+    ? []
+    : [
+        i.reviewDecision === 'CHANGES_REQUESTED' && 'changes requested',
+        (i.ci === 'FAILURE' || i.ci === 'ERROR') && 'checks failing',
+        i.mergeState === 'DIRTY' && 'conflicts',
+        i.mergeState === 'BEHIND' && 'behind its base',
+        i.queue?.state === 'UNMERGEABLE' && 'refused by the merge queue',
+      ].filter((x): x is string => !!x);
 export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean; ready?: boolean }): string[] {
   const running = (ci: QueueItem['ci']) => ci === 'PENDING' || ci === 'EXPECTED';
   // Ready to merge says it all: no separate "Approved" or "Checks passed" with it.

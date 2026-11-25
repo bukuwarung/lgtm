@@ -4,7 +4,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type AgentRun, agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
+import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
 import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
@@ -291,6 +291,12 @@ function StaleBranches() {
 }
 
 // Where a PR of mine stands, in a few words (the menu bar's menu, the bell's).
+// "2 with checks failing, 1 with conflicts": what holds my PRs up, for the Your PRs count's hover.
+const stuckTip = (mine: QueueItem[]) => {
+  const by = new Map<string, number>();
+  for (const r of mine.flatMap(stuck)) by.set(r, (by.get(r) ?? 0) + 1);
+  return [...by].map(([r, k]) => `${k} with ${r}`).join(', ');
+};
 const standing = (i: QueueItem) =>
   i.isDraft ? 'draft' : readyToMerge(i) ? 'ready to merge' : i.ci === 'FAILURE' || i.ci === 'ERROR' ? 'CI failing' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'changes requested' : i.reviewDecision === 'APPROVED' ? 'approved' : 'waiting for review';
 
@@ -2205,10 +2211,10 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       {shown && !fresh && !err && <p class="list-updating"><span class="sk-dot" /> Updating…</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && i.reviewDecision === 'CHANGES_REQUESTED').length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && stuck(i).length).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-              {/* Your PRs counts the ones with changes requested (what's yours to do), none shown when there are none */}
-              {name} {t === 'mine' ? n > 0 && <span class="count changes" title={`${n} with changes requested`}>{n}</span> : n != null && !(hideEmptyGroups && !n) && <span class="count">{n}</span>}
+              {/* Your PRs counts the ones held up by something of yours to fix (stuck), none shown when there are none */}
+              {name} {t === 'mine' ? n > 0 && <span class="count changes" title={stuckTip(shown.filter((i) => i.mine))}>{n}</span> : n != null && !(hideEmptyGroups && !n) && <span class="count">{n}</span>}
             </button>
           ))}
         </div>
