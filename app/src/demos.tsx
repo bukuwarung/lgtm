@@ -1683,7 +1683,7 @@ const ARCHIVED_TOAST = (on: boolean) => (
     <p class="notice">{on ? <>#412 Retry failed payments: its Codex conversation is archived. <u>Undo</u></> : <>#412 Retry failed payments has a Codex conversation. <u>Send it your review</u></>}</p>
   </div>
 );
-DEMOS.archiveOnApprove = { title: 'After approving', off: ARCHIVED_TOAST(false), on: ARCHIVED_TOAST(true) };
+DEMOS.archiveOnApprove = { title: 'After approving or merging', off: ARCHIVED_TOAST(false), on: ARCHIVED_TOAST(true) };
 DEMOS.unfoldBotsOnMine = { title: `Bot comments on your own ${T.PR}`, off: DEMOS.foldBots.on, on: DEMOS.foldBots.off };
 DEMOS.hideIndexToReview = { title: `A ${T.PR} waiting for your review, opened`, off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
 

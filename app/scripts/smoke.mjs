@@ -406,6 +406,19 @@ try {
   // Escape closes what it opened, and gives focus back to what opened it: each opener on the page (a dropdown's summary,
   // a button with a menu or a panel) opened from the keyboard; what floats up from it (a menu, a panel, a dialog) has to
   // go with one Escape, the page stay where it was, and the opener hold focus again.
+  // Two buttons saying the same thing at once: in what just opened, or between it and the bar and banners around it
+  // (two "Enable auto-merge" in the merge box; "Ready for review" in a banner and a panel).
+  const twins = [];
+  const twinsIn = (where) => evaluate(`(() => {
+    const vis = (b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden' && !b.closest('.demo-side, [inert], [aria-hidden=true]');
+    const label = (b) => b.textContent.trim().replace(/\\s+/g, ' ');
+    const fl = [...document.querySelectorAll('body *')].filter((e) => window.__float(e) && !window.__was.has(e) && ![...window.__was].some((w) => w.contains(e)));
+    const inFloat = [...new Set(fl.flatMap((f) => [...f.querySelectorAll('button, a[href]')]))].filter(vis);
+    const around = [...document.querySelectorAll('.bar button, .bar a[href], .pr-state button')].filter(vis).filter((b) => !inFloat.includes(b) && !fl.some((f) => f.contains(b)));
+    const seen = new Map();
+    for (const b of [...inFloat, ...around]) if (/[a-z]{3}/i.test(label(b))) seen.set(label(b), [...(seen.get(label(b)) ?? []), inFloat.includes(b)]);
+    return [...seen].filter(([, l]) => l.length > 1 && l.includes(true)).map(([t]) => ${JSON.stringify(where)} + ': "' + t + '"');
+  })()`);
   const escapes = async (where) => {
     const n = await evaluate(`(() => {
       window.__float = (e) => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return (['absolute', 'fixed'].includes(s.position) || e.matches('dialog[open]')) && s.visibility !== 'hidden' && s.display !== 'none' && r.width > 40 && r.height > 20 && !e.closest('.demo-side'); };
@@ -439,6 +452,7 @@ try {
         if (await evaluate(`(() => { const o = document.querySelector('[data-esc="${k}"]'); return !!o && (o.closest('details')?.open && o.tagName === 'SUMMARY' || o.getAttribute('aria-expanded') === 'true'); })()`)) await page.keyboard.press('Enter');
         continue;
       }
+      twins.push(...(await twinsIn(`${where}, ${name}`)));
       await page.keyboard.press('Escape');
       await sleep(200);
       const r = await evaluate(`(() => {
@@ -613,6 +627,9 @@ try {
       found.push(...(await escapes(where)));
     }
     if (found.length) throw new Error(`${found.length} not closed by Escape as they should be: ${found.join('; ')}`);
+  });
+  await step('no two buttons say the same thing at once, in each menu and panel as it opens', async () => {
+    if (twins.length) throw new Error(`said twice: ${[...new Set(twins)].join('; ')}`);
   });
   // A big PR (15,000 lines in 300 files): open in 3s, j to the next file and each screenful of scrolling within 100ms
   // (a keypress or scroll to the frame drawn after it).

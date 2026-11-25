@@ -1233,7 +1233,7 @@ export function linkNewClaude(repo: string, n: number, prUrl: string) {
   };
   setTimeout(look, 3000);
 }
-export type SessionLink = { id: string; at: number; seen?: number; agent?: 'codex' };
+export type SessionLink = { id: string; at: number; seen?: number; agent?: 'codex'; archived?: boolean }; // archived: by lgtm (archiveLinked)
 export function linkedSession(repo: string, n: number): SessionLink | null {
   try {
     const v = JSON.parse(localStorage.getItem(own(`claudeFrom:${repo}#${n}`)) ?? 'null');
@@ -1264,6 +1264,26 @@ export async function archiveSession(id: string, undo = false): Promise<void> {
   if (isDesktop) return void (await command('archive_session', { id, undo }));
   const res = await fetch('/agent-archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, undo }) });
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Couldn't archive it");
+}
+
+// A PR's Codex conversation, done with once the PR is approved or merged: archived (Settings → Reviewing), once, with an
+// Undo in the toast. True when it was a Codex one to archive.
+export function archiveLinked(repo: string, n: number): boolean {
+  const l = linkedSession(repo, n);
+  if (l?.agent !== 'codex' || l.archived || localStorage.getItem(own('archiveOnApprove')) === '0') return false;
+  const k = `${repoLabel(repo)}#${n}`;
+  const mark = (archived: boolean) => {
+    try {
+      localStorage.setItem(own(`claudeFrom:${repo}#${n}`), JSON.stringify({ ...l, archived }));
+    } catch {}
+  };
+  const say = (text: string, action?: [string, () => void]) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, action } }));
+  mark(true);
+  void archiveSession(l.id).then(
+    () => say(`${k}: its Codex conversation is archived.`, ['Undo', () => void archiveSession(l.id, true).then(() => say('Unarchived.'), (e) => say(`Couldn't unarchive it: ${e.message}`))]),
+    (e) => (mark(false), say(`Couldn't archive ${k}'s Codex conversation: ${e.message}`)),
+  );
+  return true;
 }
 
 // A session's title and what it's doing (from the Claude app's record): null when there's no record (a Terminal

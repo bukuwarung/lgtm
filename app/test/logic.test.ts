@@ -1626,4 +1626,5 @@ test("stuck: what's mine to fix before merging, not a draft nor waiting on revie
   assert.deepEqual(stuck({ ...i, reviewDecision: 'CHANGES_REQUESTED', ci: 'FAILURE', mergeState: 'DIRTY' }), ['changes requested', 'checks failing', 'conflicts']);
   assert.deepEqual(stuck({ ...i, mergeState: 'BEHIND' }), ['behind its base']);
   assert.deepEqual(stuck({ ...i, isDraft: true, ci: 'FAILURE' }), []);
+  assert.deepEqual(stuck({ ...i, neverRan: ['ci / build'] }), ['required checks that never ran']);
 });

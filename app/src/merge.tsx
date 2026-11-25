@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
-import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview } from './platform.ts';
+import { type QaThread, reportError, archiveLinked, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview } from './platform.ts';
 import { isStalePush, afterApproval, CANT_MERGE_YET, getChecks, deleteBranch, disableAutoMerge, getMergeState, getPushPoints, prCommits, mergePR, neverRan, requiredChecks, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
@@ -290,6 +290,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
                 run('merge', async () => {
                   await mergePR(s, m, msg.title, msg.body, confirm === 'auto');
                   if (confirm === 'merge') void markDoneOnSlack(`${repo}#${n}`); // your PR: your posts
+                  if (confirm === 'merge') archiveLinked(repo, n);
                   if (deleting) await deleteBranch(repo, s).catch((e) => fail(`Merged, but ${e.message}`));
                   if (confirm === 'merge' && moveTickets)
                     for (const k of openTickets) await moveJira(k, to).catch((e) => fail(`Merged, but ${k} didn't move to ${to}: ${e.message}`));
@@ -378,6 +379,7 @@ export function MergedActions({ repo, n, tickets }: { repo: string; n: number; t
   const [err, setErr] = useState('');
   const load = () => getMergeState(repo, n).then(setS, (e) => setErr(e.message));
   useEffect(() => void load(), [repo, n]);
+  useEffect(() => void (s?.state === 'MERGED' && archiveLinked(repo, n)), [s?.state]); // merged (auto-merge, or elsewhere): its Codex conversation is done with
   useEffect(() => {
     const key = `jiraOnMerge:${repo}#${n}`;
     const p = s?.state === 'MERGED' && pendingMove(key);

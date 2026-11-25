@@ -108,6 +108,7 @@ export type QueueItem = {
   mentioned?: boolean; // someone @-mentions me in it (shown, when that's all, until I open it after its latest activity) // nobody asked (people or teams) and no person has reviewed: bots don't count
   lastCommitAt: string; // the head commit's time
   headSha?: string; // the head commit
+  neverRan?: string[]; // my PR's required checks a path or branch filter skipped: GitHub waits for them for ever (getNeverRan)
   estimate?: Estimate; // rough time to review (files.ts), filled in after the list loads (getEstimates)
 };
 export type ConversationItem = { id: string; node?: string; body?: string; author: string; avatar?: string; html: string; at: string; url: string; state?: ReviewState; bot: boolean; commit?: string }; // commit: the head a review was of
@@ -1855,6 +1856,23 @@ export function requiredChecks(repo: string, branch: string): Promise<string[]> 
 export const neverRan = (required: string[], checks: Pick<Check, 'name' | 'state'>[] | null) =>
   !checks || checks.some((c) => c.state === 'pending') ? [] : required.filter((r) => !checks.some((c) => c.name === r || c.name.endsWith(` / ${r}`)));
 
+// My blocked PRs whose checks passed, but whose required checks never ran (merge.tsx says so in the merge box): asked
+// only of those, once per head commit; the list puts them in To fix.
+const neverRanSeen = new Map<string, string[]>();
+export async function getNeverRan(items: QueueItem[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  await Promise.all(
+    items
+      .filter((i) => i.authored && !i.isDraft && i.mergeState === 'BLOCKED' && i.ci === 'SUCCESS' && !isLab(i.repo))
+      .map(async (i) => {
+        const k = `${i.id}@${i.headSha}`;
+        if (!neverRanSeen.has(k)) neverRanSeen.set(k, neverRan(await requiredChecks(i.repo, i.base), await getChecks(i.repo, i.number)));
+        if (neverRanSeen.get(k)!.length) out.set(i.id, neverRanSeen.get(k)!);
+      }),
+  );
+  return out;
+}
+
 // Other PRs naming the same Jira tickets (in the title, description or branch) across the owner's repos: the backend
 // PR for this app PR's ticket, say.
 export type TicketPR = { repo: string; number: number; title: string; state: 'OPEN' | 'CLOSED' | 'MERGED'; isDraft: boolean; author: string; keys: string[] };
@@ -2264,6 +2282,7 @@ export const stuck = (i: QueueItem): string[] =>
         i.mergeState === 'DIRTY' && 'conflicts',
         i.mergeState === 'BEHIND' && 'behind its base',
         i.queue?.state === 'UNMERGEABLE' && 'refused by the merge queue',
+        !!i.neverRan?.length && 'required checks that never ran',
       ].filter((x): x is string => !!x);
 export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean; ready?: boolean; conflicts?: boolean }): string[] {
   const running = (ci: QueueItem['ci']) => ci === 'PENDING' || ci === 'EXPECTED';

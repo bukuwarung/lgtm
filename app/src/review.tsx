@@ -33,7 +33,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, StatusMark, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, archiveSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, shortLogin, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
+import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, archiveLinked, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, shortLogin, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { agentRunOf, reviewNow } from './agentreview.ts';
@@ -1612,13 +1612,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       void storage.remove(`summary:${k}`);
       // A Claude Code session or Codex conversation sent this PR here: offer to send it the outcome.
       const from = linkedSession(repo, n);
-      // Approved: its Codex conversation is done with, archived (Settings → Reviewing), with an Undo.
-      if (from?.agent === 'codex' && event === 'APPROVE' && localStorage.getItem(own('archiveOnApprove')) !== '0') {
-        const say = (text: string, action?: [string, () => void]) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, action } }));
-        void archiveSession(from.id).then(
-          () => say(`${k}: its Codex conversation is archived.`, ['Undo', () => void archiveSession(from.id, true).then(() => say('Unarchived.'), (e) => say(`Couldn't unarchive it: ${e.message}`))]),
-          (e) => say(`Couldn't archive ${k}'s Codex conversation: ${e.message}`),
-        );
+      // Approved: its Codex conversation is done with, archived (Settings → Reviewing); else offered the review.
+      if (event === 'APPROVE' && archiveLinked(repo, n)) {
       } else if (from) {
         const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
         dispatchEvent(

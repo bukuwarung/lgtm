@@ -4,7 +4,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type AgentRun, agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
+import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, getNeverRan, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
 import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
@@ -1811,13 +1811,14 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       knowJiraKeys(items.map((i) => i.title));
       setItems(items);
       // Secondary: the list works without them.
-      const [st, est, ms, qa] = await Promise.all([
+      const [st, est, ms, nr, qa] = await Promise.all([
         getThreadStatus(items, readBots()).catch(() => null),
         getEstimates(items).catch(() => null),
         getMentionStatus(items).catch(() => null),
+        getNeverRan(items).catch(() => null),
         qaThreads(items.filter((i) => i.authored).map((i) => `${i.repo}#${i.number}`)).catch(() => null), // only PRs with a QA request are read
       ]);
-      const full = items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id), mentionWaiting: ms?.get(i.id), qa: qa?.[`${i.repo}#${i.number}`] }));
+      const full = items.map((i) => ({ ...i, thread: st?.get(i.id), estimate: est?.get(i.id), mentionWaiting: ms?.get(i.id), neverRan: nr?.get(i.id), qa: qa?.[`${i.repo}#${i.number}`] }));
       setItems(full);
       setSettled(true);
       setFresh(true);
@@ -2122,7 +2123,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         {kind === MINE && !i.isDraft && i.reviewDecision === 'CHANGES_REQUESTED' && i.changesBy.length > 0 && (
           <QuickPill icon="changes" tone="p-bad" idle="changes requested" action={`Ask ${i.changesBy.map((l) => '@' + l).join(', ')} again`} busy="asking…" done="asked again" title="Once you've made the changes: ask whoever requested them to review again" run={() => askAgain(i)} />
         )}
-        {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && i.mergeState === 'BLOCKED' && i.canAutoMerge && !i.autoMerge && !i.queue && (
+        {kind === MINE && !!i.neverRan?.length && <span class="pill p-bad" title={`Required, but never ran on this commit (a path or branch filter skipped them): ${i.neverRan.join(', ')}`}><Tg i="ci" t="checks never ran" /></span>}
+        {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && i.mergeState === 'BLOCKED' && i.canAutoMerge && !i.autoMerge && !i.queue && !i.neverRan?.length && (
           <QuickPill icon="auto" tone="" idle={i.ci === 'PENDING' || i.ci === 'EXPECTED' ? 'checks running' : 'blocked'} action="Enable auto-merge" busy="enabling…" done="auto-merge on" title="Approved, but can't merge yet: Enable auto-merge merges it once it can (the repo's usual method)" run={() => autoMerge(i)} />
         )}
         {kind === MINE && i.qa && <QaPill i={i} />}
