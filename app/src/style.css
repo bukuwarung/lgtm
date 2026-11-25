@@ -223,7 +223,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .pr-tabs { display: flex; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
 .pr-tabs button { flex: 1; min-width: 0; overflow-wrap: anywhere; /* large text in a narrow sidebar: a label wraps rather than push Browse out */ padding: 6px 4px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; font-weight: 600; font-size: calc(12px * var(--ts)); color: var(--muted); cursor: pointer; }
 .pr-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
-.g-m-changes { --g: var(--g-changes); } .g-m-approved { --g: var(--g-approved); } .g-m-waiting { --g: var(--g-needs); } .g-m-draft { --g: var(--g-commented); }
+.g-m-changes { --g: var(--g-changes); } .g-m-ready { --g: var(--g-approved); } .g-m-nobody { --g: var(--pill-warn, var(--g-commented)); } .g-m-approved { --g: var(--g-approved); } .g-m-waiting { --g: var(--g-needs); } .g-m-draft { --g: var(--g-commented); }
 .g-agents { --g: var(--pill-ok, var(--add)); } .g-needs { --g: var(--g-needs); } .g-mentioned { --g: var(--g-mentioned); } .g-changes { --g: var(--g-changes); } .g-commented { --g: var(--g-commented); } .g-approved { --g: var(--g-approved); }
 .gdot { background: var(--g); }
 .count { margin-left: 4px; padding: 0 6px; border-radius: 10px; background: var(--soft); border: 1px solid var(--border); font-weight: 400; }

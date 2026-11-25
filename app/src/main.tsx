@@ -1390,14 +1390,18 @@ const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 const MINE: Kind = {
   name: `Your ${T.PRs}`,
   groups: [
+    ['m-ready', 'Ready to merge'],
     ['m-changes', 'To fix'], // held up by something of mine to fix (stuck): each row's pills say what
-    ['m-approved', 'Approved'],
-    ['m-waiting', 'Waiting for review'],
+    ['m-waiting', 'Waiting'], // nothing for me to do: reviewers, checks, auto-merge or the merge queue at work (its pills say which)
+    ['m-nobody', 'Need reviewer'],
     ['m-draft', 'Draft'],
   ],
   groupOf: (i) =>
-    i.isDraft ? 'm-draft' : stuck(i).length ? 'm-changes' : i.reviewDecision === 'APPROVED' ? 'm-approved' : 'm-waiting',
+    i.isDraft ? 'm-draft' : stuck(i).length ? 'm-changes' : readyToMerge(i) ? 'm-ready' : i.noReviewers && i.reviewDecision !== 'APPROVED' ? 'm-nobody' : 'm-waiting',
 };
+// Others' PRs coloured by their review's verdict (the team's and a repo's lists).
+const byVerdict = (i: QueueItem) =>
+  i.isDraft ? 'm-draft' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'm-changes' : i.reviewDecision === 'APPROVED' ? 'm-approved' : 'm-waiting';
 // A team's open PRs, one group per member, coloured by where each PR stands (as in "Your PRs").
 // Each member's label also says how many reviews they're asked for, to help pick a reviewer who isn't swamped.
 // Ordered by whose PR has waited longest for review (ready, not yet approved), by who's least busy, or by name.
@@ -1414,7 +1418,7 @@ const teamKind = (members: string[], load: Record<string, number>, items: QueueI
     name: `${T.Team}`,
     groups: order.map((m) => [m, shownName(m)]),
     groupOf: (i) => i.author,
-    colorOf: MINE.groupOf,
+    colorOf: byVerdict,
     note: (m) =>
       [load[m] && `${load[m]} review${load[m] > 1 ? 's' : ''} requested`, waiting[m] && `a ${T.PR} waiting ${since(waiting[m])}`].filter(Boolean).join(' · '),
     people: true,
@@ -1428,7 +1432,7 @@ const repoByAuthor = (items: QueueItem[]): Kind => ({
   name: 'Repository',
   groups: Array.from(Map.groupBy(items, (i) => i.author)).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).map(([a]) => [a, shownName(a)]),
   groupOf: (i) => i.author,
-  colorOf: MINE.groupOf,
+  colorOf: byVerdict,
   people: true,
 });
 // A person in Browse: the PRs they opened, then the ones waiting on their review.
@@ -1436,7 +1440,7 @@ const personKind = (login: string): Kind => ({
   name: 'Person',
   groups: [['p-opened', 'Opened'], ['p-asked', 'Waiting on their review']],
   groupOf: (i) => (i.author === login ? 'p-opened' : 'p-asked'),
-  colorOf: MINE.groupOf,
+  colorOf: byVerdict,
 });
 const avatar = (login: string) => faceOf(login);
 type Tab = 'reviewing' | 'mine' | 'team';
