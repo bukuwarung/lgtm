@@ -264,7 +264,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ix-item.dim { opacity: .6; }
 .ix-commit { user-select: none; } /* shift-click picks a run of commits, not text */
 .ix-commit svg { color: var(--muted); }
-.ix-commit.read svg { color: var(--accent); }
+.ix-commit.read .ix-label { color: var(--muted); } /* opened here: muted, like read mail (a ✓ read as checks passed) */
 .ix-commit.new code { color: var(--accent); font-weight: 600; } /* pushed since my last review */
 .ix-label, .ix-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ix-meta, .ix-sub { color: var(--muted); font-weight: 400; }

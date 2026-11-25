@@ -1495,7 +1495,7 @@ function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon:
   return (
     <span class="pill-drop" ref={box}>
       <button class={step === 'done' ? 'pill p-ok' : failed ? 'pill p-bad' : `pill ${tone}`} title={failed ? step : (step === 'done' && said) || title} aria-expanded={open} onClick={(e) => (stop(e), (step === 'idle' || failed) && setOpen(!open))}>
-        {step === 'done' ? <Tg i="approved" t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : step === 'idle' ? idle : "couldn't"} />}
+        {step === 'done' ? <Tg i={icon} t={done} /> : <Tg i={icon} t={step === 'busy' ? busy : step === 'idle' ? idle : "couldn't"} />}
         {step !== 'done' && step !== 'busy' && <span class="caret" aria-hidden="true" />}
       </button>
       {open && <button class="quick-menu" onClick={go}>{failed ? `${action} again` : action}</button>}
@@ -2157,7 +2157,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         {kind === MINE && !i.isDraft && i.reviewDecision === 'CHANGES_REQUESTED' && i.changesBy.length > 0 && (
           <QuickPill icon="changes" tone="p-bad" idle="changes requested" action={`Ask ${i.changesBy.map((l) => '@' + l).join(', ')} again`} busy="asking…" done="asked again" title="Once you've made the changes: ask whoever requested them to review again" run={() => askAgain(i)} />
         )}
-        {kind === MINE && !!i.neverRan?.length && <span class="pill p-bad" title={`Required, but never ran on this commit (a path or branch filter skipped them): ${i.neverRan.join(', ')}`}><Tg i="ci" t="checks never ran" /></span>}
+        {kind === MINE && !!i.neverRan?.length && <span class="pill p-bad" title={`Required, but never ran on this commit (a path or branch filter skipped them): ${i.neverRan.join(', ')}`}><Tg i="skipped" t="checks never ran" /></span>}
         {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && i.mergeState === 'BLOCKED' && i.canAutoMerge && !i.autoMerge && !i.queue && !i.neverRan?.length && (
           <QuickPill icon="auto" tone="" idle={i.ci === 'PENDING' || i.ci === 'EXPECTED' ? 'checks running' : 'blocked'} action="Enable auto-merge" busy="enabling…" done="auto-merge on" title="Approved, but can't merge yet: Enable auto-merge merges it once it can (the repo's usual method)" run={() => autoMerge(i)} />
         )}

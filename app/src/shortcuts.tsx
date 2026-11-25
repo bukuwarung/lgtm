@@ -397,7 +397,7 @@ function SlackAsk({ login, ask }: { login: string; ask: (login: string) => Promi
       disabled={state === 'asking' || state === 'sent'}
       onClick={() => (setState('asking'), ask(login).then((ok) => setState(ok ? 'sent' : 'failed')))}
     >
-      <Icon name={state === 'sent' ? 'check' : 'comment'} />
+      <Icon name={state === 'sent' ? 'clock' : 'comment'} />
     </button>
   );
 }
@@ -448,7 +448,7 @@ function ReRequest({ login, again }: { login: string; again: (login: string) => 
       disabled={state === 'asking' || state === 'done'}
       onClick={() => (setState('asking'), again(login).then((ok) => setState(ok ? 'done' : 'failed')))}
     >
-      <Icon name={state === 'done' ? 'check' : 'sync'} />
+      <Icon name={state === 'done' ? 'clock' : 'sync'} />
     </button>
   );
 }
@@ -474,7 +474,7 @@ function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[
       aria-label="Run the failed jobs again"
       onClick={go}
     >
-      <Icon name={state === 'queued' ? 'check' : 'sync'} />
+      <Icon name={state === 'queued' ? 'dot-fill' : 'sync'} />
     </button>
   );
 }
@@ -559,7 +559,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
             disabled={played === 'asking' || played === 'started'}
             onClick={play}
           >
-            <Icon name={played === 'started' ? 'check' : 'play'} />
+            <Icon name={played === 'started' ? 'dot-fill' : 'play'} />
           </button>
         )}
         {c.state === 'failure' && c.jobId && (
@@ -571,7 +571,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
               disabled={rerun === 'asking' || rerun === 'queued'}
               onClick={again}
             >
-              <Icon name={rerun === 'queued' ? 'check' : 'sync'} />
+              <Icon name={rerun === 'queued' ? 'dot-fill' : 'sync'} />
             </button>
             <button class={open ? 'ix-icon-btn on' : 'ix-icon-btn'} title={open ? 'Hide the job log' : 'Show the end of the job log'} aria-label="Job log" aria-pressed={open} onClick={toggle}>
               <Icon name="list-unordered" />
@@ -782,7 +782,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
           {atCommit && <Entry label="All changes" onClick={() => onCommit?.(null)} />}
           {commits.map((c, i) => (
             <button class={`ix-item ix-commit${readCommits?.has(c.sha) ? ' read' : ''}${newFrom >= 0 && i >= newFrom ? ' new' : ''}`} aria-current={(i >= onShow[0] && i <= onShow[1]) || undefined} onClick={(e) => onCommit?.(c.sha, e.shiftKey)} title={`${c.sha}\n${c.label}${readCommits?.has(c.sha) ? '\nOpened' : ''}\nShift-click: from the commit on show to this one`}>
-              <span class="ix-label"><Octicon name={readCommits?.has(c.sha) ? 'check' : 'git-commit'} /> <code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
+              <span class="ix-label"><Octicon name="git-commit" /> <code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
             </button>
           ))}
         </Section>
