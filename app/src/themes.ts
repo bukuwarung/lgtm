@@ -203,7 +203,19 @@ export function pickVariant(t: AppTheme, mode: 'light' | 'dark', name: string): 
 export const BUILTIN_THEMES: Record<string, AppTheme> = Object.fromEntries(Object.entries(ZED_BUILTIN).map(([k, f]) => [k, fromZedFamily(f)]));
 
 // The CSS custom properties for a theme: each token as light-dark(light, dark).
-export function themeProps(t: AppTheme): Record<string, string> {
+// Text on the primary colour is white, as in most apps (Slack, Firefox, GitHub), in light and dark: the theme's colour
+// darkened until white reads on it (One's light green would otherwise take black text).
+function whiteOn(c: string | undefined): string | undefined {
+  if (!rgb(c)) return c;
+  for (let p = 1; p >= 0.3; p -= 0.05) {
+    const m = p === 1 ? c! : mixHex(c!, '#000000', p);
+    if (contrast('#ffffff', m) >= 4.5) return m;
+  }
+  return mixHex(c!, '#000000', 0.3);
+}
+export function themeProps(theme: AppTheme): Record<string, string> {
+  const fix = (m: Record<string, string>) => (m['--primary'] ? { ...m, '--primary': whiteOn(opaque(m['--primary']))!, '--on-primary': '#ffffff' } : m);
+  const t = { ...theme, light: fix(theme.light), dark: fix(theme.dark) };
   const keys = new Set([...Object.keys(t.light), ...Object.keys(t.dark)]);
   return Object.fromEntries([...keys].map((k) => [k, `light-dark(${t.light[k] ?? t.dark[k]}, ${t.dark[k] ?? t.light[k]})`]));
 }
