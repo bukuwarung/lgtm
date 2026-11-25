@@ -1990,7 +1990,7 @@ dependencies = [
 
 [[package]]
 name = "lgtm"
-version = "0.17.1"
+version = "0.16.0"
 dependencies = [
  "mac-notification-sys",
  "regex",
