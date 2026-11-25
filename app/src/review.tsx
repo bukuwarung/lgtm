@@ -2383,11 +2383,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             <Octicon name={centered ? 'screen-full' : 'screen-normal'} />
           </button>
           {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
-          {/* A draft (merged or closed: the banner under the bar says so). */}
-          {pr.draft && !pr.merged && pr.state !== 'closed' && (
-            <span class="state-chip draft" title="A draft: not ready for review yet">
-              <Octicon name="git-pull-request-draft" />
-              Draft
+          {/* Merged, closed or a draft: small, and in view as you scroll (the banner below has who, when, Revert). */}
+          {(pr.merged || pr.state === 'closed' || pr.draft) && (
+            <span class={`state-chip ${pr.merged ? 'merged' : pr.state === 'closed' ? 'closed' : 'draft'}`} title={pr.merged ? `Merged${pr.merged_by ? ` by @${pr.merged_by.login}` : ''} into ${pr.base.ref}${pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}` : pr.state === 'closed' ? `Closed without merging${pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}` : 'A draft: not ready for review yet'}>
+              <Octicon name={pr.merged ? 'git-merge' : pr.state === 'closed' ? 'git-pull-request-closed' : 'git-pull-request-draft'} />
+              {pr.merged ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Draft'}
             </span>
           )}
           <h1 onContextMenu={titleMenu}>
