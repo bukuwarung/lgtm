@@ -204,6 +204,7 @@ try {
     await sleep(300); // the button comes alive once the text is in
     await evaluate(`[...document.querySelectorAll('[id="f-src/Pay.kt"] button')].find((b) => b.textContent.trim() === 'Add to review').click()`);
     await until('the draft', `[...document.querySelectorAll('button')].some((b) => /^Finish review \\(1\\)/.test(b.textContent.trim()))`);
+    await until('Finish review green, with a comment unsent', `[...document.querySelectorAll('.review-submit > button')].some((b) => b.classList.contains('primary'))`);
   });
   await step('Finish review sends it', async () => {
     await evaluate(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith('Finish review')).click()`);
