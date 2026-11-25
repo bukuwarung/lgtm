@@ -407,7 +407,8 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
 type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore' | 'update' | 'ready' | 'base';
 // only: just these (the idle banner: close it or park it); skip: ones shown elsewhere (the ⋯ menu: not Reopen, in the tag's menu).
 function StateActs({ rights, draft, acting, act, only, skip }: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void; only?: StateAct[]; skip?: StateAct[] }) {
-  const b = (a: StateAct, label: string, busy: string, title: string): preact.JSX.Element | null => (only && !only.includes(a)) || skip?.includes(a) ? null : <button disabled={!!acting} title={title} onClick={() => act(a)}>{acting === a ? busy : label}</button>;
+  const ICON: Record<StateAct, string> = { ready: 'git-pull-request', update: 'sync', draft: 'git-pull-request-draft', base: 'git-branch', close: 'git-pull-request-closed', closeBranch: 'git-pull-request-closed', reopen: 'git-pull-request', restore: 'git-branch' };
+  const b = (a: StateAct, label: string, busy: string, title: string): preact.JSX.Element | null => (only && !only.includes(a)) || skip?.includes(a) ? null : <button disabled={!!acting} title={title} onClick={() => act(a)}><Octicon name={ICON[a]} /> {acting === a ? busy : label}</button>;
   const t = pageTerm().PR;
   return (
     <>
@@ -494,7 +495,7 @@ function StateMenu({ askQa, rights, ...p }: { rights: PrRights | null; draft: bo
       </button>
       {open && (
         <div class="account-menu" role="menu" ref={pop} onClick={(e) => (e.target as Element).closest('button') && setOpen(false)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
-          {askQa && <button title={`Post a QA request for this ${pageTerm().PR} on Slack (you see it first)${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').askQa)}`} onClick={() => dispatchEvent(new Event('lgtm:ask-qa'))}>Ask QA…</button>}
+          {askQa && <button title={`Post a QA request for this ${pageTerm().PR} on Slack (you see it first)${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').askQa)}`} onClick={() => dispatchEvent(new Event('lgtm:ask-qa'))}><Octicon name="beaker" /> Ask QA…</button>}
           {rights && <StateActs rights={rights} {...p} skip={['reopen', 'restore']} />}
         </div>
       )}
