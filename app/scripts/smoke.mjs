@@ -462,6 +462,28 @@ try {
     for (const b of [...inFloat, ...around]) if (/[a-z]{3}/i.test(label(b))) seen.set(label(b), [...(seen.get(label(b)) ?? []), inFloat.includes(b)]);
     return [...seen].filter(([, l]) => l.length > 1 && l.includes(true)).map(([t]) => ${JSON.stringify(where)} + ': "' + t + '"');
   })()`);
+  // Sizes and corners from lgtm's scale: text 11, 12, 13, 14px (16, 20, 28 for titles and big numbers), at the text
+  // size set; corners 4px (small things), 6px (controls), 10px (surfaces), a capsule or a circle. Not inside what lgtm
+  // renders for others (descriptions, comments, code) or Settings' miniatures.
+  const offScale = (where) => evaluate(`(() => {
+    const ts = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ts')) || 1;
+    const sizes = [11, 12, 13, 14, 16, 20, 28].map((x) => x * ts);
+    const corners = new Set(['0px', '4px', '6px', '10px', '999px', '50%']);
+    const out = new Set();
+    for (const e of document.querySelectorAll('body *')) {
+      if (!e.getClientRects().length || e.closest('.md, .rich, .diff, pre, code, kbd, svg, .demo-side, .demo-window, [class*=scene], .md-thumb, .thm, .tg-preview, .doc-render, .emoji, img')) continue;
+      const s = getComputedStyle(e);
+      if (s.visibility === 'hidden') continue;
+      const own = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      const fs = parseFloat(s.fontSize);
+      if (own && !sizes.some((x) => Math.abs(x - fs) < 0.6)) out.add('text ' + fs.toFixed(1) + 'px: ' + (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase()));
+      for (const c of [s.borderTopLeftRadius, s.borderTopRightRadius, s.borderBottomRightRadius, s.borderBottomLeftRadius]) {
+        const v = c.split(' ')[0];
+        if (!corners.has(v) && !(parseFloat(v) >= e.getBoundingClientRect().height / 2 - 0.5)) out.add('corner ' + v + ': ' + (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase()));
+      }
+    }
+    return [...out].map((x) => ${JSON.stringify(where)} + ', ' + x);
+  })()`);
   const escapes = async (where) => {
     const n = await evaluate(`(() => {
       window.__float = (e) => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return (['absolute', 'fixed'].includes(s.position) || e.matches('dialog[open]')) && s.visibility !== 'hidden' && s.display !== 'none' && r.width > 40 && r.height > 20 && !e.closest('.demo-side'); };
@@ -701,6 +723,10 @@ try {
     await evaluate(`localStorage.removeItem('glass')`);
     await reload();
     if (found.length) throw new Error(found.join('; '));
+  });
+  await step("sizes and corners from lgtm's scale: text 11–14px (16, 20, 28 for titles), corners 4, 6 or 10px", async () => {
+    const found = [...new Set(await tour('scale', [offScale]))];
+    if (found.length) throw new Error(`${found.length} off the scale: ${found.join('; ')}`);
   });
   await step("a form's buttons as macOS has them: Cancel, then the main one last, 8px apart", async () => {
     const found = rowFaults();

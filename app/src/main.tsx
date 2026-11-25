@@ -2260,9 +2260,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       {shown && (
         <div class="pr-tabs" role="tablist">
           {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && stuck(i).length).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
-            <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+            <button role="tab" aria-selected={tab === t} title={name} onClick={() => setTab(t)}>
               {/* Your PRs counts the ones held up by something of yours to fix (stuck), none shown when there are none */}
-              {name} {t === 'mine' ? n > 0 && <span class="count changes" title={stuckTip(shown.filter((i) => i.mine))}>{n}</span> : n != null && !(hideEmptyGroups && !n) && <span class="count">{n}</span>}
+              <span class="tab-name">{name}</span> {t === 'mine' ? n > 0 && <span class="count changes" title={stuckTip(shown.filter((i) => i.mine))}>{n}</span> : n != null && !(hideEmptyGroups && !n) && <span class="count">{n}</span>}
             </button>
           ))}
         </div>
