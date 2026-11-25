@@ -1684,6 +1684,17 @@ const ARCHIVED_TOAST = (on: boolean) => (
   </div>
 );
 DEMOS.archiveOnApprove = { title: 'After approving or merging', off: ARCHIVED_TOAST(false), on: ARCHIVED_TOAST(true) };
+const MARKS = (on: boolean) => (
+  <div class="demo-footer">
+    {['OrderNotifier.kt', 'RetryPolicy.kt'].map((n, i) => (
+      <footer class="file-f">
+        <span class="file-f-name">{n}</span>
+        {!on && <label class={i ? 'viewed-box' : 'viewed-box on'}><Octicon name={i ? 'eye' : 'check'} /></label>}
+      </footer>
+    ))}
+  </div>
+);
+DEMOS.viewedMarks = { title: 'Viewed marks', off: MARKS(false), on: MARKS(true) };
 DEMOS.unfoldBotsOnMine = { title: `Bot comments on your own ${T.PR}`, off: DEMOS.foldBots.on, on: DEMOS.foldBots.off };
 DEMOS.hideIndexToReview = { title: `A ${T.PR} waiting for your review, opened`, off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
 

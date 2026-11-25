@@ -538,6 +538,7 @@ function PillMenu({ cls = '', label, head, children, sum, tip }: { cls?: string;
 
 // A file's Viewed switch as an icon: an eye, a green check once viewed. Still a checkbox underneath (keyboard, screen
 // readers), only drawn as the icon.
+const NO_PATHS = new Set<string>();
 function ViewedToggle({ viewed, onToggle, title }: { viewed: boolean; onToggle: () => void; title: string }) {
   return (
     <label class={viewed ? 'viewed-box on' : 'viewed-box'} title={title}>
@@ -791,6 +792,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [requestSeenAt, setRequestSeenAt] = useState(() => qaSeen(`${repo}#${n}:review`));
   const [notice, setNotice] = useState<Notice | null>(flash ?? null);
   const [viewed, setViewedPaths] = useState<Set<string>>(new Set());
+  const [viewedIn, setViewedIn] = useState(''); // the PR whose marks have all come (repo#n): then the hidden files get theirs
+  const [viewedMarks] = useStoredValue('viewedMarks', 'show'); // Settings → Reviewing: shown, hidden on small PRs, hidden
+  const noMarksNow = useRef(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // viewed files opened anyway
   const [renderAll, setRenderAll] = useState(false);
   const [help, setHelp] = useState(false);
@@ -1060,7 +1064,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     getEmojis().then(() => setEmojiReady(true), () => {});
     loadChecks();
     getStatus(repo, n).then(setStatus, () => {});
-    getViewed(repo, n, setViewedPaths).catch(() => {}); // each page's marks as it comes (100 files a page)
+    getViewed(repo, n, setViewedPaths).then(() => setViewedIn(`${repo}#${n}`), () => {}); // each page's marks as it comes (100 files a page)
     (async () => {
       const [stored, visit] = await Promise.all([storage.get<Saved>(key), storage.get<Visit>(visitKey).catch(() => undefined)]);
       if (visit && first) resumeAt.current = visit.at;
@@ -1735,7 +1739,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         if (r.bottom > 0 && r.top < innerHeight) onScreen.has(path) || onScreen.set(path, now);
         else if (r.bottom <= 0 && now - (onScreen.get(path) ?? now) >= 3000) past.push(path);
       }
-      if (!past.length) return;
+      if (!past.length || noMarksNow.current) return;
       for (const p of past) once.add(p);
       markNow.current(past, true);
       setExpanded((x) => new Set([...x, ...past]));
@@ -2091,6 +2095,19 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     [importOnly.length && !showImportsOnly, `${importOnly.length} imports-only`, () => setShowImportsOnly(true)],
     [archived.length && !showArchived, `${archived.length} archived spec${archived.length > 1 ? 's' : ''}`, () => setShowArchived(true)],
   ].filter(([on]) => on).map(([, label, show]) => ({ label: label as string, show: show as () => void }));
+  // Viewed marks hidden (Settings → Reviewing: always, or on a small PR): nothing shows as viewed, collapses by it or
+  // gets marked; GitHub keeps what was.
+  const noMarks = viewedMarks === 'hide' || (viewedMarks === 'small' && visible.length < 10);
+  noMarksNow.current = noMarks;
+  const seen = noMarks ? NO_PATHS : viewed;
+  // Files lgtm keeps behind a row or collapsed (generated, no content change, whitespace- or imports-only, archived specs,
+  // deleted ones): marked viewed at once, once GitHub's marks have come.
+  const tucked = [...(genOpen ? [] : generated), ...(noDiffOpen ? [] : noDiff), ...(showWsOnly ? [] : wsOnly), ...(showImportsOnly ? [] : importOnly), ...(showArchived ? [] : archived), ...(collapseDeleted ? inOrder.filter((f) => f.status === 'removed') : [])]
+    .map((f) => f.filename)
+    .filter((p) => !viewed.has(p));
+  useEffect(() => {
+    if (tucked.length && !noMarks && !commitView && !practice && viewedIn === `${repo}#${n}`) markViewed(tucked, true);
+  }, [tucked.join('\n'), noMarks, commitView, viewedIn]);
   // How much of the PR's change lgtm keeps out of sight: the files behind a row, and in the files on show their
   // whitespace-only changes, folded imports and deleted files' contents.
   const replacedVerdicts = new Set([...earlierVerdicts(conv).values()].flat());
@@ -2126,8 +2143,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       ctx={ctx}
       threads={byPath.get(f.filename) ?? []}
       drafts={commitView ? [] : drafts.filter((d) => d.path === f.filename)}
-      viewed={viewed.has(f.filename)}
-      collapsed={viewed.has(f.filename) && !expanded.has(f.filename)}
+      viewed={seen.has(f.filename)}
+      collapsed={seen.has(f.filename) && !expanded.has(f.filename)}
       changed={changedSinceVisit.has(f.filename)}
       onToggleViewed={() => toggleViewed(f.filename)}
       onExpand={() => setExpanded((s) => new Set(s).add(f.filename))}
@@ -2234,7 +2251,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       },
       fixedAll: () => (allFixes.length > 1 ? dispatchEvent(new Event('lgtm:fixed-all')) : dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: allFixes.length ? 'One thread to answer: its own "Fixed in" button' : 'Nothing to mark fixed', ms: 3000 } }))),
       nextUnviewed: () => {
-        const left = (s: HTMLElement) => !viewed.has(s.id.slice(2));
+        const left = (s: HTMLElement) => !seen.has(s.id.slice(2));
         const to = sections.slice(cur + 1).find(left) ?? sections.find(left);
         if (to) to.scrollIntoView();
         else dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Every file is viewed', ms: 2500 } }));
@@ -2243,7 +2260,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       prevChange: () => jumpChange(-1),
       nextThread: () => ordered.length && go(Math.min(threadCursor.current + 1, ordered.length - 1)),
       prevThread: () => ordered.length && go(Math.max(threadCursor.current - 1, 0)),
-      viewed: () => path && toggleViewed(path),
+      viewed: () => path && !noMarks && toggleViewed(path),
       fileComment: () => path && ctx.setTarget({ path, side: 'RIGHT' }),
       comment: () => commentAtCurrentLine() || scrollBy({ top: innerHeight * 0.85 }), // nothing to comment on: scroll as Space would
       index: toggleIndex,
@@ -2336,10 +2353,10 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       }}
       seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
       canMerge={mayMerge} mergeBlock={mergeBlock} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
-      unviewed={data.files.filter((f) => !viewed.has(f.filename)).length} viewAll={() => markViewed(data.files.map((f) => f.filename), true)} />
+      unviewed={noMarks ? 0 : data.files.filter((f) => !viewed.has(f.filename)).length} viewAll={() => markViewed(data.files.map((f) => f.filename), true)} />
   );
   return (
-    <div class={`review${showIndex && !narrowIx ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}`}>
+    <div class={`review${showIndex && !narrowIx ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}${noMarks ? ' no-marks' : ''}`}>
       {/* Always there, so showing and hiding can slide (style.css); hidden, it's out of reach of the keyboard. */}
       {(
         <aside class={`side tree${showIndex ? '' : ' collapsed'}${narrowIx && showIndex ? ' over' : ''}`} aria-hidden={!showIndex} onClick={(e) => narrowIx && (e.target as Element).closest('.ix-item, .tree-file, .ix-hidden-row') && setIxOver(false)}>
@@ -2366,7 +2383,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               checks={checks}
               onRefreshChecks={loadChecks}
               files={noTests.size ? shown.map((f) => (noTests.has(f.filename) ? { ...f, untested: true } : f)) : shown}
-              viewed={viewed}
+              viewed={seen}
               onViewed={markViewed}
               slackAsk={!!me && pr.user.login === me && pr.state === 'open' && slackPeople !== null ? askOnSlack : undefined}
               slackWith={new Set(slackThreads.map((t) => t.login))}
@@ -2902,7 +2919,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           )}
           {/* One commit on its own: just it, its message and its files; the PR's description, conversation, ticket and
               review state wait for all changes. */}
-          {plan && !commitView && <ReviewPlan plan={plan} viewed={viewed} />}
+          {plan && !commitView && <ReviewPlan plan={plan} viewed={seen} />}
           {!commitView && jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           {!commitView && <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />}
           <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} onComment={(path, line, body) => ctx.suggest(path, line && ctx.suggestion({ path, side: 'RIGHT', line }) != null ? line : undefined, body)} />
@@ -3734,7 +3751,7 @@ function ReviewPlan({ plan, viewed }: { plan: PlanStep[]; viewed: Set<string> })
   return (
     <details class="plan" open={open} onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open !== open && toggleOpen()}>
       <summary>
-        <b>Review plan</b> · {total} files in {plan.length} steps · {done}/{total} viewed
+        <b>Review plan</b> · {total} files in {plan.length} steps<span class="plan-viewed"> · {done}/{total} viewed</span>
       </summary>
       <ol>
         {plan.map((s) => {

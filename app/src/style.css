@@ -258,7 +258,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 /* PR Shortcut Index */
 .index { padding: 4px 0 24px; }
-.ix-sec > summary { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg); font-weight: 600; font-size: calc(12px * var(--ts)); cursor: pointer; }
+.ix-sec > summary { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; padding: 6px 8px; background: var(--bg); font-weight: 600; font-size: calc(12px * var(--ts)); cursor: pointer; }
 .ix-item { display: grid; gap: 1px; width: 100%; padding: 3px 8px 3px 14px; border: 0; border-radius: 0; background: none; text-align: left; font-size: calc(12px * var(--ts)); color: var(--fg); text-decoration: none; }
 .ix-item:hover { background: var(--soft); text-decoration: none; }
 .ix-item.dim { opacity: .6; }
@@ -1772,3 +1772,5 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .discard-review:hover { color: var(--delfg); }
 .count.changes { color: var(--delfg); border-color: color-mix(in srgb, var(--delfg) 45%, transparent); background: color-mix(in srgb, var(--delfg) 10%, transparent); }
 .merge-missing { display: block; margin-top: 2px; font-weight: 400; }
+/* Viewed marks hidden (Settings → Reviewing). */
+.review.no-marks :is(.viewed-box, .vmark, .plan-bar, .plan-n, .plan-viewed) { display: none; }

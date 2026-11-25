@@ -39,6 +39,8 @@ const files = [
   { filename: 'web/docs/retry.md', status: 'added', additions: 1, deletions: 0, changes: 1, sha: 'f2', blob_url: 'https://github.com/acme/shop/blob/x/web/docs/retry.md', patch: '@@ -0,0 +1 @@\n+Retries a failed charge three times.' },
   // A library moved a major version, its name long: the dependencies pill's menu keeps it inside (… and in full on hover).
   { filename: 'gradle/libs.versions.toml', status: 'modified', additions: 1, deletions: 1, changes: 2, sha: 'f3', blob_url: 'https://github.com/acme/shop/blob/x/gradle/libs.versions.toml', patch: '@@ -4,1 +4,1 @@\n-firebase-crashlytics-buildtools = { module = "com.google.firebase.crashlytics:firebase-crashlytics-buildtools-gradle-plugin-extended", version = "2.9.9" }\n+firebase-crashlytics-buildtools = { module = "com.google.firebase.crashlytics:firebase-crashlytics-buildtools-gradle-plugin-extended", version = "3.0.2" }' },
+  // A deleted file: collapsed (Settings → Diff), so marked viewed at once.
+  { filename: 'src/OldPay.kt', status: 'removed', additions: 0, deletions: 2, changes: 2, sha: 'f4', blob_url: 'https://github.com/acme/shop/blob/x/src/OldPay.kt', patch: '@@ -1,2 +0,0 @@\n-class OldPay\n-// gone' },
 ];
 const empty = { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] };
 // acme/shop#9, big: 300 Kotlin files of 50 new lines each (15,000 lines), for the speed check.
@@ -64,7 +66,7 @@ const sent = []; // the mutations, by name
 let pendingCount = -1; // my pending review's comments (-1: none): a line comment goes into it as it's written
 function graphql(body) {
   const { query = '', variables = {} } = JSON.parse(body || '{}');
-  const m = query.match(/mutation[^{]*\{\s*(\w+)/);
+  const m = query.match(/mutation[^{]*\{\s*(?:\w+:)?(\w+)/); // m0:markFileAsViewed(…): the mutation's name, not its alias
   if (m) {
     sent.push(m[1]);
     if (m[1] === 'addPullRequestReview') pendingCount = 0;
@@ -186,6 +188,20 @@ try {
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
     const first = await evaluate(`document.querySelector('[id^="f-"]')?.id`);
     if (first !== 'f-web/docs/retry.md') throw new Error(`files not in reading order: ${first} first`);
+  });
+  await step('a file lgtm collapses (deleted) is marked viewed at once', async () => {
+    for (let i = 0; i < 25 && !sent.includes('markFileAsViewed'); i++) await sleep(200);
+    if (!sent.includes('markFileAsViewed')) throw new Error(`not marked (sent: ${sent.join(', ') || 'nothing'})`);
+  });
+  await step('viewed marks hidden on a small PR (Settings → Reviewing): no eye, no index ticks', async () => {
+    await evaluate(`localStorage.setItem('viewedMarks', 'small')`);
+    await reload();
+    await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
+    const marks = await evaluate(`document.querySelector('.review')?.classList.contains('no-marks') && [...document.querySelectorAll('.viewed-box, .vmark')].filter((e) => e.getClientRects().length).length`);
+    if (marks !== 0) throw new Error(`marks on show: ${marks}`);
+    await evaluate(`localStorage.removeItem('viewedMarks')`);
+    await reload();
+    await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
   });
   await step('waiting for my review, it opens without the index (the switch on); i shows it', async () => {
     await until('no index', `document.querySelector('.review:not(.skel)')?.classList.contains('no-index')`, 3000);
