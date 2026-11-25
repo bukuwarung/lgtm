@@ -208,6 +208,9 @@ try {
   await step('Finish review sends it', async () => {
     await evaluate(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith('Finish review')).click()`);
     await until('the submit panel', `[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Submit review')`);
+    await until('Discard review beside it, for the unsent review on GitHub', `!!document.querySelector('.review-submit .discard-review')`);
+    const strip = await evaluate(`[...document.querySelectorAll('p.warn')].map((p) => p.innerText).find((t) => /unsent review/i.test(t)) ?? ''`);
+    if (strip) throw new Error(`a strip about the unsent review: ${strip}`);
     await evaluate(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Submit review').click()`);
     for (let i = 0; i < 50 && !sent.includes('submitPullRequestReview'); i++) await sleep(200);
     for (const m of ['addPullRequestReview', 'addPullRequestReviewThread', 'submitPullRequestReview']) if (!sent.includes(m)) throw new Error(`${m} wasn't sent (sent: ${sent.join(', ') || 'nothing'})`);

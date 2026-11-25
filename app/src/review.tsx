@@ -708,6 +708,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [pending, setPending] = useState<PendingReview | null>(null); // my review in progress on GitHub
   const pendingNow = pending; // as this render has it (submit's own copy may be fresher)
   const [discarding, setDiscarding] = useState(false);
+  // My unsent review on the site, thrown away (Finish review's panel offers it).
+  const discardPending = async () => {
+    if (!pending || !(await ask(`Discard your unsent review on ${site(repo)}${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`, 'Discard', true))) return;
+    setDiscarding(true);
+    await discardReview(pending.id).catch((e) => setError(e.message));
+    setPending(null);
+    setThreads(await getThreads(repo, n));
+    setDiscarding(false);
+  };
   const [conversation, setConversation] = useState<ConversationItem[]>([]);
   const [saved, setSaved] = useState<Saved>({ sha: '', drafts: [] });
   const [target, setTarget] = useState<Target | null>(null);
@@ -2292,7 +2301,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   );
   // Finish review: in the bar, and inline at the page's end (the same summary in both).
   const submitPanel = (inline = false) => (
-    <SubmitPanel inline={inline} count={drafts.length + (pending?.count ?? 0)} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit}
+    <SubmitPanel inline={inline} count={drafts.length + (pending?.count ?? 0)} discard={pending && !discarding ? discardPending : undefined} myOpenThreads={myOpenThreads} mySummary={mySummary} lineComments={drafts.map((d) => ({ path: d.path, line: d.line }))} slackTo={slackTo} slackNote={slackNote} threaded={slackThreads.map((t) => t.login)} onSubmit={submit}
       checkLanded={async () => {
         const head = await getHead(repo, n);
         if (!head || head === pr.head.sha) return null;
@@ -2869,25 +2878,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {/* One commit on its own: just it, its message and its files; the PR's description, conversation, ticket and
               review state wait for all changes. */}
           {plan && !commitView && <ReviewPlan plan={plan} viewed={viewed} />}
-          {!!pending?.count && !commitView && (
-            <p class="warn">
-              Unsent review on {site(repo)}, {pending.count} comment{pending.count === 1 ? '' : 's'}.{' '}
-              <button
-                class="link"
-                disabled={discarding}
-                onClick={async () => {
-                  if (!(await ask(`Discard your unsent review on ${site(repo)}, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}?`, 'Discard', true))) return;
-                  setDiscarding(true);
-                  await discardReview(pending.id).catch((e) => setError(e.message));
-                  setPending(null);
-                  setThreads(await getThreads(repo, n));
-                  setDiscarding(false);
-                }}
-              >
-                {discarding ? 'Discarding…' : 'Discard'}
-              </button>
-            </p>
-          )}
           {!commitView && jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           {!commitView && <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />}
           <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} onComment={(path, line, body) => ctx.suggest(path, line && ctx.suggestion({ path, side: 'RIGHT', line }) != null ? line : undefined, body)} />
@@ -2956,6 +2946,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 
 type SubmitProps = {
   unviewed?: number; // the PR's files I haven't marked viewed
+  discard?: () => void; // throws away my unsent review on the site
   viewAll?: () => void; // marks them viewed
   inline?: boolean; // at the page's end, always there (else the bar's button and its panel)
   unlooked?: number; // the agent's drafts in my pending review I haven't looked at (kept or edited)
@@ -3001,7 +2992,7 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 const slackWhy = (r: { login: string; error?: string }) =>
   /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
 
-function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, inFlight = false, checkLanded, seeLanded }: SubmitProps) {
+function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, inFlight = false, checkLanded, seeLanded }: SubmitProps) {
   const [open, setOpen] = useState(false);
   useDismiss(open && !inline, () => setOpen(false), '.review-submit');
   const root = useRef<HTMLDivElement>(null);
@@ -3207,6 +3198,7 @@ function SubmitPanel({ unviewed = 0, viewAll, inline = false, count, myOpenThrea
           <button class="primary" disabled={!!busy || (inline && inFlight)} onClick={go}>
             {busy ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : authored ? 'Comment' : 'Submit review'}
           </button>
+          {discard && <button class="link discard-review" disabled={!!busy} onClick={() => (setOpen(false), discard())} title="Throw away your unsent review and its comments">Discard review</button>}
           {err && <p class="error">{err}{isStalePush(err) && <> <StaleActions /></>}</p>}
         </div>
       )}

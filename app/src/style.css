@@ -1768,3 +1768,5 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 /* With empty groups hidden: the line that stands in for an empty "Needs your review" */
 .g-clear { display: flex; align-items: center; gap: 6px; margin: 6px 12px; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .g-clear svg { color: var(--addfg); }
+.discard-review { margin-left: 14px; color: var(--muted); }
+.discard-review:hover { color: var(--delfg); }
