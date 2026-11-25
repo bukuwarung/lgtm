@@ -50,6 +50,7 @@
     "allow-agent-skill",
     "allow-agent-mod",
     "allow-agent-outbox",
+    "allow-archive-session",
     "allow-claude-session",
     "core:window:allow-set-badge-count",
     "core:window:allow-start-dragging",

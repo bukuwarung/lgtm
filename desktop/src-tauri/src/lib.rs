@@ -174,6 +174,7 @@ pub fn run() {
             commands::agent_skill,
             commands::agent_mod,
             commands::agent_outbox,
+            commands::archive_session,
             commands::claude_session,
             commands::notify,
         ])

@@ -1678,6 +1678,12 @@ const NEXT_PANEL = (next: boolean) => (
 );
 DEMOS.nextAfterReview = { title: `After a review, the next ${T.PR}`, off: NEXT_PANEL(false), on: NEXT_PANEL(true) };
 DEMOS.viewAllOnSubmit = { title: "After a review, the files you didn't view", off: SCROLLED(false), on: SCROLLED(true) };
+const ARCHIVED_TOAST = (on: boolean) => (
+  <div class="demo-panel">
+    <p class="notice">{on ? <>#412 Retry failed payments: its Codex conversation is archived. <u>Undo</u></> : <>#412 Retry failed payments has a Codex conversation. <u>Send it your review</u></>}</p>
+  </div>
+);
+DEMOS.archiveOnApprove = { title: 'After approving', off: ARCHIVED_TOAST(false), on: ARCHIVED_TOAST(true) };
 DEMOS.unfoldBotsOnMine = { title: `Bot comments on your own ${T.PR}`, off: DEMOS.foldBots.on, on: DEMOS.foldBots.off };
 DEMOS.hideIndexToReview = { title: `A ${T.PR} waiting for your review, opened`, off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
 

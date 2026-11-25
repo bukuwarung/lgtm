@@ -1113,7 +1113,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/agent-session', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/agent-archive', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/agent-session', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
     // A line of JSON per piece of the answer ({d}), then the whole of it ({text}) or why not ({error}).
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
@@ -1151,6 +1151,14 @@ const server = createServer(async (req, res) => {
       return json(res, 500, { error: e.message });
     }
   }
+  // A Codex conversation archived (codex archive) once its PR is approved, or back (undo).
+  if (path === '/agent-archive' && req.method === 'POST')
+    return readJson(req)
+      .then((b) => {
+        if (!SESSION_ID.test(b?.id ?? '')) throw new Error('Bad conversation id');
+        return new Promise((ok, no) => execFile('codex', [b.undo ? 'unarchive' : 'archive', b.id], { timeout: 30000 }, (e, _o, err) => (e ? no(new Error(e.code === 'ENOENT' ? "Codex isn't installed" : err.trim().split('\n').at(-1)?.replace(/^Error:\s*/, '') || "Codex couldn't")) : ok({}))));
+      })
+      .then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/agent-outbox' && req.method === 'POST') return readJson(req).then(leaveForSession).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/claude-session') return claudeSession(new URL(req.url ?? '/', ORIGIN).searchParams.get('id')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/agent-mod') return agentMod(new URL(req.url ?? '/', ORIGIN).searchParams.get('agent')).then((s) => json(res, 200, s), (e) => json(res, 500, { error: e.message }));

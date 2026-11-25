@@ -1722,6 +1722,17 @@ pub async fn agent_outbox(id: String, text: String) -> Result<Value, String> {
     Ok(json!({ "path": file.to_string_lossy() }))
 }
 
+/// A Codex conversation archived (`codex archive`) once its PR is approved, or back (`unarchive`): as the server's
+/// archiveSession(). Claude app sessions can't be: the app keeps them in memory and ignores its record changing.
+#[tauri::command]
+pub async fn archive_session(id: String, undo: bool) -> Result<Value, String> {
+    if !session_id_ok(&id) {
+        return Err("Bad conversation id".into());
+    }
+    let r = crate::cli::run("codex", &[if undo { "unarchive" } else { "archive" }, &id], None, std::time::Duration::from_secs(30));
+    if r.ok { Ok(json!({})) } else if r.missing { Err("Codex isn't installed".into()) } else { Err(r.stderr.trim().lines().last().unwrap_or("Codex couldn't").trim_start_matches("Error: ").to_string()) }
+}
+
 /// A session's title and state from the Claude app's record; as the server's claudeSession().
 #[tauri::command]
 pub async fn claude_session(id: String) -> Result<Value, String> {

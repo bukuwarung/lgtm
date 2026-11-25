@@ -1258,6 +1258,14 @@ export async function leaveForSession(id: string, text: string): Promise<void> {
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Could not leave the message');
 }
 
+// A Codex conversation archived once its PR is approved (Settings → Reviewing), or back (undo). Claude app sessions
+// can't be: the app keeps them in memory and ignores its record changing (tried 2026-11-25).
+export async function archiveSession(id: string, undo = false): Promise<void> {
+  if (isDesktop) return void (await command('archive_session', { id, undo }));
+  const res = await fetch('/agent-archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, undo }) });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Couldn't archive it");
+}
+
 // A session's title and what it's doing (from the Claude app's record): null when there's no record (a Terminal
 // session) or it's archived.
 export type SessionState = { id: string; title: string; state: 'working' | 'waiting' | 'idle' } | null;
