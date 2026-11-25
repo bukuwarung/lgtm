@@ -2265,7 +2265,7 @@ export const stuck = (i: QueueItem): string[] =>
         i.mergeState === 'BEHIND' && 'behind its base',
         i.queue?.state === 'UNMERGEABLE' && 'refused by the merge queue',
       ].filter((x): x is string => !!x);
-export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean; ready?: boolean }): string[] {
+export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean; verdicts: boolean; ci: boolean; queue: boolean; ready?: boolean; conflicts?: boolean }): string[] {
   const running = (ci: QueueItem['ci']) => ci === 'PENDING' || ci === 'EXPECTED';
   // Ready to merge says it all: no separate "Approved" or "Checks passed" with it.
   if (on.ready && readyToMerge(now) && !readyToMerge(was)) return ['Ready to merge', ...queueNews(was, now, { ...on, ready: false, verdicts: false, ci: false })];
@@ -2273,6 +2273,9 @@ export function queueNews(was: QueueItem, now: QueueItem, on: { replies: boolean
     on.replies && was.thread && now.thread && now.thread.awaiting > was.thread.awaiting && 'New reply for you',
     on.verdicts && now.authored && now.reviewDecision !== was.reviewDecision && ({ APPROVED: 'Approved', CHANGES_REQUESTED: 'Changes requested' } as Record<string, string>)[now.reviewDecision ?? ''],
     on.ci && now.authored && running(was.ci) && now.ci && !running(now.ci) && (now.ci === 'SUCCESS' ? 'Checks passed' : 'Checks failed'),
+    // Its base moved and it no longer merges. ponytail: from UNKNOWN too (GitHub's "still working it out"), so a PR
+    // that was conflicting before that may say it again; remembering the last known state per PR if that nags.
+    on.conflicts && now.authored && !now.isDraft && now.mergeState === 'DIRTY' && was.mergeState !== 'DIRTY' && 'Has conflicts',
     // Auto-merge that hands over to the merge queue isn't news; dropping out of either is (a merged PR leaves the list).
     on.queue && now.authored && !now.queue && (was.queue ? 'Left the merge queue' : was.autoMerge && !now.autoMerge && 'Auto-merge turned off'),
   ].filter((x): x is string => !!x);

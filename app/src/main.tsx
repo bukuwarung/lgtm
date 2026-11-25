@@ -298,7 +298,7 @@ const stuckTip = (mine: QueueItem[]) => {
   return [...by].map(([r, k]) => `${k} with ${r}`).join(', ');
 };
 const standing = (i: QueueItem) =>
-  i.isDraft ? 'draft' : readyToMerge(i) ? 'ready to merge' : i.ci === 'FAILURE' || i.ci === 'ERROR' ? 'CI failing' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'changes requested' : i.reviewDecision === 'APPROVED' ? 'approved' : 'waiting for review';
+  i.isDraft ? 'draft' : readyToMerge(i) ? 'ready to merge' : stuck(i).join(', ') || (i.reviewDecision === 'APPROVED' ? 'approved' : 'waiting for review'); // To fix's reasons, as the list
 
 // The bell: what lgtm would have notified me about and I haven't acted on yet (opened its PR, or dismissed), newest
 // first, its count on the bell; and the switch for desktop notifications.
@@ -1872,6 +1872,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   const [notifyCI] = useStoredFlag('notifyCI', true);
   const [notifyMentions] = useStoredFlag('notifyMentions', true);
   const [notifyQueue] = useStoredFlag('notifyQueue', true);
+  const [notifyConflicts] = useStoredFlag('notifyConflicts', true);
   const [notifyReady] = useStoredFlag('notifyReady', true);
   const seen = useRef<Set<string> | null>(null);
   const before = useRef<Map<string, QueueItem>>(new Map()); // the list at the last refresh, to notice what changed
@@ -1929,8 +1930,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       };
       // The mute or what counts as a bot just switched: replies hidden or shown again by it aren't new.
       const flipped = rulesWas.current !== rules;
-      const all = { replies: !flipped, verdicts: true, ci: true, queue: true, ready: true };
-      const mine = { replies: notifyReplies && !flipped, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, ready: notifyReady };
+      const all = { replies: !flipped, verdicts: true, ci: true, queue: true, ready: true, conflicts: true };
+      const mine = { replies: notifyReplies && !flipped, verdicts: notifyVerdicts, ci: notifyCI, queue: notifyQueue, ready: notifyReady, conflicts: notifyConflicts };
       // A draft I own (CODEOWNERS) isn't a request yet: GitHub asks once it's ready, and that's when it's news.
       for (const i of waiting.filter((i) => !i.codeOwner && !i.slackAsk && !seen.current!.has(i.id))) tell(i.requested ? 'Review requested' : 'Your comments were resolved', i, true);
       for (const i of items) {

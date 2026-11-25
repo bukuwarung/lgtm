@@ -518,6 +518,9 @@ test('queueNews: what changed between list refreshes', () => {
   assert.deepEqual(queueNews({ ...base, mergeState: 'BLOCKED' }, ready, { ...on, ready: true }), ['Ready to merge']);
   assert.deepEqual(queueNews({ ...base, mergeState: 'BLOCKED' }, { ...ready, autoMerge: true }, { ...on, ready: true }), ['Approved', 'Checks passed']); // auto-merge merges it
   assert.deepEqual(queueNews(ready, ready, { ...on, ready: true }), []);
+  assert.deepEqual(queueNews({ ...base, mergeState: 'BLOCKED' }, { ...base, mergeState: 'DIRTY' }, { ...on, conflicts: true }), ['Has conflicts']);
+  assert.deepEqual(queueNews({ ...base, mergeState: 'DIRTY' }, { ...base, mergeState: 'DIRTY' }, { ...on, conflicts: true }), []);
+  assert.deepEqual(queueNews({ ...base, mergeState: 'BLOCKED' }, { ...base, mergeState: 'DIRTY' }, on), []); // switched off
 });
 
 test('withAnswered: a review just sent leaves "needs your review" until the search catches up', () => {

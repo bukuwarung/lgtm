@@ -487,6 +487,7 @@ export function Settings() {
           <Flag k="notifyVerdicts" initial={true} label={`Your ${T.PR} approved, or changes requested`} />
           <Flag k="notifyCI" initial={true} label={`Your ${T.PRs_} checks passed or failed`} />
           <Flag k="notifyReady" initial={true} label={`Your ${T.PR} is ready to merge`} hint="Approved, checks green, no auto-merge. Opens the merge box." />
+          <Flag k="notifyConflicts" initial={true} label={`Your ${T.PR} has conflicts`} />
           <Flag k="notifyMentions" initial={true} label={`Someone mentions you in a ${T.PR}`} />
           <Flag k="notifyQueue" initial={true} label={`Your ${T.PR} left the merge queue, or its auto-merge turned off`} />
           <Flag k="notifyAgents" initial={true} label="A coding agent finished" hint="While lgtm is in the background." />
