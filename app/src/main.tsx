@@ -955,7 +955,7 @@ function App() {
               });
             }}
           >
-            ⬆ {update}
+            <Octicon name="arrow-up" /> {update}
           </a>
         )}
         <button
@@ -964,7 +964,7 @@ function App() {
           aria-label="Keyboard shortcuts"
           onClick={shortcuts}
         >
-          ?
+          <Octicon name="question" />
         </button>
         <ThemeToggle />
         <AccountMenu />
@@ -1316,7 +1316,7 @@ function ThemeToggle() {
   const next = THEMES[(i + 1) % THEMES.length];
   return (
     <button class="theme-btn" title={`Theme: ${THEMES[i][1]} (click for ${next[1]})`} aria-label={`Theme: ${THEMES[i][1]}`} onClick={() => setTheme(next[0])}>
-      {THEMES[i][2]}
+      <Octicon name={THEMES[i][2]} />
     </button>
   );
 }

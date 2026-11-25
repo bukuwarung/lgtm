@@ -83,8 +83,9 @@ export function fromZed(s: any): Tokens {
   // Its colours that colour text, made readable where the theme's own are too faint for it (Ayu's green on white): on the
   // page and on raised surfaces; a pill's, also on its own tint (style.css: 13% of it). Text on the primary colour: the
   // theme's background or text, or white or black when neither reads (Ayu's light green), whichever reads best.
-  const fg = opaque(t['--fg']), soft = opaque(t['--soft']);
-  for (const k of ['--muted', '--accent', '--addfg', '--delfg', '--modfg', '--warnfg', '--test', '--g-commented']) t[k] = readable(opaque(t[k]), fg, () => [bg, soft]);
+  // A button is the panel with up to 9% of the text colour over it (style.css --btn-bg), so text reads on that too.
+  const fg = opaque(t['--fg']), soft = opaque(t['--soft']), btn = rgb(fg) && rgb(soft) ? mixHex(fg!, soft!, 0.09) : undefined;
+  for (const k of ['--muted', '--accent', '--addfg', '--delfg', '--modfg', '--warnfg', '--test', '--g-commented']) t[k] = readable(opaque(t[k]), fg, () => [bg, soft, btn]);
   for (const k of ['--pill-ok', '--pill-bad', '--pill-warn', '--pill-info']) t[k] = readable(opaque(t[k]), fg, (c) => [bg, soft, rgb(bg) ? mixHex(c, bg!, 0.13) : undefined]);
   const p = opaque(t['--primary']);
   if (contrast(t['--on-primary'], p) < 4.5) t['--on-primary'] = [fg, '#ffffff', '#000000'].reduce((best, c) => (contrast(c, p) >= 4.5 && contrast(best, p) < 4.5 ? c : best), t['--on-primary']);

@@ -384,7 +384,8 @@ export const DEMOS: Record<string, Demo> = {
   },
 };
 
-// Without → with, side by side. `active`: which side the current setting gives (outlined).
+// Without → with, side by side. `active`: which side the current setting gives (outlined). `pick`: clicking a side
+// chooses it (not while the setting is greyed out under one that's off).
 // In the order the steps are dragged into (Settings): the view model's test stays right below it; the flow test, whose
 // code isn't in the PR, goes with the Tests step.
 function ReadingOrderOn() {
@@ -392,16 +393,26 @@ function ReadingOrderOn() {
   return <>{reviewPlan(READING, stepOrder(saved)).flatMap((s) => s.paths).map((p) => <File path={p} add={12} del={2} />)}</>;
 }
 
-export function DemoPair({ k, active }: { k: string; active?: boolean }) {
+export function DemoPair({ k, active, pick }: { k: string; active?: boolean; pick?: (on: boolean) => void }) {
   const d = DEMOS[k];
   if (!d) return null;
+  const side = (on: boolean) => ({
+    class: active === on ? 'demo-side on' : 'demo-side',
+    ...(pick && {
+      role: 'radio' as const,
+      'aria-checked': active === on,
+      'aria-label': on ? 'On' : 'Off',
+      title: `Click for ${on ? 'on' : 'off'}`,
+      onClick: (e: MouseEvent) => !(e.currentTarget as Element).closest('fieldset:disabled') && active !== on && pick(on),
+    }),
+  });
   return (
-    <div class="demo-pair">
-      <div class={active === false ? 'demo-side on' : 'demo-side'}>
+    <div class={pick ? 'demo-pair pickable' : 'demo-pair'} role={pick ? 'radiogroup' : undefined}>
+      <div {...side(false)}>
         <div class="demo-label">Off</div>
         {d.off}
       </div>
-      <div class={active === true ? 'demo-side on' : 'demo-side'}>
+      <div {...side(true)}>
         <div class="demo-label">On</div>
         {d.on}
       </div>

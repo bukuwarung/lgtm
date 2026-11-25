@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
 import { ago, personKey, usePresence, repoLabel, viewAs, term, shownName, getSlackPeople, fetchIntegrations, openExternal, faceOf } from './platform.ts';
 import { isAway, statusText, zoneLine } from './slackmsg.ts';
-import { Empty, Tg, Who, Time } from './tags.tsx';
+import { Octicon, Empty, Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
@@ -77,7 +77,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
             {p.bio && ` · ${p.bio}`}
           </p>
           {presence && <p class={isAway(presence) ? 'ix-status away' : 'ix-status'}>{isAway(presence) && '🌴 '}{statusText(presence)}</p>}
-          {presence?.tz && zoneLine(presence.tz) && <p class="note">🕑 {zoneLine(presence.tz)}</p>}
+          {presence?.tz && zoneLine(presence.tz) && <p class="note"><Octicon name="clock" /> {zoneLine(presence.tz)}</p>}
           {dm && <button onClick={() => void openExternal(dm)}>Message on Slack</button>}
         </div>
       </header>

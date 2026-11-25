@@ -30,7 +30,7 @@ fun total(items: List<Item>, fee: Int = 0): Long =
     items.filter { it.qty != 0 }.sumOf { it.price * it.qty } + fee
 val label = "Total: \${format(total(cart.items, fee = MAX_FEE))}" // -> shown at checkout`;
 
-export const THEMES = [['', 'Auto', '◐'], ['light', 'Light', '☀'], ['dark', 'Dark', '☾']] as const;
+export const THEMES = [['', 'Auto', 'device-desktop'], ['light', 'Light', 'sun'], ['dark', 'Dark', 'moon']] as const; // with their icons
 
 // The saved theme ('' = follow the system); index.html applies it before first paint, this keeps it applied.
 export function useTheme() {
@@ -215,7 +215,7 @@ function Flag({ k, initial, label, hint, demo, children }: { k: string; initial:
           {children}
         </fieldset>
       )}
-      {demo && <DemoPair k={k} active={on} />}
+      {demo && <DemoPair k={k} active={on} pick={toggle} />}
     </div>
   );
 }
@@ -686,7 +686,7 @@ export function Settings() {
           <span class="set-seg" role="radiogroup" aria-label="Light or dark">
             {THEMES.map(([t, name, icon]) => (
               <button role="radio" aria-checked={theme === t} class={theme === t ? 'on' : ''} onClick={() => setTheme(t)}>
-                {icon} {name}
+                <Octicon name={icon} /> {name}
               </button>
             ))}
           </span>
@@ -983,7 +983,7 @@ function ViewedMarks() {
           <option value="hide">Hidden</option>
         </select>
       </label>
-      <DemoPair k="viewedMarks" active={v !== 'show'} />
+      <DemoPair k="viewedMarks" active={v !== 'show'} pick={(o) => set(o ? 'hide' : 'show')} />
     </div>
   );
 }
@@ -1267,7 +1267,7 @@ function MarkdownStyle() {
         <span class="set-seg" role="radiogroup" aria-label="Style for">
           {(['light', 'dark'] as const).map((m) => (
             <button role="radio" aria-checked={mode === m} class={mode === m ? 'on' : ''} onClick={() => setMode(m)}>
-              {m === 'light' ? '☀ In light mode' : '☾ In dark mode'}
+              <Octicon name={m === 'light' ? 'sun' : 'moon'} /> {m === 'light' ? 'In light mode' : 'In dark mode'}
             </button>
           ))}
         </span>
@@ -1708,7 +1708,7 @@ function LaunchAtLogin() {
             <small>PRs waiting on you beside the icon; its menu lists them and starts review mode.</small>
           </span>
         </label>
-        <DemoPair k="menuBar" active={menuBar} />
+        <DemoPair k="menuBar" active={menuBar} pick={toggleMenuBar} />
       </div>
       <Flag k="badgeInbox" initial={false} label="Count your inbox on the Dock badge" hint="Replies and mentions waiting on you join its count." demo />
     </div>
