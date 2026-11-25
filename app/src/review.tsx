@@ -2869,14 +2869,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {/* One commit on its own: just it, its message and its files; the PR's description, conversation, ticket and
               review state wait for all changes. */}
           {plan && !commitView && <ReviewPlan plan={plan} viewed={viewed} />}
-          {pending && !commitView && (
+          {!!pending?.count && !commitView && (
             <p class="warn">
-              Unsent review on {site(repo)}{pending.count ? `, ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}.{' '}
+              Unsent review on {site(repo)}, {pending.count} comment{pending.count === 1 ? '' : 's'}.{' '}
               <button
                 class="link"
                 disabled={discarding}
                 onClick={async () => {
-                  if (!(await ask(`Discard your review in progress on ${site(repo)}${pending.count ? `, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}?`, 'Discard', true))) return;
+                  if (!(await ask(`Discard your unsent review on ${site(repo)}, and its ${pending.count} comment${pending.count === 1 ? '' : 's'}?`, 'Discard', true))) return;
                   setDiscarding(true);
                   await discardReview(pending.id).catch((e) => setError(e.message));
                   setPending(null);

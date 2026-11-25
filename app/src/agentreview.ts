@@ -268,7 +268,7 @@ async function review(i: Target & { agent: AgentId; since?: string }, onText?: (
   });
   const mode = postMode();
   const summary = `🤖 ${since ? `Re-review of the changes since ${since.slice(0, 7)}` : 'Adversarial review'} by ${AGENTS[i.agent].name} (from lgtm): ${drafts.length ? `${drafts.length} finding${drafts.length > 1 ? 's' : ''}` : 'nothing found'}.${parsed.summary ? `\n\n${parsed.summary}` : ''}`;
-  if (drafts.length || mode === 'pending') await postAgentFindings(i.repo, i.number, pr, drafts, summary, mode);
+  if (drafts.length) await postAgentFindings(i.repo, i.number, pr, drafts, summary, mode);
   return { findings: drafts.length, posted: mode, read: opened, session };
 }
 
