@@ -380,7 +380,6 @@ export function MergedActions({ repo, n, tickets }: { repo: string; n: number; t
   useEffect(() => void load(), [repo, n]);
   useEffect(() => {
     const key = `jiraOnMerge:${repo}#${n}`;
-    if (s?.state === 'CLOSED') localStorage.removeItem(key);
     const p = s?.state === 'MERGED' && pendingMove(key);
     if (!p) return;
     localStorage.removeItem(key);

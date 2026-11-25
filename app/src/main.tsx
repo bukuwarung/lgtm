@@ -4,7 +4,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type AgentRun, agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
+import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
 import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
@@ -1515,7 +1515,10 @@ function QaPill({ i }: { i: QueueItem }) {
 
 // Auto-merge with the repo's usual method and GitHub's default message, as the merge box would.
 async function autoMerge(i: QueueItem) {
-  const s = await getMergeState(i.repo, i.number);
+  const [s, checks] = await Promise.all([getMergeState(i.repo, i.number), getChecks(i.repo, i.number).catch(() => null)]);
+  // Required checks a path or branch filter skipped: auto-merge would wait for ever (the pill says so, in red).
+  const never = isLab(i.repo) ? [] : neverRan(await requiredChecks(i.repo, s.baseRefName).catch(() => []), checks);
+  if (never.length) throw new Error(`Required checks never ran (${never.join(', ')}): auto-merge would wait for ever`);
   const m = s.methods[0];
   await mergePR(s, m, s.message[m].title, s.message[m].body, true);
 }

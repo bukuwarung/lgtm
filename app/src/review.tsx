@@ -12,7 +12,7 @@ import { baselineChanges, isLintBaseline, type Suppression } from './lintbaselin
 import { addedLines, interdiff, hiddenChanges, moveRuns, wholeFromPatch, type MoveRun, relocate, commonIndent, dedentHtml, anchor, changePairs, gaps, markText, rangeChange, ignoreWhitespace, trimContext, importFolds, importsOnly, importSyntax, movedLines, ownRoot, parsePatch, removedRuns, wordChange, type Gap, type Hunk, type Line, type Moved, type Removed, alignChanges } from './diff.ts';
 import { inLfs, isGenerated, parseGeneratedRules } from './gitattributes.ts';
 import {
-  getChecks, baseChecks, onBaseOf, getStatus, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
+  getChecks, baseChecks, onBaseOf, getStatus, requiredChecks, neverRan, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   isStalePush, awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, prCommits, revertCommit, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
   ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
@@ -33,7 +33,7 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, StatusMark, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, archiveSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
+import { closeOnBackdrop, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, archiveSession, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, shortLogin, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
 import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { agentRunOf, reviewNow } from './agentreview.ts';
@@ -902,6 +902,29 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // the ⋯ menu; a PR quiet for 30 days or more has them up front, in a banner.
   const [rights, setRights] = useState<PrRights | null>(null);
   const [acting, setActing] = useState<StateAct | null>(null);
+  // "Then merge it" (Finish review) off, with why, when approving can't end in a merge: conflicts, someone else's change
+  // request, or required checks that never ran (auto-merge would wait for ever).
+  const mayMerge = !!data && !!rights?.merge && data.pr.state === 'open' && !data.pr.draft && (data.pr.assignees.some((a) => a.login === me) || !!linkedSession(repo, n));
+  // Asked once per head commit (conflicts, the branch's required checks); the rest from what the page already has.
+  const [conflicts, setConflicts] = useState(false);
+  const [required, setRequired] = useState<string[]>([]);
+  useEffect(() => {
+    if (!mayMerge || !data) return;
+    let live = true;
+    void getStatus(repo, n).then((st) => live && setConflicts(st.mergeStateStatus === 'DIRTY'), () => {});
+    if (!isLab(repo)) void requiredChecks(repo, data.pr.base.ref).then((r) => live && setRequired(r), () => {});
+    return () => void (live = false);
+  }, [mayMerge, data?.pr.head.sha]);
+  // Closed without merging: the ticket move auto-merge left waiting (merge.tsx) won't happen.
+  useEffect(() => void (data?.pr.state === 'closed' && !data.pr.merged && localStorage.removeItem(`jiraOnMerge:${repo}#${n}`)), [data?.pr.state]);
+  const mergeBlock = useMemo(() => {
+    if (!mayMerge) return '';
+    const latest = new Map<string, string>();
+    for (const c of conversation) if (c.state && c.state !== 'COMMENTED') latest.set(c.author, c.state);
+    const asked = [...latest].filter(([who, st]) => who !== me && st === 'CHANGES_REQUESTED').map(([who]) => '@' + shortLogin(who));
+    const never = neverRan(required, checks);
+    return conflicts ? 'it has conflicts' : asked.length ? `${asked.join(', ')} requested changes` : never.length ? `required checks never ran (${never.join(', ')})` : '';
+  }, [mayMerge, conflicts, required, conversation, checks, me]);
   const [basePick, setBasePick] = useState(false); // Change base…: its dialog open
   useEffect(() => {
     setRights(null);
@@ -2317,7 +2340,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it.`;
       }}
       seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
-      canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft && (pr.assignees.some((a) => a.login === me) || !!linkedSession(repo, n))} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
+      canMerge={mayMerge} mergeBlock={mergeBlock} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
       unviewed={data.files.filter((f) => !viewed.has(f.filename)).length} viewAll={() => markViewed(data.files.map((f) => f.filename), true)} />
   );
   return (
@@ -2966,6 +2989,7 @@ type SubmitProps = {
   slackNote: string;
   onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void, merge: boolean) => Promise<boolean | 'sending'>;
   canMerge?: boolean; // I may merge it, and it's open and ready: approving can merge it too
+  mergeBlock?: string; // why approving can't end in a merge now (then the option is off, saying so)
   inFlight?: boolean; // a review of it is still on its way (sent as you moved on)
   checkLanded?: () => Promise<string | null>; // commits pushed since the page loaded, in words (none: null)
   seeLanded?: () => void; // show just those
@@ -2999,7 +3023,7 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 const slackWhy = (r: { login: string; error?: string }) =>
   /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
 
-function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, inFlight = false, checkLanded, seeLanded }: SubmitProps) {
+function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, mergeBlock = '', inFlight = false, checkLanded, seeLanded }: SubmitProps) {
   const [open, setOpen] = useState(false);
   useDismiss(open && !inline, () => setOpen(false), '.review-submit');
   const root = useRef<HTMLDivElement>(null);
@@ -3015,7 +3039,7 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
   const [mergeIt, toggleMergeIt] = useStoredFlag('mergeOnApprove', false);
   const [viewRest] = useStoredFlag('viewAllOnSubmit', false); // Settings → Reviewing
   const viewing = viewRest && unviewed > 0;
-  const merging = canMerge && mergeIt && !authored;
+  const merging = canMerge && mergeIt && !authored && !mergeBlock;
   const want = useRef<ReviewEvent | null>(null); // the verdict asked for (A: Approve), picked as it opens
   // Pushed while I read: the review would go on code I haven't seen. Asked each time the panel opens.
   const [landed, setLanded] = useState('');
@@ -3150,7 +3174,7 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
           )}
           {canMerge && !authored && event === 'APPROVE' && (
             <label title="Once your approval is in: merged the repo's usual way if nothing else is in the way, or auto-merge while it waits on checks, another approval or open conversations. Failing checks, conflicts, a requested change or a do-not-merge sign: not merged, and it says why">
-              <input type="checkbox" checked={mergeIt} onChange={toggleMergeIt} /> Then merge it, or turn on auto-merge until it can
+              <input type="checkbox" checked={mergeIt && !mergeBlock} disabled={!!mergeBlock} onChange={toggleMergeIt} /> Then merge it, or turn on auto-merge until it can{mergeBlock && <span class="note"> (not now: {mergeBlock})</span>}
             </label>
           )}
           {slackNote && <p class="note">{slackNote}</p>}
