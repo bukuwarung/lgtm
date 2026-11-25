@@ -1695,6 +1695,14 @@ const MARKS = (on: boolean) => (
   </div>
 );
 DEMOS.viewedMarks = { title: 'Viewed marks', off: MARKS(false), on: MARKS(true) };
+// A link, a focused button and a selected row in the theme's accent, or in macOS's (AccentColor: the raw one here).
+const ACCENT = (os: boolean) => (
+  <div class="demo-panel" style={{ '--accent': os ? 'AccentColor' : 'var(--theme-accent)' } as any}>
+    <p><a>See what changed</a> · <a>Your reviews this month</a></p>
+    <button tabIndex={-1} style={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}>Finish review</button>
+  </div>
+);
+DEMOS.osAccent = { title: 'Accent colour', off: ACCENT(false), on: ACCENT(true) };
 DEMOS.unfoldBotsOnMine = { title: `Bot comments on your own ${T.PR}`, off: DEMOS.foldBots.on, on: DEMOS.foldBots.off };
 DEMOS.hideIndexToReview = { title: `A ${T.PR} waiting for your review, opened`, off: DEMOS.showIndex.on, on: DEMOS.showIndex.off };
 

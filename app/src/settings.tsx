@@ -11,7 +11,7 @@ import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './
 import { DemoPair } from './demos.tsx';
 import { SlackPreview } from './emojibox.tsx';
 import { highlightCode } from './highlight.ts';
-import { CODE_FONTS, CODE_DEFAULT, CODE_THEMES, TEXT_DEFAULT, useCodeLook, allThemes, saveTheme, setTrial } from './look.ts';
+import { CODE_FONTS, CODE_DEFAULT, CODE_THEMES, TEXT_DEFAULT, useCodeLook, allThemes, saveTheme, setTrial, hasOsAccent } from './look.ts';
 import { fromVSCode, fromVSCodeSet, fromZedFile, parseThemeFile, pickVariant, vsAppearance, withIncludes, type AppTheme } from './themes.ts';
 import { ThemeThumb } from './themecard.tsx';
 import { GENERIC_FONTS, MD_COLORS, MD_FONTS, MD_THEMES, loadMdFonts, mdStyleProps, useAppDark, useMdStyle, type MdColor, type MdStyle } from './mdthemes.ts';
@@ -655,6 +655,7 @@ export function Settings() {
         <h3>Appearance</h3>
         <Flag k="glass" initial={true} label="Glass" hint="Translucent bars and pop-ups. Off with Reduce transparency."  demo />
         <TagStyle />
+        {hasOsAccent() && <Flag k="osAccent" initial={true} label="macOS's accent colour" hint="For links, focus and what's selected, as System Settings → Appearance has it; darker or lighter where it wouldn't read." demo />}
         <Flag k="themeColors" initial={true} label="Theme colours for lgtm's marks" hint="Warnings and findings in the theme's colours. Solid badges keep lgtm's." demo />
         <Flag k="relativeTimes" initial={true} label="Relative times" hint="The exact time shows on hover." demo />
         <div class="set-row">

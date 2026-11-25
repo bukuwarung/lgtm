@@ -8,7 +8,7 @@
   --fg: light-dark(#1f2328, #bbbbbb); --code-fg: light-dark(#1f2328, #a9b7c6); --muted: light-dark(#59636e, #9e9e9e);
   --add: light-dark(#dafbe1, #294436); --del: light-dark(#ffebe9, #4a3536); --warn: light-dark(#fff8c5, #52503a);
   --addfg: light-dark(#1a7f37, #78b06a); --delfg: light-dark(#d1242f, #e87a75); --modfg: light-dark(#bf8700, #6897bb);
-  --accent: light-dark(#0969da, #589df6); --primary: light-dark(#1f883d, #3d6b45); --on-primary: light-dark(#fff, #e6e6e6);
+  --accent: light-dark(#0969da, #589df6); --theme-accent: light-dark(#0969da, #589df6); --primary: light-dark(#1f883d, #3d6b45); --on-primary: light-dark(#fff, #e6e6e6);
   --shadow: light-dark(#0003, #0008);
   /* More of what a theme (themes.ts) sets: amber text, word highlights, find matches, the image checkerboard, the test
      flask, rainbow brackets. */

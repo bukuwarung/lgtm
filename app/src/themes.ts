@@ -21,7 +21,7 @@ export function contrast(a?: string, b?: string): number {
 // `a` mixed with `b`, `p` of it `a`, as #rrggbb.
 const mixHex = (a: string, b: string, p: number) => '#' + rgb(a)!.map((v, k) => Math.round((v * p + rgb(b)![k] * (1 - p)) * 255).toString(16).padStart(2, '0')).join('');
 // `c` moved toward `fg` (5% at a time) until it reads at 4.5:1 (WCAG's minimum for text) on each of `on(c)`.
-function readable(c: string | undefined, fg: string | undefined, on: (c: string) => (string | undefined)[]): string | undefined {
+export function readable(c: string | undefined, fg: string | undefined, on: (c: string) => (string | undefined)[]): string | undefined {
   if (!rgb(c) || !rgb(fg)) return c;
   for (let p = 1; p > 0; p -= 0.05) {
     const m = p === 1 ? c! : mixHex(c!, fg!, p);

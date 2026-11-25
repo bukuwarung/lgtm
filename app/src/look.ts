@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useStoredFlag, useStoredValue } from './platform.ts';
-import { BUILTIN_THEMES, contrast, themeProps, type AppTheme } from './themes.ts';
+import { BUILTIN_THEMES, contrast, readable, themeProps, type AppTheme } from './themes.ts';
 
 // Code colours and font, picked in Settings → Appearance. A theme is a light and a dark palette for the
 // highlighter's tokens (style.css --hl-*); the app's own light/dark choice picks which one shows.
@@ -155,6 +155,19 @@ export function markProps(t: AppTheme): Record<string, string> {
   return props;
 }
 
+// macOS's accent colour (System Settings → Appearance), where the web view knows it (CSS AccentColor: WebKit does), as
+// #rrggbb; null elsewhere.
+function osAccent(): string | null {
+  if (!CSS.supports('color', 'AccentColor')) return null;
+  const probe = document.createElement('span');
+  probe.style.color = 'AccentColor';
+  document.body.append(probe);
+  const m = getComputedStyle(probe).color.match(/\d+/g);
+  probe.remove();
+  return m && m.length >= 3 ? '#' + m.slice(0, 3).map((v) => Number(v).toString(16).padStart(2, '0')).join('') : null;
+}
+export const hasOsAccent = () => typeof CSS !== 'undefined' && CSS.supports('color', 'AccentColor');
+
 let applied: string[] = []; // the colour properties set on the page, to take off when the theme changes
 // Applies the saved app theme, code colours and font, and the text sizes, to the page (once, in App), and gives
 // Settings the setters. Code colours "theme": the app theme's own (lgtm's own look: Classic).
@@ -165,6 +178,13 @@ export function useCodeLook() {
   const [font, setFont] = useStoredValue('codeFont', 'jetbrains');
   const tried = useTrial();
   const [themeColors] = useStoredFlag('themeColors', true); // lgtm's marks in the theme's colours (markProps)
+  const [useOsAccent] = useStoredFlag('osAccent', true); // Settings → Appearance
+  const [back, setBack] = useState(0); // lgtm in front again: the accent may have changed in System Settings meanwhile
+  useEffect(() => {
+    const f = () => setBack((n) => n + 1);
+    addEventListener('focus', f);
+    return () => removeEventListener('focus', f);
+  }, []);
   useEffect(() => {
     const app = tried?.t ?? allThemes(mine)[appTheme] ?? null;
     const own = theme === 'theme' || !!tried; // a theme being tried shows its own code colours
@@ -172,11 +192,20 @@ export function useCodeLook() {
     if (!app || !own) for (const k of Object.keys(props)) if (k.startsWith('--hl-')) delete props[k];
     const code = own ? (app ? null : CODE_THEMES.intellij) : (CODE_THEMES[theme] ?? CODE_THEMES.intellij);
     if (code) for (const k of Object.keys(code.light) as (keyof Palette)[]) props[`--hl-${k}`] = `light-dark(${code.light[k]}, ${code.dark[k]})`;
+    // The theme's accent, for Settings' preview; macOS's in its place when asked, made readable on the theme's
+    // background and raised surfaces (yellow on white wouldn't read), in light and dark.
+    if (props['--accent']) props['--theme-accent'] = props['--accent'];
+    const os = useOsAccent && !tried ? osAccent() : null;
+    if (os) {
+      const on = (m: 'light' | 'dark', k: string, own: string) => app?.[m][k] ?? own;
+      const mode = (m: 'light' | 'dark') => readable(os, on(m, '--fg', m === 'light' ? '#1f2328' : '#bbbbbb'), () => [on(m, '--bg', m === 'light' ? '#ffffff' : '#2b2b2b'), on(m, '--soft', m === 'light' ? '#f6f8fa' : '#313335')]);
+      props['--accent'] = `light-dark(${mode('light')}, ${mode('dark')})`;
+    }
     const style = document.documentElement.style;
     for (const k of applied) if (!(k in props)) style.removeProperty(k);
     for (const [k, v] of Object.entries(props)) style.setProperty(k, v);
     applied = Object.keys(props);
-  }, [appTheme, theme, mine, tried, themeColors]);
+  }, [appTheme, theme, mine, tried, themeColors, useOsAccent, back]);
   useEffect(() => {
     const f = CODE_FONTS[font] ?? CODE_FONTS.jetbrains;
     void f.load?.();
