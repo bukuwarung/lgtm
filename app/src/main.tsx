@@ -489,7 +489,7 @@ function GroupSwitcher({ value, teams, recent, onPick, here }: { value: string; 
 // No PR open: the queue at a glance; each number opens its tab of the list.
 function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
   const [showDrafts] = useStoredFlag('showDrafts', false);
-  if (!items) return <p class="note page empty">Pick a {T.PR} from the list, or paste a {T.PR} link in the box at the top (⌘K).</p>;
+  if (!items) return <p class="note page empty">Pick a {T.PR}, or paste a link (⌘K).</p>;
   const needs = toReview(items, showDrafts);
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
@@ -520,7 +520,7 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
         ))}
       </div>
       <p class="note">
-        Pick a PR from the list, or paste a PR link in the box at the top (⌘K). <a href="#/history">Your reviews this month →</a>
+        Pick a PR, or paste a link (⌘K). <a href="#/history">Your reviews this month →</a>
       </p>
       <RecentList max={8} />
       <StaleBranches />
@@ -838,7 +838,7 @@ function App() {
     else if (id === 'text-reset') textStep(0);
     else if (id === 'help') void openExternal('https://github.com/bukuwarung/lgtm#readme');
     else if (id === 'diagnostics')
-      void copyDiagnostics().then(() => say({ text: 'Diagnostics copied: paste them into your bug report' }), () => say({ text: "Couldn't copy the diagnostics" }));
+      void copyDiagnostics().then(() => say({ text: 'Diagnostics copied' }), () => say({ text: "Couldn't copy the diagnostics" }));
   };
   useEffect(() => {
     // Other parts of the page show a message here too (the review page, after a review a Claude session sent).
@@ -1107,7 +1107,7 @@ function SetupCheck() {
           <button onClick={check}>Check again</button>
           <button class="primary" onClick={done}>Done</button>
         </div>
-        <p class="note">lgtm borrows the sign-ins of these tools and stores no tokens. It needs GitHub or GitLab (or both); the rest you can set up now or later in Settings.</p>
+        <p class="note">Uses these tools' sign-ins, stores no tokens. GitHub or GitLab is required; the rest is optional.</p>
         {row(hub, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', <pre>brew install gh && gh auth login</pre>)}
         {row(labs == null ? null : labs.length > 0, 'GitLab', labs?.length ? `MRs, reviews and comments, through the GitLab CLI (${labs.map((a) => a.host).join(', ')}).` : 'MRs, reviews and comments, through the GitLab CLI, on gitlab.com or your own GitLab.', <pre>brew install glab && glab auth login</pre>)}
         {row(ints ? ints.slack.ok : null, 'Slack', '(optional) DM the author when you finish a review.', <pre>brew install shaharia-lab/tap/slackcli && slackcli auth login-auto</pre>)}
@@ -1180,7 +1180,7 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
       </h1>
       {isDesktop || /signed in|gh token|gh auth/i.test(error) ? (
         <>
-          <p>lgtm signs in with the GitHub CLI (gh) or the GitLab CLI (glab), so it never asks for a password or token. {error}</p>
+          <p>Signs in through gh or glab, never a password or token. {error}</p>
           <p>In Terminal, run one, or both:</p>
           <pre>{missing ? 'brew install gh\ngh auth login' : 'gh auth login'}</pre>
           <pre>{'brew install glab\nglab auth login'}</pre>
@@ -1195,7 +1195,6 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
       <button class="primary" disabled={busy} onClick={() => (setBusy(true), retry().finally(() => setBusy(false)))}>
         {busy ? 'Checking…' : 'Check again'}
       </button>
-      <p class="note">Slack messages and Jira tickets are optional: set them up later in Settings.</p>
     </div>
   );
 }

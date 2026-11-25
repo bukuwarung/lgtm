@@ -206,7 +206,7 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: s
             <SlackPreview message={text} emoji={emoji} />
           )}
           {!SLACK_CHANNEL.test(channel) && <p class="warn">The {review ? 'review' : 'QA'} channel in Settings isn't a channel ID, #name or link.</p>}
-          {review && unmatched.length > 0 && <p class="warn">Not matched on Slack, so named but not tagged: {unmatched.map((l) => '@' + l).join(', ')}. Match them in Settings → Slack → People.</p>}
+          {review && unmatched.length > 0 && <p class="warn">Not tagged (no Slack match): {unmatched.map((l) => '@' + l).join(', ')}. Settings → Slack → People.</p>}
           {err && <p class="warn">{err}</p>}
           <form method="dialog" onSubmit={(e) => e.preventDefault()}>
             <button type="button" class="link qa-edit" onClick={() => setEditing(!editing)} disabled={busy}>
@@ -327,7 +327,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
         </div>
       )}
       {picks == null && !err && <p class="note ix-pad">Finding who's free…</p>}
-      {picks?.length === 0 && <p class="note ix-pad">No one to suggest: nobody else has reviewed here lately{team ? `, and ${team} has no one else` : ''}.</p>}
+      {picks?.length === 0 && <p class="note ix-pad">No one to suggest.</p>}
       {picks
         ?.slice(0, 6)
         .map((p) => ({ p, s: presence[p.login], away: !!p.busy || isAway(presence[p.login]), late: lateFor(presence[p.login]) }))
@@ -368,9 +368,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
           </span>
           {slack && <EmojiTextarea rows={2} value={text} onInput={setText} names={emoji.names} emoji={emoji.emoji} label="Slack message" />}
         </label>
-      ) : (
-        <p class="note ix-pad">Slack isn't set up, so this only asks on {site(repo)}.</p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -913,9 +911,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     if (a === 'base') return setBasePick(true); // its dialog (BaseDialog) does the rest
     const t = pageTerm().PR;
     const [q, yes] = {
-      close: [`Close this ${t} without merging? It can be reopened later.`, 'Close'],
-      closeBranch: [`Close this ${t} and delete its branch ${rights.headRefName}? lgtm can bring the branch back to reopen it.`, 'Close and delete'],
-      draft: [`Convert this ${t} to a draft? It stays open; it's marked ready again when it's worth reviewing.`, 'Convert to draft'],
+      close: [`Close this ${t} without merging?`, 'Close'],
+      closeBranch: [`Close this ${t} and delete ${rights.headRefName}? It can be restored.`, 'Close and delete'],
+      draft: [`Convert this ${t} to a draft?`, 'Convert to draft'],
       reopen: [`Reopen this ${t}?`, 'Reopen'],
       restore: [`Make ${rights.headRefName} again at this ${t}'s last commit, and reopen it?`, 'Restore and reopen'],
       update: ['', rights.rebase ? 'Rebase' : 'Update branch'], // as on GitHub, no question: it only adds the base's commits
@@ -1088,7 +1086,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       } catch (e: any) {
         if (first && !shownHead) throw e;
         setStale(null);
-        return setNotice({ ok: false, text: `Couldn't refresh this ${pageTerm().PR} (${e.message}); showing the copy loaded earlier.` });
+        return setNotice({ ok: false, text: `Couldn't refresh (${e.message}). Showing the earlier copy.` });
       }
       await loadLanguages(repo, loaded.files.map((f) => f.filename)); // any language beyond the built-in ones, before drawing
       fresh = true;
@@ -1224,7 +1222,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         if (d.files.length >= 300) {
           setSince(false);
           setLastReviewed(null); // no "since" toggle either: it would hit the same limit
-          setNotice({ ok: false, text: `Showing the full diff: the branch was rebased onto so much new base-branch work since your last review that ${site(repo)} can't list just what changed in this ${pageTerm().PR}.` });
+          setNotice({ ok: false, text: `Full diff: too much was rebased since your last review to show only what changed.` });
           return;
         }
         const inPR = new Set(data.files.map((f) => f.filename));
@@ -1311,12 +1309,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     const no = (text: string) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, ms: 4000 } }));
     if (!t || t.editId || !data || !toSha) return setTarget(t);
     const f = data.files.find((x) => x.filename === t.path);
-    if (!f) return no(`${t.path.split('/').pop()} has no changes in all changes now: nothing to comment on there`);
+    if (!f) return no(`${t.path.split('/').pop()} has no changes in all changes now`);
     if (!t.line) return setTarget(t); // on the file
     if (t.side === 'LEFT') return no('Comment on removed lines in all changes');
     const [a, b] = await Promise.all([getRaw(data.headRepo, t.path, toSha), getRaw(data.headRepo, t.path, data.pr.head.sha)].map((p) => p.catch(() => null)));
     const at = a != null && b != null && relocate(a.split('\n'), b.split('\n'), parsePatch(f.patch ?? ''), t.startLine ?? t.line, t.line);
-    if (!at) return no('That line changed after this commit, or isn\'t in the diff now: comment on it in all changes');
+    if (!at) return no('That line changed since: comment in all changes');
     setTarget({ ...t, at });
   };
 
@@ -1559,7 +1557,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       noteReadSaved(`${repo}#${n}`, trimmedLines);
       onSubmitted(event);
       if (next || focus) onReviewed(null, event);
-      else setNotice({ ok: true, text: `Your comments are already on ${site(repo)}: nothing more to send.` });
+      else setNotice({ ok: true, text: 'Nothing new to send.' });
       return true;
     }
     // Comments written on an older commit: new commits move them with their lines, and only ones whose lines changed
@@ -1648,7 +1646,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       (r) => r?.ok && r.text && dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${k}: ${r.text}` } })),
       (e) => {
         reportError(`Your review of ${k} didn't go: ${e.message}`);
-        dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Your review of ${k} didn't go: ${e.message}. Its comments and summary are as you left them.`, action: ['Back to it', () => (location.hash = `/${repo}/pull/${n}`)], ms: 120_000 } }));
+        dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Your review of ${k} didn't go: ${e.message}. Nothing lost.`, action: ['Back to it', () => (location.hash = `/${repo}/pull/${n}`)], ms: 120_000 } }));
       },
     ).finally(() => sending.delete(k));
     step(`Opening the next ${pageTerm().PR}…`);
@@ -1844,7 +1842,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           setThreads(t);
           setPending(p);
         })
-        .catch((e) => setNotice({ ok: false, text: `Your comment is kept here, not in your review on ${site(repo)} yet (${e.message}); it goes with the review.` }));
+        .catch((e) => setNotice({ ok: false, text: `Comment kept here, not on ${site(repo)} yet (${e.message}). It goes with your review.` }));
       toPendingChain.set(k, job);
     },
     updateDraft: (id, d) => saveDrafts(drafts.map((x) => (x.id === id ? { ...d, id } : x))),
@@ -2208,7 +2206,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         if (!sess) return say(`No kept session for this ${pageTerm().PR}'s agent review (Settings → Coding agents → Keep agent review sessions)`);
         openAgentSession(sess, claudeFolder(repo)).catch((e: Error) => say(`Couldn't open the session: ${e.message}`));
       },
-      fixedAll: () => (allFixes.length > 1 ? dispatchEvent(new Event('lgtm:fixed-all')) : dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: allFixes.length ? 'One thread to answer: its own "Fixed in" button' : 'No threads waiting on you that later commits changed', ms: 3000 } }))),
+      fixedAll: () => (allFixes.length > 1 ? dispatchEvent(new Event('lgtm:fixed-all')) : dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: allFixes.length ? 'One thread to answer: its own "Fixed in" button' : 'Nothing to mark fixed', ms: 3000 } }))),
       nextUnviewed: () => {
         const left = (s: HTMLElement) => !viewed.has(s.id.slice(2));
         const to = sections.slice(cur + 1).find(left) ?? sections.find(left);
@@ -2232,7 +2230,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       askQa: () => (askQa ? dispatchEvent(new Event('lgtm:ask-qa')) : setNotice({ ok: true, text: mine ? 'QA is asked already, or no QA channel is set (Settings → Slack).' : 'Ask QA is for your own PRs.' })),
       ready: () => (pr.draft && rights?.update && rights.close ? void stateAct('ready') : setNotice({ ok: true, text: pr.draft ? "You can't change this one." : "It's not a draft." })),
       changeBase: () => (rights?.update && rights.close ? setBasePick(true) : setNotice({ ok: true, text: "You can't change this one's base." })),
-      updateBranch: () => (rights?.updateBranch ? void stateAct('update') : setNotice({ ok: true, text: `Nothing to update: it's up to date with ${pr.base.ref}, or you can't push to it.` })),
+      updateBranch: () => (rights?.updateBranch ? void stateAct('update') : setNotice({ ok: true, text: `Up to date with ${pr.base.ref}, or not yours to push to.` })),
       agentDraft: () => dispatchEvent(new Event('lgtm:agent-next')), // Review: the next agent draft not looked at
       nextPR: () => stepPR(1),
       prevPR: () => stepPR(-1),
@@ -2869,11 +2867,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           )}
           {paused && !commitView && (
             <p class="warn">
-              Review threads aren't shown: {paused.replace(/: lgtm waits until then$/, '')}. The diff, description and conversation are here; reload after that for the threads.
+              Threads hidden: {paused.replace(/: lgtm waits until then$/, '')}. Reload after that.
             </p>
           )}
           {!commitView && drafts.length > 0 && saved.sha !== pr.head.sha && (
-            <p class="warn">New commits were pushed since you started this review. Your comments move to them with their lines when you submit; you'll be asked about any whose lines changed.</p>
+            <p class="warn">New commits since you started. Your comments move with their lines.</p>
           )}
           {/* One commit on its own: just it, its message and its files; the PR's description, conversation, ticket and
               review state wait for all changes. */}
@@ -3156,28 +3154,27 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
           {/* One place to look them over (Your threads): at the first agent draft not looked at, when there is one. */}
           {count > 0 && (
             <button class={unlooked ? 'look-over warn' : 'look-over'} title="Your comments to send, then your other threads, each with the code it's on" onClick={() => (setOpen(false), dispatchEvent(new Event(unlooked ? 'lgtm:look-drafts' : 'lgtm:my-threads')))}>
-              {unlooked > 0 && <>{unlooked === 1 ? "An agent draft you haven't looked at goes" : `${unlooked} agent drafts you haven't looked at go`} with this review. </>}
-              <span class="look-go">Look {count === 1 ? 'it' : `the ${count} comments`} over before sending →</span>
+              {unlooked > 0 && <>{unlooked === 1 ? '1 agent draft' : `${unlooked} agent drafts`} not looked at. </>}
+              <span class="look-go">Look over {count === 1 ? 'it' : `${count} comments`} →</span>
             </button>
           )}
           {event === 'APPROVE' && stillOpen.length > 0 && (
             <p class="warn approve-open">
-              {stillOpen.length === 1 ? 'A thread you started is' : `${stillOpen.length} threads you started are`} still open, and{' '}
-              {stillOpen.length === 1 ? 'its' : 'their'} code hasn't changed since you commented:{' '}
+              Still open, code unchanged since you commented:{' '}
               {stillOpen.slice(0, 4).map((t, i) => (
                 <>
                   {i ? ', ' : ''}
                   <button class="link" onClick={() => jumpTo(t.id, 'f-' + t.path)}>{fileLabel(t.path)}{t.line ? `:${t.line}` : ''}</button>
                 </>
               ))}
-              {stillOpen.length > 4 && ` and ${stillOpen.length - 4} more`}. You can still approve.
+              {stillOpen.length > 4 && ` and ${stillOpen.length - 4} more`}.
             </p>
           )}
           {/* What submitting does beyond the obvious (the verdict and your summary): said only when there's some of it. */}
           {(() => {
             const nothing = event !== 'APPROVE' && !body.trim() && !count && !(event === 'REQUEST_CHANGES' && mySummary);
-            if (nothing && event === 'COMMENT') return myOpenThreads ? <div class="sends">Nothing new to send: your comments are already on {site(repo)}. Submitting just moves on.</div> : null;
-            if (nothing) return <div class="sends">A change request needs to say what to change: write it above.</div>;
+            if (nothing && event === 'COMMENT') return myOpenThreads ? <div class="sends">Nothing new to send.</div> : null;
+            if (nothing) return <div class="sends">Say what to change above.</div>;
             const extra = [
               event === 'REQUEST_CHANGES' && !body.trim() && 'a summary of your comments as its text',
               count > 0 && `${count} line comment${count > 1 ? 's' : ''}`,
@@ -4629,7 +4626,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
   if (src === undefined) return <div class="pad" style={{ minHeight: stand }}><Lines n={6} /></div>;
-  if (src === null) return <p class="note pad">Couldn't load this file. <Retry onClick={() => setSrc(undefined)} /> · The {'<>'} button in its header shows the source diff.</p>;
+  if (src === null) return <p class="note pad">Couldn't load this file. <Retry onClick={() => setSrc(undefined)} /></p>;
 
   const t = ctx.target?.path === path ? ctx.target : null;
   // Threads, drafts and removals attach to the first top-level block ending at or after their line.
@@ -5145,7 +5142,7 @@ function FixedAll({ fixes, ctx }: { fixes: { t: Thread; fixes: Fix[] }[]; ctx: C
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const go = async () => {
-    if (busy || !(await ask(`Reply "Fixed in …" to ${fixes.length} threads, each with the commits that changed its lines, and resolve them?`, 'Reply and resolve'))) return;
+    if (busy || !(await ask(`Reply "Fixed in …" to ${fixes.length} threads and resolve them?`, 'Reply and resolve'))) return;
     setBusy(true), setErr('');
     let failed = 0;
     for (const { t, fixes: f } of fixes)
@@ -5162,9 +5159,9 @@ function FixedAll({ fixes, ctx }: { fixes: { t: Thread; fixes: Fix[] }[]; ctx: C
   }, []);
   return (
     <p class="note fixed-all">
-      {fixes.length} threads waiting on you have commits that changed their lines.{' '}
+      Later commits changed the lines of {fixes.length} threads waiting on you.{' '}
       <button disabled={busy} onClick={go} title={`Each gets "Fixed in" with its commits, then is resolved${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fixedAll)}`}>
-        {busy ? 'Replying…' : `Reply "Fixed in" and resolve all ${fixes.length}`}
+        {busy ? 'Replying…' : 'Reply "Fixed in" and resolve all'}
       </button>
       {err && <span class="error"> {err}</span>}
     </p>
@@ -5397,7 +5394,7 @@ function PendingComment({ c, ctx, path, t }: { c: Thread['comments']['nodes'][nu
       <div class="row">
         {agent && !looked && <button disabled={busy} onClick={() => markLooked(c.id!)} title="Keep it in your review (↵)">Keep</button>}
         <button disabled={busy} onClick={() => setText(c.body ?? c.bodyText)}>Edit</button>
-        <button disabled={busy} onClick={async () => (agent ? drop() : (await ask(`Delete this comment from your review in progress on ${site(ctx.repo)}? Its text goes with it.`, 'Delete', true)) && run(null))} title={agent ? 'Drop it from your review (⌫)' : undefined}>{agent ? 'Drop' : 'Delete'}</button>
+        <button disabled={busy} onClick={async () => (agent ? drop() : (await ask('Delete this comment from your unsent review?', 'Delete', true)) && run(null))} title={agent ? 'Drop it from your review (⌫)' : undefined}>{agent ? 'Drop' : 'Delete'}</button>
         {looked && <span class="note">Kept</span>}
       </div>
       {err && <p class="error">{err}</p>}
@@ -5538,7 +5535,7 @@ function MyThreads({ threads, drafts, files, ctx, close }: { threads: Thread[]; 
   const [dropping, setDropping] = useState(false);
   const dropStale = async () => {
     const n = stale.length;
-    if (!(await ask(`Drop the ${n === 1 ? 'outdated comment' : `${n} outdated comments`} from your review? The code under ${n === 1 ? 'it' : 'them'} changed since; ${n === 1 ? 'it' : 'they'} can't be put back.`, 'Drop', true))) return;
+    if (!(await ask(`Drop the ${n === 1 ? 'outdated comment' : `${n} outdated comments`} ? ${n === 1 ? 'It' : 'They'} can't be put back.`, 'Drop', true))) return;
     setDropping(true);
     await ctx.dropPending(stale).catch((e) => reportError(`Couldn't drop them all: ${e.message}`));
     setDropping(false);
@@ -5573,7 +5570,7 @@ function MyThreads({ threads, drafts, files, ctx, close }: { threads: Thread[]; 
         Your threads <span class="note">{[sending && `${sending} to send`, open.length && `${open.length} open`, done.length && `${done.length} resolved or outdated`].filter(Boolean).join(', ') || 'none yet'}</span>
         <button onClick={() => close()}>Back to the diff <kbd>Esc</kbd></button>
       </h3>
-      {!mine.length && !drafts.length && <p class="note">You haven't commented on its code yet.</p>}
+      {!mine.length && !drafts.length && <p class="note">No comments yet.</p>}
       {sending > 0 && (
         <h4 class="my-threads-sub">
           To send with your review

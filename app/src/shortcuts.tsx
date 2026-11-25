@@ -815,7 +815,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
             </details>
           ) : (
             <>
-              <p class="note ix-pad">{pr.draft ? 'Asking someone marks it ready for review. ' : ''}Least busy first:</p>
+              {pr.draft && <p class="note ix-pad">Asking someone marks it ready for review.</p>}
               {ask}
             </>
           ))}

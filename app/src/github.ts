@@ -188,7 +188,7 @@ function noteBudget(res: Response, bucket: string, path: string, body?: string) 
   if (limit >= 1000 && remaining <= limit / 10 && !warned.has(bucket + reset)) {
     warned.add(bucket + reset);
     const at = new Date(reset).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`}: ${remaining} of ${limit} left until ${at}. lgtm keeps going; Settings → Accounts shows what used it.` } }));
+    dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`}: ${remaining} of ${limit} left until ${at}. Settings → Accounts shows what used it.` } }));
   }
 }
 function spend(bucket: string, area: string, n: number) {

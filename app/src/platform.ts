@@ -683,7 +683,7 @@ export async function notifySlack(recipients: { login: string; emails: string[];
     recipients = recipients.map((r) => (lateFor(status[r.login]) ? { ...r, at: Math.floor(morningFor(status[r.login].tz!) / 1000) } : r));
     const later = recipients.filter((r) => r.at);
     if (later.length)
-      dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${later.map((r) => `${shownAt(r.login)} gets the Slack message at ${morningWords(status[r.login].tz!, r.at! * 1000)} (${lateFor(status[r.login])} now)`).join('; ')}. It's under Scheduled messages in Slack, to send now or change.` } }));
+      dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `${later.map((r) => `${shownAt(r.login)} gets the Slack message at ${morningWords(status[r.login].tz!, r.at! * 1000)} (${lateFor(status[r.login])} now)`).join('; ')}. Change it in Slack's Scheduled messages.` } }));
   }
   if (isDesktop) return command<SlackResult[]>('slack_notify', { recipients, text, thread, check });
   const res = await fetch('/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients, text, thread, check }) });
