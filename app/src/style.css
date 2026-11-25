@@ -1798,3 +1798,4 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .merge-missing { display: block; margin-top: 2px; font-weight: 400; }
 /* Viewed marks hidden (Settings → Reviewing). */
 .review.no-marks :is(.viewed-box, .vmark, .plan-bar, .plan-n, .plan-viewed) { display: none; }
+.why-item { white-space: nowrap; } /* a reason and its action on one line; the list wraps between them */

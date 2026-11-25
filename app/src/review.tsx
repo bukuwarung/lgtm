@@ -1043,6 +1043,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         .then((base) => setChecks(cs.map((c) => (c.state === 'failure' ? { ...c, onBase: onBaseOf(base, c) } : c))), () => {});
     }, (e) => (setChecks([]), setChecksErr(e.message)));
   };
+  // The merge box re-ran failed jobs: the checks again.
+  useEffect(() => {
+    const f = () => loadChecks();
+    addEventListener('lgtm:checks', f);
+    return () => removeEventListener('lgtm:checks', f);
+  });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keys.current(e);

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
-import { jumpTo } from './shortcuts.tsx';
+import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
 import { type QaThread, reportError, archiveLinked, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview } from './platform.ts';
-import { isStalePush, afterApproval, CANT_MERGE_YET, getChecks, deleteBranch, disableAutoMerge, getMergeState, getPushPoints, prCommits, mergePR, neverRan, requiredChecks, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { isStalePush, afterApproval, CANT_MERGE_YET, getChecks, deleteBranch, rerunFailedJobs, runOf, updateBranchAndWait, disableAutoMerge, getMergeState, getPushPoints, prCommits, mergePR, neverRan, requiredChecks, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -173,6 +173,23 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
     setBusy('');
     load();
   }
+  // What's in the way, each with what does something about it: bring the base in, ask for a review, run the failed
+  // GitHub Actions jobs again (checks still running, conflicts and the like: nothing here does).
+  const reruns = [...new Set((checks ?? []).filter((c) => c.state === 'failure' && c.jobId).map(runOf).filter(Boolean))] as string[];
+  const fixFor = (w: string) => {
+    const go = (label: string, f: () => unknown, title: string) => (
+      <>
+        {' '}
+        <button class="link" disabled={!!busy} title={title} onClick={f}>{label}</button>
+      </>
+    );
+    if (w === 'Behind the base branch' && s.viewerCanUpdateBranch)
+      return go(busy === 'update' ? (s.reasons ? 'Rebasing…' : 'Updating…') : s.reasons ? 'Rebase' : 'Update branch', () => run('update', () => updateBranchAndWait(repo, n, s).then(() => dispatchEvent(new Event('lgtm:refresh')))), `Bring ${s.baseRefName} in`);
+    if (w === 'Review required') return go('Ask reviewers', () => (setShown(false), showReviewers(location.hash.slice(1))), "Who's free to review, in the index");
+    if (/failing check/.test(w) && reruns.length)
+      return go(busy === 'rerun' ? 'Re-running…' : 'Re-run failed', () => run('rerun', () => Promise.all(reruns.map((r) => rerunFailedJobs(repo, r))).then(() => setTimeout(() => dispatchEvent(new Event('lgtm:checks')), 3000))), 'Run the failed GitHub Actions jobs again');
+    return null;
+  };
   // Deleting the branch with the merge: when GitHub won't (the repo doesn't, or the branch is a fork's), and not for
   // auto-merge, which merges later.
   const offerDelete = confirm === 'merge' && !s.deleteBranchOnMerge && !s.isCrossRepository && !!s.headRef;
@@ -195,7 +212,16 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
       <div class="merge-head">
         <b>{headline}</b>
         {loading && <Updating />}
-        {!ready && why.length > 0 && <span class="merge-why">{why.join(' · ')}</span>}
+        {!ready && why.length > 0 && (
+          <span class="merge-why">
+            {why.map((w, k) => (
+              <>
+                {k > 0 && ' · '}
+                <span class="why-item">{w}{fixFor(w)}</span>
+              </>
+            ))}
+          </span>
+        )}
       </div>
       {s.holds.length > 0 && (
         <div class="merge-row merge-hold">
