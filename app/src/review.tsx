@@ -328,6 +328,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       )}
       {picks == null && !err && <p class="note ix-pad">Finding who's free…</p>}
       {picks?.length === 0 && <p class="note ix-pad">No one to suggest.</p>}
+      {!!picks?.length && <p class="note ix-pad ix-suggest">Suggested, a click asks:</p>}
       {picks
         ?.slice(0, 6)
         .map((p) => ({ p, s: presence[p.login], away: !!p.busy || isAway(presence[p.login]), late: lateFor(presence[p.login]) }))
@@ -354,7 +355,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
                 !away && (p.load ? (
                   <span class="ix-meta ix-load" title={`${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review`}><Octicon name="git-pull-request" />{p.load}</span>
                 ) : (
-                  <span class="ix-meta ix-load free" title={`No open ${pageTerm().PRs} waiting on their review`}><Octicon name="check" /></span>
+                  <span class="ix-meta ix-load free" title={`No open ${pageTerm().PRs} waiting on their review`}><Octicon name="git-pull-request" />0</span>
                 ))
               )}
               <StatusMark s={s} late={late} busy={p.busy} />
