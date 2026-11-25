@@ -2101,6 +2101,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             <Tg i={DECISION[i.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[i.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
           </span>
         )}
+        {/* Approved, but under To fix (failing checks, conflicts…): the approval still said */}
+        {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && stuck(i).length > 0 && <span class="pill p-ok"><Tg i="approved" t="approved" /></span>}
         {i.assigned && !i.authored && <span class="pill"><Tg i="assigned" t="assigned to you" /></span>}
         {kind === REVIEWING && !reReview(i) && i.newSinceApproval > 0 && (
           <span class="pill p-warn" title="Commits written since you approved it (not rebases or merges of the base): worth another look before it merges">
