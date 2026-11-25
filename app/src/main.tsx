@@ -1391,13 +1391,13 @@ const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 const MINE: Kind = {
   name: `Your ${T.PRs}`,
   groups: [
-    ['m-changes', 'Changes requested'],
+    ['m-changes', 'To fix'], // held up by something of mine to fix (stuck): each row's pills say what
     ['m-approved', 'Approved'],
     ['m-waiting', 'Waiting for review'],
     ['m-draft', 'Draft'],
   ],
   groupOf: (i) =>
-    i.isDraft ? 'm-draft' : i.reviewDecision === 'CHANGES_REQUESTED' ? 'm-changes' : i.reviewDecision === 'APPROVED' ? 'm-approved' : 'm-waiting',
+    i.isDraft ? 'm-draft' : stuck(i).length ? 'm-changes' : i.reviewDecision === 'APPROVED' ? 'm-approved' : 'm-waiting',
 };
 // A team's open PRs, one group per member, coloured by where each PR stands (as in "Your PRs").
 // Each member's label also says how many reviews they're asked for, to help pick a reviewer who isn't swamped.
