@@ -2871,7 +2871,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {plan && !commitView && <ReviewPlan plan={plan} viewed={viewed} />}
           {pending && !commitView && (
             <p class="warn">
-              You have a review in progress on {site(repo)} ({pending.count} comment{pending.count === 1 ? '' : 's'}): Finish review sends it, with your comments here.{' '}
+              Unsent review on {site(repo)}{pending.count ? `, ${pending.count} comment${pending.count === 1 ? '' : 's'}` : ''}.{' '}
               <button
                 class="link"
                 disabled={discarding}
@@ -2884,7 +2884,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   setDiscarding(false);
                 }}
               >
-                {discarding ? 'Discarding…' : 'Discard it'}
+                {discarding ? 'Discarding…' : 'Discard'}
               </button>
             </p>
           )}

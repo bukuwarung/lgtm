@@ -374,6 +374,8 @@ try {
   const unringed = async (where) => {
     await evaluate(`(() => {
       document.activeElement?.blur();
+      // Focus rings that ease in (selects: .12s) would read as unfocused when sampled at once.
+      if (!document.getElementById('smoke-still')) document.head.append(Object.assign(document.createElement('style'), { id: 'smoke-still', textContent: '*, *::before, *::after { transition: none !important; }' }));
       window.__look = (e) => e ? [e, e.parentElement, e.parentElement?.parentElement, e.parentElement?.parentElement?.parentElement].filter(Boolean).map((x) => { const s = getComputedStyle(x); return [s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0 ? s.outlineColor + s.outlineWidth : '', s.boxShadow, s.borderColor, s.backgroundColor, s.color, s.opacity, s.visibility, s.textDecorationLine].join('|'); }).join('/') : '';
       window.__stops = [];
     })()`);
@@ -394,6 +396,7 @@ try {
       if (r.miss && !r.miss.includes('demo')) out.push(`${where}: ${r.miss}`);
       if (r.done) break;
     }
+    await evaluate(`document.getElementById('smoke-still')?.remove()`);
     return out;
   };
   // Escape closes what it opened, and gives focus back to what opened it: each opener on the page (a dropdown's summary,
