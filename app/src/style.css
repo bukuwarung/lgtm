@@ -41,16 +41,16 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 /* Buttons filled, with an edge that shows (on the page a shade darker than it; in the top and review bars, which are
    the theme's panel colour as Firefox's toolbar is, raised in the page's own). */
-:root { --btn-bg: color-mix(in srgb, var(--fg) 4%, var(--soft)); --btn-edge: color-mix(in srgb, var(--fg) 18%, var(--border)); --btn-edge-low: color-mix(in srgb, var(--fg) 30%, var(--border)); }
-:is(.top, .bar) { --btn-bg: var(--bg); }
+:root { --btn-bg: light-dark(color-mix(in srgb, var(--fg) 4%, var(--soft)), color-mix(in srgb, var(--fg) 8%, var(--soft))); --btn-edge: color-mix(in srgb, var(--fg) 18%, var(--border)); --btn-edge-low: color-mix(in srgb, var(--fg) 30%, var(--border)); }
+:is(.top, .bar) { --btn-bg: light-dark(var(--bg), color-mix(in srgb, var(--fg) 9%, var(--soft))); } /* raised: the page's white on the bar in light, a step lighter than the bar in dark */
 button { font: inherit; padding: 3px 10px; border: 1px solid var(--btn-edge); border-bottom-color: var(--btn-edge-low); border-radius: 6px; background: var(--btn-bg); color: var(--fg); cursor: pointer; } /* depth from a darker lower edge, not a shadow: a flat button (no border: index rows, links) has none */
 button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 /* Hover a step darker, pressed another (through --btn-bg, so what sets its own background keeps it). */
 button { transition: background-color .12s; }
-button:hover:not(:disabled) { --btn-bg: color-mix(in srgb, var(--fg) 9%, var(--soft)); }
-button:active:not(:disabled) { --btn-bg: color-mix(in srgb, var(--fg) 14%, var(--soft)); }
-:is(.top, .bar) button:hover:not(:disabled) { --btn-bg: color-mix(in srgb, var(--fg) 5%, var(--bg)); }
-:is(.top, .bar) button:active:not(:disabled) { --btn-bg: color-mix(in srgb, var(--fg) 10%, var(--bg)); }
+button:hover:not(:disabled) { --btn-bg: light-dark(color-mix(in srgb, var(--fg) 9%, var(--soft)), color-mix(in srgb, var(--fg) 13%, var(--soft))); }
+button:active:not(:disabled) { --btn-bg: light-dark(color-mix(in srgb, var(--fg) 14%, var(--soft)), color-mix(in srgb, var(--fg) 18%, var(--soft))); }
+:is(.top, .bar) button:hover:not(:disabled) { --btn-bg: light-dark(color-mix(in srgb, var(--fg) 5%, var(--bg)), color-mix(in srgb, var(--fg) 14%, var(--soft))); }
+:is(.top, .bar) button:active:not(:disabled) { --btn-bg: light-dark(color-mix(in srgb, var(--fg) 10%, var(--bg)), color-mix(in srgb, var(--fg) 19%, var(--soft))); }
 button.primary:hover:not(:disabled) { background: color-mix(in srgb, #000 10%, var(--primary)); border-color: color-mix(in srgb, #000 10%, var(--primary)); }
 button.primary:active:not(:disabled) { background: color-mix(in srgb, #000 18%, var(--primary)); border-color: color-mix(in srgb, #000 18%, var(--primary)); }
 button:disabled { opacity: .5; cursor: default; }
@@ -1009,11 +1009,11 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
   border: 1px solid var(--glass-line); border-radius: 10px; box-shadow: inset 0 1px 0 var(--glass-edge), 0 14px 44px var(--shadow);
 }
 .glass .whats-new-back { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
-.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .account-menu > button) { border-radius: 999px; background: color-mix(in srgb, var(--bg) 88%, transparent); border-color: color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
-.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .account-menu > button, :disabled):hover { background: color-mix(in srgb, var(--fg) 5%, var(--bg)); }
-.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .account-menu > button, :disabled):active { background: color-mix(in srgb, var(--fg) 10%, var(--bg)); }
-.glass :is(.top, .bar) button.primary { border-radius: 999px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25); }
-.glass .top .cmd input { border-radius: 999px; background: color-mix(in srgb, var(--bg) 88%, transparent); border-color: color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); } /* as the bar's buttons: same edge, same depth */
+.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .link, .panel *, .account-menu *, .pill-pop *, dialog *) { border-radius: 999px; background: light-dark(color-mix(in srgb, var(--bg) 88%, transparent), color-mix(in srgb, var(--fg) 10%, transparent)); border-color: color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
+.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .link, .panel *, .account-menu *, .pill-pop *, dialog *, :disabled):hover { background: light-dark(color-mix(in srgb, var(--fg) 5%, var(--bg)), color-mix(in srgb, var(--fg) 15%, transparent)); }
+.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .link, .panel *, .account-menu *, .pill-pop *, dialog *, :disabled):active { background: light-dark(color-mix(in srgb, var(--fg) 10%, var(--bg)), color-mix(in srgb, var(--fg) 20%, transparent)); }
+.glass :is(.top, .bar) button.primary:not(.panel *, .account-menu *, .pill-pop *, dialog *) { border-radius: 999px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25); }
+.glass .top .cmd input { border-radius: 999px; background: light-dark(color-mix(in srgb, var(--bg) 88%, transparent), color-mix(in srgb, var(--fg) 10%, transparent)); border-color: color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); } /* as the bar's buttons: same edge, same depth */
 .glass .top .cmd input:focus { border-color: var(--accent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .glass .cmd-kbd { border-radius: 999px; }
 .glass .nav-dev { border-radius: 999px; }
