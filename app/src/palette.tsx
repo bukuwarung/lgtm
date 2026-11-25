@@ -3,7 +3,7 @@ import { gistId, numRef, prWebUrl, pushedNow } from './github.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import type { QueueItem } from './github.ts';
-import { composing, faceOf, recentPRs, repoLabel, term, useRecentPRs } from './platform.ts';
+import { composing, faceOf, recentPRs, repoLabel, shownName, term, useRecentPRs } from './platform.ts';
 import { Octicon } from './tags.tsx';
 import { ACTIONS, keyLabel, readBindings } from './keys.ts';
 
@@ -19,7 +19,7 @@ function entries(queue: QueueItem[]): Entry[] {
   const recent = recentPRs().filter((r) => `/${r.repo}/pull/${r.n}` !== here).map((r) => ({
     kind: 'Recent',
     label: r.title,
-    sub: `${repoLabel(r.repo)}#${r.n} · ${r.author}`,
+    sub: `${repoLabel(r.repo)}#${r.n} · ${shownName(r.author)}`,
     run: () => (location.hash = `/${r.repo}/pull/${r.n}`),
   }));
   // Pushed branches with no PR yet (main.tsx PushedBranches): open one from here.
@@ -28,7 +28,7 @@ function entries(queue: QueueItem[]): Entry[] {
   const prs = queue.filter((i) => !seen.has(`${i.repo}#${i.number}`)).map((i) => ({
     kind: `${T.PR}`,
     label: i.title,
-    sub: `${repoLabel(i.repo)}#${i.number} · ${i.author}`,
+    sub: `${repoLabel(i.repo)}#${i.number} · ${shownName(i.author, i.repo)}`,
     run: () => (location.hash = `/${i.repo}/pull/${i.number}`),
   }));
   const index = [...document.querySelectorAll<HTMLElement>('.ix-item')].map((el) => ({

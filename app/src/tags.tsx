@@ -108,8 +108,11 @@ export const Who = ({ login, src }: { login: string; src?: string }) => (
   <span class="who" title={shownName(login) !== login ? `@${login}` : undefined}>
     <img class="who-av" src={src ?? faceOf(login)} alt="" loading="lazy" />
     {shownName(login)}
+    <BotMark login={login} />
   </span>
 );
+// A bot's mark beside its name (shown without GitHub's "[bot]", as GitHub shows it).
+export const BotMark = ({ login }: { login: string }) => (login.endsWith('[bot]') ? <span class="who-bot" title={`@${login}`} aria-label="(a bot)"><Octicon name="dependabot" /></span> : null);
 
 // When something happened: "2 hours ago", or the date and time (Settings → Appearance → Relative times); the other on hover.
 export const exactTime = (at: string | number) => new Date(at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });

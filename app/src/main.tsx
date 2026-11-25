@@ -1919,7 +1919,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         addNotice(what, i.title, `${i.repo}#${i.number}`);
         if (!notify || !desktop) return;
         if (what === 'Ready to merge') sessionStorage.setItem('openMerge', `${i.repo}#${i.number}`); // its merge box opens (merge.tsx)
-        void notifyNative(`${what}: ${i.title}`, `${repoLabel(i.repo)}#${i.number} by ${i.author}`, `/${i.repo}/pull/${i.number}`);
+        void notifyNative(`${what}: ${i.title}`, `${repoLabel(i.repo)}#${i.number} by ${shownName(i.author, i.repo)}`, `/${i.repo}/pull/${i.number}`);
       };
       // The mute or what counts as a bot just switched: replies hidden or shown again by it aren't new.
       const flipped = rulesWas.current !== rules;
@@ -1956,7 +1956,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       const fresh = list.filter((r) => !told.includes(`${r.repo}#${r.number}`));
       for (const r of fresh) {
         addNotice(`${shownAt(r.author)} is reverting your #${r.of}`, r.title, `${r.repo}#${r.number}`);
-        if (notify) void notifyNative(`Reverting your #${r.of}: ${r.title}`, `${repoLabel(r.repo)}#${r.number} by ${r.author}`, `/${r.repo}/pull/${r.number}`);
+        if (notify) void notifyNative(`Reverting your #${r.of}: ${r.title}`, `${repoLabel(r.repo)}#${r.number} by ${shownName(r.author, r.repo)}`, `/${r.repo}/pull/${r.number}`);
       }
       if (fresh.length) localStorage.setItem('revertsTold', JSON.stringify([...told, ...fresh.map((r) => `${r.repo}#${r.number}`)].slice(-100)));
     }, () => {});

@@ -24,7 +24,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
 import { StaleActions, MergeBox, mergeOnceApproved } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode, CodeSnippet } from './tags.tsx';
+import { AgentMark, BotMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode, CodeSnippet } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
@@ -2383,10 +2383,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             <Octicon name={centered ? 'screen-full' : 'screen-normal'} />
           </button>
           {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
-          {(pr.merged || pr.state === 'closed' || pr.draft) && (
-            <span class={`state-chip ${pr.merged ? 'merged' : pr.state === 'closed' ? 'closed' : 'draft'}`} title={pr.merged ? `Merged${pr.merged_by ? ` by @${pr.merged_by.login}` : ''} into ${pr.base.ref}${pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}` : pr.state === 'closed' ? `Closed without merging${pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}` : 'A draft: not ready for review yet'}>
-              <Octicon name={pr.merged ? 'git-merge' : pr.state === 'closed' ? 'git-pull-request-closed' : 'git-pull-request-draft'} />
-              {pr.merged ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Draft'}
+          {/* A draft (merged or closed: the banner under the bar says so). */}
+          {pr.draft && !pr.merged && pr.state !== 'closed' && (
+            <span class="state-chip draft" title="A draft: not ready for review yet">
+              <Octicon name="git-pull-request-draft" />
+              Draft
             </span>
           )}
           <h1 onContextMenu={titleMenu}>
@@ -2452,15 +2453,14 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                     {' '}<b>{undoneBy.merged ? 'Reverted' : 'Being reverted'}</b> by <a href={`#/${repo}/pull/${undoneBy.number}`}>{numRef(repo, undoneBy.number)}</a>
                     {undoneBy.merged ? <>, merged <Time at={undoneBy.at} /></> : ', still open'}.
                   </>
-                )}{' '}
-                A review now can only comment.</span>
+                )}</span>
               {!undoneBy && <button class="pr-state-act" disabled={reverting} title={`A new ${pageTerm().PR} that undoes this one on ${pr.base.ref}, to review and merge like any other`} onClick={() => void revert(pr.node_id, pr.base.ref)}>
                 {reverting ? 'Reverting…' : 'Revert'}
               </button>}
             </p>
           ) : pr.state === 'closed' ? (
             <p class="pr-state closed">
-              <Octicon name="git-pull-request-closed" size={16} /> <span><b>Closed without merging</b>{pr.closed_at && <> <Time at={pr.closed_at} /></>}. A review now can only comment.</span>
+              <Octicon name="git-pull-request-closed" size={16} /> <span><b>Closed without merging</b>{pr.closed_at && <> <Time at={pr.closed_at} /></>}.</span>
               {(rights?.reopen || rights?.restore) && (
                 <button class="pr-state-act" disabled={!!acting} title={rights.reopen ? undefined : `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`} onClick={() => void stateAct(rights.reopen ? 'reopen' : 'restore')}>
                   {acting ? 'Reopening…' : rights.reopen ? 'Reopen' : 'Restore branch and reopen'}
@@ -6350,7 +6350,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         Conversation <span class="badge">· {items.length} comment{items.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="comment" id="pr-description" data-social={pr.node_id}>
-        <Avatar login={lead.login} src={lead === pr.user ? pr.user.avatar_url : undefined} /> <b class="person-link" title={lead === pr.user ? undefined : `Assigned; opened by ${pr.user.login}`} onClick={toPerson(lead.login, repo)}>{lead.login}</b>
+        <Avatar login={lead.login} src={lead === pr.user ? pr.user.avatar_url : undefined} /> <b class="person-link" title={lead === pr.user ? `@${lead.login}` : `Assigned; opened by @${pr.user.login}`} onClick={toPerson(lead.login, repo)}>{shownName(lead.login, repo)}</b><BotMark login={lead.login} />
         {pr.assignees.filter((a) => a.login !== pr.user.login && a !== lead).map((a, k) => (
           <span key={a.login} class="assigned-to">
             {k ? ', ' : ' · assigned to '}
@@ -6402,7 +6402,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
                 <>
                   {k ? (k === u.length - 1 ? ' and ' : ', ') : ''}
                   <span id={'cv-' + c.id} title={new Date(c.at).toLocaleString()}>
-                    <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{shownName(c.author, repo)}</b>
+                    <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)}>{shownName(c.author, repo)}</b><BotMark login={c.author} />
                   </span>
                 </>
               ))}
@@ -6412,7 +6412,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         const c = Array.isArray(u) ? u[0] : u;
         const head = (
           <>
-            <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
+            <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b><BotMark login={c.author} /> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
             <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
             {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}
             <ReactPick id={c.node} />
@@ -6491,7 +6491,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             const one = (c: ConversationItem) => (
             <details class="comment bot" key={c.id} id={'cv-' + c.id} data-url={c.url}>
               <summary>
-                <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b>{' '}
+                <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b><BotMark login={c.author} />{' '}
                 <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
                 {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}{' '}
                 <span class="bot-excerpt">{botExcerpt(c.html)}</span>

@@ -278,6 +278,7 @@ export const words = (text: string, where?: string | boolean) => {
 // The full login on hover, and in anything sent.
 export const loginEnding = () => account.split('@')[0].match(/[-_][^-_]+$/)?.[0] ?? '';
 export const shortLogin = (login: string) => {
+  login = login.replace(/\[bot\]$/, ''); // a bot by its name, as GitHub shows it ("vorflux", not "vorflux[bot]"); Who marks it
   const end = localStorage.getItem(own('shortLogins')) === '1' ? loginEnding() : '';
   return end && login.endsWith(end) && login.length > end.length ? login.slice(0, -end.length) : login;
 };

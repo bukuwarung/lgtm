@@ -1560,6 +1560,7 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .agents-pop > button { white-space: nowrap; }
 .who { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; vertical-align: bottom; }
 .who-av { width: 1.3em; height: 1.3em; border-radius: 50%; flex: none; }
+.who-bot { display: inline-flex; color: var(--muted); } /* a bot's mark beside its name */
 .ticket-prs { display: grid; gap: 2px; margin: -4px 0 12px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; }
 .ticket-prs a { display: flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; min-width: 0; }
 .ticket-prs a:hover .ticket-pr-title { color: var(--accent); }
