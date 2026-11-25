@@ -90,7 +90,7 @@ export function Tg({ i, t, n }: { i: string | ComponentChildren; t?: string; n?:
       <span class="ti" title={[n, t].filter((x) => x != null && x !== '').join(' ') || undefined}>
         {typeof i === 'string' ? <TagIcon i={i} /> : i}
       </span>
-      {n != null && <span class="tn">{n}</span>}
+      {n != null && <span class="tn" title={t ? `${n} ${t}` : undefined}>{n}</span>}
       {t && <span class="tt">{t}</span>}
     </>
   );

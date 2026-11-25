@@ -2563,6 +2563,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             </p>
           ) : null}
           <div class="pills pr-status" ref={pillsRef}>
+            {/* Groups, a little apart: where it stands, red findings, amber ones, what's in it, how big. */}
+            <span class="pill-group">
             {stale && <span class="pill" title={`Showing the copy loaded ${ago(stale)} while this one loads`}><Tg i="again" t="updating…" /></span>}
             {pr.state === 'open' && rights?.updateBranch && (
               <span class="pill p-warn" title={`${pr.base.ref} has commits this branch doesn't${hint(bindings.updateBranch)}`}>
@@ -2570,8 +2572,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 <button class="link" disabled={!!acting} onClick={() => void stateAct('update')}>{acting === 'update' ? (rights.rebase ? 'Rebasing…' : 'Updating…') : rights.rebase ? 'Rebase' : 'Update branch'}</button>
               </span>
             )}
-            {status && !pr.draft && (
-              <span class={'pill ' + ({ APPROVED: 'p-ok', CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] || '' }>
+            {status && !pr.draft && status.reviewDecision !== 'APPROVED' /* the bar's Approved tag says it */ && (
+              <span class={'pill ' + (({ CHANGES_REQUESTED: 'p-bad' } as Record<string, string>)[status.reviewDecision ?? ''] ?? '')}>
                 <Tg i={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][0]} t={DECISION[status.reviewDecision ?? 'REVIEW_REQUIRED'][1]} />
               </span>
             )}
@@ -2628,6 +2630,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
+            </span>
+            <span class="pill-group">
             {/* Red findings */}
             {secrets.list.length > 0 && (
               <PillMenu cls="p-bad" label={<Tg i="key" n={secrets.list.length} t={`possible secret${secrets.list.length > 1 ? 's' : ''}`} />} head="Added lines that look like a secret:">
@@ -2710,6 +2714,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
+            </span>
+            <span class="pill-group">
             {/* Amber findings */}
             {supp.length > 0 && (
               <PillMenu
@@ -2794,6 +2800,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {deps.some((d) => d.major || d.unpinned) && depsPill}
+            </span>
+            <span class="pill-group">
             {/* Info */}
             {!deps.some((d) => d.major || d.unpinned) && depsPill}
             {ownSome && (
@@ -2812,6 +2820,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             <ModulesPill modules={view !== 'none' ? shownModules : undefined} />
+            </span>
+            <span class="pill-group">
             {pr.additions != null && (
               <span class="pill p-size">
                 <b class="a">+{num(pr.additions)}</b> <b class="d">−{num(pr.deletions ?? 0)}</b> · {num(pr.changed_files ?? 0)} file{pr.changed_files === 1 ? '' : 's'}
@@ -2859,6 +2869,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
+            </span>
           </div>
           {notice && (
             <p class={notice.ok ? 'notice' : 'warn'}>

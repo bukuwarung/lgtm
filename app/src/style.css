@@ -1800,3 +1800,11 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .merge-missing { display: block; margin-top: 2px; font-weight: 400; }
 /* Viewed marks hidden (Settings → Reviewing). */
 .review.no-marks :is(.viewed-box, .vmark, .plan-bar, .plan-n, .plan-viewed) { display: none; }
+/* The PR's pill row in groups (review.tsx): pills 4px apart within one, 12px between. */
+.pr-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.pr-status:not(:has(.pill)) { display: none; }
+.pill-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pill-group:empty { display: none; }
+.pill-group > .pill, .pill-group > details > summary.pill { margin-right: 0; }
+/* A link inside a pill (behind · Update branch) as tall as the pill's own text. */
+.pill button.link { padding: 0; font: inherit; line-height: inherit; vertical-align: baseline; }
