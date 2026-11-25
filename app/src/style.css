@@ -34,10 +34,10 @@ html, body { overflow-x: clip; }
 body { margin: 0; font: calc(14px * var(--ts))/1.5 var(--sans); background: var(--bg); color: var(--fg); }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-/* Buttons filled, with an edge that shows (on the page a shade darker than it; in the bars, which are the theme's panel
-   colour as Slack's sidebar and Firefox's toolbar are, raised in the page's own). */
+/* Buttons filled, with an edge that shows (on the page a shade darker than it; in the top and review bars, which are
+   the theme's panel colour as Firefox's toolbar is, raised in the page's own). */
 :root { --btn-bg: color-mix(in srgb, var(--fg) 4%, var(--soft)); --btn-edge: color-mix(in srgb, var(--fg) 18%, var(--border)); }
-:is(.top, .bar, .side) { --btn-bg: var(--bg); }
+:is(.top, .bar) { --btn-bg: var(--bg); }
 button { font: inherit; padding: 3px 10px; border: 1px solid var(--btn-edge); border-radius: 6px; background: var(--btn-bg); color: var(--fg); cursor: pointer; box-shadow: 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
 button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 button:disabled { opacity: .5; cursor: default; }
@@ -83,7 +83,7 @@ code, pre { font-family: var(--mono); }
 .shell.no-prs { grid-template-columns: 0px minmax(0, 1fr); }
 .empty { margin-top: 48px; }
 /* Sidebars: sticky full-height columns; content scrolls inside, the resize handle stays on the edge. */
-.side { position: sticky; top: var(--nav); height: calc(100vh - var(--nav)); display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--soft); }
+.side { position: sticky; top: var(--nav); height: calc(100vh - var(--nav)); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
 .side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
 .prs .side-scroll { padding: 8px; }
 .review-all { width: 100%; margin-bottom: 6px; }
@@ -232,7 +232,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .gdot { background: var(--g); }
 .count { margin-left: 4px; padding: 0 6px; border-radius: 10px; background: var(--soft); border: 1px solid var(--border); font-weight: 400; }
 .pr-item { display: grid; gap: 1px; margin: 2px 0; padding: 6px 8px; border-left: 3px solid var(--g); border-radius: 0 6px 6px 0; color: var(--fg); }
-.pr-item:hover { background: var(--bg); text-decoration: none; } /* raised in the page's colour on the grey sidebar */
+.pr-item:hover { background: var(--soft); text-decoration: none; }
 .pr-item { position: relative; }
 .pr-x { position: absolute; top: 4px; right: 4px; display: none; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: var(--bg); color: var(--muted); }
 .pr-x:hover { color: var(--fg); background: var(--border); }
@@ -244,7 +244,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .member-tabs button { padding: 3px 0; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; font-size: calc(11px * var(--ts)); color: var(--muted); cursor: pointer; }
 .member-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
 .layer { color: var(--fg); font-weight: 600; }
-.pr-item.cur { background: var(--bg); outline: 1px solid var(--border); }
+.pr-item.cur { background: var(--soft); outline: 1px solid var(--border); }
 .pr-title { font-size: calc(13px * var(--ts)); line-height: 1.35; }
 .pr-item .meta { font-size: calc(11px * var(--ts)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pills:empty { display: none; }
@@ -346,7 +346,7 @@ kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: va
 @media (max-width: 800px) { .shell, .review { grid-template-columns: minmax(0, 1fr); } .side:not(.over) { display: none; } }
 /* A narrow window: the PR list or the index laid over the page from its button (main.tsx, review.tsx), in a column of no
    width, so the diff keeps its own. */
-.side.over { width: min(320px, 85vw); z-index: 25; background: var(--soft); box-shadow: 0 8px 32px var(--shadow); }
+.side.over { width: min(320px, 85vw); z-index: 25; background: var(--bg); box-shadow: 0 8px 32px var(--shadow); }
 @media (max-width: 800px) { .side.over { position: fixed; top: var(--nav); bottom: 0; left: 0; height: auto; } }
 
 /* macOS → Accessibility → Display → Reduce motion: no flashes, sweeps, slides or fades. */
