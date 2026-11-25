@@ -790,6 +790,9 @@ dialog.base-dialog input { width: 100%; box-sizing: border-box; }
 .settings h3 { margin: 0 0 10px; font-size: calc(13px * var(--ts)); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .set-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
 .set-row > span:first-of-type { flex: 1; }
+/* A dropdown right after its label (as a switch sits by its own), not out at the row's far edge. */
+.set-row:has(> :is(select, .set-seg)) { align-items: center; }
+.set-row:has(> :is(select, .set-seg)) > span:first-of-type { flex: 0 0 auto; min-width: 140px; }
 .set-row input:is([type=checkbox], [type=radio]) { margin-top: 3px; }
 .settings small { display: block; color: var(--muted); font-size: calc(12px * var(--ts)); }
 .set-int { display: flex; gap: 10px; padding: 8px 0; }
@@ -957,7 +960,6 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 /* What's new, once after an update */
 .whats-new-back { position: fixed; inset: 0; z-index: 70; display: flex; justify-content: center; align-items: flex-start; padding-top: 10vh; background: rgb(0 0 0 / .3); }
 .whats-new { display: grid; gap: 10px; width: min(640px, calc(100vw - 32px)); max-height: 75vh; overflow: auto; padding: 16px 20px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
-.whats-new .row { display: flex; align-items: center; gap: 8px; font-size: calc(16px * var(--ts)); }
 /* An edited doc comment, rendered: what changed, marked like a changed markdown block */
 .doc-chg { background: var(--add); box-shadow: -6px 0 0 var(--add), 6px 0 0 var(--add); border-radius: 4px; }
 .diff tr.doc.edited .code::before { content: "±"; }
@@ -1383,6 +1385,10 @@ html.no-signs .diff .code::before { content: none; }
 dialog.ask { max-width: min(440px, calc(100vw - 32px)); padding: 16px 20px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
 dialog.ask::backdrop { background: rgb(0 0 0 / .3); }
 dialog.ask p { margin: 0 0 14px; line-height: 1.45; }
+dialog.ask > p:first-child { font-weight: 600; } /* the question, as a macOS alert's title */
+/* Its answer can't be undone (Close, Delete, Discard, Dismiss): the button red, white text. */
+dialog.ask.danger button.primary { background: light-dark(#cf222e, #da3633); border-color: light-dark(#cf222e, #da3633); color: #fff; }
+dialog.ask.danger button.primary:hover:not(:disabled) { background: light-dark(#a40e26, #b62324); border-color: light-dark(#a40e26, #b62324); }
 dialog.ask form { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 dialog.ask form > input, dialog.ask form > label { flex: 1 0 100%; margin-bottom: 4px; }
 /* A spec chip's menu in a file's header: over the file (content-visibility would clip it), opening leftward */
@@ -1731,8 +1737,8 @@ input:is([type=checkbox], [type=radio]):disabled { cursor: not-allowed; opacity:
 /* The PR's title bar: icons centred in their buttons (inline, they sat on the text baseline, low in WebKit), icon-only
    buttons square. */
 .bar :is(button, summary):has(> svg) { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-block-size: calc(1lh + 8px); }
-/* A menu's items, opened from the bar, still start at the left with their icons (Agents, ⋯). */
-.bar .account-menu > :is(button, a) { display: flex; justify-content: flex-start; min-block-size: 0; }
+/* A menu's items, opened from a bar, still start at the left with their icons (Agents, ⋯, accounts). */
+:is(.top, .bar) .account-menu > :is(button, a) { display: flex; justify-content: flex-start; min-block-size: 0; height: auto; } /* the account menu's too (the top bar centres its own buttons) */
 .bar :is(button, summary) > svg { display: block; flex: none; }
 .bar .bar-index { min-inline-size: calc(1lh + 8px); padding: 0; }
 /* Icon-only buttons elsewhere, centred the same way: a comment's copy-link and session buttons, the refresh button, a
@@ -1819,3 +1825,8 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 /* A web engine too old for lgtm (main.tsx TooOld). */
 .too-old { max-width: 460px; margin: 20vh auto 0; padding: 0 24px; text-align: center; }
 .too-old p { color: var(--muted); font-size: calc(14px * var(--ts)); }
+/* What's new as a dialog: its heading, the notes, then All releases and Got it at the bottom. */
+.whats-new-h { margin: 0; font-size: calc(16px * var(--ts)); }
+.whats-new { overflow: hidden; grid-template-rows: auto minmax(0, 1fr) auto; } /* only the notes scroll; the heading and Got it stay in view */
+.whats-new > .md { overflow: auto; min-height: 0; }
+.whats-new-all { margin-right: auto; }

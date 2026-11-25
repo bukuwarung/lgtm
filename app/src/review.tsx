@@ -953,7 +953,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       base: ['', ''],
     }[a];
     // Closing asks why (optional): a comment on the PR, and the review thread hears it.
-    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE) : a === 'update' || a === 'ready' || (await ask(q, yes)) ? { text: '' } : null;
+    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE, undefined, true) : a === 'update' || a === 'ready' || (await ask(q, yes)) ? { text: '' } : null;
     if (!said) return;
     setActing(a);
     try {

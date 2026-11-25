@@ -1158,13 +1158,12 @@ function WhatsNew() {
   return (
     <div class="whats-new-back" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div class="whats-new" role="dialog" aria-label={`What's new in lgtm ${__APP_VERSION__}`}>
-        <div class="row">
-          <b>What's new in lgtm {__APP_VERSION__}</b>
-          <span class="spacer" />
+        <h3 class="whats-new-h">What's new in lgtm {__APP_VERSION__}</h3>
+        <div class="md" dangerouslySetInnerHTML={{ __html: notes }} />
+        <div class="acts">
+          <a class="whats-new-all" href="https://github.com/bukuwarung/lgtm/releases" target="_blank" rel="noopener">All releases</a>
           <button class="primary" onClick={close}>Got it</button>
         </div>
-        <div class="md" dangerouslySetInnerHTML={{ __html: notes }} />
-        <a href="https://github.com/bukuwarung/lgtm/releases" target="_blank" rel="noopener">All releases</a>
       </div>
     </div>
   );

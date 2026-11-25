@@ -1389,7 +1389,7 @@ export function closeOnBackdrop(d: HTMLDialogElement | null) {
 }
 export function ask(text: string, yes = 'OK', danger = false): Promise<boolean> {
   const d = document.createElement('dialog');
-  d.className = 'ask';
+  d.className = danger ? 'ask danger' : 'ask'; // danger: its button red, as macOS draws one that can't be undone
   d.innerHTML = `<p id="ask-${++askId}"></p><form method="dialog"><button value="">Cancel</button><button class="primary" value="y"></button></form>`;
   d.setAttribute('aria-labelledby', `ask-${askId}`);
   d.querySelector('p')!.textContent = text;
@@ -1402,9 +1402,9 @@ export function ask(text: string, yes = 'OK', danger = false): Promise<boolean> 
 
 // ask() with a line to fill in: what was typed ('' when nothing), or null when cancelled. check: a checkbox's label,
 // added (unticked) once it's known; none, no checkbox.
-export function askText(text: string, yes: string, placeholder: string, check?: Promise<string | null>): Promise<{ text: string; checked: boolean } | null> {
+export function askText(text: string, yes: string, placeholder: string, check?: Promise<string | null>, danger = false): Promise<{ text: string; checked: boolean } | null> {
   const d = document.createElement('dialog');
-  d.className = 'ask';
+  d.className = danger ? 'ask danger' : 'ask';
   d.innerHTML = `<p id="ask-${++askId}"></p><form method="dialog"><input maxlength="500"><button value="">Cancel</button><button class="primary" value="y"></button></form>`;
   d.setAttribute('aria-labelledby', `ask-${askId}`);
   d.querySelector('p')!.textContent = text;
