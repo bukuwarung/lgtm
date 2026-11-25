@@ -1036,7 +1036,7 @@ function App() {
             <img src="/favicon.png" alt="" width="96" height="96" />
             <h2>{rm?.practice ? 'Practice run done' : rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
             <p>
-              {rm?.practice ? `Nothing was sent to ${T.site}. When ${T.PRs} need your review, it's the button at the top of the Reviewing tab.`
+              {rm?.practice ? `Nothing was sent to ${T.site}.`
                 : rm?.skipped ? `Reviewed ${rm.done}, skipped ${rm.skipped}: those still need your review.`
                 : rm ? `Reviewed ${rm.done}. No ${T.PRs} need your review right now.`
                 : `No ${T.PRs} need your review right now.`}
@@ -1458,7 +1458,6 @@ const QUEUE_STATE: Record<NonNullable<QueueItem['queue']>['state'], string> = {
 const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string, string]>> = {
   CLEAN: ['ready to merge', 'p-ok', 'merge'],
   HAS_HOOKS: ['ready to merge', 'p-ok', 'merge'],
-  UNSTABLE: ['mergeable', 'p-ok', 'merge'], // with the "CI failing" pill beside it
   DIRTY: ['conflicts', 'p-bad', 'conflict'],
 };
 
@@ -1538,7 +1537,7 @@ async function askAgain(i: QueueItem): Promise<string> {
 }
 async function rerunFailed(i: QueueItem) {
   const runs = [...new Set((await getChecks(i.repo, i.number)).filter((c) => c.state === 'failure' && c.jobId).map(runOf).filter(Boolean))] as string[];
-  if (!runs.length) throw new Error("the failed checks aren't GitHub Actions, so they can't be run again from here");
+  if (!runs.length) throw new Error("not GitHub Actions: rerun them where they run");
   await Promise.all(runs.map((r) => rerunFailedJobs(i.repo, r)));
 }
 
@@ -2116,6 +2115,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'APPROVED' && i.myState !== 'APPROVED' && <span class="pill p-ok"><Tg i="approved" t={`${T.PR} approved`} /></span>}
         {kind === REVIEWING && !reReview(i) && i.reviewDecision === 'CHANGES_REQUESTED' && i.myState !== 'CHANGES_REQUESTED' && <span class="pill p-bad"><Tg i="changes" t={`${T.PR} changes requested`} /></span>}
         {kind === MINE && !i.isDraft && i.mergeState === 'BEHIND' && <UpdateBase i={i} />}
+        {kind === MINE && !i.isDraft && i.reviewDecision === 'CHANGES_REQUESTED' && !i.changesBy.length && <span class="pill p-bad"><Tg i="changes" t="changes requested" /></span>}
         {kind === MINE && !i.isDraft && i.reviewDecision === 'CHANGES_REQUESTED' && i.changesBy.length > 0 && (
           <QuickPill icon="changes" tone="p-bad" idle="changes requested" action={`Ask ${i.changesBy.map((l) => '@' + l).join(', ')} again`} busy="asking…" done="asked again" title="Once you've made the changes: ask whoever requested them to review again" run={() => askAgain(i)} />
         )}
@@ -2123,7 +2123,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           <QuickPill icon="auto" tone="" idle={i.ci === 'PENDING' || i.ci === 'EXPECTED' ? 'checks running' : 'blocked'} action="Enable auto-merge" busy="enabling…" done="auto-merge on" title="Approved, but can't merge yet: Enable auto-merge merges it once it can (the repo's usual method)" run={() => autoMerge(i)} />
         )}
         {kind === MINE && i.qa && <QaPill i={i} />}
-        {kind === MINE && !i.isDraft && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}><Tg i={MERGE_PILL[i.mergeState]![2]} t={MERGE_PILL[i.mergeState]![0]} /></span>}
+        {kind === MINE && !i.isDraft && !i.autoMerge && !i.queue && MERGE_PILL[i.mergeState] && <span class={'pill ' + MERGE_PILL[i.mergeState]![1]}><Tg i={MERGE_PILL[i.mergeState]![2]} t={MERGE_PILL[i.mergeState]![0]} /></span>}
         {i.queue ? (
           <span class={i.queue.state === 'UNMERGEABLE' ? 'pill p-bad' : 'pill p-ok'} title={QUEUE_STATE[i.queue.state]}>
             {i.queue.state === 'UNMERGEABLE' ? <Tg i="queue" t="queue: can't merge" /> : <Tg i="queue" n={`#${i.queue.position}`} t="in merge queue" />}

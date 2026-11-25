@@ -1298,7 +1298,7 @@ export async function backToSession(id: string, message = '', agent?: 'codex'): 
     return note;
   }
   await copyText(`claude --resume ${id}${message ? " 'check lgtm'" : ''}`).catch(() => {});
-  return 'A Terminal session: the command to resume it is copied; paste it in Terminal';
+  return 'Copied the command to resume it: paste it in Terminal';
 }
 
 // The installed skill, kept the same as this lgtm's (after an update), without asking: only if it's installed.

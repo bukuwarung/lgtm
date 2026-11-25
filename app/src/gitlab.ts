@@ -52,7 +52,7 @@ const slow = new Map<string, number>();
 const running = new Map<string, number>();
 const queued = new Map<string, (() => void)[]>();
 const slowError = (host: string) =>
-  new Error(`${host} asked lgtm to slow down (its limit on requests a minute): lgtm asks again at ${new Date(slow.get(host)!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`);
+  new Error(`${host} rate-limited lgtm until ${new Date(slow.get(host)!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`);
 async function turn(host: string) {
   if ((running.get(host) ?? 0) >= 4) await new Promise<void>((go) => queued.set(host, [...(queued.get(host) ?? []), go]));
   running.set(host, (running.get(host) ?? 0) + 1);
@@ -422,7 +422,7 @@ export async function submitLabReview(prId: string, commitOID: string, event: Re
   const { host } = split(repo);
   const base = `/projects/${pid(repo)}/merge_requests/${n}`;
   const refs = (await getMR(repo, n, 'diffRefs{baseSha headSha startSha}')).diffRefs;
-  if (refs.headSha !== commitOID) throw new Error(`${STALE_PUSH} MR: nothing was sent. Look at them, then send again.`);
+  if (refs.headSha !== commitOID) throw new Error(`${STALE_PUSH} MR: nothing was sent.`);
   const files = drafts.some((x) => x.line) ? await getLabFiles(repo, n) : [];
   for (const x of drafts) {
     const f = files.find((f) => f.filename === x.path);

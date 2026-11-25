@@ -620,7 +620,7 @@ async function slackDelete({ pr, login, sent }) {
         // Neither: a reply under it (in its thread) saying the ask is off.
         const root = threads[key]?.ts && /^\d+\.\d+$/.test(threads[key].ts) && threads[key].channel === msg.channel ? threads[key].ts : msg.ts;
         const f = await slackcli(['messages', 'send', `--recipient-id=${msg.channel}`, `--thread-ts=${root}`, '--message-file', '-', '--json', ...dry], 'No need to review this anymore, sorry for the noise.');
-        if (!f.ok) return { ok: false, error: `Slack lets lgtm neither delete it (${r.error}) nor edit it (${e.error}), and replying failed too (${f.error}): delete it in Slack yourself` };
+        if (!f.ok) return { ok: false, error: `Couldn't delete, edit or reply to it on Slack (${r.error}): delete it there yourself` };
         if (!DRY_RUN && threads[key]?.last?.ts === msg.ts) (delete threads[key].last, await saveThreads(threads));
         return { ok: true, followedUp: true };
       }
@@ -723,7 +723,7 @@ function agentText(input, model, effort, agent, onDelta, cwd, read = [], keep = 
       if (late) return reject(new Error('Claude Code took too long and was stopped'));
       if (code || result?.is_error) {
         const last = err.trim().split('\n').pop() || String(result?.result ?? '').trim().split('\n').pop() || `Claude Code stopped (${code})`;
-        if (/authenticat|log ?in|oauth|unauthori[sz]ed/i.test(last)) return reject(new Error("Claude Code isn't signed in: run `claude` in Terminal and sign in (/login), then try again"));
+        if (/authenticat|log ?in|oauth|unauthori[sz]ed/i.test(last)) return reject(new Error("Claude Code isn't signed in: run `claude` in Terminal, then /login"));
         return reject(new Error(last));
       }
       resolve(String(result?.result ?? text).trim());

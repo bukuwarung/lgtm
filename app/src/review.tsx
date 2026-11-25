@@ -22,7 +22,7 @@ import { isMarkdown, md, onDocClick, renderChunks, tidyDoc, toggleTask } from '.
 import { CommentMenu, ReactPick, Reactions, editUnderMouse, loadSocial, menuUnderMouse, reactUnderMouse, useSocial } from './social.tsx';
 import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
-import { StaleActions, MergeBox, mergeOnceApproved } from './merge.tsx';
+import { StaleActions, MergeBox, MergedActions, mergeOnceApproved } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
 import { AgentMark, BotMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode, CodeSnippet } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
@@ -229,7 +229,7 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: s
 type Finding = { text: string; go: () => void };
 // What became of the Slack message when a review request was taken back (platform.ts slackDelete), as the end of a sentence.
 const slackGone = (r: { ok: boolean; error?: string; edited?: boolean; followedUp?: boolean }, had: boolean) =>
-  !had ? '.' : !r.ok ? `. The Slack message is still there: ${r.error}.` : r.followedUp ? `. Your Slack workspace allows neither deleting nor editing messages, so lgtm replied under it that the review isn't needed anymore.` : r.edited ? `. Your Slack workspace doesn't allow deleting messages, so the Slack message now just says "-".` : ', and deleted its Slack message.';
+  !had ? '.' : !r.ok ? `. The Slack message is still there: ${r.error}.` : r.followedUp ? `. Slack allows no deleting or editing here, so lgtm replied under it that it's not needed.` : r.edited ? `. Slack allows no deleting here, so its message now says "-".` : ', and deleted its Slack message.';
 
 function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean, asked?: string) => void; findings?: Finding[]; files?: PRFile[] }) {
   // What lgtm found in my PR, shown once before the first ask: reviewers needn't point out the obvious.
@@ -404,8 +404,9 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
 // A pill that says what it counts: a click opens the list behind it (what each item is, in a line on top), each one a
 // link or a jump; a click elsewhere, or Esc, closes it.
 type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore' | 'update' | 'ready' | 'base';
-function StateActs({ rights, draft, acting, act }: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void }) {
-  const b = (a: StateAct, label: string, busy: string, title: string): preact.JSX.Element => <button disabled={!!acting} title={title} onClick={() => act(a)}>{acting === a ? busy : label}</button>;
+// only: just these (the idle banner: close it or park it); skip: ones shown elsewhere (the ⋯ menu: not Reopen, in the tag's menu).
+function StateActs({ rights, draft, acting, act, only, skip }: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void; only?: StateAct[]; skip?: StateAct[] }) {
+  const b = (a: StateAct, label: string, busy: string, title: string): preact.JSX.Element | null => (only && !only.includes(a)) || skip?.includes(a) ? null : <button disabled={!!acting} title={title} onClick={() => act(a)}>{acting === a ? busy : label}</button>;
   const t = pageTerm().PR;
   return (
     <>
@@ -493,7 +494,7 @@ function StateMenu({ askQa, rights, ...p }: { rights: PrRights | null; draft: bo
       {open && (
         <div class="account-menu" role="menu" ref={pop} onClick={(e) => (e.target as Element).closest('button') && setOpen(false)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
           {askQa && <button title={`Post a QA request for this ${pageTerm().PR} on Slack (you see it first)${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').askQa)}`} onClick={() => dispatchEvent(new Event('lgtm:ask-qa'))}>Ask QA…</button>}
-          {rights && <StateActs rights={rights} {...p} />}
+          {rights && <StateActs rights={rights} {...p} skip={['reopen', 'restore']} />}
         </div>
       )}
     </span>
@@ -645,7 +646,7 @@ export async function swapReviewer(repo: string, n: number, away: string, skip: 
   const free = picks.filter((p) => !p.busy && !isAway(status[p.login]));
   const next = free.find((p) => !lateFor(status[p.login])) ?? free[0];
   if (!next)
-    throw new Error(owners ? `No free code owner to ask: @${away} was asked as one, and GitHub needs an owner's approval; the other owners of these files are away, busy or already asked.` : 'No one free to ask: everyone suggested is away or already asked.');
+    throw new Error(owners ? `No free code owner to replace @${away}: the others are away, busy or already asked.` : 'No one free to ask: everyone suggested is away or already asked.');
   await requestReview(repo, n, next.login);
   await unrequestReview(repo, n, away);
   dispatchEvent(new Event('lgtm:refresh'));
@@ -813,7 +814,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     // The PR's review request on Slack, if any: a box to say so in its thread.
     const author = data && data.pr.user.login !== me ? data.pr.user.login : undefined;
     const where = slackRequest(`${repo}#${n}`, author).then((d) => d.where && `Reply in its review request's thread in ${d.where}`, () => null);
-    const a = await askText(`Open a ${pageTerm().PR} that reverts this one on ${base}? It's reviewed and merged like any other. Why goes in its description.`, 'Revert', 'Why (optional): what it breaks', where);
+    const a = await askText(`Open a ${pageTerm().PR} that reverts this one on ${base}?`, 'Revert', 'Why (optional): what it breaks', where);
     if (!a) return;
     setReverting(true);
     try {
@@ -2285,7 +2286,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
 
   // The dependency pill: with the amber findings when a major jump or an unpinned version is marked, else with the info.
   const depsPill = deps.length > 0 && (
-    <PillMenu cls={deps.some((d) => d.major || d.unpinned) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Libraries added, removed or moved (major jumps and unpinned versions marked):">
+    <PillMenu cls={deps.some((d) => d.major || d.unpinned) ? 'p-warn' : ''} label={<Tg i="package" n={deps.length} t={`dependenc${deps.length > 1 ? 'ies' : 'y'} changed`} />} head="Marked: major jumps, unpinned versions">
       {deps.map((d) => (
         <div class="pill-row">
           <button onClick={() => jumpToLine(d.path, d.removed ? undefined : d.line)} title={`${d.path}:${d.line}`}>
@@ -2312,8 +2313,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         if (!head || head === pr.head.sha) return null;
         const c = await getCompare(repo, pr.head.sha, head).catch(() => null);
         return !c || c.status === 'diverged' || !c.commits
-          ? `The branch was rewritten since you opened it: your review goes on code you haven't seen.`
-          : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it: your review goes on the newest.`;
+          ? `The branch was rewritten since you opened it.`
+          : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it.`;
       }}
       seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
       canMerge={!!rights?.merge && pr.state === 'open' && !pr.draft && (pr.assignees.some((a) => a.login === me) || !!linkedSession(repo, n))} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
@@ -2349,17 +2350,17 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               files={noTests.size ? shown.map((f) => (noTests.has(f.filename) ? { ...f, untested: true } : f)) : shown}
               viewed={viewed}
               onViewed={markViewed}
-              slackAsk={!!me && pr.user.login === me && slackPeople !== null ? askOnSlack : undefined}
+              slackAsk={!!me && pr.user.login === me && pr.state === 'open' && slackPeople !== null ? askOnSlack : undefined}
               slackWith={new Set(slackThreads.map((t) => t.login))}
-              reRequest={!!me && pr.user.login === me ? reRequest : undefined}
+              reRequest={!!me && pr.user.login === me && pr.state === 'open' ? reRequest : undefined}
               withdraw={(!!me && pr.user.login === me) || rights?.update ? withdraw : undefined}
-              replace={!!me && pr.user.login === me ? replaceReviewer : undefined}
-              addMe={!!me && pr.user.login !== me ? () => takeReview(repo, n, (pr.requested_teams ?? []).map((t) => t.slug)).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
+              replace={!!me && pr.user.login === me && pr.state === 'open' ? replaceReviewer : undefined}
+              addMe={!!me && pr.user.login !== me && pr.state === 'open' ? () => takeReview(repo, n, (pr.requested_teams ?? []).map((t) => t.slug)).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
               me={me}
               modules={view === 'all' ? shownModules : undefined}
               steps={readingOrder ? steps : undefined}
               ask={
-                !!me && pr.user.login === me && (
+                !!me && pr.user.login === me && pr.state === 'open' && ( // merged or closed: nobody to ask
                   <AskReviewer
                     findings={findings}
                     files={data.files}
@@ -2436,6 +2437,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   Tell the review thread
                 </button>
               ),
+              mine && pr.merged && <MergedActions repo={repo} n={n} tickets={jiraKeys(pr.title, pr.head.ref)} />,
             ].filter(Boolean) as ComponentChildren[],
           )}
           {pr.draft && !pr.merged && pr.state !== 'closed' && (
@@ -2487,9 +2489,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
             {askQa && <AskQA inMenu pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
-            {mine && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
+            {mine && pr.state === 'open' && !pr.draft && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
-            {(askQa || (rights && (rights.close || rights.reopen || rights.restore || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} />}
+            {(askQa || (rights && (rights.close || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} />}
             {submitPanel()}
           </div>
         </div>
@@ -2501,11 +2503,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {pr.merged || pr.state === 'closed' ? null /* the tag in the bar: details on hover, actions in its menu */ : idleDays >= 30 && rights?.close ? (
             <p class="pr-state idle">
               <Octicon name="hourglass" size={16} /> <span><b>No activity for {idleDays} days.</b> Close it if it's not going anywhere, or {pr.draft ? 'pick it up again' : 'make it a draft until it is'}.</span>
-              <span class="pr-state-act"><StateActs rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} /></span>
+              <span class="pr-state-act"><StateActs rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} only={['close', 'draft', 'ready']} /></span>
             </p>
           ) : pr.draft ? (
             <p class="pr-state draft">
-              <Octicon name="git-pull-request-draft" size={16} /> <span><b>Draft.</b> {me && pr.user.login === me ? "Reviewers aren't notified until you mark it ready for review." : "The author hasn't asked for review yet: it may still change."}</span>
+              <Octicon name="git-pull-request-draft" size={16} /> <span><b>Draft.</b> {me && pr.user.login === me ? null : "It may still change."}</span>
               {rights?.update && rights.close && (
                 <button class="pr-state-act" disabled={!!acting} title={`Mark it ready: reviewers are notified${hint(bindings.ready)}`} onClick={() => void stateAct('ready')}>
                   {acting === 'ready' ? 'Marking…' : 'Ready for review'}
@@ -2581,7 +2583,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             )}
             {/* Red findings */}
             {secrets.list.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="key" n={secrets.list.length} t={`possible secret${secrets.list.length > 1 ? 's' : ''}`} />} head="Added lines that look like a secret (a key, a token, a password in the code):">
+              <PillMenu cls="p-bad" label={<Tg i="key" n={secrets.list.length} t={`possible secret${secrets.list.length > 1 ? 's' : ''}`} />} head="Added lines that look like a secret:">
                 {secrets.list.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
@@ -2606,7 +2608,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {backend.mig.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="alert" n={backend.mig.length} t={`migration problem${backend.mig.length > 1 ? 's' : ''}`} />} head="Flyway checks every migration it already ran, and runs new ones in version order:">
+              <PillMenu cls="p-bad" label={<Tg i="alert" n={backend.mig.length} t={`migration problem${backend.mig.length > 1 ? 's' : ''}`} />} head="Migrations Flyway may refuse:">
                 {backend.mig.map((m) => (
                   <div class="pill-row">
                     <button onClick={() => jumpTo('f-' + m.path)} title={m.path}>
@@ -2626,7 +2628,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {drift.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="package" t="lockfile not updated" />} head="package.json's dependencies changed, its lockfile didn't: npm ci (and the like) fail on the mismatch.">
+              <PillMenu cls="p-bad" label={<Tg i="package" t="lockfile not updated" />} head="package.json changed, its lockfile didn't: npm ci fails.">
                 {drift.map((d) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(d.path, d.line)} title={d.path}>
@@ -2638,7 +2640,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {focusHits.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="alert" n={focusHits.length} t={focusHits.every((f) => f.what === 'debugger') ? 'debugger left in' : 'focused test left in'} />} head="A .only makes CI run just that test (and pass); a debugger stops the app in anyone's dev tools:">
+              <PillMenu cls="p-bad" label={<Tg i="alert" n={focusHits.length} t={focusHits.every((f) => f.what === 'debugger') ? 'debugger left in' : 'focused test left in'} />} head="Left in from debugging:">
                 {focusHits.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
@@ -2650,7 +2652,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {room.length > 0 && (
-              <PillMenu cls="p-bad" label={<Tg i="alert" t="table changed, database version not raised" />} head={`These change a Room table's columns, but no @Database version is raised in this ${pageTerm().PR}: installed apps keep the old table and crash when they update, until the version goes up (with a migration).`}>
+              <PillMenu cls="p-bad" label={<Tg i="alert" t="table changed, database version not raised" />} head={`Room table columns changed, no @Database version raised: installed apps crash on update.`}>
                 {room.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
@@ -2666,7 +2668,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               <PillMenu
                 cls={supp.some((x) => x.test || x.ci) ? 'p-warn' : ''}
                 label={<Tg i="alert" n={supp.length} t={offLabel(supp)} />}
-                head={`Tests skipped, CI steps let fail or skipped, and checks (types, lint, warnings, coverage) silenced by the ${pageTerm().PR}:`}
+                head={`Switched off by this ${pageTerm().PR}:`}
               >
                 {supp.map((x) => (
                   <div class="pill-row">
@@ -2697,7 +2699,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {backend.ent.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="alert" t="entity changed, no migration" />} head={`These change a JPA entity's columns, and this ${pageTerm().PR} adds no migration: the database won't have them (unless something else creates them).`}>
+              <PillMenu cls="p-warn" label={<Tg i="alert" t="entity changed, no migration" />} head={`Entity columns changed, no migration in this ${pageTerm().PR}:`}>
                 {backend.ent.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => (x.side === 'RIGHT' ? jumpToLine(x.path, x.line) : jumpTo('f-' + x.path))} title={`${x.path}:${x.line}`}>
@@ -2709,7 +2711,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {texts.list.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="text" n={texts.list.length} t={`text${texts.list.length > 1 ? 's' : ''} not in strings.xml`} />} head="Text people see, written in the code instead of strings.xml, so never translated:">
+              <PillMenu cls="p-warn" label={<Tg i="text" n={texts.list.length} t={`text${texts.list.length > 1 ? 's' : ''} not in strings.xml`} />} head="Text in the code, not strings.xml (never translated):">
                 {texts.list.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
@@ -2721,7 +2723,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {html.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="alert" n={html.length} t="raw HTML" />} head="HTML put in as is: safe only if none of it comes from users (else it's an XSS hole):">
+              <PillMenu cls="p-warn" label={<Tg i="alert" n={html.length} t="raw HTML" />} head="HTML put in as is (an XSS hole if any comes from users):">
                 {html.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
@@ -2733,7 +2735,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               </PillMenu>
             )}
             {txs.length > 0 && (
-              <PillMenu cls="p-warn" label={<Tg i="alert" n={txs.length} t="@Transactional on a private method" />} head="Spring's proxy never sees a call to a private method, so it runs without a transaction:">
+              <PillMenu cls="p-warn" label={<Tg i="alert" n={txs.length} t="@Transactional on a private method" />} head="No transaction: Spring's proxy never sees private calls:">
                 {txs.map((x) => (
                   <div class="pill-row">
                     <button onClick={() => jumpToLine(x.path, x.line)} title={x.path}>
@@ -2861,9 +2863,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                     {fromSha ? `Showing only the changes after ${points?.find((p) => p.sha === fromSha)?.label ?? 'that point'} ` : 'Showing only those changes '}
                     (<CopyCode text={sinceBase!}>{sinceBase!.slice(0, 7)}</CopyCode> → <CopyCode text={pr.head.sha}>{pr.head.sha.slice(0, 7)}</CopyCode>)
                     {sinceData ? ` · ${sinceData.files.length} file${sinceData.files.length === 1 ? '' : 's'}` : ' · loading…'}
-                    {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since then, so these files may also show changes from the base branch</b>}
+                    {sinceData?.status === 'diverged' && sinceData.files.length > 0 && <b> · rebased since, so base-branch changes may show too</b>}
                     {sinceData?.status === 'rebased' && <> · rebased since then: the base branch's changes left out</>}
-                    {sinceData && !sinceData.files.length && <b> · none of this {pageTerm().PRs_} files changed (only a rebase)</b>}
+                    {sinceData && !sinceData.files.length && <b> · only a rebase, no file changed</b>}
                   </span>
                   <button onClick={() => showCommit(null)}>Show all changes</button>
                 </>
@@ -2874,7 +2876,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           )}
           {paused && !commitView && (
             <p class="warn">
-              Threads hidden: {paused.replace(/: lgtm waits until then$/, '')}. Reload after that.
+              Threads hidden: {paused}. Reload after that.
             </p>
           )}
           {!commitView && drafts.length > 0 && saved.sha !== pr.head.sha && (
@@ -3037,7 +3039,7 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
     let live = true;
     Promise.all([getSlackPeople(), slackFindsByEmail()]).then(([{ mine }, email]) => {
       const lost = slackTo.filter((l) => !mine[personKey(repo, l)] && !threaded.includes(l) && !threaded.includes(personKey(repo, l)));
-      if (live) setSlackWarn(lost.length && !email ? `Slack won't reach ${lost.map((l) => '@' + l).join(', ')}: not mapped, and your Slack sign-in can't find people by email. Map them in Settings → Slack → People.` : '');
+      if (live) setSlackWarn(lost.length && !email ? `Slack won't reach ${lost.map((l) => '@' + l).join(', ')} (no Slack match). Settings → Slack → People.` : '');
     }, () => {});
     return () => void (live = false);
   }, [open, notify, who, threaded.join(',')]);
@@ -3184,12 +3186,11 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
             if (nothing) return <div class="sends">Say what to change above.</div>;
             const extra = [
               event === 'REQUEST_CHANGES' && !body.trim() && 'a summary of your comments as its text',
-              count > 0 && `${count} line comment${count > 1 ? 's' : ''}`,
             ].filter(Boolean);
-            if (!extra.length) return null;
+            if (!extra.length && !lineComments.length) return null;
             return (
               <div class="sends">
-                Also: {extra.join('; ')}.
+                {extra.length > 0 && <>Also: {extra.join('; ')}.</>}
                 {lineComments.length > 0 && (
                   <span class="sends-list">
                     {lineComments.slice(0, 6).map((d) => `${base(d.path)}${d.line ? ':' + d.line : ''}`).join(' · ')}
@@ -3199,7 +3200,7 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
               </div>
             );
           })()}
-          <button class="primary" disabled={!!busy || (inline && inFlight)} onClick={go}>
+          <button class="primary" disabled={!!busy || (inline && inFlight) || (event === 'REQUEST_CHANGES' && !body.trim() && !count && !mySummary)} onClick={go}>
             {busy ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : authored ? 'Comment' : 'Submit review'}
           </button>
           {discard && <button class="link discard-review" disabled={!!busy} onClick={() => (setOpen(false), discard())} title="Throw away your unsent review and its comments">Discard review</button>}

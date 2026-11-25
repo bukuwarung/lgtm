@@ -152,7 +152,7 @@ const LIMIT_NAME: Record<string, string> = { core: "GitHub's hourly API limit", 
 const limitError = (bucket: string) => {
   const l = limited.get(bucket)!;
   const at = new Date(l.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', ...(l.until - Date.now() < 120_000 ? { second: '2-digit' } : {}) });
-  return new Error(l.slow ? `GitHub asked lgtm to slow down: it asks again at ${at}` : `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`} is used up until ${at}: lgtm waits until then`);
+  return new Error(l.slow ? `GitHub rate-limited lgtm until ${at}` : `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`} is used up until ${at}`);
 };
 export const isLimited = (bucket: string) => (limited.get(bucket)?.until ?? 0) > Date.now();
 
@@ -1297,7 +1297,7 @@ export async function commitSuggestions(headRepo: string, branch: string, head: 
     return await commitSuggestionsOn(headRepo, branch, head, list, me);
   } catch (e) {
     const now = STALE.test((e as Error).message) && !isLab(headRepo) ? await freshHead(headRepo, branch, head, list.map((x) => x.path)).catch(() => null) : null;
-    if (!now) throw STALE.test((e as Error).message) ? new Error('New commits on the branch changed these files since you loaded it: reload, then apply them again') : e;
+    if (!now) throw STALE.test((e as Error).message) ? new Error('New commits changed these files: reload, then apply again') : e;
     return commitSuggestionsOn(headRepo, branch, now, list, me);
   }
 }
@@ -1915,7 +1915,7 @@ export function notesOf(rules: Rule[], unresolved: number, decision: string | nu
   const pr = has('pull_request')?.parameters ?? {};
   const deploy: string[] = has('required_deployments')?.parameters?.required_deployment_environments ?? [];
   return [
-    pr.required_review_thread_resolution && unresolved > 0 && `${unresolved} conversation${unresolved > 1 ? 's aren\'t' : ' isn\'t'} resolved (the branch rules ask for all of them)`,
+    pr.required_review_thread_resolution && unresolved > 0 && `${unresolved} conversation${unresolved > 1 ? 's aren\'t' : ' isn\'t'} resolved`,
     pr.require_code_owner_review && decision !== 'APPROVED' && 'a code owner has to approve',
     (pr.required_approving_review_count ?? 0) > 1 && decision !== 'APPROVED' && `it needs ${pr.required_approving_review_count} approvals`,
     has('merge_queue') && 'it merges through the merge queue',

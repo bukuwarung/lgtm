@@ -312,7 +312,7 @@ function ConvToggles({ repo, n, prNode, canEdit, threads }: { repo: string; n: n
   const subscribe = () => meta && meta.subscribed != null && change({ ...meta, subscribed: !meta.subscribed }, () => setSubscribed(repo, n, prNode, !meta.subscribed), meta.subscribed ? `Unsubscribed: no notifications about this ${T.PR} unless you're mentioned` : `Subscribed to this ${T.PR}'s notifications`);
   const lock = async () => {
     if (!meta || !canEdit) return;
-    if (!meta.locked && !(await ask(`Lock the conversation? Only people with write access can comment until it's unlocked.`, 'Lock'))) return;
+    if (!meta.locked && !(await ask(`Lock the conversation? Only people with write access can comment.`, 'Lock'))) return;
     change({ ...meta, locked: !meta.locked }, () => setLocked(repo, n, !meta.locked), meta.locked ? 'Conversation unlocked' : 'Conversation locked');
   };
   useDetailsKey('subscribe', subscribe);

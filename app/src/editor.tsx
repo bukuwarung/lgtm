@@ -263,7 +263,7 @@ export function Editor(p: Props) {
           <textarea
             ref={area}
             rows={p.rows ?? 4}
-            placeholder={p.placeholder ?? 'Leave a comment · : for emoji, @ to mention, ` for code, / for saved replies · ⌘↵ to save'}
+            placeholder={p.placeholder ?? 'Leave a comment · : emoji · / saved replies · ⌘↵ to save'}
             value={p.value}
             onInput={(e) => {
               p.onInput(e.currentTarget.value);

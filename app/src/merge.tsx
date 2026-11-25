@@ -2,8 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { jumpTo } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
-import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview, closedOnSlack, WHY_CLOSE, askText } from './platform.ts';
-import { isStalePush, afterApproval, CANT_MERGE_YET, getChecks, closeWithReason, deleteBranch, disableAutoMerge, getMergeState, getPushPoints, prCommits, markReady, mergePR, neverRan, requiredChecks, updateBranchAndWait, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
+import { type QaThread, reportError, fetchJira, moveJira, useJiraStatuses, useStoredFlag, useStoredValue, type JiraIssue, type JiraStatus, useDismiss, ask, pageTerm, markDoneOnSlack, ticketsToReview } from './platform.ts';
+import { isStalePush, afterApproval, CANT_MERGE_YET, getChecks, deleteBranch, disableAutoMerge, getMergeState, getPushPoints, prCommits, mergePR, neverRan, requiredChecks, requestReview, site, type Check, type MergeMethod, type MergeState } from './github.ts';
 
 const VERB: Record<MergeMethod, string> = { MERGE: 'Merge', SQUASH: 'Squash and merge', REBASE: 'Rebase and merge' };
 
@@ -42,7 +42,7 @@ export async function mergeOnceApproved(repo: string, n: number, wait = (ms: num
   // Blocked for no reason GitHub names (checks still to pass where auto-merge isn't allowed, say): the checks' word.
   if (next === CANT_MERGE_YET) {
     const why = blockers(s, await getChecks(repo, n).catch(() => null)).filter((b) => b !== 'Blocked by branch rules').join(', ').toLowerCase();
-    next = !why ? `${site(repo)} doesn't say what's blocking it (its merge box on ${site(repo)} may)`
+    next = !why ? `${site(repo)} doesn't say what's blocking it`
       : s.mergeStateStatus === 'BLOCKED' && !s.viewerCanEnableAutoMerge ? `${why}, and auto-merge isn't turned on for this repo` : why;
   }
   const m = s.methods[0];
@@ -168,6 +168,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
       onChange();
     } catch (e: any) {
       setErr(e.message);
+      if (isStalePush(e.message)) setConfirm(null); // its button could only fail again until a reload
       reportError(`${label === 'merge' ? "Couldn't merge" : "Couldn't do that"}: ${e.message}`);
     }
     setBusy('');
@@ -196,7 +197,6 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
         <b>{headline}</b>
         {loading && <Updating />}
         {!ready && why.length > 0 && <span class="merge-why">{why.join(' · ')}</span>}
-        {conflict && <a href={`${url}/conflicts`} target="_blank" rel="noopener">Resolve conflicts on {site(repo)}</a>}
       </div>
       {s.holds.length > 0 && (
         <div class="merge-row merge-hold">
@@ -252,40 +252,20 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
       )}
       {s.autoMergeRequest && (
         <div class="merge-row">
-          Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{s.autoMergeRequest.enabledBy && <>, enabled by <Who login={s.autoMergeRequest.enabledBy.login} /></>}: it merges once requirements are met.
+          Auto-merge ({VERB[s.autoMergeRequest.mergeMethod].toLowerCase()}) is on{s.autoMergeRequest.enabledBy && <>, enabled by <Who login={s.autoMergeRequest.enabledBy.login} /></>}{missing.length ? ', but it waits for ever for the checks that never ran' : ''}.
           {s.viewerCanDisableAutoMerge && <button disabled={!!busy} onClick={() => run('disable', () => disableAutoMerge(s.id))}>Disable auto-merge</button>}
         </div>
       )}
       {!confirm && <div class="merge-row">
-        {s.isDraft && <button disabled={!!busy} onClick={() => run('ready', () => markReady(s.id).then(() => (void ticketsToReview(tickets), setShown(false), jumpTo('ix-reviewers'))))}>{busy === 'ready' ? 'Marking…' : 'Ready for review'}</button>}
-        {s.mergeStateStatus === 'BEHIND' && s.viewerCanUpdateBranch && (
-          <button disabled={!!busy} onClick={() => run('update', () => updateBranchAndWait(repo, n, s).then(() => dispatchEvent(new Event('lgtm:refresh'))))}>{busy === 'update' ? (s.reasons ? 'Rebasing…' : 'Updating…') : s.reasons ? 'Rebase' : 'Update branch'}</button>
-        )}
         {s.methods.length > 1 && (
           <select value={m} onChange={(e) => setMethod(e.currentTarget.value as MergeMethod)} title="Merge method">
             {s.methods.map((x) => <option value={x}>{VERB[x]}</option>)}
           </select>
         )}
         <button class="primary" disabled={!!busy || !(ready || bypass)} onClick={() => open('merge')}>{VERB[m]}</button>
-        {!ready && !s.autoMergeRequest && s.viewerCanEnableAutoMerge && !missing.length && ( // checks that never run: auto-merge would wait for ever
+        {!ready && !s.autoMergeRequest && s.viewerCanEnableAutoMerge && !missing.length && !conflict && ( // never-run checks or conflicts: auto-merge would wait for ever
           <button disabled={!!busy} onClick={() => open('auto')}>Enable auto-merge</button>
         )}
-        <button
-          class="link merge-close"
-          disabled={!!busy}
-          title={`Close this ${pageTerm().PR} without merging (it can be reopened). With Settings → Slack → "Tell your review request when you close", its review request's thread hears it too`}
-          onClick={async () => {
-            const a = await askText(`Close this ${pageTerm().PR} without merging? It can be reopened later.`, 'Close', WHY_CLOSE);
-            if (!a) return;
-            run('close', async () => {
-              await closeWithReason(repo, n, a.text);
-              const where = await closedOnSlack(`${repo}#${n}`, asked, a.text).catch(() => null);
-              if (where) dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Closed. Said so in your review request's thread in ${where}.` } }));
-            });
-          }}
-        >
-          {busy === 'close' ? 'Closing…' : 'Close'}
-        </button>
         {!ready && !s.isDraft && !conflict && s.viewerCanMergeAsAdmin && (
           <label title="You're an admin here: merge even though requirements aren't met">
             <input type="checkbox" checked={bypass} onChange={() => setBypass(!bypass)} /> Merge without waiting for requirements
@@ -294,7 +274,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
       </div>}
       {confirm && (
         <div class="merge-confirm">
-          {s.holds.length > 0 && <p class="warn">It's marked not to merge: {s.holds.join(', ')}. Merge anyway?</p>}
+          {s.holds.length > 0 && <p class="warn">Marked not to merge. Merge anyway?</p>}
           {m !== 'REBASE' && (
             <>
               <input value={msg.title} onInput={(e) => setMsg({ ...msg, title: e.currentTarget.value })} aria-label="Commit title" />
@@ -390,6 +370,38 @@ export function StatusSelect({ value, onChange, statuses }: { value: string; onC
 
 // Once merged: its Jira ticket moved on (unless it's done already), to the status you pick (Settings → Reviewing sets
 // the usual one). Jira's own names; one it doesn't allow from where the ticket is comes back as its error.
+// My merged or closed PR's own actions, in its title-bar tag's menu (review.tsx): delete the branch and move its
+// tickets once merged, and the ticket move auto-merge left waiting.
+export function MergedActions({ repo, n, tickets }: { repo: string; n: number; tickets: string[] }) {
+  const [s, setS] = useState<MergeState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const load = () => getMergeState(repo, n).then(setS, (e) => setErr(e.message));
+  useEffect(() => void load(), [repo, n]);
+  useEffect(() => {
+    const key = `jiraOnMerge:${repo}#${n}`;
+    if (s?.state === 'CLOSED') localStorage.removeItem(key);
+    const p = s?.state === 'MERGED' && pendingMove(key);
+    if (!p) return;
+    localStorage.removeItem(key);
+    movePendingTickets(p).then((failed) =>
+      failed.length ? reportError(`Merged, but ${failed.join('; ')}`) : dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Moved ${p.tickets.join(', ')} to ${p.to}` } })),
+    );
+  }, [s?.state]);
+  if (s?.state !== 'MERGED') return null;
+  return (
+    <>
+      {s.headRef && s.viewerCanDeleteHeadRef && !s.isCrossRepository && (
+        <button disabled={busy} onClick={async () => (await ask(`Delete ${s.headRefName}?`, 'Delete', true)) && (setBusy(true), setErr(''), deleteBranch(repo, s).catch((e) => setErr(e.message)).finally(() => (setBusy(false), load())))}>
+          {busy ? 'Deleting…' : `Delete ${s.headRefName}`}
+        </button>
+      )}
+      {tickets.map((k) => <TicketMove key={k} id={k} />)}
+      {err && <p class="error">{err}</p>}
+    </>
+  );
+}
+
 function TicketMove({ id }: { id: string }) {
   const [issue, setIssue] = useState<JiraIssue | null>(null);
   const [usual] = useStoredValue('jiraAfterMerge', 'Done');

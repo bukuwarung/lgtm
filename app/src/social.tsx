@@ -45,7 +45,7 @@ async function hide(id: string, reason: string | null) {
   await hideComment(id, reason).catch((e) => (put(id, s), toast(`Couldn't ${reason ? 'hide' : 'unhide'} it: ${e.message}`)));
 }
 async function dismiss(id: string, who: string) {
-  const r = await askText(`Dismiss @${who}'s review? It stops counting toward merging. Say why (they're told):`, 'Dismiss', 'Why…');
+  const r = await askText(`Dismiss @${who}'s review? Say why (they're told):`, 'Dismiss', 'Why…');
   if (!r?.text.trim()) return;
   await dismissReview(id, r.text.trim()).then(() => dispatchEvent(new Event('lgtm:refresh')), (e) => toast(`Couldn't dismiss it: ${e.message}`));
 }
