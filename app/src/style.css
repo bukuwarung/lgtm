@@ -41,9 +41,9 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 /* Buttons filled, with an edge that shows (on the page a shade darker than it; in the top and review bars, which are
    the theme's panel colour as Firefox's toolbar is, raised in the page's own). */
-:root { --btn-bg: color-mix(in srgb, var(--fg) 4%, var(--soft)); --btn-edge: color-mix(in srgb, var(--fg) 18%, var(--border)); }
+:root { --btn-bg: color-mix(in srgb, var(--fg) 4%, var(--soft)); --btn-edge: color-mix(in srgb, var(--fg) 18%, var(--border)); --btn-edge-low: color-mix(in srgb, var(--fg) 30%, var(--border)); }
 :is(.top, .bar) { --btn-bg: var(--bg); }
-button { font: inherit; padding: 3px 10px; border: 1px solid var(--btn-edge); border-radius: 6px; background: var(--btn-bg); color: var(--fg); cursor: pointer; box-shadow: 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
+button { font: inherit; padding: 3px 10px; border: 1px solid var(--btn-edge); border-bottom-color: var(--btn-edge-low); border-radius: 6px; background: var(--btn-bg); color: var(--fg); cursor: pointer; } /* depth from a darker lower edge, not a shadow: a flat button (no border: index rows, links) has none */
 button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 /* Hover a step darker, pressed another (through --btn-bg, so what sets its own background keeps it). */
 button { transition: background-color .12s; }
@@ -58,9 +58,8 @@ button:disabled { opacity: .5; cursor: default; }
 select {
   appearance: none; -webkit-appearance: none; box-sizing: border-box; max-width: 100%;
   padding: 4px 28px 4px 10px; font: inherit; color: var(--fg); cursor: pointer;
-  border: 1px solid var(--btn-edge); border-radius: 6px;
+  border: 1px solid var(--btn-edge); border-bottom-color: var(--btn-edge-low); border-radius: 6px;
   background: var(--btn-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%238b949e' d='M4.43 6.18a.75.75 0 0 1 1.06.02L8 8.85l2.51-2.65a.75.75 0 1 1 1.09 1.03l-3.06 3.23a.75.75 0 0 1-1.09 0L4.4 7.23a.75.75 0 0 1 .03-1.05Z'/%3E%3C/svg%3E") no-repeat right 7px center / 16px;
-  box-shadow: 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); /* as buttons */
   transition: border-color .12s, box-shadow .12s;
 }
 select:hover { border-color: color-mix(in srgb, var(--fg) 32%, var(--border)); background-color: color-mix(in srgb, var(--fg) 6%, var(--btn-bg)); }
@@ -868,7 +867,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 /* The top bar's Go to / open-a-link box, centred in the bar; its results drop down below it. */
 .nav-go { display: flex; align-items: center; gap: 6px; flex: 0 1 680px; min-width: 260px; } /* back, forward and the search box, between the spacers: centred when there's room */
 .cmd { position: relative; flex: 1; min-width: 180px; }
-.top .cmd input { width: 100%; height: calc(1.5em + 8px); box-sizing: border-box; padding: 0 74px 0 32px; /* as tall as the buttons beside it: their line, padding and edge */ font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid var(--btn-edge); border-radius: 6px; box-shadow: 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
+.top .cmd input { width: 100%; height: calc(1.5em + 8px); box-sizing: border-box; padding: 0 74px 0 32px; /* as tall as the buttons beside it: their line, padding and edge */ font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid var(--btn-edge); border-radius: 6px; border-bottom-color: var(--btn-edge-low); box-shadow: none; }
 .top .cmd input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .cmd-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .cmd-kbd { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); padding: 1px 6px; font: calc(11px * var(--ts))/calc(16px * var(--ts)) var(--sans); color: var(--muted); border: 1px solid var(--border); border-radius: 4px; pointer-events: none; }

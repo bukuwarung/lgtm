@@ -477,6 +477,8 @@ try {
       const own = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
       const fs = parseFloat(s.fontSize);
       if (own && !sizes.some((x) => Math.abs(x - fs) < 0.6)) out.add('text ' + fs.toFixed(1) + 'px: ' + (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase()));
+      // A flat button (no border: an index row, a link) has no shadow either: one showed as a faint line under a row.
+      if (e.tagName === 'BUTTON' && s.borderTopWidth === '0px' && parseFloat((s.boxShadow.replace(/inset[^,]*,?/g, '').match(/(-?[\\d.]+)px (-?[\\d.]+)px/) ?? [])[2] ?? '0') !== 0 && document.activeElement !== e && !e.matches(':hover')) out.add('shadow under a flat button: ' + (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : 'button'));
       for (const c of [s.borderTopLeftRadius, s.borderTopRightRadius, s.borderBottomRightRadius, s.borderBottomLeftRadius]) {
         const v = c.split(' ')[0];
         if (!corners.has(v) && !(parseFloat(v) >= e.getBoundingClientRect().height / 2 - 0.5)) out.add('corner ' + v + ': ' + (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase()));
