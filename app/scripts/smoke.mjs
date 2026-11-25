@@ -165,7 +165,9 @@ try {
     for (const end = Date.now() + ms; Date.now() < end; await sleep(200)) if (await evaluate(expression)) return;
     throw new Error(`Timed out: ${what}`);
   };
+  // SMOKE_ONLY=<part of a step's name>: only the steps it names (timing one, say); the rest are skipped.
   const step = async (what, run) => {
+    if (process.env.SMOKE_ONLY && !what.includes(process.env.SMOKE_ONLY)) return;
     try {
       await run();
       console.log(`  ✓ ${what}`);

@@ -2255,7 +2255,6 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           <button class="link" onClick={() => setAgain((n) => n + 1)}>Retry</button>
         </p>
       )}
-      {shown && !fresh && !err && <p class="list-updating"><span class="sk-dot" /> Updating…</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
           {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && stuck(i).length).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
@@ -2313,6 +2312,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           )}
         </>
       )}
+      {/* Floating at the list's foot while it refreshes: nothing above it moves when it comes and goes. */}
+      {shown && !fresh && !err && <p class="list-updating" role="status"><span class="sk-dot" /> Updating…</p>}
       </div>
       <Resizer name="prs" label={`${T.PR} list`} />
     </aside>

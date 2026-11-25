@@ -557,7 +557,12 @@ function ViewedToggle({ viewed, onToggle, title }: { viewed: boolean; onToggle: 
 const SKEL_LINES = [62, 48, 71, 35, 80, 54, 66, 28];
 // `pr`: once the PR itself is here (its files still loading), its title and description show in place.
 function PRSkeleton({ pr }: { pr?: PR | null }) {
-  const [showIndex] = useStoredFlag('showIndex', true);
+  // The index as the page will open: not in a narrow window, nor (until the PR is known) with "Hide the index on PRs
+  // waiting for your review" on, as Review decides.
+  const [showIx] = useStoredFlag('showIndex', true);
+  const [hideToReview] = useStoredFlag('hideIndexToReview', true);
+  const narrow = useMedia('(max-width: 1280px)');
+  const showIndex = showIx && !narrow && !hideToReview;
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle);
   return (
@@ -567,24 +572,29 @@ function PRSkeleton({ pr }: { pr?: PR | null }) {
           <span class="sk" style={{ width: `${w}%` }} />
         ))}
       </aside>
+      {/* In the page's own order, so nothing moves when it arrives: the bar with the title, the pills, the
+          description, the files. */}
       <main>
-        {pr ? (
-          <h1 class="skel-h1">
-            <span class="pr-num">{pr.html_url.includes("/-/merge_requests/") ? "!" : "#"}{pr.number}</span> {pr.title}
-          </h1>
-        ) : (
-          <span class="sk sk-title" />
-        )}
-        {pr?.body_html && (
-          <div class={`rich pr-desc skel-desc ${look.class}`} style={look.style}>
-            <div class="md chunk" dangerouslySetInnerHTML={{ __html: pr.body_html }} />
-          </div>
-        )}
+        <div class="bar skel-bar">
+          {[0, 1, 2].map(() => <span class="sk skel-btn" />)}{/* the index, side-by-side and width buttons */}
+          {pr ? (
+            <h1 class="skel-h1">
+              <span class="pr-num">{pr.html_url.includes("/-/merge_requests/") ? "!" : "#"}{pr.number}</span> {pr.title}
+            </h1>
+          ) : (
+            <span class="sk sk-title" />
+          )}
+        </div>
         <div class="skel-pills">
           {[70, 110, 60, 90].map((w) => (
             <span class="sk sk-pill" style={{ width: `${w}px` }} />
           ))}
         </div>
+        {pr?.body_html && (
+          <div class={`rich pr-desc skel-desc ${look.class}`} style={look.style}>
+            <div class="md chunk" dangerouslySetInnerHTML={{ __html: pr.body_html }} />
+          </div>
+        )}
         {[8, 5, 7].map((n, k) => (
           <div class="skel-file">
             <div class="skel-fh">
