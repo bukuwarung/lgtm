@@ -176,6 +176,9 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .fail-bar { position: sticky; top: var(--nav); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 12px; color: #fff; background: light-dark(#cf222e, #b62324); font-size: calc(13px * var(--ts)); }
 .fail-bar span { flex: 1; }
 .fail-bar .icon-btn { color: #fff; }
+/* A toast's and the error bar's close: a plain ×, not a button box; a toast's action a bold link (Undo), as Slack's and Mail's. */
+:is(.toast, .fail-bar) .icon-btn { border: 0; background: none; padding: 2px 4px; }
+.toast .toast-act { font-size: inherit; font-weight: 600; padding: 0 2px; }
 .offline-bar { position: sticky; top: var(--nav); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: calc(13px * var(--ts)); color: var(--fg); background: var(--warn); border-bottom: 1px solid var(--border); }
 .offline-bar .retry { margin-left: auto; }
 /* Offline: what needs GitHub rests (the bar says why); reading, scrolling, drafts and settings go on. */
@@ -885,9 +888,11 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .top .cmd .cmd-end button.nav-refresh.nav-refresh { height: 24px; min-width: 24px; width: 24px; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); border-radius: 6px; }
 .top .cmd .cmd-end button.nav-refresh.nav-refresh:hover { color: var(--fg); background: var(--soft); }
 .cmd-list { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); width: max(100%, 520px); z-index: 50; list-style: none; margin: 0; padding: 4px; max-height: 60vh; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
-.cmd-list li { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: calc(13px * var(--ts)); font-weight: 400; }
+.cmd-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 0 10px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: calc(13px * var(--ts)); font-weight: 400; }
 .cmd-list li.on { background: var(--soft); }
-.pal-kind { grid-row: span 2; align-self: center; min-width: 64px; font-size: calc(11px * var(--ts)); color: var(--muted); }
+.pal-kind { grid-row: span 2; align-self: center; display: grid; place-items: center; width: 16px; color: var(--muted); } /* the kind as an icon, its name on hover */
+.cmd-list li.on .pal-kind { color: var(--fg); }
+.pal-key { grid-row: span 2; align-self: center; font-size: calc(11px * var(--ts)); color: var(--muted); } /* an action's key, on the right as in a menu */
 .pal-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pal-sub { grid-column: 2; font-size: calc(11px * var(--ts)); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pal-none { color: var(--muted); cursor: default; }

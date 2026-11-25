@@ -55,6 +55,10 @@ function entries(queue: QueueItem[]): Entry[] {
   return [...pushed, ...recent.slice(0, 8), ...files, ...index, ...recent.slice(8), ...prs, ...actions]; // the latest few first, as a browser's box has them
 }
 
+// A row's kind as an icon (its name on hover): a file, a PR, an action, a section of the index…
+const KIND_ICON: Record<string, string> = { File: 'file', Recent: 'history', Action: 'command-palette', Open: 'link-external', Reviewers: 'person', Assignees: 'person', Conversation: 'comment-discussion', Checks: 'dot-fill', Files: 'file', Labels: 'tag', Milestone: 'milestone', Commits: 'git-commit' };
+const kindIcon = (k: string) => KIND_ICON[k] ?? (/^New /.test(k) ? 'plus' : /^(PR|MR)$/.test(k) ? 'git-pull-request' : 'dot-fill');
+
 // Every word of the query, in any order, somewhere in the entry.
 export const matches = (q: string, text: string) => q.toLowerCase().split(/\s+/).every((w) => text.toLowerCase().includes(w));
 
@@ -160,9 +164,9 @@ export function CommandBar({ queue, parse, end }: { queue: () => QueueItem[]; pa
               onMouseDown={(ev) => (ev.preventDefault(), go(e))}
               ref={(el) => void (k === sel && el?.scrollIntoView({ block: 'nearest' }))}
             >
-              <span class="pal-kind">{e.kind}</span>
+              <span class="pal-kind" title={e.kind} aria-label={e.kind}><Octicon name={kindIcon(e.kind)} /></span>
               <span class="pal-label">{e.label}</span>
-              {e.sub && <span class="pal-sub">{e.sub}</span>}
+              {e.kind === 'Action' ? e.sub && <kbd class="pal-key">{e.sub}</kbd> : e.sub && <span class="pal-sub">{e.sub}</span>}
             </li>
           ))}
           {!shown.length && <li class="pal-none">{q ? 'Nothing matches' : 'Nothing to go to yet'}</li>}

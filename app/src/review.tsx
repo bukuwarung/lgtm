@@ -6423,7 +6423,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         <CopyLink url={pr.html_url} />
         <ReactPick id={pr.node_id} />
         {(canEdit || me === pr.user.login) && !editing && (
-          <button class="icon-btn" title="Edit the title and description" aria-label="Edit the title and description" onClick={() => setEditing(true)}>
+          <button class="copy-link" title="Edit the title and description" aria-label="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />
           </button>
         )}

@@ -991,11 +991,11 @@ function App() {
         <div class="toast" role="status">
           {toast.text}
           {toast.action && (
-            <button class="primary" onClick={() => (toast.action![1](), setToast(null))}>
+            <button class="link toast-act" onClick={() => (toast.action![1](), setToast(null))}>
               {toast.action[0]}
             </button>
           )}
-          <button title="Dismiss" onClick={() => setToast(null)}><Octicon name="x" /></button>
+          <button class="icon-btn" title="Dismiss" aria-label="Dismiss" onClick={() => setToast(null)}><Octicon name="x" /></button>
         </div>
       )}
       <div class={showPRs && !rm && !narrowPRs ? 'shell' : 'shell no-prs'} key={accountKey}>{/* another account: everything again, as it */}
