@@ -1811,3 +1811,6 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 /* The index's rows one height: a section's items, people and files alike (a second line adds its own). */
 .ix-item, .tree-file { min-height: 24px; }
 .ix-item { align-content: center; }
+/* A web engine too old for lgtm (main.tsx TooOld). */
+.too-old { max-width: 460px; margin: 20vh auto 0; padding: 0 24px; text-align: center; }
+.too-old p { color: var(--muted); font-size: calc(14px * var(--ts)); }

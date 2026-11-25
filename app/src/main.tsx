@@ -2331,4 +2331,18 @@ function takeClaudeLink() {
 }
 takeClaudeLink();
 
-render(<App />, document.getElementById('app')!);
+// lgtm needs a web engine with CSS @scope (Safari 17.4, Chrome 118): without it, says so instead of a half-styled
+// app. Checked by the feature (its rule's class), not by a version.
+function TooOld() {
+  return (
+    <div class="too-old" role="alert">
+      <h2>lgtm needs a newer {isDesktop ? 'Safari' : 'browser'}</h2>
+      {isDesktop ? (
+        <p>The Mac app draws with Safari's engine, and needs Safari 17.4 or later. Update it in System Settings → General → Software Update, then open lgtm again.</p>
+      ) : (
+        <p>Open lgtm in a current Safari, Chrome or Firefox.</p>
+      )}
+    </div>
+  );
+}
+render('CSSScopeRule' in window ? <App /> : <TooOld />, document.getElementById('app')!);
