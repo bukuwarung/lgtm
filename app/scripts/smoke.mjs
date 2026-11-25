@@ -644,6 +644,36 @@ try {
     }
     if (found.length) throw new Error(`${found.length} not closed by Escape as they should be: ${found.join('; ')}`);
   });
+  // The controls in the top bar and the review bar look alike: one edge, one depth, one height (an icon button and a
+  // labelled one alike), glass or not. The search bar once had a shadow three times the buttons'.
+  const barLook = (where) => evaluate(`(() => {
+    const out = [];
+    for (const bar of document.querySelectorAll('.top, .bar')) {
+      const cs = [...bar.querySelectorAll('button, input, select')].filter((e) => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden' && !e.closest('.panel, [role=menu], .account-menu, .pill-pop, details[open] > :not(summary)') && !(e.tagName === 'BUTTON' && e.closest('.cmd')) && !e.matches('.link, .account-btn, [type=checkbox], [type=radio]'));
+      const look = (e) => { const s = getComputedStyle(e); return { edge: s.borderTopWidth + ' ' + (s.borderTopStyle === 'none' ? 'none' : 'solid'), depth: s.boxShadow.replace(/rgba?\\([^)]*\\)|color\\([^)]*\\)|oklch\\([^)]*\\)/g, 'c').replace(/inset [^,]*,?\\s*/g, '').trim(), h: Math.round(e.getBoundingClientRect().height) }; };
+      for (const k of ['edge', 'depth', 'h']) {
+        const by = new Map();
+        for (const e of cs) { const v = String(look(e)[k]); by.set(v, [...(by.get(v) ?? []), e]); }
+        if (by.size < 2) continue;
+        const common = [...by].sort((a, b) => b[1].length - a[1].length)[0][0];
+        for (const [v, es] of by) if (v !== common && !(k === 'h' && Math.abs(Number(v) - Number(common)) <= 1)) out.push(${JSON.stringify(where)} + ', ' + (bar.classList.contains('top') ? 'top bar' : 'review bar') + ': ' + k + ' ' + v + ' (others ' + common + '): ' + es.map((e) => (e.getAttribute('aria-label') || e.title || e.textContent.trim() || e.placeholder || e.tagName).replace(/\\s+/g, ' ').slice(0, 24)).join(', '));
+      }
+    }
+    return out;
+  })()`);
+  await step("the top bar's and the review bar's controls look alike: one edge, one depth, one height", async () => {
+    const found = [];
+    for (const glass of ['1', '0']) {
+      await evaluate(`localStorage.setItem('glass', '${glass}')`);
+      await reload();
+      await evaluate(`location.hash = '/acme/shop/pull/1'`);
+      await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
+      found.push(...(await barLook(glass === '1' ? 'glass' : 'no glass')));
+    }
+    await evaluate(`localStorage.removeItem('glass')`);
+    await reload();
+    if (found.length) throw new Error(found.join('; '));
+  });
   await step('no two buttons say the same thing at once, in each menu and panel as it opens', async () => {
     if (twins.length) throw new Error(`said twice: ${[...new Set(twins)].join('; ')}`);
   });

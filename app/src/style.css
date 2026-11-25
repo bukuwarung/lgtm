@@ -40,6 +40,14 @@ a:hover { text-decoration: underline; }
 :is(.top, .bar) { --btn-bg: var(--bg); }
 button { font: inherit; padding: 3px 10px; border: 1px solid var(--btn-edge); border-radius: 6px; background: var(--btn-bg); color: var(--fg); cursor: pointer; box-shadow: 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
 button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+/* Hover a step darker, pressed another (through --btn-bg, so what sets its own background keeps it). */
+button { transition: background-color .12s; }
+button:hover:not(:disabled) { --btn-bg: color-mix(in srgb, var(--fg) 9%, var(--soft)); }
+button:active:not(:disabled) { --btn-bg: color-mix(in srgb, var(--fg) 14%, var(--soft)); }
+:is(.top, .bar) button:hover:not(:disabled) { --btn-bg: color-mix(in srgb, var(--fg) 5%, var(--bg)); }
+:is(.top, .bar) button:active:not(:disabled) { --btn-bg: color-mix(in srgb, var(--fg) 10%, var(--bg)); }
+button.primary:hover:not(:disabled) { background: color-mix(in srgb, #000 10%, var(--primary)); border-color: color-mix(in srgb, #000 10%, var(--primary)); }
+button.primary:active:not(:disabled) { background: color-mix(in srgb, #000 18%, var(--primary)); border-color: color-mix(in srgb, #000 18%, var(--primary)); }
 button:disabled { opacity: .5; cursor: default; }
 /* Dropdowns: drawn like the buttons (border, a little depth), with their own chevron, in both themes. */
 select {
@@ -47,7 +55,7 @@ select {
   padding: 4px 28px 4px 10px; font: inherit; color: var(--fg); cursor: pointer;
   border: 1px solid var(--btn-edge); border-radius: 6px;
   background: var(--btn-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%238b949e' d='M4.43 6.18a.75.75 0 0 1 1.06.02L8 8.85l2.51-2.65a.75.75 0 1 1 1.09 1.03l-3.06 3.23a.75.75 0 0 1-1.09 0L4.4 7.23a.75.75 0 0 1 .03-1.05Z'/%3E%3C/svg%3E") no-repeat right 7px center / 16px;
-  box-shadow: 0 1px 2px var(--shadow), inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent);
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); /* as buttons */
   transition: border-color .12s, box-shadow .12s;
 }
 select:hover { border-color: color-mix(in srgb, var(--fg) 32%, var(--border)); background-color: color-mix(in srgb, var(--fg) 6%, var(--btn-bg)); }
@@ -843,7 +851,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 /* The top bar's Go to / open-a-link box, centred in the bar; its results drop down below it. */
 .nav-go { display: flex; align-items: center; gap: 6px; flex: 0 1 680px; min-width: 260px; } /* back, forward and the search box, between the spacers: centred when there's room */
 .cmd { position: relative; flex: 1; min-width: 180px; }
-.top .cmd input { width: 100%; height: 32px; box-sizing: border-box; padding: 0 74px 0 32px; font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid var(--btn-edge); border-radius: 8px; box-shadow: 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
+.top .cmd input { width: 100%; height: calc(1.5em + 8px); box-sizing: border-box; padding: 0 74px 0 32px; /* as tall as the buttons beside it: their line, padding and edge */ font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid var(--btn-edge); border-radius: 8px; box-shadow: 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
 .top .cmd input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .cmd-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .cmd-kbd { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); padding: 1px 6px; font: calc(11px * var(--ts))/calc(16px * var(--ts)) var(--sans); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; pointer-events: none; }
@@ -986,6 +994,8 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 }
 .glass .whats-new-back { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 .glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .account-menu > button) { border-radius: 999px; background: color-mix(in srgb, var(--bg) 88%, transparent); border-color: color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); }
+.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .account-menu > button, :disabled):hover { background: color-mix(in srgb, var(--fg) 5%, var(--bg)); }
+.glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .account-menu > button, :disabled):active { background: color-mix(in srgb, var(--fg) 10%, var(--bg)); }
 .glass :is(.top, .bar) button.primary { border-radius: 999px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25); }
 .glass .top .cmd input { border-radius: 999px; background: color-mix(in srgb, var(--bg) 88%, transparent); border-color: color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); } /* as the bar's buttons: same edge, same depth */
 .glass .top .cmd input:focus { border-color: var(--accent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
@@ -1131,7 +1141,6 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .caret { display: inline-block; width: 12px; height: 12px; margin: 0 -2px 0 1px; vertical-align: -1px; background: currentColor; opacity: .75; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.43 6.18a.75.75 0 0 1 1.06.02L8 8.85l2.51-2.65a.75.75 0 1 1 1.09 1.03l-3.06 3.23a.75.75 0 0 1-1.09 0L4.4 7.23a.75.75 0 0 1 .03-1.05Z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.43 6.18a.75.75 0 0 1 1.06.02L8 8.85l2.51-2.65a.75.75 0 1 1 1.09 1.03l-3.06 3.23a.75.75 0 0 1-1.09 0L4.4 7.23a.75.75 0 0 1 .03-1.05Z'/%3E%3C/svg%3E") center / contain no-repeat; }
 [aria-expanded="true"] > .caret, details[open] > summary > .caret { transform: rotate(180deg); }
 /* Buttons that open a menu or panel: a little depth, like the dropdowns. */
-:is(.merge-bar, .submit, .stack-nav) > button { box-shadow: 0 1px 2px var(--shadow), inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent); }
 .pill-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; display: grid; grid-template-columns: minmax(0, 1fr); /* its column at its width: a long row ends in … (in full on hover), the heading wraps inside */ min-width: 340px; max-width: min(520px, 90vw); max-height: 360px; overflow: auto; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
 .pill-head { margin: 2px 8px 6px; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .pill-pop > :is(a, button) { display: flex; align-items: baseline; gap: 6px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; text-decoration: none; font-size: calc(13px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
