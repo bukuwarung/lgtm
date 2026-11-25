@@ -185,6 +185,20 @@ export const prCache = {
 // Inside the macOS app (desktop/, Tauri) the page reaches the CLIs through app commands instead of the local server.
 export const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 if (isDesktop) document.documentElement.classList.add('desktop'); // styles for the app's own window (top bar)
+// As a Mac window's toolbar does, the top bar dims while another window is in front (focus inside an embedded frame
+// still counts as this window's).
+if (isDesktop) {
+  const mark = () => document.documentElement.classList.toggle('inactive', !document.hasFocus());
+  addEventListener('focus', mark);
+  addEventListener('blur', () => setTimeout(mark));
+  // Full screen hides the traffic lights, so the top bar gives back the room it keeps for them.
+  void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+    const w = getCurrentWindow();
+    const full = async () => void document.documentElement.classList.toggle('fullscreen', await w.isFullscreen());
+    void full();
+    void w.onResized(full);
+  });
+}
 
 // No autocorrect or auto-capitals in any text field (macOS rewrites code, logins and paths otherwise); one-line fields
 // skip spell-check too, comment boxes keep its underlines. Set on focus, so fields added later are covered.

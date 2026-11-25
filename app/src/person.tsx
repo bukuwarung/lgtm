@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
 import { ago, personKey, usePresence, repoLabel, viewAs, term, shownName, getSlackPeople, fetchIntegrations, openExternal, faceOf } from './platform.ts';
 import { isAway, statusText, zoneLine } from './slackmsg.ts';
-import { Tg, Who, Time } from './tags.tsx';
+import { Empty, Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
@@ -55,9 +55,10 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
       if (i.slack.ok && i.slack.team && /^U[A-Z0-9]+$/.test(id ?? '')) setDm(`slack://user?team=${i.slack.team}&id=${id}`);
     }, () => {});
   }, [login]);
-  useEffect(() => void (setP(null), getPerson(login, orgs).then(setP, (e) => setP(e.message))), [login, orgs.join()]);
+  const [tries, setTries] = useState(0);
+  useEffect(() => void (setP(null), getPerson(login, orgs).then(setP, (e) => setP(e.message))), [login, orgs.join(), tries]);
   if (p === null) return <PageSkeleton title={`@${login}`} face />;
-  if (typeof p === 'string') return <div class="page history person"><h2>@{login}</h2><p class="error">{p}</p></div>;
+  if (typeof p === 'string') return <div class="page history person"><h2>@{login}</h2><Empty tone="err" action={['Retry', () => setTries((t) => t + 1)]}>{p}</Empty></div>;
   const count = (s: string) => p.reviews.filter((r) => r.state === s).length;
   const waits = p.reviews.flatMap((r) => (r.waited != null ? [r.waited] : [])).sort((a, b) => a - b);
   const median = waits.length ? waits[Math.floor(waits.length / 2)] : null;

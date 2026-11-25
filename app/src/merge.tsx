@@ -299,6 +299,19 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
               {m === 'SQUASH' && <button class="link" style="justify-self: start" onClick={fromCommits} title="Each commit's headline, as a list, in the message (⌥C)">From the commits</button>}
             </>
           )}
+          {openTickets.length > 0 && (
+            <div class="merge-opt">
+              <label title={confirm === 'auto' ? `Auto-merge merges later: the ticket moves the next time you open this ${pageTerm().PR} here after it merged` : 'Settings → Jira: whether this starts ticked, and the status'}>
+                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> {confirm === 'auto' ? 'Once merged, move' : 'Move'} {openTickets.join(', ')} {revert ? 'back to' : 'to'}
+              </label>
+              <StatusSelect value={to} onChange={setTo} statuses={statuses} />
+            </div>
+          )}
+          {offerDelete && (
+            <label class="merge-opt" title="GitHub doesn't delete this repo's merged branches by itself">
+              <input type="checkbox" checked={dropBranch} onChange={toggleDropBranch} /> Delete {s.headRefName}
+            </label>
+          )}
           <div class="acts">
             <button disabled={!!busy} onClick={() => setConfirm(null)}>Cancel</button>
             <button
@@ -319,19 +332,6 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
               {busy === 'merge' ? 'Working…' : confirm === 'auto' ? `Enable auto-merge (${VERB[m].toLowerCase()})` : `Confirm ${VERB[m].toLowerCase()}${admin ? ' as admin' : ''}`}
             </button>
           </div>
-          {openTickets.length > 0 && (
-            <div class="merge-opt">
-              <label title={confirm === 'auto' ? `Auto-merge merges later: the ticket moves the next time you open this ${pageTerm().PR} here after it merged` : 'Settings → Jira: whether this starts ticked, and the status'}>
-                <input type="checkbox" checked={moveTickets} onChange={() => setMoveTickets(!moveTickets)} /> {confirm === 'auto' ? 'Once merged, move' : 'Move'} {openTickets.join(', ')} {revert ? 'back to' : 'to'}
-              </label>
-              <StatusSelect value={to} onChange={setTo} statuses={statuses} />
-            </div>
-          )}
-          {offerDelete && (
-            <label class="merge-opt" title="GitHub doesn't delete this repo's merged branches by itself">
-              <input type="checkbox" checked={dropBranch} onChange={toggleDropBranch} /> Delete {s.headRefName}
-            </label>
-          )}
         </div>
       )}
       {err && <p class="error">{err}{isStalePush(err) && <> <StaleActions /></>}</p>}

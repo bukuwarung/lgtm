@@ -9,7 +9,7 @@ import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
-import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry } from './tags.tsx';
+import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry, Empty } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -490,7 +490,7 @@ function GroupSwitcher({ value, teams, recent, onPick, here }: { value: string; 
 // No PR open: the queue at a glance; each number opens its tab of the list.
 function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
   const [showDrafts] = useStoredFlag('showDrafts', false);
-  if (!items) return <p class="note page empty">Pick a {T.PR}, or paste a link (⌘K).</p>;
+  if (!items) return <Empty icon="git-pull-request">Pick a {T.PR}, or paste a link (⌘K).</Empty>;
   const needs = toReview(items, showDrafts);
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
@@ -881,17 +881,19 @@ function App() {
   const r = parseRoute(route);
   return (
     <>
-      {/* In the app the window has no title bar: this bar holds the traffic lights (left) and drags the window. */}
+      {/* In the app the window has no title bar: this bar holds the traffic lights (left), and drags the window and zooms it
+          on a double-click from anywhere but its controls (Tauri takes only a click on the element itself, so its spacers
+          and labels carry the attribute too). */}
       <nav class="top" data-tauri-drag-region>
         {rm ? (
           <>
-            <b class="rm-title">Review mode</b>
+            <b class="rm-title" data-tauri-drag-region>Review mode</b>
             {rm.practice && <span class="pill p-warn" title={`Your own ${T.PRs}; finishing a review only moves on, and nothing is sent to ${T.site}`}>practice</span>}
             {r && (() => {
               const left = needs(queue.current, rm.seen).length || 1; // this one, and what's after it
-              return <span class="rm-count">{rm.seen.length + 1} of {rm.seen.length + left}</span>;
+              return <span class="rm-count" data-tauri-drag-region>{rm.seen.length + 1} of {rm.seen.length + left}</span>;
             })()}
-            <span class="spacer" />
+            <span class="spacer" data-tauri-drag-region />
             {r && <button onClick={() => moveOn(r, 'skipped')} title={`On to the next ${T.PR} without reviewing this one (${keyFor('skip')})`}>Skip <kbd>{keyFor('skip')}</kbd></button>}
             <button onClick={() => setRm(null)} title="Back to everything (Esc)">Exit <kbd>Esc</kbd></button>
           </>
@@ -908,12 +910,12 @@ function App() {
           {replies > 0 && <span class="nav-count">{replies}</span>}
         </a>
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
-        <div class="top-actions">
+        <div class="top-actions" data-tauri-drag-region>
           <BellMenu />
         </div>
-        <span class="spacer" />
+        <span class="spacer" data-tauri-drag-region />
         {/* Back and forward beside the search box, as a browser has them by its address bar. */}
-        <span class="nav-go">
+        <span class="nav-go" data-tauri-drag-region>
           <HistoryNav backTo={backTo} />
           <NewPR />
           <CommandBar
@@ -931,9 +933,9 @@ function App() {
             }
           />
         </span>
-        <span class="spacer" />
+        <span class="spacer" data-tauri-drag-region />
         {__DEV_BUILD__ && (
-          <span class="nav-dev" title={`A development build, not a release${__COMMIT__ ? ` (commit ${__COMMIT__})` : ''}`}>
+          <span class="nav-dev" data-tauri-drag-region title={`A development build, not a release${__COMMIT__ ? ` (commit ${__COMMIT__})` : ''}`}>
             DEV{__COMMIT__ && ` · ${__COMMIT__}`}
           </span>
         )}
@@ -2250,12 +2252,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   return (
     <aside class={`side prs${hidden ? ' collapsed' : ''}${over ? ' over' : ''}`} aria-hidden={hidden}>
       <div class="side-scroll">
-      {err && (
-        <p class="error">
-          {err}
-          <button class="link" onClick={() => setAgain((n) => n + 1)}>Retry</button>
-        </p>
-      )}
+      {err && <Empty tone="err" action={['Retry', () => setAgain((n) => n + 1)]}>{err}</Empty>}
       {shown && (
         <div class="pr-tabs" role="tablist">
           {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && stuck(i).length).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (

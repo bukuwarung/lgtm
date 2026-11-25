@@ -146,6 +146,15 @@ export function CopyCode({ children, text }: { children: string; text?: string }
   );
 }
 
+// A page or list with nothing in it, or that couldn't load: an icon, one line, and its action as a button.
+export const Empty = ({ icon = 'check', tone, children, action }: { icon?: string; tone?: 'ok' | 'err'; children: ComponentChildren; action?: [string, () => void] }) => (
+  <div class={`empty${tone ? ` empty-${tone}` : ''}`} role={tone === 'err' ? 'alert' : undefined}>
+    <Octicon name={tone === 'err' ? 'alert' : icon} size={24} />
+    <p>{children}</p>
+    {action && <button type="button" onClick={action[1]}>{action[0]}</button>}
+  </div>
+);
+
 // After "Couldn't load …": fetch just that part again.
 export const Retry = ({ onClick }: { onClick: () => void }) => (
   <button type="button" class="link retry" onClick={onClick}>Retry</button>

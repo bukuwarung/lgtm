@@ -296,7 +296,7 @@ try {
   });
   await step('e marks the mention done', async () => {
     await key('e');
-    await until('nothing left', `document.querySelector('.inbox .note')?.textContent.includes('Nothing waits on your reply')`, 3000);
+    await until('nothing left', `document.querySelector('.inbox .empty')?.textContent.includes('Nothing waits on your reply')`, 3000);
   });
   await step('the bell lists a new review request, and dismisses it', async () => {
     later = true;

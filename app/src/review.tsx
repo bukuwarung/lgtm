@@ -4707,7 +4707,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
   if (src === undefined) return <div class="pad" style={{ minHeight: stand }}><Lines n={6} /></div>;
-  if (src === null) return <p class="note pad">Couldn't load this file. <Retry onClick={() => setSrc(undefined)} /></p>;
+  if (src === null) return <p class="error pad">Couldn't load this file. <Retry onClick={() => setSrc(undefined)} /></p>;
 
   const t = ctx.target?.path === path ? ctx.target : null;
   // Threads, drafts and removals attach to the first top-level block ending at or after their line.

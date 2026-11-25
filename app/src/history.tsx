@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getMyReviews, type MyReview } from './github.ts';
 import { copyText, readSaved, readTime, repoLabel } from './platform.ts';
-import { Tg, Who } from './tags.tsx';
+import { Empty, Tg, Who } from './tags.tsx';
 
 // While a page of PRs loads (this one, a person's): its shape, shimmering (style.css .sk). `face`: a picture by the title.
 const SK = [78, 62, 88, 55, 70];
@@ -40,9 +40,10 @@ const day = (iso: string) => new Date(iso).toLocaleDateString([], { weekday: 'lo
 export function History() {
   const [list, setList] = useState<MyReview[] | string | null>(null);
   const [copied, setCopied] = useState(false);
-  useEffect(() => void getMyReviews(30).then(setList, (e) => setList(e.message)), []);
+  const [tries, setTries] = useState(0);
+  useEffect(() => void getMyReviews(30).then(setList, (e) => setList(e.message)), [tries]);
   if (list === null) return <PageSkeleton title="your reviews" />;
-  if (typeof list === 'string') return <div class="page history"><h2>Your reviews this month</h2><p class="error">{list}</p></div>;
+  if (typeof list === 'string') return <div class="page history"><h2>Your reviews this month</h2><Empty tone="err" action={['Retry', () => (setList(null), setTries((t) => t + 1))]}>{list}</Empty></div>;
   const count = (s: string) => list.filter((r) => r.state === s).length;
   const waits = list.flatMap((r) => (r.waited != null ? [r.waited] : [])).sort((a, b) => a - b);
   const median = waits.length ? waits[Math.floor(waits.length / 2)] : null;

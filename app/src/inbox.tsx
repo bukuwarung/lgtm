@@ -4,7 +4,7 @@ import { isLab, awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, ge
 import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel, term } from './platform.ts';
 import { syncLabTodo } from './gitlab.ts';
 import { PageSkeleton } from './history.tsx';
-import { Tg, Who, Time, Retry, Updating, ThreadCode } from './tags.tsx';
+import { Empty, Tg, Who, Time, Retry, Updating, ThreadCode } from './tags.tsx';
 import { highlightBlocks, languageFor } from './highlight.ts';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
@@ -103,16 +103,15 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
       {pending && <p class="list-updating"><Updating /></p>}
       {loadErr && <p class="error">Couldn't load your threads: {loadErr} <Retry onClick={() => (setLoadErr(''), setList(null), setTries((t) => t + 1))} /></p>}
       <h2>Waiting on your reply</h2>
-      <p class="note">
-        {count
-          ? `${[threadCount && `${threadCount} thread${threadCount === 1 ? '' : 's'}`, mentionCount && `${mentionCount} mention${mentionCount === 1 ? '' : 's'}`].filter(Boolean).join(' and ')} in ${open.length} ${T.PR}${open.length === 1 ? '' : 's'}.`
-          : 'Nothing waits on your reply.'}
-        {count > 0 && (
+      {!count && <Empty tone="ok">Nothing waits on your reply.</Empty>}
+      {count > 0 && <p class="note">
+        {`${[threadCount && `${threadCount} thread${threadCount === 1 ? '' : 's'}`, mentionCount && `${mentionCount} mention${mentionCount === 1 ? '' : 's'}`].filter(Boolean).join(' and ')} in ${open.length} ${T.PR}${open.length === 1 ? '' : 's'}.`}
+        {(
           <span class="inbox-keys">
             <kbd>j</kbd> <kbd>k</kbd> move · <kbd>r</kbd> reply · <kbd>e</kbd> done · <kbd>x</kbd> resolve · <kbd>o</kbd> open the PR
           </span>
         )}
-      </p>
+      </p>}
       {open.map(({ item, threads, mention }) => (
         <section key={item.id}>
           <h4>

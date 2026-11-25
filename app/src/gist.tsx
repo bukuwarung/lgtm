@@ -3,7 +3,7 @@ import { getGist, type Gist } from './github.ts';
 import { splitPatch, type Line } from './diff.ts';
 import { isMarkdown, md } from './markdown.ts';
 import { highlightBlocks } from './highlight.ts';
-import { CodeSnippet, Retry, Time, Who } from './tags.tsx';
+import { CodeSnippet, Empty, Time, Who } from './tags.tsx';
 import { FileIcon } from './shortcuts.tsx';
 import { PageSkeleton } from './history.tsx';
 
@@ -17,7 +17,7 @@ export function GistPage({ id }: { id: string }) {
     getGist(id).then(setG, (e) => (setErr(e.message), setG(null)));
   }, [id]);
   if (g === undefined) return <PageSkeleton title="the gist" />;
-  if (!g) return <div class="page"><p class="warn">Couldn't load the gist: {err} <Retry onClick={() => (setErr(''), setG(undefined), getGist(id).then(setG, (e) => (setErr(e.message), setG(null))))} /></p></div>;
+  if (!g) return <div class="page"><Empty tone="err" action={['Retry', () => (setErr(''), setG(undefined), getGist(id).then(setG, (e) => (setErr(e.message), setG(null))))]}>Couldn't load the gist: {err}</Empty></div>;
   const files = Object.values(g.files);
   return (
     <div class="page gist">

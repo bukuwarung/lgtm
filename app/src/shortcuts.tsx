@@ -604,7 +604,7 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
           </>
         )}
       </div>
-      {open && (logErr ? <p class="note ix-pad">Couldn't load the log: {logErr} <Retry onClick={loadLog} /></p> : log == null ? <Lines n={4} /> : <pre class="ix-log">{log}</pre>)}
+      {open && (logErr ? <p class="error ix-pad">Couldn't load the log: {logErr} <Retry onClick={loadLog} /></p> : log == null ? <Lines n={4} /> : <pre class="ix-log">{log}</pre>)}
     </>
   );
 }
@@ -922,7 +922,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
         {!checks ? (
           <div class="ix-pad"><Lines /></div>
         ) : checksErr ? (
-          <p class="note ix-pad">Couldn't load the checks: {checksErr} <Retry onClick={onRefreshChecks} /></p>
+          <p class="error ix-pad">Couldn't load the checks: {checksErr} <Retry onClick={onRefreshChecks} /></p>
         ) : !checks.length ? null : (
           <>
             {checks.filter((c) => c.state === 'failure' || c.state === 'pending').map((c) => <CheckEntry key={c.name} c={c} repo={repo} onRefresh={onRefreshChecks} base={pr.base.ref} />)}
