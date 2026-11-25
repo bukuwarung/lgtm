@@ -207,7 +207,8 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
         <div class="merge-row merge-hold">
           <Octicon name="alert" />{' '}
           <span>
-            <b>{missing.join(', ')}</b>: required, but {missing.length > 1 ? 'they never ran' : 'it never ran'} on this commit (its workflow skipped this {pageTerm().PR}: a path or branch filter). GitHub waits for {missing.length > 1 ? 'them' : 'it'} for ever: push a change {missing.length > 1 ? 'their workflows run' : 'its workflow runs'} on{s.viewerCanMergeAsAdmin ? ', or merge as an admin below' : ', or ask an admin to merge'}.
+            Skipped by a path or branch filter, so GitHub waits for ever. {s.viewerCanMergeAsAdmin ? 'Merge as an admin below.' : 'Ask an admin to merge.'}
+            <span class="merge-why merge-missing">{missing.join(' · ')}</span>
           </span>
         </div>
       )}
@@ -255,7 +256,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
           {s.viewerCanDisableAutoMerge && <button disabled={!!busy} onClick={() => run('disable', () => disableAutoMerge(s.id))}>Disable auto-merge</button>}
         </div>
       )}
-      <div class="merge-row">
+      {!confirm && <div class="merge-row">
         {s.isDraft && <button disabled={!!busy} onClick={() => run('ready', () => markReady(s.id).then(() => (void ticketsToReview(tickets), setShown(false), jumpTo('ix-reviewers'))))}>{busy === 'ready' ? 'Marking…' : 'Ready for review'}</button>}
         {s.mergeStateStatus === 'BEHIND' && s.viewerCanUpdateBranch && (
           <button disabled={!!busy} onClick={() => run('update', () => updateBranchAndWait(repo, n, s).then(() => dispatchEvent(new Event('lgtm:refresh'))))}>{busy === 'update' ? (s.reasons ? 'Rebasing…' : 'Updating…') : s.reasons ? 'Rebase' : 'Update branch'}</button>
@@ -266,7 +267,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
           </select>
         )}
         <button class="primary" disabled={!!busy || !(ready || bypass)} onClick={() => open('merge')}>{VERB[m]}</button>
-        {!ready && !s.autoMergeRequest && s.viewerCanEnableAutoMerge && (
+        {!ready && !s.autoMergeRequest && s.viewerCanEnableAutoMerge && !missing.length && ( // checks that never run: auto-merge would wait for ever
           <button disabled={!!busy} onClick={() => open('auto')}>Enable auto-merge</button>
         )}
         <button
@@ -290,7 +291,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
             <input type="checkbox" checked={bypass} onChange={() => setBypass(!bypass)} /> Merge without waiting for requirements
           </label>
         )}
-      </div>
+      </div>}
       {confirm && (
         <div class="merge-confirm">
           {s.holds.length > 0 && <p class="warn">It's marked not to merge: {s.holds.join(', ')}. Merge anyway?</p>}

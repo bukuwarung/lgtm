@@ -1948,7 +1948,7 @@ export function afterApproval(s: Pick<MergeState, 'holds' | 'isDraft' | 'mergeSt
 export const STALE_PUSH = 'New commits were pushed since you loaded this';
 export const isStalePush = (m?: string) => !!m?.startsWith(STALE_PUSH);
 const staleMerge = (term: string) => (e: Error) => {
-  throw /Head branch was modified|head ref was modified|SHA does not match HEAD|expected head/i.test(e.message) ? new Error(`${STALE_PUSH} ${term}, so it wasn't merged: look at them first.`) : e;
+  throw /Head branch was modified|head ref was modified|SHA does not match HEAD|expected head/i.test(e.message) ? new Error(`${STALE_PUSH} ${term}: not merged.`) : e;
 };
 export const mergePR = (s: MergeState, method: MergeMethod, title: string, body: string, auto: boolean) =>
   (isLabId(s.id) ? lab.mergeLab(s, method, title, body, auto) : graphql(
