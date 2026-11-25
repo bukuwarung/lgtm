@@ -3204,30 +3204,32 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
             </label>
           )}
           {slackNote && <p class="note">{slackNote}</p>}
-          {notify && slackWarn && <p class="warn">{slackWarn}</p>}
+          {/* What to know before sending, a row each (as the merge box's): icon, what, and its action at the end. */}
+          {notify && slackWarn && (
+            <div class="reason-row warn-row"><Octicon name="alert" /><span class="reason-t">{slackWarn}</span></div>
+          )}
           {landed && (
-            <p class="warn">
-              {landed} <button class="link" onClick={() => (setOpen(false), seeLanded?.())}>See what changed</button>
-            </p>
+            <div class="reason-row warn-row">
+              <Octicon name="git-commit" /><span class="reason-t">{landed}</span>
+              <button class="link" onClick={() => (setOpen(false), seeLanded?.())}>See what changed</button>
+            </div>
           )}
           {/* One place to look them over (Your threads): at the first agent draft not looked at, when there is one. */}
           {count > 0 && (
-            <button class={unlooked ? 'look-over warn' : 'look-over'} title="Your comments to send, then your other threads, each with the code it's on" onClick={() => (setOpen(false), dispatchEvent(new Event(unlooked ? 'lgtm:look-drafts' : 'lgtm:my-threads')))}>
-              {unlooked > 0 && <>{unlooked === 1 ? '1 agent draft' : `${unlooked} agent drafts`} not looked at. </>}
-              <span class="look-go">Look over {count === 1 ? 'it' : `${count} comments`} →</span>
-            </button>
+            <div class={unlooked ? 'reason-row warn-row' : 'reason-row'}>
+              <Octicon name="comment" />
+              <span class="reason-t">{unlooked > 0 ? `${unlooked === 1 ? '1 agent draft' : `${unlooked} agent drafts`} not looked at` : `${count} comment${count === 1 ? '' : 's'} to send`}</span>
+              <button class="link" title="Your comments to send, then your other threads, each with the code it's on" onClick={() => (setOpen(false), dispatchEvent(new Event(unlooked ? 'lgtm:look-drafts' : 'lgtm:my-threads')))}>Look over</button>
+            </div>
           )}
           {event === 'APPROVE' && stillOpen.length > 0 && (
-            <p class="warn approve-open">
-              Still open, code unchanged since you commented:{' '}
-              {stillOpen.slice(0, 4).map((t, i) => (
-                <>
-                  {i ? ', ' : ''}
-                  <button class="link" onClick={() => jumpTo(t.id, 'f-' + t.path)}>{fileLabel(t.path)}{t.line ? `:${t.line}` : ''}</button>
-                </>
-              ))}
-              {stillOpen.length > 4 && ` and ${stillOpen.length - 4} more`}.
-            </p>
+            <div class="reason-row warn-row">
+              <Octicon name="comment-discussion" />
+              <span class="reason-t" title={stillOpen.map((t) => `${fileLabel(t.path)}${t.line ? `:${t.line}` : ''}`).join('\n')}>
+                {stillOpen.length === 1 ? 'A thread you started is' : `${stillOpen.length} threads you started are`} still open, the code unchanged since
+              </span>
+              <button class="link" onClick={() => (setOpen(false), jumpTo(stillOpen[0].id, 'f-' + stillOpen[0].path))}>{stillOpen.length === 1 ? 'Go to it' : 'Go to the first'}</button>
+            </div>
           )}
           {/* What submitting does beyond the obvious (the verdict and your summary): said only when there's some of it. */}
           {(() => {
@@ -3250,10 +3252,12 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
               </div>
             );
           })()}
-          <button class="primary" disabled={!!busy || (inline && inFlight) || (event === 'REQUEST_CHANGES' && !body.trim() && !count && !mySummary)} onClick={go}>
-            {busy ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : authored ? 'Comment' : 'Submit review'}
-          </button>
-          {discard && <button class="link discard-review" disabled={!!busy} onClick={() => (setOpen(false), discard())} title="Throw away your unsent review and its comments">Discard review</button>}
+          <div class="acts">
+            {discard && <button class="link discard-review" disabled={!!busy} onClick={() => (setOpen(false), discard())} title="Throw away your unsent review and its comments">Discard review</button>}
+            <button class="primary" disabled={!!busy || (inline && inFlight) || (event === 'REQUEST_CHANGES' && !body.trim() && !count && !mySummary)} onClick={go}>
+              {busy ? <><span class="btn-spin" aria-hidden="true" />{busy}</> : authored ? 'Comment' : 'Submit review'}
+            </button>
+          </div>
           {err && <p class="error">{err}{isStalePush(err) && <> <StaleActions /></>}</p>}
         </div>
       )}
