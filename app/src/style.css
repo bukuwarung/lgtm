@@ -37,6 +37,9 @@ body { margin: 0; font: calc(14px * var(--ts))/1.5 var(--sans); background: var(
 :where(h1, h2):where(:not(.md *, .rich *, .doc-render *)) { font-size: calc(20px * var(--ts)); font-weight: 600; }
 :where(h3):where(:not(.md *, .rich *, .doc-render *)) { font-size: calc(16px * var(--ts)); font-weight: 600; }
 :where(h4, h5, h6):where(:not(.md *, .rich *, .doc-render *)) { font-size: calc(13px * var(--ts)); font-weight: 600; }
+/* Focus: one ring everywhere, 2px in the accent colour (macOS draws one ring too); inside a menu, inset. Fields and
+   dropdowns alike (they had an accent edge and a soft halo instead). */
+:where(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 /* Buttons filled, with an edge that shows (on the page a shade darker than it; in the top and review bars, which are
@@ -63,7 +66,7 @@ select {
   transition: border-color .12s, box-shadow .12s;
 }
 select:hover { border-color: color-mix(in srgb, var(--fg) 32%, var(--border)); background-color: color-mix(in srgb, var(--fg) 6%, var(--btn-bg)); }
-select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 select:disabled { opacity: .5; cursor: default; }
 input:not([type=radio]):not([type=checkbox]), textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; width: 100%; }
 code, pre { font-family: var(--mono); }
@@ -331,7 +334,7 @@ section.file.flash > .file-h { animation: flash-bg 2.2s ease-out; }
 .viewed-box:hover { color: var(--fg); }
 .viewed-box.on { color: var(--addfg); border-color: currentColor; }
 .viewed-box input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
-.viewed-box:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.viewed-box:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .file.viewed .file-h { opacity: .75; }
 .file-f { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--soft); border-radius: 0 0 6px 6px; }
 html.no-file-footer .file-f { display: none; }
@@ -436,7 +439,7 @@ main { padding: 16px; }
 /* GitHub-style "+" on hover; it sits on the new-line-number cell, whose click handler opens the comment form. */
 .diff tr:hover > .num + .num::after {
   content: "+"; position: absolute; right: -14px; top: 0; z-index: 1; width: calc(20px * var(--cs)); height: calc(20px * var(--cs));
-  font: bold calc(14px * var(--ts))/calc(20px * var(--ts)) var(--sans); text-align: center; color: #fff; background: var(--accent); border-radius: 4px;
+  font: bold calc(14px * var(--cs))/calc(20px * var(--cs)) var(--sans); text-align: center; color: #fff; background: var(--accent); /* sized with the code, as its box is */ border-radius: 4px;
 }
 .diff .code { white-space: pre-wrap; word-break: break-word; }
 .diff .code::before { content: " "; display: inline-block; width: 1.2em; }
@@ -496,7 +499,7 @@ main { padding: 16px; }
 .chunk [data-src]:not(tr, [data-nd]):hover:not(:has([data-src]:hover)):not(:has(.note-host:hover))::before,
 .chunk tr[data-src]:not([data-nd]):hover > :first-child::before, .chunk .demo-plus::before {
   content: "+"; position: absolute; left: -36px; top: 0; width: 20px; height: 20px;
-  font: bold calc(14px * var(--ts))/calc(20px * var(--ts)) var(--sans); text-align: center; color: #fff; background: var(--accent); border-radius: 4px; cursor: pointer;
+  font: bold calc(14px * var(--cs))/calc(20px * var(--cs)) var(--sans); text-align: center; color: #fff; background: var(--accent); border-radius: 4px; cursor: pointer;
 }
 /* Invisible bridge from the block to its "+", so moving the mouse across the gap (often the parent list's
    indent) keeps this block hovered instead of handing the "+" to the parent. */
@@ -552,7 +555,7 @@ time { color: var(--muted); font-size: calc(12px * var(--ts)); }
 
 /* Comment editor */
 .editor { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
-.editor:focus-within { border-color: var(--accent); }
+.editor:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ed-bar { display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-bottom: 1px solid var(--border); background: var(--soft); border-radius: 6px 6px 0 0; flex-wrap: wrap; }
 .ed-tab { border: 0; background: none; padding: 2px 10px; font-size: calc(12px * var(--ts)); color: var(--muted); border-radius: 4px; }
 .ed-tab.on { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--border); }
@@ -877,7 +880,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .nav-go { display: flex; align-items: center; gap: 6px; flex: 0 1 680px; min-width: 260px; } /* back, forward and the search box, between the spacers: centred when there's room */
 .cmd { position: relative; flex: 1; min-width: 180px; }
 .top .cmd input { width: 100%; height: calc(1.5em + 8px); box-sizing: border-box; padding: 0 74px 0 32px; /* as tall as the buttons beside it: their line, padding and edge */ font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid var(--btn-edge); border-radius: 6px; border-bottom-color: var(--btn-edge-low); box-shadow: none; }
-.top .cmd input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.top .cmd input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cmd-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .cmd-kbd { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); padding: 1px 6px; font: calc(11px * var(--ts))/calc(16px * var(--ts)) var(--sans); color: var(--muted); border: 1px solid var(--border); border-radius: 4px; pointer-events: none; }
 .cmd:focus-within .cmd-kbd { display: none; }
@@ -1024,7 +1027,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .glass :is(.top, .bar) :is(button, .nav-btn):not(.primary, .account-btn, .link, .panel *, .account-menu *, .pill-pop *, dialog *, :disabled):active { background: light-dark(color-mix(in srgb, var(--fg) 10%, var(--bg)), color-mix(in srgb, var(--fg) 20%, transparent)); }
 .glass :is(.top, .bar) button.primary:not(.panel *, .account-menu *, .pill-pop *, dialog *) { border-radius: 999px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25); }
 .glass .top .cmd input { border-radius: 999px; background: light-dark(color-mix(in srgb, var(--bg) 88%, transparent), color-mix(in srgb, var(--fg) 10%, transparent)); border-color: color-mix(in srgb, var(--fg) 16%, transparent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 1px color-mix(in srgb, var(--fg) 6%, transparent); } /* as the bar's buttons: same edge, same depth */
-.glass .top .cmd input:focus { border-color: var(--accent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.glass .top .cmd input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .glass .cmd-kbd { border-radius: 999px; }
 .glass .nav-dev { border-radius: 999px; }
 /* Inside a bar, a pop-up can only blur the bar itself, so the page would read through it: nearly opaque there. */
@@ -1842,3 +1845,10 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .skel-btn { flex: none; width: 29px; height: 29px; border-radius: 999px; }
 /* A comment box's buttons a little below it, everywhere (Resolve thread sat right against the reply box). */
 .editor + :is(.row, .acts) { margin-top: 8px; }
+/* Motion: what opens over the page comes in one way, a short fade with a 4px rise (menus, panels, the palette, toasts,
+   dialogs); translate, not transform, so the centring some of them use stays. None with Reduce motion. */
+@keyframes lgtm-in { from { opacity: 0; translate: 0 -4px; } }
+@keyframes lgtm-up { from { opacity: 0; translate: 0 6px; } }
+:is(.account-menu, .pill-pop, .panel, .cmd-list, .quick-menu, .whats-new, dialog.ask[open]) { animation: lgtm-in .12s ease-out; }
+.toast { animation: lgtm-up .14s ease-out; }
+@media (prefers-reduced-motion: reduce) { :is(.account-menu, .pill-pop, .panel, .cmd-list, .quick-menu, .whats-new, dialog.ask[open], .toast) { animation: none; } }
