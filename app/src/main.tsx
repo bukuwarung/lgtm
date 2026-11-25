@@ -2205,9 +2205,10 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       {shown && !fresh && !err && <p class="list-updating"><span class="sk-dot" /> Updating…</p>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && i.reviewDecision === 'CHANGES_REQUESTED').length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-              {name} {n != null && !(hideEmptyGroups && !n) && <span class="count">{n}</span>}
+              {/* Your PRs counts the ones with changes requested (what's yours to do), none shown when there are none */}
+              {name} {t === 'mine' ? n > 0 && <span class="count changes" title={`${n} with changes requested`}>{n}</span> : n != null && !(hideEmptyGroups && !n) && <span class="count">{n}</span>}
             </button>
           ))}
         </div>
