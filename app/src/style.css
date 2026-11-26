@@ -501,14 +501,13 @@ main { padding: 16px; }
    one there, faint. Spans of 3 still cover the row. */
 .diff.one-num td.num:first-child { display: none; }
 .diff.one-num td.num[data-old]::before { content: attr(data-old); opacity: .55; }
-/* GitHub-style "+" on hover; it sits on the new-line-number cell, whose click handler opens the comment form. */
+/* The "+" on the hovered line, placed as GitLab places its button: at the left of the number cell, where the right-aligned
+   number leaves room (covering neither the number nor the code); the number cell tinted. Its click handler is the cell's. */
+.diff tr:hover:not(.x) > .num + .num { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .diff tr:hover > .num + .num::after {
-  content: "+"; position: absolute; right: -14px; top: 0; z-index: 1; width: calc(20px * var(--cs)); height: calc(20px * var(--cs));
-  font: bold calc(14px * var(--cs))/calc(20px * var(--cs)) var(--sans); text-align: center; color: #fff; background: var(--accent); /* sized with the code, as its box is */ border-radius: 4px;
+  content: "+"; position: absolute; left: 3px; top: calc(50% - 9px * var(--cs)); z-index: 1; width: calc(18px * var(--cs)); height: calc(18px * var(--cs));
+  font: bold calc(14px * var(--cs))/calc(18px * var(--cs)) var(--sans); text-align: center; color: #fff; background: var(--accent); border-radius: 4px; /* sized with the code, as its row is */
 }
-/* Without the +/- column (Settings → Diff) the code starts right after its padding: the "+" stays in the gutter and that
-   padding, over the line's number rather than its first letters. */
-html.no-signs:not(.a11y-shapes) .diff tr:hover > .num + .num::after { right: -7px; }
 .diff .code { white-space: pre-wrap; word-break: break-word; }
 .diff .code::before { content: " "; display: inline-block; width: 1.2em; }
 .diff tr.a { background: var(--add); }
