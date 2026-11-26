@@ -23,7 +23,8 @@ func letters(_ ctx: CGContext, _ dx: CGFloat, _ dy: CGFloat) {
 let probe = bitmap { letters($0, 0, 0) }
 var lo = CGPoint(x: 999, y: 999), hi = CGPoint(x: -1, y: -1)
 for y in 0..<144 { for x in 0..<144 where probe.colorAt(x: x, y: y)!.alphaComponent > 0.3 { lo.x = min(lo.x, CGFloat(x)); hi.x = max(hi.x, CGFloat(x)); lo.y = min(lo.y, CGFloat(y)); hi.y = max(hi.y, CGFloat(y)) } }
-let dx = 18 - (lo.x + hi.x + 1) / 8, dy = -(18 - (lo.y + hi.y + 1) / 8) // bitmap rows run down, drawing up
+let nudge: CGFloat = 0.75 // and a touch right: by ink alone the pair still looks left of centre (L and T are heavy on their left)
+let dx = 18 - (lo.x + hi.x + 1) / 8 + nudge, dy = -(18 - (lo.y + hi.y + 1) / 8) // bitmap rows run down, drawing up
 let rep = bitmap { ctx in
   let o = NSBezierPath(ovalIn: NSRect(x: 1.5, y: 1.5, width: 33, height: 33)); o.lineWidth = 3; o.stroke()
   letters(ctx, dx, dy)
