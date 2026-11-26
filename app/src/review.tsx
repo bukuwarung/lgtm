@@ -4382,13 +4382,21 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                 const first = h.lines[doc.start], last = h.lines[doc.end];
                 // An edited one comments on its new version: from its first line there.
                 const at = doc.kind === '~' ? run.find((x) => x.kind !== '-')! : first;
-                const onNum = (e: MouseEvent) => pick(e, doc.kind === '-' ? 'LEFT' : 'RIGHT', doc.kind === '-' ? first.old! : at.new!);
+                // A comment on it is on all of it: its lines on that side, first to last (⌥-click still links its first
+                // line, shift-click extends as on any line).
+                const side: Side = doc.kind === '-' ? 'LEFT' : 'RIGHT';
+                const nums = run.map((x) => (side === 'LEFT' ? x.old : x.new)).filter((n): n is number => n != null);
+                const onNum = (e: MouseEvent) => {
+                  if (e.altKey || e.shiftKey || nums.length < 2) return pick(e, side, nums[0] ?? (side === 'LEFT' ? first.old! : at.new!));
+                  if (side === 'LEFT' && ctx.since) return;
+                  ctx.setTarget({ path, side, line: Math.max(...nums), startLine: Math.min(...nums) });
+                };
                 return (
                   <tr class={`ln doc${doc.kind === '+' ? ' a' : doc.kind === '-' ? ' d' : doc.kind === '~' ? ' edited' : ''}`}>
-                    <td class="num" title={`Lines ${first.old}–${last.old}: comment (shift-click to extend)`} onClick={onNum}>
+                    <td class="num" title={`Lines ${first.old}–${last.old}: comment on them all`} onClick={onNum}>
                       {run.find((x) => x.old != null)?.old ?? ''}
                     </td>
-                    <td class="num" title={`Lines ${at.new}–${last.new}: comment (shift-click to extend)`} onClick={onNum} data-old={at.new == null ? first.old : undefined}>
+                    <td class="num" title={`Lines ${at.new}–${last.new}: comment on them all`} onClick={onNum} data-old={at.new == null ? first.old : undefined}>
                       {at.new ?? ''}
                     </td>
                     <td class="code">
