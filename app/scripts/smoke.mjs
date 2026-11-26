@@ -765,6 +765,57 @@ try {
     const found = rowFaults();
     if (found.length) throw new Error(found.join('; '));
   });
+  // LGTM's own controls, where macOS's were (select.tsx, tooltip.ts, settings.tsx NumberField): nothing else checks them.
+  await step("LGTM's own controls: a dropdown opens, moves with the keys, picks and gives focus back, Esc closes only its list; a tooltip shows its key and gives its title back; − and + stop at their ends", async () => {
+    await evaluate(`location.hash = '/settings'`);
+    await until('Settings', `document.querySelectorAll('button.select').length > 3`);
+    const was = await evaluate(`(() => { const b = [...document.querySelectorAll('button.select')].find((x) => /^(Shown|Hidden)/.test(x.textContent.trim())); b.scrollIntoView({ block: 'center' }); b.focus(); window.__sel = b; return b.textContent.trim(); })()`);
+    await page.keyboard.press('ArrowDown');
+    await sleep(150);
+    if (!(await evaluate(`!!document.querySelector('.select-menu [role=option]')`))) throw new Error('the dropdown did not open on ↓');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await sleep(150);
+    const picked = await evaluate(`({ open: !!document.querySelector('.select-menu'), text: window.__sel.textContent.trim(), focus: document.activeElement === window.__sel })`);
+    if (picked.open || picked.text === was || !picked.focus) throw new Error(`picking with ↓ and Enter: ${JSON.stringify(picked)}`);
+    await page.keyboard.press('ArrowDown');
+    await sleep(100);
+    await page.keyboard.press('Escape');
+    await sleep(150);
+    if (await evaluate(`!!document.querySelector('.select-menu') || location.hash !== '#/settings'`)) throw new Error('Esc in the dropdown did more than close its list');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Enter'); // back as it was
+    // A tooltip: Settings' gear, "Settings (⌘,)".
+    const gear = await evaluate(`(() => { const r = document.querySelector('a[href="#/settings"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    await page.mouse.move(gear.x, gear.y);
+    await sleep(700);
+    const tip = await evaluate(`({ open: !!document.querySelector('.lgtm-tip')?.matches(':popover-open'), text: document.querySelector('.lgtm-tip')?.textContent, key: document.querySelector('.lgtm-tip kbd')?.textContent, title: document.querySelector('a[href="#/settings"]').getAttribute('title') })`);
+    if (!tip.open || tip.key !== '⌘,' || tip.title) throw new Error(`the gear's tooltip: ${JSON.stringify(tip)}`);
+    await page.mouse.move(2, 700);
+    await sleep(200);
+    const gone = await evaluate(`({ open: !!document.querySelector('.lgtm-tip')?.matches(':popover-open'), title: document.querySelector('a[href="#/settings"]').getAttribute('title') })`);
+    if (gone.open || gone.title !== 'Settings (⌘,)') throw new Error(`after the tooltip: ${JSON.stringify(gone)}`);
+    // − and + (agent reviews switched on for it, then off again).
+    const box = `[...document.querySelectorAll('.set-row')].find((r) => /An agent reviews/.test(r.textContent))?.querySelector('input[type=checkbox]')`;
+    const wasOn = await evaluate(`${box}.checked`);
+    if (!wasOn) await evaluate(`${box}.click()`);
+    await sleep(200);
+    const nums = await evaluate(`(async () => {
+      const f = document.querySelector('.num-field'), [less, more] = f.querySelectorAll('button'), n = f.querySelector('input');
+      const set = (v) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(n, v); n.dispatchEvent(new Event('input', { bubbles: true })); n.dispatchEvent(new Event('change', { bubbles: true })); };
+      const wait = () => new Promise((r) => setTimeout(r, 60));
+      const start = n.value;
+      set('5'); await wait(); less.click(); await wait(); less.click(); await wait();
+      const low = [f.querySelector('input').value, f.querySelectorAll('button')[0].disabled];
+      set('498'); await wait(); more.click(); await wait();
+      const high = [f.querySelector('input').value, f.querySelectorAll('button')[1].disabled];
+      set(start); await wait();
+      return { low, high };
+    })()`);
+    if (!wasOn) await evaluate(`${box}.click()`);
+    if (nums.low[0] !== '0' || !nums.low[1] || nums.high[0] !== '500' || !nums.high[1]) throw new Error(`− and +: ${JSON.stringify(nums)}`);
+  });
   await step('no two buttons say the same thing at once, in each menu and panel as it opens', async () => {
     if (twins.length) throw new Error(`said twice: ${[...new Set(twins)].join('; ')}`);
   });

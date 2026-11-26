@@ -1828,6 +1828,8 @@ SCENES.app = {
 export function DemoPage({ k: route }: { k: string }) {
   const [k, theme] = route.split('/');
   if (theme) document.documentElement.dataset.theme = theme;
+  // Every preview's and scene's key, for scripts/sheet.mjs.
+  if (k === '_keys') return <pre id="demo-keys">{JSON.stringify({ demos: Object.keys(DEMOS), scenes: Object.keys(SCENES) })}</pre>;
   return (
     SCENES[k.replace(/^scene-/, '')] && k.startsWith('scene-') ? (
       <div class="demo-page scene" style={{ width: SCENES[k.slice(6)].width }}>

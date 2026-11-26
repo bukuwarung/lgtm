@@ -949,8 +949,9 @@ export async function askNotifications(): Promise<boolean> {
   return (await n.isPermissionGranted()) || (await n.requestPermission()) === 'granted';
 }
 // `route`: the PR a click opens ("/owner/repo/pull/n"); empty, just lgtm.
-// A coding agent's work done (a review, a CI diagnosis, a thread check) while lgtm isn't in front: a desktop
-// notification that opens the PR, per Settings → Desktop notifications.
+// A coding agent's work done (a review, a CI diagnosis, a thread check) while LGTM isn't in front: a desktop
+// notification that opens the PR, per Settings → Desktop notifications. Its title is the PR's (several in Notification
+// Center tell apart), its body what happened, then which PR (repo#n).
 export function notifyAgentDone(title: string, body: string, route: string) {
   if (document.hasFocus()) return; // in front, the page says it
   const on = (k: string) => {

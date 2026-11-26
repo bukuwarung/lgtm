@@ -67,7 +67,7 @@ const postMode = (): 'pending' | 'comment' => {
     return 'pending';
   }
 };
-type Target = Pick<QueueItem, 'id' | 'repo' | 'number'> & { headSha?: string; waitingSince?: string };
+type Target = Pick<QueueItem, 'id' | 'repo' | 'number'> & { headSha?: string; waitingSince?: string; title?: string };
 // Its latest run, on whichever commit: new pushes alone don't run it again.
 export const agentRunOf = (i: Pick<QueueItem, 'id'> & { headSha?: string }) => all()[i.id];
 // Whether a PR sits in "Agents reviewing" rather than "Needs your review".
@@ -155,12 +155,12 @@ function pump() {
     })
       .then((r) => {
         set(i.id, { ...base, state: 'done', at: Date.now(), ...r });
-        notifyAgentDone(`${by} reviewed it`, `${ref(i)}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}` : 'nothing found'}`, `/${i.repo}/pull/${i.number}`);
+        notifyAgentDone(i.title ?? ref(i), `${by} reviewed it: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}` : 'nothing found'} · ${ref(i)}`, `/${i.repo}/pull/${i.number}`);
         if (manual) say(`${by} reviewed ${ref(i)}: ${r.findings ? `${r.findings} finding${r.findings > 1 ? 's' : ''}, ${r.posted === 'pending' ? 'in your pending review' : 'posted as comments'}` : 'nothing to point out'}`);
       })
       .catch((e: Error) => {
         set(i.id, { ...base, state: 'failed', at: Date.now(), error: e.message });
-        notifyAgentDone(`${by} couldn't review it`, `${ref(i)}: ${e.message}`, `/${i.repo}/pull/${i.number}`);
+        notifyAgentDone(i.title ?? ref(i), `${by} couldn't review it: ${e.message} · ${ref(i)}`, `/${i.repo}/pull/${i.number}`);
         if (manual) say(`${by} couldn't review it: ${e.message}`);
       })
       .finally(() => (active--, inflight.delete(i.id), pump()));

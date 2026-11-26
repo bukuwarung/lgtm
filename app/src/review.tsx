@@ -1195,7 +1195,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       checkThreads({ repo, n, headRepo: data.headRepo, head, since: checkSince, threads: myOpen, agent }).then((c) => {
         if (checking.current === run) setCheck(c);
         const all = Object.values(c.verdicts), done = all.filter((v) => v.addressed).length;
-        if (c.state === 'done' && all.length) notifyAgentDone(`${AGENTS[agent].name} checked ${ownPR ? 'their' : 'your'} threads`, `${data.pr.title}: ${done} of ${all.length} addressed`, `/${repo}/pull/${n}`);
+        if (c.state === 'done' && all.length) notifyAgentDone(data.pr.title, `${AGENTS[agent].name} checked ${ownPR ? 'their' : 'your'} threads: ${done} of ${all.length} addressed · ${repo.split('/').pop()}#${n}`, `/${repo}/pull/${n}`);
       });
     });
   }, [head, checkSince, myOpenIds, checkOn, checkTry]);
@@ -6146,7 +6146,7 @@ function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: stri
         setTurns(all);
         requestAnimationFrame(() => panelRef.current?.scrollTo({ top: panelRef.current.scrollHeight, behavior: 'smooth' }));
       }
-      if (panel.ci && !turns.length) notifyAgentDone(`${AGENTS[who].name}: why ${panel.ci.check} failed`, text.replace(/[`*_>#]/g, '').split('\n').find((l) => l.trim())?.slice(0, 160) ?? '', `/${repo}/pull/${pr.number}`);
+      if (panel.ci && !turns.length) notifyAgentDone(pr.title, `${AGENTS[who].name} on why ${panel.ci.check} failed: ${text.replace(/[`*_>#]/g, '').split('\n').find((l) => l.trim())?.slice(0, 140) ?? ''} · ${repo.split('/').pop()}#${pr.number}`, `/${repo}/pull/${pr.number}`);
     } catch (e: any) {
       setError(e.message);
       if (shown.current === k) setQ((q) => q || asked); // to ask again
