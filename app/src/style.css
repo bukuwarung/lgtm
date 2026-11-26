@@ -505,6 +505,7 @@ main { padding: 16px; }
    diff's edge with one number column, the line between them with two), clear of the number and the code; the number
    cell tinted. Its click handler is the cell's. A file clips what's outside it (content-visibility): not while hovered. */
 .file:hover { content-visibility: visible; }
+.diff tr[data-tgt] > td, .diff tr.drag-sel > td { background-image: linear-gradient(color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--accent) 18%, transparent)); } /* the lines a comment being written is on, and those being dragged over (review.tsx dragFrom) */
 .diff tr:hover:not(.x) > .num + .num { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .diff tr:hover > .num + .num::after {
   content: "+"; position: absolute; left: calc(-9px * var(--cs)); top: calc(50% - 9px * var(--cs)); z-index: 1; width: calc(18px * var(--cs)); height: calc(18px * var(--cs));

@@ -4149,6 +4149,37 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
     } else ctx.setTarget({ path, side, line });
   };
 
+  // Dragging from a line's number (or its "+") up or down: the lines passed over, commented on together, as GitHub and
+  // GitLab do (shift-click still extends). Lit as you go; let go and the form opens for them. On one side: a removed
+  // line's run, or the new file's lines.
+  const dragged = useRef(false);
+  const dragFrom = (e: PointerEvent, side: Side, line: number) => {
+    const table = (e.currentTarget as Element).closest('table');
+    if (e.button !== 0 || e.shiftKey || e.altKey || e.metaKey || !table || (side === 'LEFT' && ctx.since)) return;
+    e.preventDefault(); // no text selection while dragging
+    let end = line;
+    const rows = () => [...table.querySelectorAll<HTMLElement>(`tr[data-side="${side}"][data-line]`)];
+    const light = () => {
+      const lo = Math.min(line, end), hi = Math.max(line, end);
+      for (const r of rows()) r.classList.toggle('drag-sel', +r.dataset.line! >= lo && +r.dataset.line! <= hi);
+    };
+    const move = (m: PointerEvent) => {
+      const r = document.elementFromPoint(m.clientX, m.clientY)?.closest<HTMLElement>(`tr[data-side="${side}"][data-line]`);
+      if (r && table.contains(r) && +r.dataset.line! !== end) (end = +r.dataset.line!, light());
+    };
+    const up = () => {
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', up);
+      for (const r of rows()) r.classList.remove('drag-sel');
+      if (end === line) return; // a click: the number's own handler
+      dragged.current = true; // the click that follows isn't a second pick
+      setTimeout(() => (dragged.current = false));
+      ctx.setTarget({ path, side, line: Math.max(line, end), startLine: Math.min(line, end) });
+    };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  };
+
   const notes = (side: Side, line: number) => {
     const th = threads.filter((x) => x.diffSide === side && x.line === line);
     const dr = drafts.filter((x) => x.side === side && x.line === line);
@@ -4442,9 +4473,9 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : l.kind !== '-' && flagAt?.has(l.new!) ? (flagAt.get(l.new!)!.bad ? ' flag-bad' : ' flag-warn') : '')} data-k={`${hi}-${li}`} onContextMenu={(e) => void lineMenu(e, side, num)} title={l.kind === '-' ? undefined : l.kind === '+' && secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : l.kind === '+' && textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : flagAt?.get(l.new!)?.why}>
-                    <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)}>{l.old ?? ''}</td>
-                    <td class="num" title="Comment (shift-click to extend; ⌥-click copies a link to the line)" onClick={(e) => pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : l.kind !== '-' && flagAt?.has(l.new!) ? (flagAt.get(l.new!)!.bad ? ' flag-bad' : ' flag-warn') : '')} data-k={`${hi}-${li}`} onContextMenu={(e) => void lineMenu(e, side, num)} title={l.kind === '-' ? undefined : l.kind === '+' && secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : l.kind === '+' && textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : flagAt?.get(l.new!)?.why} data-side={side} data-line={num} data-tgt={t && t.line != null && t.side === side && num >= (t.startLine ?? t.line) && num <= t.line ? '' : undefined}>
+                    <td class="num" title="Comment (drag or shift-click for more lines; ⌥-click copies a link to the line)" onPointerDown={(e) => dragFrom(e, side, num)} onClick={(e) => !dragged.current && pick(e, side, num)}>{l.old ?? ''}</td>
+                    <td class="num" title="Comment (drag or shift-click for more lines; ⌥-click copies a link to the line)" onPointerDown={(e) => dragFrom(e, side, num)} onClick={(e) => !dragged.current && pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />
                   </tr>
                   {notes(side, num)}
