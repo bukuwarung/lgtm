@@ -48,13 +48,35 @@ let inkShift: CGPoint = {
   for y in stride(from: 0, to: n, by: 2) { for x in stride(from: 0, to: n, by: 2) where rep.colorAt(x: x, y: y)!.alphaComponent > 0.3 { lo.x = min(lo.x, CGFloat(x)); hi.x = max(hi.x, CGFloat(x)); lo.y = min(lo.y, CGFloat(y)); hi.y = max(hi.y, CGFloat(y)) } }
   return CGPoint(x: 512 - (lo.x + hi.x) / 2 + stampR * 0.045, y: -(512 - (lo.y + hi.y) / 2)) // bitmap rows run down
 }()
+// Pressed on the page as a rubber stamp leaves it: no disc of its own (the diff shows through), the ink soaked into the
+// paper (multiplied over what's under it, in light), uneven where the rubber met it: specks where no ink took, and one
+// side pressed lighter. The specks come from a fixed seed, so every build draws the same stamp.
+struct Seeded { var x: UInt64; mutating func next() -> CGFloat { x = x &* 6364136223846793005 &+ 1442695040888963407; return CGFloat(x >> 33) / CGFloat(1 << 31) } }
 func stamp(dark: Bool, _ ctx: CGContext) {
   ctx.saveGState(); ctx.translateBy(x: stampAt.x, y: S - stampAt.y)
   let ink = dark ? c(0x3fb950) : c(0x1a7f37)
-  let ring = NSBezierPath(ovalIn: NSRect(x: -stampR, y: -stampR, width: 2 * stampR, height: 2 * stampR)); ring.lineWidth = 34
-  (dark ? c(0x16191d, 0.85) : c(0xffffff, 0.88)).setFill(); ring.fill(); ink.setStroke(); ring.stroke()
+  if !dark { ctx.setBlendMode(.multiply) }
+  ctx.setAlpha(dark ? 0.92 : 0.9)
+  ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+  ink.setStroke()
+  let ring = NSBezierPath(ovalIn: NSRect(x: -stampR, y: -stampR, width: 2 * stampR, height: 2 * stampR)); ring.lineWidth = 34; ring.stroke()
   let inner = NSBezierPath(ovalIn: NSRect(x: -165, y: -165, width: 330, height: 330)); inner.lineWidth = 10; inner.stroke()
-  ctx.translateBy(x: inkShift.x, y: inkShift.y); letters(ctx, ink)
+  ctx.saveGState(); ctx.translateBy(x: inkShift.x, y: inkShift.y); letters(ctx, ink); ctx.restoreGState()
+  // where no ink took: many small specks, a few larger worn patches, thicker toward the lightly pressed side
+  ctx.setBlendMode(.destinationOut); NSColor.black.setFill()
+  var r = Seeded(x: 20261126)
+  for i in 0..<1400 {
+    let ang = r.next() * 2 * .pi, rad = sqrt(r.next()) * (stampR + 20)
+    let x = cos(ang) * rad, y = sin(ang) * rad
+    let light = (x - y) / (2 * stampR) // toward the lower right
+    if r.next() > 0.12 + 0.22 * max(0, light) { continue }
+    let big = i % 41 == 0, w = big ? 5 + r.next() * 7 : 1.5 + r.next() * 3.5, h = big ? w * (0.4 + r.next() * 0.5) : w * (0.6 + r.next() * 0.6)
+    NSBezierPath(ovalIn: NSRect(x: x - w / 2, y: y - h / 2, width: w, height: h)).fill()
+  }
+  // one side pressed lighter
+  NSGradient(colors: [NSColor(white: 0, alpha: 0), NSColor(white: 0, alpha: 0.2)], atLocations: [0.45, 1], colorSpace: .sRGB)!
+    .draw(in: CGRect(x: -stampR - 20, y: -stampR - 20, width: 2 * stampR + 40, height: 2 * stampR + 40), angle: -40)
+  ctx.endTransparencyLayer()
   ctx.restoreGState()
 }
 if args[1] == "layers" {
