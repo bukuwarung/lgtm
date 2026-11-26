@@ -831,6 +831,10 @@ button.link { border: none; background: none; padding: 0 4px; color: var(--accen
 .demo-pair.pickable .demo-side:not(.on):hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
 fieldset:disabled .demo-pair.pickable .demo-side, fieldset:disabled .demo-pair.pickable .demo-side * { cursor: default !important; }
 fieldset:disabled .demo-pair.pickable .demo-side:hover { border-color: var(--border); }
+/* Under a setting that's off, its preview fades with it, the chosen side unmarked. */
+fieldset:disabled .demo-pair { opacity: .5; }
+fieldset:disabled .demo-side.on { border-color: var(--border); box-shadow: none; }
+fieldset:disabled .demo-side.on .demo-label { color: var(--muted); }
 .demo-label { position: absolute; top: 4px; left: 8px; font: 600 calc(10px * var(--ts)) var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .demo-side.on .demo-label { color: var(--accent); }
 .demo-side .file { margin-bottom: 6px; content-visibility: visible; }
@@ -941,6 +945,10 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .g-note { margin-left: 6px; font-weight: 400; color: var(--muted); }
 /* The app: the top bar is the title bar, with room for the traffic lights on the left. */
 .desktop .top { padding-left: 84px; -webkit-user-select: none; user-select: none; }
+/* The app's own controls and labels don't highlight when a drag crosses them, as in a Mac app; what you read (the diff,
+   comments, descriptions, code, messages) still selects. */
+.desktop :is(button, summary, label, [role="tab"], .bar, .pr-tabs, .pr-item, .pr-group > summary, .side.tree, .set-toc, .pill, .pills, .file-h, .demo-pair, .start-card, .count, kbd, .acts) { -webkit-user-select: none; user-select: none; }
+.desktop :is(input, textarea, [contenteditable]:not([contenteditable="false"])) { -webkit-user-select: text; user-select: text; }
 .desktop.fullscreen .top { padding-left: 12px; }
 .desktop.inactive .top > * { opacity: .5; } /* another window in front, as a Mac toolbar's controls fade */
 /* Showing and hiding the PR list and the PR index slides their column; the panel keeps its width inside, clipped,
@@ -973,7 +981,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .set-sources li { margin: 2px 0; }
 .set-pace input[type=range] { width: 220px; }
 .idle.old { color: var(--warnfg); }
-.set-head { display: flex; align-items: center; gap: 12px; max-width: 720px; margin: 20px 0 16px; }
+.set-head { display: flex; align-items: center; gap: 12px; max-width: 720px; margin: 30px 0 16px; } /* its title 32px below the bar as every page's (the search beside it is 4px taller) */
 .set-head h2 { margin: 0; flex: 1; }
 .set-search { width: 240px; padding: 4px 10px; }
 .settings [hidden] { display: none !important; }
@@ -1085,7 +1093,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 /* Settings: a side panel of its sections, beside them (gone when the window is narrow). */
 .settings { display: grid; grid-template-columns: 160px minmax(0, 960px); column-gap: 28px; max-width: calc(960px + 188px); }
 .settings > :not(.set-toc) { grid-column: 2; }
-.set-toc { grid-column: 1; grid-row: 1 / span 100; align-self: start; position: sticky; top: calc(var(--nav) + 16px); display: grid; gap: 1px; padding-top: 24px; }
+.set-toc { grid-column: 1; grid-row: 1 / span 100; align-self: start; position: sticky; top: calc(var(--nav) + 16px); display: grid; gap: 1px; padding-top: 16px; } /* its first row level with the title */
 .set-toc button { padding: 5px 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: calc(13px * var(--ts)); text-align: left; }
 .set-toc button:hover { color: var(--fg); background: var(--soft); }
 .set-toc button { display: flex; align-items: center; gap: 8px; }
@@ -1720,8 +1728,8 @@ main.only-mine > :not(.my-threads) { display: none; } /* just them: not the desc
 .snippet .diff .num:hover { color: var(--muted); }
 .snippet tr.hit > td.num { color: var(--fg); box-shadow: inset 3px 0 var(--accent); }
 /* A gist (gist.tsx): its title, a patch's commit message, a hunk's @@ line above its rows. */
-.gist { max-width: 1100px; min-width: 0; margin: 0 auto; padding-bottom: 40px; }
-.gist-h h2 { margin: 16px 0 4px; }
+.gist { max-width: 1100px; min-width: 0; margin: 0 auto; padding: 32px 24px 40px; }
+.gist-h h2 { margin: 0 0 4px; }
 .gist-h { margin-bottom: 16px; }
 .gist-lead { white-space: pre-wrap; background: var(--soft); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: calc(12px * var(--ts)); }
 .gist .file .snippet { border: 0; border-radius: 0; }

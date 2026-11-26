@@ -1138,7 +1138,13 @@ export async function initDesktop(go: (route: string) => void) {
       ];
       return void (await (await Menu.new({ items })).popup());
     }
-    if ((!a && !pic && !video) || e.defaultPrevented) return;
+    if (e.defaultPrevented) return;
+    // Anywhere else WebKit's own menu (Reload, Back) is a web page's, not an app's: none, except on selected text and in a
+    // text field (Copy, Look Up, Paste, spelling); ⌥ right-click still gets it.
+    if (!a && !pic && !video) {
+      if (!e.altKey && !getSelection()?.toString() && !t?.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"])')) e.preventDefault();
+      return;
+    }
     e.preventDefault();
     const { Menu } = await import('@tauri-apps/api/menu');
     const items: { text: string; action: () => void }[] = [];
