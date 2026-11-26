@@ -153,7 +153,7 @@ const LIMIT_NAME: Record<string, string> = { core: "GitHub's hourly API limit", 
 const limitError = (bucket: string) => {
   const l = limited.get(bucket)!;
   const at = new Date(l.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', ...(l.until - Date.now() < 120_000 ? { second: '2-digit' } : {}) });
-  return new Error(l.slow ? `GitHub rate-limited lgtm until ${at}` : `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`} is used up until ${at}`);
+  return new Error(l.slow ? `GitHub rate-limited LGTM until ${at}` : `${LIMIT_NAME[bucket] ?? `GitHub's ${bucket} limit`} is used up until ${at}`);
 };
 export const isLimited = (bucket: string) => (limited.get(bucket)?.until ?? 0) > Date.now();
 
@@ -200,7 +200,7 @@ reportUsage(() =>
   (['graphql', 'core'] as const).flatMap((b) => {
     const by = spentThisHour(b);
     const x = budgets.get(b);
-    return by.length ? [`GitHub ${b === 'graphql' ? 'GraphQL points' : 'REST requests'} since lgtm opened, this hour: ${by.map(([what, n]) => `${what} ${n.toLocaleString()}`).join(', ')}${x ? ` (${x.remaining.toLocaleString()} of ${x.limit.toLocaleString()} left)` : ''}`] : [];
+    return by.length ? [`GitHub ${b === 'graphql' ? 'GraphQL points' : 'REST requests'} since LGTM opened, this hour: ${by.map(([what, n]) => `${what} ${n.toLocaleString()}`).join(', ')}${x ? ` (${x.remaining.toLocaleString()} of ${x.limit.toLocaleString()} left)` : ''}`] : [];
   }),
 );
 export const spentThisHour = (bucket: string) => [...(spent.get(bucket) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1]);

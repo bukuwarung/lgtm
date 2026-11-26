@@ -236,11 +236,11 @@ function ApiBudget() {
   const NAME = { core: 'REST', graphql: 'GraphQL' };
   return (
     <div class="api-budget">
-      <span class="api-head">GitHub's hourly API limit is running low: lgtm stops asking GitHub when it's used up, until it resets.</span>
+      <span class="api-head">GitHub's hourly API limit is running low: LGTM stops asking GitHub when it's used up, until it resets.</span>
       {rows.map(([b, x]) => {
         const left = x!.remaining / x!.limit;
         const by = spentThisHour(b).filter(([what]) => what !== 'other').slice(0, 3);
-        const tip = `${x!.remaining.toLocaleString()} of ${x!.limit.toLocaleString()} left this hour, until ${at(x!.reset)}${by.length ? `. Most used since lgtm opened: ${by.map(([what, n]) => `${what} (${n.toLocaleString()} ${b === 'graphql' ? 'point' : 'request'}${n === 1 ? '' : 's'})`).join(', ')}` : ''}`;
+        const tip = `${x!.remaining.toLocaleString()} of ${x!.limit.toLocaleString()} left this hour, until ${at(x!.reset)}${by.length ? `. Most used since LGTM opened: ${by.map(([what, n]) => `${what} (${n.toLocaleString()} ${b === 'graphql' ? 'point' : 'request'}${n === 1 ? '' : 's'})`).join(', ')}` : ''}`;
         return (
           <div class="api-row" title={tip}>
             <span class="api-name">{NAME[b]} requests</span>
@@ -382,7 +382,7 @@ export function Settings() {
 
       <section>
         <h3>Accounts</h3>
-        <p class="note">lgtm uses these command-line tools' sign-ins and stores no tokens.</p>
+        <p class="note">LGTM uses these command-line tools' sign-ins and stores no tokens.</p>
         <Status ok={me == null ? null : !!me}>
           <b>GitHub</b> {me ? <>signed in as <code>@{me}</code> through the GitHub CLI</> : me === '' ? 'not signed in' : 'checking…'}
           {me === '' && <pre>gh auth login</pre>}
@@ -390,7 +390,7 @@ export function Settings() {
           {me && <MissingScopes />}
           {accounts && accounts.length > 1 ? (
             <label class="gh-account">
-              Account lgtm uses{' '}
+              Account LGTM uses{' '}
               <select
                 value={ghAccount()}
                 onChange={(e) => {
@@ -469,7 +469,7 @@ export function Settings() {
             type="checkbox"
             checked={notify}
             onChange={async () => {
-              if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications.' : 'Notifications are blocked for this page in your browser settings.');
+              if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for LGTM in System Settings → Notifications.' : 'Notifications are blocked for this page in your browser settings.');
               toggleNotify();
             }}
           />
@@ -480,7 +480,7 @@ export function Settings() {
         </label>
         <fieldset class="set-sub" disabled={!notify}>
           <Flag k="notifySound" initial={true} label="Play a sound" />
-          <button class="set-test" onClick={() => void sendNotification('lgtm', 'A test notification. Click it to come back to lgtm.', '')}>
+          <button class="set-test" onClick={() => void sendNotification('LGTM', 'A test notification. Click it to come back to LGTM.', '')}>
             Send a test notification
           </button>
           <Flag k="notifyReplies" initial={true} label="New replies waiting for you" />
@@ -490,7 +490,7 @@ export function Settings() {
           <Flag k="notifyConflicts" initial={true} label={`Your ${T.PR} has conflicts`} />
           <Flag k="notifyMentions" initial={true} label={`Someone mentions you in a ${T.PR}`} />
           <Flag k="notifyQueue" initial={true} label={`Your ${T.PR} left the merge queue, or its auto-merge turned off`} />
-          <Flag k="notifyAgents" initial={true} label="A coding agent finished" hint="While lgtm is in the background." />
+          <Flag k="notifyAgents" initial={true} label="A coding agent finished" hint="While LGTM is in the background." />
         </fieldset>
       </section>
 
@@ -562,7 +562,7 @@ export function Settings() {
       {/* What lgtm looks for in a PR. Ones for one platform or framework get a section of their own, below. */}
       <section>
         <h3>Checks</h3>
-        <p class="note">What lgtm points out in a {T.PR}, each a click from a comment. Turn off what's noise.</p>
+        <p class="note">What LGTM points out in a {T.PR}, each a click from a comment. Turn off what's noise.</p>
         <Flag k="checkSecrets" initial={true} label="Possible secrets" hint="Keys, tokens and literal passwords in added lines. Placeholders and tests don't count."  demo />
         <Flag k="checkDeps" initial={true} label="Dependency changes" hint="Major jumps and unpinned versions marked."  demo />
         <Flag k="checkBinaries" initial={true} label="Binary files: what they are" hint="Kind, size and Git LFS; warns over 1 MB outside LFS."  demo />
@@ -656,7 +656,7 @@ export function Settings() {
         <Flag k="glass" initial={true} label="Glass" hint="Translucent bars and pop-ups. Off with Reduce transparency."  demo />
         <TagStyle />
         {hasOsAccent() && <Flag k="osAccent" initial={true} label="macOS's accent colour" hint="For links, focus and what's selected, as System Settings → Appearance has it; darker or lighter where it wouldn't read." demo />}
-        <Flag k="themeColors" initial={true} label="Theme colours for lgtm's marks" hint="Warnings and findings in the theme's colours. Solid badges keep lgtm's." demo />
+        <Flag k="themeColors" initial={true} label="Theme colours for LGTM's marks" hint="Warnings and findings in the theme's colours. Solid badges keep LGTM's." demo />
         <Flag k="relativeTimes" initial={true} label="Relative times" hint="The exact time shows on hover." demo />
         <div class="set-row">
           <span>
@@ -669,7 +669,7 @@ export function Settings() {
             <span class="thm-slot">
               <button role="radio" aria-checked={look.appTheme === k} class={look.appTheme === k ? 'thm-card on' : 'thm-card'} onClick={() => look.setAppTheme(k)}>
                 <ThemeThumb t={t} />
-                <span class="thm-name" title={t ? t.name : 'lgtm'}>{t ? t.name : 'lgtm'}</span>
+                <span class="thm-name" title={t ? t.name : 'LGTM'}>{t ? t.name : 'LGTM'}</span>
               </button>
               {k in savedThemes(look) && (
                 <button class="thm-remove" title={`Delete ${t?.name}`} aria-label={`Delete ${t?.name}`} onClick={() => (look.appTheme === k && look.setAppTheme('lgtm'), saveTheme(look, k, null))}>
@@ -964,7 +964,7 @@ function ThemeGallery({ look }: { look: Look }) {
           ))}
         </div>
       )}
-      <p class="note">Themes are their authors' work, under their own licenses; lgtm reads only their colours.</p>
+      <p class="note">Themes are their authors' work, under their own licenses; LGTM reads only their colours.</p>
     </div>
   );
 }
@@ -1017,7 +1017,7 @@ function MissingScopes() {
     <div class="note scopes">
       {missing.map(([s, what]) => (
         <p>
-          Without <code>{s}</code>, lgtm can't read {what}.
+          Without <code>{s}</code>, LGTM can't read {what}.
         </p>
       ))}
       <p>
@@ -1152,7 +1152,7 @@ function Template({ label, text, setText, initial, fields, box, preview, note }:
         <span class="template-name">{label}</span>
         {edited && <span class="template-edited">edited</span>}
         {edited && (
-          <button class="md-reset" title="Back to lgtm's wording" onClick={(e) => (e.preventDefault(), setText(initial))}>
+          <button class="md-reset" title="Back to LGTM's wording" onClick={(e) => (e.preventDefault(), setText(initial))}>
             ↺
           </button>
         )}
@@ -1320,7 +1320,7 @@ function MarkdownStyle() {
             <button onClick={() => save({ theme: s.theme })}>Reset to the theme</button>
           </p>
           <p class="note">
-            Themes other than lgtm and Linen Night (a dark Linen) are from <a href="https://markdown.style/themes" target="_blank" rel="noopener">markdown.style</a> (Apache 2.0), with their fonts bundled.
+            Themes other than LGTM and Linen Night (a dark Linen) are from <a href="https://markdown.style/themes" target="_blank" rel="noopener">markdown.style</a> (Apache 2.0), with their fonts bundled.
           </p>
         </div>
         <div class={`md-preview rich ${look.class}`} style={look.style} ref={preview}>
@@ -1340,16 +1340,16 @@ function About() {
   useEffect(() => void availableUpdate().then(setUpdate), []);
   return (
     <div class="note set-version">
-      lgtm {__APP_VERSION__}
+      LGTM {__APP_VERSION__}
       {__DEV_BUILD__ && <b> dev{__COMMIT__ && ` (${__COMMIT__})`}</b>} · {isDesktop ? 'macOS app' : 'browser version'} · <i>Say LGTM and mean it.</i>
       {update && (
         <p class="notice">
-          lgtm {update} is out. Update with <code>{UPGRADE}</code>{!isDesktop && ' (the browser version runs from source)'}.
+          LGTM {update} is out. Update with <code>{UPGRADE}</code>{!isDesktop && ' (the browser version runs from source)'}.
           {isDesktop && (
             <>
               {' '}
               <button class="primary" disabled={updating === ''} onClick={() => (setUpdating(''), selfUpdate().catch((e) => setUpdating(e.message)))}>
-                {updating === '' ? 'Updating… lgtm restarts when it’s done' : 'Update now'}
+                {updating === '' ? 'Updating… LGTM restarts when it’s done' : 'Update now'}
               </button>
             </>
           )}
@@ -1375,7 +1375,7 @@ function About() {
         <button onClick={forgetKept}>Refresh saved lookups</button> Teams, people, checks, code owners and emoji, kept a day or more. Fetches them again and reloads.
       </p>
       <p>
-        lgtm is <a href="https://github.com/bukuwarung/lgtm/blob/main/LICENSE" target="_blank" rel="noopener">MIT licensed</a>. Its colour themes, icons,
+        LGTM is <a href="https://github.com/bukuwarung/lgtm/blob/main/LICENSE" target="_blank" rel="noopener">MIT licensed</a>. Its colour themes, icons,
         fonts and libraries are others' open-source work:{' '}
         <a href="https://github.com/bukuwarung/lgtm/blob/main/THIRD-PARTY-NOTICES.md" target="_blank" rel="noopener">third-party notices</a> (also in the app, as THIRD-PARTY-NOTICES.md).
       </p>
@@ -1742,7 +1742,7 @@ function BackupSection() {
               setMsg({ ok: true, text: `Imported ${n.entries} entries${n.people || n.threads ? `, ${n.people} Slack people and ${n.threads} Slack threads` : ''}. Reloading…` });
               setTimeout(() => location.reload(), 600);
             } catch (err: any) {
-              setMsg({ ok: false, text: err instanceof SyntaxError ? "This isn't an lgtm settings file." : err.message });
+              setMsg({ ok: false, text: err instanceof SyntaxError ? "This isn't an LGTM settings file." : err.message });
             }
           }}
         />
@@ -1786,9 +1786,9 @@ function AgentMod({ agent }: { agent: AgentId }) {
         lgtm-links {agent === 'codex' ? 'plugin' : 'mod'}
         <small>
           {agent === 'codex' ? (
-            <>Your reviews and comments from lgtm reach the conversation on your next message, without “check lgtm”, and <code>/lgtm</code> opens its {T.PR} here.</>
+            <>Your reviews and comments from LGTM reach the conversation on your next message, without “check lgtm”, and <code>/lgtm</code> opens its {T.PR} here.</>
           ) : (
-            <>An Open in lgtm button under replies that link a {T.PR}, <code>/lgtm</code>, and your reviews reaching the session by themselves.</>
+            <>An Open in LGTM button under replies that link a {T.PR}, <code>/lgtm</code>, and your reviews reaching the session by themselves.</>
           )}
           {installed === false && <> From a terminal: <code>{line}</code></>}
         </small>
@@ -1921,7 +1921,7 @@ function AgentPrompts() {
   return (
     <>
       <h5>Prompts</h5>
-      <p class="note">What lgtm says to the agent. Open one to change it; what the agent also needs follows your text.</p>
+      <p class="note">What LGTM says to the agent. Open one to change it; what the agent also needs follows your text.</p>
       <div class="templates">{(Object.keys(PROMPTS) as PromptKind[]).map((k) => <AgentPrompt k={k} />)}</div>
     </>
   );
@@ -1938,7 +1938,7 @@ function AgentPrompt({ k }: { k: PromptKind }) {
       fields={p.fields}
       box={(ref) => <textarea ref={ref} rows={Math.max(5, text.split('\n').length + 1)} value={text} onInput={(e) => setText(e.currentTarget.value)} aria-label={p.label} />}
       preview={<pre class="prompt-preview">{fillPrompt(text || p.initial, PROMPT_SAMPLE)}</pre>}
-      note={p.after && `Then lgtm adds ${p.after}.`}
+      note={p.after && `Then LGTM adds ${p.after}.`}
     />
   );
 }

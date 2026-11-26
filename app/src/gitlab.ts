@@ -52,7 +52,7 @@ const slow = new Map<string, number>();
 const running = new Map<string, number>();
 const queued = new Map<string, (() => void)[]>();
 const slowError = (host: string) =>
-  new Error(`${host} rate-limited lgtm until ${new Date(slow.get(host)!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`);
+  new Error(`${host} rate-limited LGTM until ${new Date(slow.get(host)!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`);
 async function turn(host: string) {
   if ((running.get(host) ?? 0) >= 4) await new Promise<void>((go) => queued.set(host, [...(queued.get(host) ?? []), go]));
   running.set(host, (running.get(host) ?? 0) + 1);

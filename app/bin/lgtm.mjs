@@ -602,7 +602,7 @@ async function slackDelete({ pr, login, sent }) {
   const threads = await readThreads();
   const key = `${pr}:${login}`;
   const msg = sent ?? threads[key]?.last;
-  if (!msg) return { ok: false, error: 'no message from lgtm to take back' };
+  if (!msg) return { ok: false, error: 'no message from LGTM to take back' };
   if (!/^[CDG][A-Z0-9]+$/.test(msg.channel ?? '')) throw new Error('Bad Slack request');
   const dry = DRY_RUN ? ['--dry-run'] : [];
   let r;

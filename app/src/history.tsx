@@ -64,7 +64,7 @@ export function History() {
     seen.add(k);
   }
   const kept = [...keptOn.values()].reduce((a, b) => a + b, 0);
-  if (kept) summary += ` · lgtm kept ${kept.toLocaleString()} lines (about ${readTime(kept)} of reading) out of your way`;
+  if (kept) summary += ` · LGTM kept ${kept.toLocaleString()} lines (about ${readTime(kept)} of reading) out of your way`;
   const days = [...new Set(list.map((r) => day(r.at)))];
   const copy = () =>
     copyText([`Reviews in the last 30 days: ${summary}`, ...list.map((r) => `- ${VERDICT[r.state][1]}: ${r.title} (${r.repo}#${r.number}) ${r.url}`)].join('\n'))

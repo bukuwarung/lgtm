@@ -47,10 +47,10 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         &[
             &Submenu::with_items(
                 app,
-                "lgtm",
+                "LGTM",
                 true,
                 &[
-                    &P::about(app, None, Some(AboutMetadata { version: Some(app.package_info().version.to_string()), ..Default::default() }))?,
+                    &P::about(app, None, Some(AboutMetadata { name: Some("LGTM".into()), version: Some(app.package_info().version.to_string()), ..Default::default() }))?,
                     &sep()?,
                     &item("settings", "Settings…", Some("CmdOrCtrl+,"))?,
                     &sep()?,
@@ -98,7 +98,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                     &item("recent", "Recently Viewed", Some("CmdOrCtrl+Y"))?,
                     &sep()?,
                     &item("refresh", "Refresh", Some("CmdOrCtrl+R"))?,
-                    &item("reload", "Reload lgtm", Some("CmdOrCtrl+Alt+R"))?,
+                    &item("reload", "Reload LGTM", Some("CmdOrCtrl+Alt+R"))?,
                     &sep()?,
                     &item("inbox", "Inbox", Some("CmdOrCtrl+Shift+I"))?,
                     &item("toggle-prs", "Show or Hide the List", Some("CmdOrCtrl+Shift+L"))?,
@@ -115,7 +115,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 app,
                 "Help",
                 true,
-                &[&item("shortcuts", "Keyboard Shortcuts", None)?, &sep()?, &item("help", "lgtm on GitHub", None)?, &item("diagnostics", "Copy Diagnostics", None)?],
+                &[&item("shortcuts", "Keyboard Shortcuts", None)?, &sep()?, &item("help", "LGTM on GitHub", None)?, &item("diagnostics", "Copy Diagnostics", None)?],
             )?,
         ],
     )

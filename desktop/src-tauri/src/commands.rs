@@ -911,7 +911,7 @@ pub async fn slack_delete(pr: String, login: String, sent: Option<Value>) -> Res
     let key = format!("{pr}:{login}");
     let msg = sent.filter(|v| !v.is_null()).unwrap_or_else(|| threads[&key]["last"].clone());
     if msg.is_null() {
-        return Ok(json!({ "ok": false, "error": "no message from lgtm to take back" }));
+        return Ok(json!({ "ok": false, "error": "no message from LGTM to take back" }));
     }
     let ch = msg["channel"].as_str().unwrap_or("");
     if !re(r"^[CDG][A-Z0-9]+$").is_match(ch) {
@@ -958,7 +958,7 @@ pub async fn slack_delete(pr: String, login: String, sent: Option<Value>) -> Res
                 }
                 let f = slackcli(&args, Some("No need to review this anymore, sorry for the noise."));
                 if !f.ok {
-                    return Ok(json!({ "ok": false, "error": format!("Slack lets lgtm neither delete it ({}) nor edit it ({}), and replying failed too ({}): delete it in Slack yourself", out.error, e.error, f.error) }));
+                    return Ok(json!({ "ok": false, "error": format!("Slack lets LGTM neither delete it ({}) nor edit it ({}), and replying failed too ({}): delete it in Slack yourself", out.error, e.error, f.error) }));
                 }
                 if !dry && threads[&key]["last"]["ts"] == msg["ts"] {
                     threads[&key].as_object_mut().map(|m| m.remove("last"));
@@ -1689,7 +1689,7 @@ pub async fn self_update(app: tauri::AppHandle) -> Result<(), String> {
         return Err("Homebrew isn't installed.".into());
     }
     if !installed.ok {
-        return Err("This copy of lgtm wasn't installed with Homebrew: update it the way you installed it.".into());
+        return Err("This copy of LGTM wasn't installed with Homebrew: update it the way you installed it.".into());
     }
     let minutes = |m: u64| std::time::Duration::from_secs(60 * m);
     let update = run("brew", &["update", "--quiet"], None, minutes(5));
@@ -2035,7 +2035,7 @@ pub fn set_tray(app: tauri::AppHandle, items: Option<Vec<TrayItem>>) -> Result<(
     add("menu:review-mode".into(), "Start Review Mode".into(), !needs.is_empty())?;
     add("menu:refresh-list".into(), "Refresh".into(), true)?;
     add("menu:settings".into(), "Settings…".into(), true)?;
-    add("open".into(), "Open lgtm".into(), true)?;
+    add("open".into(), "Open LGTM".into(), true)?;
     let title = if needs.is_empty() { None } else { Some(needs.len().to_string()) };
     if let Some(tray) = app.tray_by_id("lgtm") {
         tray.set_menu(Some(menu)).map_err(e)?;
@@ -2044,7 +2044,7 @@ pub fn set_tray(app: tauri::AppHandle, items: Option<Vec<TrayItem>>) -> Result<(
     }
     // A template image: macOS draws it in the menu bar's own colour, light or dark, like its other items.
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-template.png")).map_err(e)?;
-    let mut b = TrayIconBuilder::with_id("lgtm").icon(icon).icon_as_template(true).menu(&menu).show_menu_on_left_click(true).tooltip("lgtm");
+    let mut b = TrayIconBuilder::with_id("lgtm").icon(icon).icon_as_template(true).menu(&menu).show_menu_on_left_click(true).tooltip("LGTM");
     if let Some(t) = title {
         b = b.title(t);
     }
@@ -2126,7 +2126,7 @@ pub async fn download_media(url: String, name: String) -> Result<String, String>
 #[tauri::command]
 pub async fn open_media(paths: Vec<String>, app: Option<String>) -> Result<(), String> {
     if paths.is_empty() || !paths.iter().all(|p| in_media_dir(p)) || app.as_deref().is_some_and(|a| a != "Preview") {
-        return Err("Not lgtm's files".into());
+        return Err("Not LGTM's files".into());
     }
     let mut args: Vec<&str> = vec![];
     if let Some(a) = app.as_deref() {
@@ -2141,7 +2141,7 @@ pub async fn open_media(paths: Vec<String>, app: Option<String>) -> Result<(), S
 #[tauri::command]
 pub async fn copy_media(path: String) -> Result<(), String> {
     if !in_media_dir(&path) {
-        return Err("Not lgtm's file".into());
+        return Err("Not LGTM's file".into());
     }
     let png = format!("{path}.clip.png");
     if !run("sips", &["-s", "format", "png", &path, "--out", &png], None, std::time::Duration::from_secs(20)).ok {

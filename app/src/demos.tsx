@@ -673,7 +673,7 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
           {[['lgtm', null] as const, ...Object.entries(BUILTIN_THEMES)].map(([k, t]) => (
             <span class={k === 'one' ? 'thm-card on' : 'thm-card'}>
               <ThemeThumb t={t} />
-              <span class="thm-name">{t ? t.name : 'lgtm'}</span>
+              <span class="thm-name">{t ? t.name : 'LGTM'}</span>
             </span>
           ))}
         </div>
@@ -1500,7 +1500,7 @@ Object.assign(DEMOS, {
 
 Object.assign(DEMOS, {
   themeColors: {
-    title: "Theme colours for lgtm's marks (here with Gruvbox)",
+    title: "Theme colours for LGTM's marks (here with Gruvbox)",
     off: <ThemeMarks on={false} />,
     on: <ThemeMarks on />,
   },
@@ -1646,7 +1646,7 @@ function ThemeMarks({ on }: { on: boolean }) {
     <div class="demo-theme" style={{ ...themeStyle(BUILTIN_THEMES.gruvbox), ...(on ? markProps(BUILTIN_THEMES.gruvbox) : {}) }}>
       <p><span class="ph ph-given">Given</span> a saved card <span class="ph ph-when">When</span> it expires <span class="ph ph-then">Then</span> retry</p>
       <p><b>okhttp</b> <small class="dep-major">4.12.0 → 5.0.0 · major</small> · <span class="ix-status away">🌴 On leave</span></p>
-      <p><span class="state-chip merged"><Octicon name="git-merge" /> Merged</span> keeps lgtm's colours</p>
+      <p><span class="state-chip merged"><Octicon name="git-merge" /> Merged</span> keeps LGTM's colours</p>
     </div>
   );
 }
@@ -1668,7 +1668,7 @@ const MACBAR = (on: boolean) => (
         <div>Refund screen · app#85 — ready to merge</div>
         <hr />
         <div>Start Review Mode</div>
-        <div>Open lgtm</div>
+        <div>Open LGTM</div>
       </div>
     )}
   </div>
@@ -1677,7 +1677,7 @@ Object.assign(DEMOS, { menuBar: { title: 'In the menu bar', off: MACBAR(false), 
 // The Dock icon's badge: 2 PRs to review, then those and 3 threads waiting on your reply.
 const DOCK = (n: number, inbox: boolean) => (
   <div class="demo-dock">
-    <span class="demo-dock-icon"><img src="./app-icon.png" alt="lgtm" /><b>{n}</b></span>
+    <span class="demo-dock-icon"><img src="./app-icon.png" alt="LGTM" /><b>{n}</b></span>
     <small>2 to review{inbox ? ' + 3 waiting on your reply' : ''}</small>
   </div>
 );

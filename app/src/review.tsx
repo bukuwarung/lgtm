@@ -231,7 +231,7 @@ function AskQA({ pr, repo, n, onPosted, kind = 'qa', inMenu }: { pr: PR; repo: s
 type Finding = { text: string; go: () => void };
 // What became of the Slack message when a review request was taken back (platform.ts slackDelete), as the end of a sentence.
 const slackGone = (r: { ok: boolean; error?: string; edited?: boolean; followedUp?: boolean }, had: boolean) =>
-  !had ? '.' : !r.ok ? `. The Slack message is still there: ${r.error}.` : r.followedUp ? `. Slack allows no deleting or editing here, so lgtm replied under it that it's not needed.` : r.edited ? `. Slack allows no deleting here, so its message now says "-".` : ', and deleted its Slack message.';
+  !had ? '.' : !r.ok ? `. The Slack message is still there: ${r.error}.` : r.followedUp ? `. Slack allows no deleting or editing here, so LGTM replied under it that it's not needed.` : r.edited ? `. Slack allows no deleting here, so its message now says "-".` : ', and deleted its Slack message.';
 
 function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files = [] }: { pr: PR; repo: string; n: number; skip: Set<string>; slackOk: boolean; onAsked: (text: string, ok: boolean, asked?: string) => void; findings?: Finding[]; files?: PRFile[] }) {
   // What lgtm found in my PR, shown once before the first ask: reviewers needn't point out the obvious.
@@ -313,7 +313,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       {held && (
         <div class="preflight ix-pad">
           <p>
-            <b>Before asking @{held}</b>, lgtm found in this PR:
+            <b>Before asking @{held}</b>, LGTM found in this PR:
           </p>
           <ul>
             {findings.map((f) => (
@@ -2027,7 +2027,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // A review request taken back (the index's ×), after asking; the Slack message lgtm sent them about it goes too.
   async function withdraw(login: string): Promise<boolean> {
     const last = slackThreads.some((t) => t.login === login && t.last);
-    if (!(await ask(`Take back the review request for ${shownAt(login, repo)}?${last ? ' The Slack message lgtm sent them about it is deleted too.' : ''}`, 'Take back'))) return false;
+    if (!(await ask(`Take back the review request for ${shownAt(login, repo)}?${last ? ' The Slack message LGTM sent them about it is deleted too.' : ''}`, 'Take back'))) return false;
     try {
       await unrequestReview(repo, n, login);
     } catch (e: any) {
@@ -2590,7 +2590,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {undoes && gaps && (
               <span
                 class={`pill ${gaps.differ.length ? 'p-warn' : 'p-ok'}`}
-                title={gaps.differ.length ? `Not what undoing #${undoes} exactly would change:\n${gaps.differ.join('\n')}` : gaps.unknown.length ? `Every file lgtm could compare undoes #${undoes} exactly. No diff to compare for:\n${gaps.unknown.join('\n')}` : `Every line it changes undoes #${undoes}, and nothing else`}
+                title={gaps.differ.length ? `Not what undoing #${undoes} exactly would change:\n${gaps.differ.join('\n')}` : gaps.unknown.length ? `Every file LGTM could compare undoes #${undoes} exactly. No diff to compare for:\n${gaps.unknown.join('\n')}` : `Every line it changes undoes #${undoes}, and nothing else`}
               >
                 <Tg i="history" t={gaps.differ.length ? `differs from a clean revert of #${undoes} in ${gaps.differ.length} file${gaps.differ.length > 1 ? 's' : ''}` : `exactly undoes #${undoes}${gaps.unknown.length ? ` (${gaps.unknown.length} not compared)` : ''}`} />
               </span>
@@ -5520,7 +5520,7 @@ function ThenNow({ s }: { s?: SinceComment }) {
   if (s.kind !== 'changed')
     return (
       <p class="then-now">
-        {{ same: <><Octicon name="check" /> The commented lines haven't changed since.</>, gone: 'The file was removed since.', unknown: "The branch was rewritten since (force-push), so lgtm can't tell whether these lines changed." }[s.kind]}
+        {{ same: <><Octicon name="check" /> The commented lines haven't changed since.</>, gone: 'The file was removed since.', unknown: "The branch was rewritten since (force-push), so LGTM can't tell whether these lines changed." }[s.kind]}
       </p>
     );
   const shown = s.lines.slice(0, 12);
@@ -5998,14 +5998,14 @@ function AgentsMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
       {note && <span class="agents-note">{note}</span>}
       {offerMod && !offer && !note && (
         <span class="agents-note">
-          Add the lgtm-links mod to Claude Code: an Open in lgtm button under PR links, and your reviews reach the session by themselves.{' '}
+          Add the lgtm-links mod to Claude Code: an Open in LGTM button under PR links, and your reviews reach the session by themselves.{' '}
           <button class="link" onClick={() => (setOfferMod(false), copyText(MOD_INSTALL).then(() => flash(`Copied: paste it in a terminal (${MOD_INSTALL})`), () => flash(MOD_INSTALL)))}>Copy the install command</button> ·{' '}
           <button class="link" onClick={() => (setOfferMod(false), noModOffer())}>Don't ask again</button>
         </span>
       )}
       {offer && !note && (
         <span class="agents-note">
-          Add the lgtm skill so {AGENTS[offer].short} sends {pageTerm().PRs} ready for review here, linked to its {offer === 'codex' ? 'conversation' : 'session'}.{' '}
+          Add the LGTM skill so {AGENTS[offer].short} sends {pageTerm().PRs} ready for review here, linked to its {offer === 'codex' ? 'conversation' : 'session'}.{' '}
           <button class="link" onClick={() => install(offer)}>Add it</button> · <button class="link" onClick={() => (setOffer(null), noOffer())}>Don't ask again</button>
         </span>
       )}

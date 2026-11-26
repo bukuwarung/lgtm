@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the app's Info.plist by Tauri: the name macOS shows (menu bar, Dock, notifications, Finder) is LGTM, as
+     the icon says, while the app stays lgtm.app (Homebrew, Login Items and people's scripts find it by that). -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>LGTM</string>
+  <key>CFBundleDisplayName</key>
+  <string>LGTM</string>
+</dict>
+</plist>

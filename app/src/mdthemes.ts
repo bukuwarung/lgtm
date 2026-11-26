@@ -8,7 +8,7 @@ import './mdthemes.css';
 // base: a night version's light theme, whose rules it shares (mdthemes.css).
 export type MdTheme = { id: string; name: string; group: string; dark: boolean; fonts: string[]; base?: string };
 export const MD_THEMES: MdTheme[] = [
-  { id: 'lgtm', name: 'lgtm', group: 'Follows the app', dark: false, fonts: [] },
+  { id: 'lgtm', name: 'LGTM', group: 'Follows the app', dark: false, fonts: [] },
   { id: 'atlas', name: 'Atlas', group: 'Reports', dark: false, fonts: ["Public Sans"] },
   { id: 'atlas-night', name: 'Atlas Night', group: 'Reports', dark: true, fonts: ["Public Sans"], base: 'atlas' },
   { id: 'meridian', name: 'Meridian', group: 'Reports', dark: false, fonts: ["Manrope"] },

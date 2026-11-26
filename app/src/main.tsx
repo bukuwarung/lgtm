@@ -133,7 +133,7 @@ function OfflineBar() {
   if (!off) return null;
   return (
     <div class="offline-bar" role="status">
-      <Octicon name="alert" /> <span><b>Offline:</b> {offlineWhere()} can't be reached. This is what was loaded; lgtm tries again by itself.</span>
+      <Octicon name="alert" /> <span><b>Offline:</b> {offlineWhere()} can't be reached. This is what was loaded; LGTM tries again by itself.</span>
       <Retry onClick={() => void pingGitHub()} />
     </div>
   );
@@ -349,7 +349,7 @@ function BellMenu() {
               class="switch"
               onClick={async () => {
                 setErr('');
-                if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for lgtm in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
+                if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for LGTM in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
                 toggleNotify();
               }}
             />
@@ -508,8 +508,8 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
   return (
     <div class="page start">
       {savedLines > 0 && (
-        <p class="start-saved" title={`Changes and comments lgtm folded or hid ("less to read") in the ${T.PRs} you reviewed here, as each stood at your latest review. The time: at a careful review's 400 lines an hour`}>
-          lgtm has kept <b>{savedLines.toLocaleString()} lines</b> (about {readTime(savedLines)} of reading) out of your way in the {saved.length} {saved.length === 1 ? T.PR : T.PRs} you've reviewed
+        <p class="start-saved" title={`Changes and comments LGTM folded or hid ("less to read") in the ${T.PRs} you reviewed here, as each stood at your latest review. The time: at a careful review's 400 lines an hour`}>
+          LGTM has kept <b>{savedLines.toLocaleString()} lines</b> (about {readTime(savedLines)} of reading) out of your way in the {saved.length} {saved.length === 1 ? T.PR : T.PRs} you've reviewed
         </p>
       )}
       <div class="start-grid">
@@ -948,9 +948,9 @@ function App() {
             onClick={(e) => {
               if (!isDesktop) return void setTimeout(() => document.querySelector('.set-version')?.scrollIntoView({ block: 'center' }), 300);
               e.preventDefault();
-              void ask(`Update lgtm to ${update}? It restarts when it's done.`, 'Update').then((ok) => {
+              void ask(`Update LGTM to ${update}? It restarts when it's done.`, 'Update').then((ok) => {
                 if (!ok) return;
-                dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Updating to lgtm ${update}… it restarts when it's done.`, ms: 60000 } }));
+                dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Updating to LGTM ${update}… it restarts when it's done.`, ms: 60000 } }));
                 selfUpdate().catch((err) => reportError(`Couldn't update: ${err.message ?? err}`));
               });
             }}
@@ -1103,8 +1103,8 @@ function SetupCheck() {
   );
   return (
     <div class="whats-new-back" onMouseDown={(e) => e.target === e.currentTarget && done()}>
-      <div class="whats-new" role="dialog" aria-label="Set up lgtm">
-        <h3 class="whats-new-h">Welcome to lgtm</h3>
+      <div class="whats-new" role="dialog" aria-label="Set up LGTM">
+        <h3 class="whats-new-h">Welcome to LGTM</h3>
         <div class="welcome-body">
         <p class="note">Uses these tools' sign-ins, stores no tokens. GitHub or GitLab is required; the rest is optional.</p>
         {row(hub, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', <pre>brew install gh && gh auth login</pre>)}
@@ -1160,8 +1160,8 @@ function WhatsNew() {
   if (!notes) return null;
   return (
     <div class="whats-new-back" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div class="whats-new" role="dialog" aria-label={`What's new in lgtm ${__APP_VERSION__}`}>
-        <h3 class="whats-new-h">What's new in lgtm {__APP_VERSION__}</h3>
+      <div class="whats-new" role="dialog" aria-label={`What's new in LGTM ${__APP_VERSION__}`}>
+        <h3 class="whats-new-h">What's new in LGTM {__APP_VERSION__}</h3>
         <div class="md" dangerouslySetInnerHTML={{ __html: notes }} />
         <div class="acts">
           <a class="whats-new-all" href="https://github.com/bukuwarung/lgtm/releases" target="_blank" rel="noopener">All releases</a>
@@ -1179,7 +1179,7 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
   return (
     <div class="signin">
       <h1 class="brand">
-        <img src="/favicon.png" alt="" width="32" height="32" /> lgtm
+        <img src="/favicon.png" alt="" width="32" height="32" /> LGTM
       </h1>
       {isDesktop || /signed in|gh token|gh auth/i.test(error) ? (
         <>
@@ -1954,7 +1954,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     // mentions waiting on your reply, as the inbox button counts them.
     const inbox = badgeInbox ? repliesWaiting(items) : 0;
     const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length + inbox;
-    document.title = count ? `(${count}) lgtm` : 'lgtm';
+    document.title = count ? `(${count}) LGTM` : 'LGTM';
     void setBadge(count); // the app's Dock icon
     const forMe = [...waiting, ...items.filter((i) => !waiting.includes(i) && claudeWaiting(i))];
     // The menu bar: what waits on my review, then my own PRs and where each stands.
@@ -2334,11 +2334,11 @@ takeClaudeLink();
 function TooOld() {
   return (
     <div class="too-old" role="alert">
-      <h2>lgtm needs a newer {isDesktop ? 'Safari' : 'browser'}</h2>
+      <h2>LGTM needs a newer {isDesktop ? 'Safari' : 'browser'}</h2>
       {isDesktop ? (
-        <p>The Mac app draws with Safari's engine, and needs Safari 17.4 or later. Update it in System Settings → General → Software Update, then open lgtm again.</p>
+        <p>The Mac app draws with Safari's engine, and needs Safari 17.4 or later. Update it in System Settings → General → Software Update, then open LGTM again.</p>
       ) : (
-        <p>Open lgtm in a current Safari, Chrome or Firefox.</p>
+        <p>Open LGTM in a current Safari, Chrome or Firefox.</p>
       )}
     </div>
   );

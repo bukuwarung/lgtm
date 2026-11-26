@@ -231,7 +231,7 @@ export async function fetchToken(): Promise<string> {
   try {
     if (isDesktop) return await command<string>('gh_token', { user });
     const res = await fetch('/token?user=' + encodeURIComponent(user));
-    if (!res.ok) throw new Error((await res.text()) || 'Could not get a token from the lgtm server.');
+    if (!res.ok) throw new Error((await res.text()) || 'Could not get a token from the LGTM server.');
     return await res.text();
   } catch (e) {
     if (!user) throw e;
@@ -611,7 +611,7 @@ async function call<T>(method: string, body?: any): Promise<T> {
   if (isDesktop)
     return method === 'GET' ? command<T>('slack_people_get') : method === 'POST' ? command<T>('slack_people_find', body) : command<T>('slack_people_save', { map: body });
   const res = await fetch('/slack-people', { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-  const d = await res.json().catch(() => ({ error: 'the running lgtm is older than this page. Restart it (Ctrl-C, then lgtm) and reload.' }));
+  const d = await res.json().catch(() => ({ error: 'the running LGTM is older than this page. Restart it (Ctrl-C, then lgtm) and reload.' }));
   if (!res.ok) throw new Error(d.error);
   return d;
 }
@@ -667,7 +667,7 @@ export async function fetchIntegrations(): Promise<Integrations> {
     throw new Error("lgtm isn't running. Start it with the lgtm-web command, then reload.");
   });
   // An lgtm started before this page existed doesn't know the route: the page is newer than the running server.
-  if (!res.ok) throw new Error('the running lgtm is older than this page. Restart it (Ctrl-C, then lgtm) and reload.');
+  if (!res.ok) throw new Error('the running LGTM is older than this page. Restart it (Ctrl-C, then lgtm) and reload.');
   return res.json();
 }
 
@@ -1527,7 +1527,7 @@ export async function saveBackup(): Promise<string> {
 // way (in ~/.config/lgtm); returns how many of each.
 export async function restoreBackup(text: string): Promise<{ entries: number; people: number; threads: number }> {
   const b = JSON.parse(text) as Partial<Backup>;
-  if (b?.lgtm !== 1 || typeof b.storage !== 'object' || !b.storage) throw new Error("This isn't an lgtm settings file.");
+  if (b?.lgtm !== 1 || typeof b.storage !== 'object' || !b.storage) throw new Error("This isn't an LGTM settings file.");
   const entries = Object.entries(b.storage).filter(([k, v]) => typeof k === 'string' && typeof v === 'string');
   for (const [k, v] of entries) localStorage.setItem(k, v);
   const people = Object.entries(b.slack?.people ?? {}).filter(([, id]) => typeof id === 'string' && id);
