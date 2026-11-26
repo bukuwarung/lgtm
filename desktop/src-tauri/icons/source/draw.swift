@@ -70,12 +70,12 @@ func stamp(dark: Bool, _ ctx: CGContext) {
     let ang = r.next() * 2 * .pi, rad = sqrt(r.next()) * (stampR + 20)
     let x = cos(ang) * rad, y = sin(ang) * rad
     let light = (x - y) / (2 * stampR) // toward the lower right
-    if r.next() > 0.12 + 0.22 * max(0, light) { continue }
-    let big = i % 41 == 0, w = big ? 5 + r.next() * 7 : 1.5 + r.next() * 3.5, h = big ? w * (0.4 + r.next() * 0.5) : w * (0.6 + r.next() * 0.6)
+    if r.next() > 0.22 + 0.36 * max(0, light) { continue }
+    let big = i % 30 == 0, w = big ? 5.5 + r.next() * 8.5 : 1.5 + r.next() * 3.5, h = big ? w * (0.4 + r.next() * 0.5) : w * (0.6 + r.next() * 0.6)
     NSBezierPath(ovalIn: NSRect(x: x - w / 2, y: y - h / 2, width: w, height: h)).fill()
   }
   // one side pressed lighter
-  NSGradient(colors: [NSColor(white: 0, alpha: 0), NSColor(white: 0, alpha: 0.2)], atLocations: [0.45, 1], colorSpace: .sRGB)!
+  NSGradient(colors: [NSColor(white: 0, alpha: 0), NSColor(white: 0, alpha: 0.28)], atLocations: [0.4, 1], colorSpace: .sRGB)!
     .draw(in: CGRect(x: -stampR - 20, y: -stampR - 20, width: 2 * stampR + 40, height: 2 * stampR + 40), angle: -40)
   ctx.endTransparencyLayer()
   ctx.restoreGState()
