@@ -1611,9 +1611,13 @@ export const setTitleCount = (n: number) => void (n !== titleCount && ((titleCou
 // in. Not with Reduce motion, in a window not on screen, nor where the engine has none: then it just happens. Preact
 // draws on a microtask, so the move starts once the timeout after it has run.
 export function moving(change: () => void) {
-  const d = document as Document & { startViewTransition?: (update: () => Promise<void>) => unknown };
+  type T = { ready: Promise<void>; finished: Promise<void> };
+  const d = document as Document & { startViewTransition?: (update: () => Promise<void>) => T };
   if (!d.startViewTransition || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return change();
-  d.startViewTransition(() => (change(), new Promise<void>((r) => setTimeout(r))));
+  const t = d.startViewTransition(() => (change(), new Promise<void>((r) => setTimeout(r))));
+  // A newer move cuts this one short: its promises reject (AbortError), which is nothing to report.
+  t.ready.catch(() => {});
+  t.finished.catch(() => {});
 }
 export function ago(when: string | number) {
   const s = (new Date(when).getTime() - Date.now()) / 1000;
