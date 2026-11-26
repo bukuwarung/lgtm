@@ -38,6 +38,10 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
     use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem as P, Submenu};
     let item = |id: &str, text: &str, keys: Option<&str>| MenuItem::with_id(app, id, text, true, keys);
     let sep = || P::separator(app);
+    // macOS fills the Window menu (Fill, Center, Move & Resize, the window list) once it knows which menu that is.
+    let window = Submenu::with_items(app, "Window", true, &[&P::minimize(app, None)?, &P::maximize(app, None)?, &sep()?, &P::bring_all_to_front(app, None)?])?;
+    #[cfg(target_os = "macos")]
+    window.set_as_windows_menu_for_nsapp()?;
     Menu::with_items(
         app,
         &[
@@ -106,7 +110,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                     &P::fullscreen(app, None)?,
                 ],
             )?,
-            &Submenu::with_items(app, "Window", true, &[&P::minimize(app, None)?, &P::maximize(app, None)?])?,
+            &window,
             &Submenu::with_items(
                 app,
                 "Help",

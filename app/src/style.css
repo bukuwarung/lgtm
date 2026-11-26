@@ -895,7 +895,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 /* The top bar's Go to / open-a-link box, centred in the bar; its results drop down below it. */
 .nav-go { display: flex; align-items: center; gap: 6px; flex: 0 1 680px; min-width: 260px; } /* back, forward and the search box, between the spacers: centred when there's room */
 .cmd { position: relative; flex: 1; min-width: 180px; }
-.top .cmd input { width: 100%; height: calc(1.5em + 8px); box-sizing: border-box; padding: 0 74px 0 32px; /* as tall as the buttons beside it: their line, padding and edge */ font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid var(--btn-edge); border-radius: 6px; border-bottom-color: var(--btn-edge-low); box-shadow: none; }
+.top .cmd input { text-overflow: ellipsis; /* a narrow window cuts its hint with … */ width: 100%; height: calc(1.5em + 8px); box-sizing: border-box; padding: 0 74px 0 32px; /* as tall as the buttons beside it: their line, padding and edge */ font-size: calc(14px * var(--ts)); background: var(--bg); border: 1px solid var(--btn-edge); border-radius: 6px; border-bottom-color: var(--btn-edge-low); box-shadow: none; }
 .top .cmd input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cmd-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .cmd-kbd { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); padding: 1px 6px; font: calc(11px * var(--ts))/calc(16px * var(--ts)) var(--sans); color: var(--muted); border: 1px solid var(--border); border-radius: 4px; pointer-events: none; }
@@ -1640,8 +1640,9 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .merge-qa a { margin-left: auto; }
 .scene-claude { min-height: 170px; }
 .demo-dock { display: flex; align-items: center; gap: 12px; padding: 14px; }
-.demo-dock-icon { position: relative; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 12px; font-weight: 700; color: #fff; background: linear-gradient(#3b82f6, #1d4ed8); }
-.demo-dock-icon b { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font-size: 12px; line-height: 20px; text-align: center; background: #ef4444; box-sizing: border-box; }
+.demo-dock-icon { position: relative; width: 52px; height: 52px; } /* the app's own icon (icons/source/make.sh) */
+.demo-dock-icon img { display: block; width: 100%; height: 100%; }
+.demo-dock-icon b { position: absolute; top: -2px; right: -2px; /* on the tile's corner (the picture has macOS's margin around it) */ min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font-size: 12px; line-height: 20px; text-align: center; background: #ef4444; box-sizing: border-box; }
 .demo-dock small { color: var(--muted); }
 .num-input { width: 4.5em; margin: 0 4px; padding: 1px 4px; }
 .template-run { display: flex; gap: 12px; flex-wrap: wrap; font-size: calc(12px * var(--ts)); color: var(--muted); }

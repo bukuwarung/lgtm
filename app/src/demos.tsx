@@ -1677,7 +1677,7 @@ Object.assign(DEMOS, { menuBar: { title: 'In the menu bar', off: MACBAR(false), 
 // The Dock icon's badge: 2 PRs to review, then those and 3 threads waiting on your reply.
 const DOCK = (n: number, inbox: boolean) => (
   <div class="demo-dock">
-    <span class="demo-dock-icon">lgtm<b>{n}</b></span>
+    <span class="demo-dock-icon"><img src="./app-icon.png" alt="lgtm" /><b>{n}</b></span>
     <small>2 to review{inbox ? ' + 3 waiting on your reply' : ''}</small>
   </div>
 );
