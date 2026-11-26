@@ -1572,6 +1572,17 @@ export function since(when: string | number) {
   const n = Math.max(1, Math.floor(s / size));
   return `${n} ${unit}${n > 1 ? 's' : ''}`;
 }
+// A length of time, short, as LGTM writes them all: 52 min, 2 h 15 min (to 5 minutes, under 10 hours), 14 h, 3 d.
+// (An estimate adds ~: files.ts estimateLabel. "… ago" stays in words: ago.)
+export const duration = (ms: number) => {
+  const q = Math.max(1, Math.round(ms / 60_000));
+  if (q < 60) return `${q} min`;
+  if (q < 24 * 60) {
+    const r = Math.round(q / 5) * 5, h = Math.floor(r / 60), m = r % 60;
+    return h < 10 && m ? `${h} h ${m} min` : `${Math.round(q / 60)} h`;
+  }
+  return `${Math.round(q / 1440)} d`;
+};
 export function ago(when: string | number) {
   const s = (new Date(when).getTime() - Date.now()) / 1000;
   const u = UNITS.find(([, n]) => Math.abs(s) >= n);

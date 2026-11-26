@@ -388,7 +388,7 @@ test('estimate: description, code, tests and docs at their own pace; generated f
   );
   assert.deepEqual([e.code, e.tests, e.docs, e.words], [60, 40, 30, 400]);
   assert.equal(e.minutes, 2 + 12 + 4 + 1);
-  assert.deepEqual([estimateLabel(3), estimateLabel(19), estimateLabel(64), estimateLabel(90)], ['<5 min', '~20 min', '~1 h', '~1 h 30']);
+  assert.deepEqual([estimateLabel(3), estimateLabel(19), estimateLabel(58), estimateLabel(64), estimateLabel(90), estimateLabel(615)], ['<5 min', '~20 min', '~1 h', '~1 h', '~1 h 30 min', '~10 h']);
 });
 
 test('editedDocBlocks: an edited doc comment, from its new version, with the changed parts', async () => {

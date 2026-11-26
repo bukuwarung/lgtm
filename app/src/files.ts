@@ -139,9 +139,10 @@ export function estimate(files: { path: string; additions: number; deletions: nu
 // "~5 min", "~40 min", "~1 h 30": rounded to what an estimate can claim.
 export function estimateLabel(minutes: number): string {
   if (minutes < 5) return '<5 min';
-  if (minutes < 60) return `~${Math.round(minutes / 5) * 5} min`;
+  if (Math.round(minutes / 5) * 5 < 60) return `~${Math.round(minutes / 5) * 5} min`;
   const q = Math.round(minutes / 15) * 15;
-  return `~${Math.floor(q / 60)} h${q % 60 ? ` ${q % 60}` : ''}`;
+  // as every length of time is written (platform.ts duration): minutes kept under 10 hours
+  return `~${Math.floor(q / 60)} h${q % 60 && q < 600 ? ` ${q % 60} min` : ''}`;
 }
 
 // The Gradle module of each changed file, from paths alone (no request): what comes before "/src/" (Gradle keeps a

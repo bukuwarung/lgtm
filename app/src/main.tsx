@@ -13,7 +13,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { setResign, claudeFolder, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { setResign, claudeFolder, duration, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
 import { unblockPrompt } from './prompts.ts';
 import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
@@ -501,7 +501,7 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
   const groups: [string, Stat[], ComponentChildren?][] = [
     ['To review', [
       { n: needs.length, label: `${T.PR}${needs.length === 1 ? '' : 's'} to review`, tone: 'act', title: needs.length ? 'Open the Reviewing tab' : '', onClick: open('reviewing') },
-      { n: oldest ? ago(oldest).replace(/ ago$/, '') : '–', label: 'Oldest wait', title: oldest ? `Since ${new Date(oldest).toLocaleString()}` : '', onClick: open('reviewing') },
+      { n: oldest ? duration(Date.now() - new Date(oldest).getTime()) : '–', label: 'Oldest wait', title: oldest ? `Since ${new Date(oldest).toLocaleString()}` : '', onClick: open('reviewing') },
       { n: replies, label: 'Waiting on your reply', tone: 'act', title: 'Threads and mentions waiting on your reply: open them, to reply or resolve', onClick: open('inbox') },
     ], <a href="#/history">Your reviews this month →</a>],
     [`Your ${T.PRs}`, [

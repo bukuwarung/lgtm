@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getMyReviews, type MyReview } from './github.ts';
-import { copyText, readSaved, readTime, repoLabel } from './platform.ts';
+import { copyText, duration, readSaved, readTime, repoLabel } from './platform.ts';
 import { Empty, Stats, Tg, Who } from './tags.tsx';
 
 // While a page of PRs loads (this one, a person's): its shape, shimmering (style.css .sk). `face`: a picture by the title.
@@ -34,7 +34,7 @@ export function PageSkeleton({ title, face }: { title: string; face?: boolean })
 
 // Your reviews of the last 30 days (#/history): a summary line, then each day's, to read back or paste in a standup.
 const VERDICT: Record<string, [string, string]> = { APPROVED: ['approved', 'Approved'], CHANGES_REQUESTED: ['changes', 'Requested changes'], COMMENTED: ['reply', 'Commented'], DISMISSED: ['', 'Dismissed'] };
-const hours = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.round(ms / 60_000))} min` : ms < 86_400_000 ? `${Math.round(ms / 3_600_000)} h` : `${Math.round(ms / 86_400_000)} d`);
+const hours = duration; // platform.ts: how LGTM writes a length of time
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' });
 
 export function History() {

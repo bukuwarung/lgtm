@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
-import { ago, personKey, usePresence, repoLabel, viewAs, term, shownName, getSlackPeople, fetchIntegrations, openExternal, faceOf } from './platform.ts';
+import { ago, duration, personKey, usePresence, repoLabel, viewAs, term, shownName, getSlackPeople, fetchIntegrations, openExternal, faceOf } from './platform.ts';
 import { isAway, statusText, zoneLine } from './slackmsg.ts';
 import { Octicon, Empty, Stats, Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
@@ -21,7 +21,7 @@ export const toPerson = (login: string, repo?: string) => (e: Event) => {
   location.hash = '/person/' + encodeURIComponent(key);
 };
 
-const hours = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.round(ms / 60_000))} min` : ms < 86_400_000 ? `${Math.round(ms / 3_600_000)} h` : `${Math.round(ms / 86_400_000)} d`);
+const hours = duration; // platform.ts: how LGTM writes a length of time
 const VERDICT: Record<string, [string, string]> = { APPROVED: ['approved', 'Approved'], CHANGES_REQUESTED: ['changes', 'Requested changes'], COMMENTED: ['reply', 'Commented'], DISMISSED: ['', 'Dismissed'] };
 
 function Row({ i, waiting }: { i: QueueItem; waiting?: boolean }) {
@@ -37,7 +37,7 @@ function Row({ i, waiting }: { i: QueueItem; waiting?: boolean }) {
       </span>
       <b>{i.title}</b>
       <small>
-        {repoLabel(i.repo)}{numRef(i.repo, i.number)}{waiting ? <> · <Who login={i.author} /> · waiting {ago(i.waitingSince).replace(/ ago$/, '')}</> : <> · active <Time at={i.updatedAt} /></>}
+        {repoLabel(i.repo)}{numRef(i.repo, i.number)}{waiting ? <> · <Who login={i.author} /> · waiting {duration(Date.now() - new Date(i.waitingSince).getTime())}</> : <> · active <Time at={i.updatedAt} /></>}
       </small>
     </a>
   );
