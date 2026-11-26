@@ -459,7 +459,7 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
         <details class="thread" open>
           <summary />
           <div class="comment">
-            <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time> <button class="copy-link">🔗</button> <span class="agents-menu"><button class="copy-link"><AgentMark id="claude" /></button></span>
+            <img class="c-avatar" src={face(who)} alt="" /> <b>{who}</b> <time>{when}</time> <button class="copy-link"><Octicon name="link" /></button> <span class="agents-menu"><button class="copy-link"><AgentMark id="claude" /></button></span>
             <div class="md" dangerouslySetInnerHTML={{ __html: html }} />
           </div>
           <div class="editor">

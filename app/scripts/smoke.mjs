@@ -347,6 +347,34 @@ try {
     }
     return out;
   })()`);
+  // Controls side by side anywhere (buttons, pills, chips, counts, keys, switches; previews too) share a middle,
+  // within 2px. A control with words is measured by its words, not its box: a chip stretched to a button's height
+  // keeps its words at its top (Settings' Jira previews did); one with an icon, by its box (a badge sits in its corner).
+  const textRows = (where) => evaluate(`(() => {
+    const CTRL = 'button, a.nav-btn, .pill, .count, kbd, select, .badge, .jira-st, .state-chip, .chip, .nav-count, img.avatar, input[type=checkbox], input[type=radio], .switch, .template-chip, .copy-link, .icon-btn';
+    const mid = (k) => {
+      const r = document.createRange(); r.selectNodeContents(k);
+      const t = [...r.getClientRects()].filter((x) => x.height > 0 && x.width > 0);
+      const words = /\\S/.test(k.textContent || '') && !k.matches('select, input') && !k.querySelector(':scope > svg, :scope > span > svg, :scope > img');
+      const b = words && t.length ? { top: Math.min(...t.map((x) => x.top)), bottom: Math.max(...t.map((x) => x.bottom)) } : k.getBoundingClientRect();
+      return (b.top + b.bottom) / 2;
+    };
+    const out = [];
+    for (const row of document.querySelectorAll('*')) {
+      if (row.closest('[aria-hidden="true"], [inert], .skel, .md, .rich')) continue;
+      const kids = [...row.children].filter((k) => k.matches(CTRL) && k.offsetParent && k.getClientRects().length === 1).map((k) => ({ k, b: k.getBoundingClientRect() })).filter((x) => x.b.height > 0 && x.b.height < 48);
+      if (kids.length < 2) continue;
+      const lines = [];
+      for (const x of kids) { const l = lines.find((l) => l.some((y) => Math.min(y.b.bottom, x.b.bottom) - Math.max(y.b.top, x.b.top) > Math.min(y.b.height, x.b.height) * 0.6)); l ? l.push(x) : lines.push([x]); }
+      for (const l of lines) {
+        if (l.length < 2) continue;
+        const mids = l.map((x) => mid(x.k)), off = Math.max(...mids) - Math.min(...mids);
+        const name = (e) => (e.getAttribute('aria-label') || e.title || e.textContent.trim() || e.className || e.tagName).toString().replace(/\\s+/g, ' ').slice(0, 24);
+        if (off > 2) out.push(${JSON.stringify(where)} + ' ' + String(row.className || row.tagName).split(' ')[0] + ': ' + l.map((x) => name(x.k)).join(' / ') + ' ' + off.toFixed(1) + 'px apart');
+      }
+    }
+    return out;
+  })()`);
   // A checkbox or radio centred on the first line of its words, within 1.5px (previews aside: they're miniatures).
   const offWords = (where) => evaluate(`[...document.querySelectorAll('label input[type=checkbox], label input[type=radio]')].flatMap((i) => {
     if (!i.offsetParent || i.closest('.demo-side')) return [];
@@ -582,7 +610,7 @@ try {
     await evaluate(`location.hash = '/acme/shop/pull/1'`);
     await until('the diff', `!!document.querySelector('[id="f-src/Pay.kt"] tr.ln.a')`);
     const off = await icons('the PR');
-    const misaligned = await rows('the PR');
+    const misaligned = [...(await rows('the PR')), ...(await textRows('the PR'))];
     const unboxed = [...(await offWords('the PR')), ...(await offWords('the end of the PR'))];
     const wide = await sideways('the PR');
     const cut = await clipped('the PR');
@@ -628,6 +656,7 @@ try {
     await evaluate(`location.hash = '/settings'`);
     await until('Settings', `document.querySelectorAll('.page.settings input[type=checkbox]').length > 10`);
     off.push(...(await icons('Settings')));
+    misaligned.push(...(await textRows('Settings')));
     unboxed.push(...(await offWords('Settings')));
     // Checkboxes the run doesn't open (the merge box's admin bypass and options, New PR, the Close dialog, the ask
     // list's Slack box, the keyboard help, a comment's task list), drawn here as the app draws them, then removed.
@@ -650,7 +679,7 @@ try {
     cut.push(...(await clipped('Settings')));
     await evaluate(`location.hash = '/'`);
     await until('the PR list', `!!document.querySelector('.pr-item')`);
-    misaligned.push(...(await rows('the list')));
+    misaligned.push(...(await rows('the list')), ...(await textRows('the list')));
     wide.push(...(await sideways('the list')));
     cut.push(...(await clipped('the list')));
     if (misaligned.length) throw new Error(`not lined up: ${misaligned.join('; ')}`);
@@ -666,16 +695,16 @@ try {
   });
   await step('at the narrowest window (900px): lined up, nothing sideways, no text cut off, checkboxes on their words, icon buttons named', async () => {
     await page.setViewportSize({ width: 900, height: 700 });
-    const found = await tour('900px', [rows, sideways, clipped, offWords, unnamed]);
+    const found = await tour('900px', [rows, textRows, sideways, clipped, offWords, unnamed]);
     await page.setViewportSize({ width: 1400, height: 900 });
     if (found.length) throw new Error(`at 900px: ${found.slice(0, 15).join('; ')}`);
   });
   await step('at the largest text size (20px), wide and narrow: lined up, nothing sideways, no text cut off, checkboxes on their words', async () => {
     await evaluate(`localStorage.setItem('textSize', '20')`); // Settings → Appearance's largest
     await reload();
-    const found = await tour('20px text', [rows, sideways, clipped, offWords]);
+    const found = await tour('20px text', [rows, textRows, sideways, clipped, offWords]);
     await page.setViewportSize({ width: 900, height: 700 });
-    found.push(...(await tour('20px text, 900px', [rows, sideways, clipped, offWords])));
+    found.push(...(await tour('20px text, 900px', [rows, textRows, sideways, clipped, offWords])));
     await page.setViewportSize({ width: 1400, height: 900 });
     await evaluate(`localStorage.removeItem('textSize')`);
     await reload();

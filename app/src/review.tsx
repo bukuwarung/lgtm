@@ -6253,7 +6253,7 @@ function CopyLink({ url }: { url: string }) {
       title="Copy link to this comment"
       onClick={() => copyText(url).then(() => show('Copied'), () => show("Couldn't copy"))}
     >
-      {done || '🔗'}
+      {done || <Octicon name="link" />}
     </button>
   );
 }
