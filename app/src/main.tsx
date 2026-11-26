@@ -9,7 +9,7 @@ import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
-import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry, Empty } from './tags.tsx';
+import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry, Empty, AppIcon } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -1185,7 +1185,7 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
   return (
     <div class="signin">
       <h1 class="brand">
-        <img src="/app-icon.png" alt="" width="32" height="32" /> LGTM
+        <AppIcon size={32} /> LGTM
       </h1>
       {isDesktop || /signed in|gh token|gh auth/i.test(error) ? (
         <>

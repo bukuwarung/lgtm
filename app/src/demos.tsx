@@ -3,7 +3,7 @@ import { highlightCode, rainbow, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
 import { FileIcon, ModuleIcon } from './shortcuts.tsx';
 import { folderIcon } from './fileicons.ts';
-import { AgentMark, CheckMark, Octicon, Tg, Who } from './tags.tsx';
+import { AgentMark, AppIcon, CheckMark, Octicon, Tg, Who } from './tags.tsx';
 import { markProps, themeStyle } from './look.ts';
 import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
@@ -1677,7 +1677,7 @@ Object.assign(DEMOS, { menuBar: { title: 'In the menu bar', off: MACBAR(false), 
 // The Dock icon's badge: 2 PRs to review, then those and 3 threads waiting on your reply.
 const DOCK = (n: number, inbox: boolean) => (
   <div class="demo-dock">
-    <span class="demo-dock-icon"><img src="./app-icon.png" alt="LGTM" /><b>{n}</b></span>
+    <span class="demo-dock-icon"><AppIcon alt="LGTM" /><b>{n}</b></span>
     <small>2 to review{inbox ? ' + 3 waiting on your reply' : ''}</small>
   </div>
 );

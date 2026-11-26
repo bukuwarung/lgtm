@@ -2,6 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { AGENTS, type AgentId } from './agents.ts';
 
 import { OCTICONS } from './octicons.ts';
+import { useAppDark } from './mdthemes.ts';
 import { ago, copyText, useStoredFlag, faceOf, shownName } from './platform.ts';
 import { useState } from 'preact/hooks';
 import type { Thread } from './github.ts';
@@ -153,6 +154,11 @@ export const Empty = ({ icon = 'check', tone, children, action }: { icon?: strin
     <p>{children}</p>
     {action && <button type="button" onClick={action[1]}>{action[0]}</button>}
   </div>
+);
+
+// LGTM's icon as the app is now, light or dark (the Dock's own follows macOS's icon style instead).
+export const AppIcon = ({ size, alt = '' }: { size?: number; alt?: string }) => (
+  <img src={useAppDark() ? '/app-icon-dark.png' : '/app-icon.png'} alt={alt} width={size} height={size} />
 );
 
 // After "Couldn't load …": fetch just that part again.

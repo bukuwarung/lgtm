@@ -86,14 +86,16 @@ if args[1] == "layers" {
     canvas("\(args[2])/diff-\(m).png") { ctx in ctx.scaleBy(x: 1024 / S, y: 1024 / S); diff(dark: dark) }
     canvas("\(args[2])/stamp-\(m).png") { ctx in ctx.scaleBy(x: 1024 / S, y: 1024 / S); stamp(dark: dark, ctx) }
   }
-} else {
+} else { // icon (light) or icondark: the whole icon on its tile, as the app shows it in Settings and on the sign-in page
+  let dark = args[1] == "icondark"
   canvas(args[2]) { ctx in
     let T = NSRect(x: 100, y: 110, width: S, height: S), tile = NSBezierPath(roundedRect: T, xRadius: 185, yRadius: 185)
-    let sh = NSShadow(); sh.shadowOffset = NSSize(width: 0, height: -10); sh.shadowBlurRadius = 28; sh.shadowColor = NSColor(white: 0, alpha: 0.3)
-    NSGraphicsContext.saveGraphicsState(); sh.set(); NSColor.white.setFill(); tile.fill(); NSGraphicsContext.restoreGraphicsState()
-    NSGraphicsContext.saveGraphicsState(); tile.addClip(); NSGradient(starting: .white, ending: c(0xf6f8fa))!.draw(in: T, angle: -90)
-    ctx.translateBy(x: T.minX, y: T.minY); diff(dark: false); stamp(dark: false, ctx)
+    let top = dark ? c(0x151b23) : NSColor.white, bottom = dark ? c(0x0d1117) : c(0xf6f8fa) // GitHub's page colours
+    let sh = NSShadow(); sh.shadowOffset = NSSize(width: 0, height: -10); sh.shadowBlurRadius = 28; sh.shadowColor = NSColor(white: 0, alpha: dark ? 0.45 : 0.3)
+    NSGraphicsContext.saveGraphicsState(); sh.set(); top.setFill(); tile.fill(); NSGraphicsContext.restoreGraphicsState()
+    NSGraphicsContext.saveGraphicsState(); tile.addClip(); NSGradient(starting: top, ending: bottom)!.draw(in: T, angle: -90)
+    ctx.translateBy(x: T.minX, y: T.minY); diff(dark: dark); stamp(dark: dark, ctx)
     NSGraphicsContext.restoreGraphicsState()
-    NSColor(white: 0, alpha: 0.12).setStroke(); NSBezierPath(roundedRect: T.insetBy(dx: 0.5, dy: 0.5), xRadius: 184.5, yRadius: 184.5).stroke()
+    NSColor(white: dark ? 1 : 0, alpha: dark ? 0.12 : 0.12).setStroke(); NSBezierPath(roundedRect: T.insetBy(dx: 0.5, dy: 0.5), xRadius: 184.5, yRadius: 184.5).stroke()
   }
 }
