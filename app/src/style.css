@@ -1677,6 +1677,7 @@ fieldset:disabled .set-steps li { cursor: default; opacity: 0.6; }
 dialog.qa-dialog { max-width: min(640px, calc(100vw - 32px)); width: 640px; }
 dialog.qa-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; margin-bottom: 12px; }
 .bar-qa { position: relative; color: var(--muted); }
+.bar-slack:has(> .qa-new) { margin: 0 6px 0 2px; } /* room for its count, clear of the button beside it */
 .bar-qa.qa-signed { color: var(--addfg); }
 .bar-qa.qa-issue { color: var(--modfg); }
 .qa-new { position: absolute; top: -4px; right: -6px; min-width: calc(14px * var(--ts)); padding: 0 3px; border-radius: 999px; font-size: calc(11px * var(--ts)); line-height: calc(14px * var(--ts)); text-align: center; color: #fff; background: var(--accent); }
@@ -1756,7 +1757,7 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .sym-use mark { color: inherit; background: color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 4px; }
 .sym-more { padding: 6px 10px; border-top: 1px solid var(--border); }
 .demo-sym-name { position: relative; }
-.demo-sym-badge { position: absolute; right: -18px; top: -10px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: #fff; background: var(--accent); }
+.demo-sym-badge { position: absolute; right: -10px; top: -17px; /* above the line, clear of the code */ display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: #fff; background: var(--accent); }
 .demo-sym-list { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 0; font-size: calc(12px * var(--ts)); }
 /* The conversation's one-line rows: plain approvals together, and a review whose threads are all settled. */
 .comment.approvals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); }
@@ -1945,3 +1946,15 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 :is(.account-menu, .pill-pop, .panel, .cmd-list, .quick-menu, .whats-new, dialog.ask[open]) { animation: lgtm-in .12s ease-out; }
 .toast { animation: lgtm-up .14s ease-out; }
 @media (prefers-reduced-motion: reduce) { :is(.account-menu, .pill-pop, .panel, .cmd-list, .quick-menu, .whats-new, dialog.ask[open], .toast) { animation: none; } }
+
+/* One disclosure caret everywhere: GitHub's chevron, turned right when closed (WebKit's own ▼ was bigger and heavier,
+   the tree's and threads' ▾ too small at 12px). */
+:is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group) > summary { list-style: none; }
+:is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group) > summary::-webkit-details-marker { display: none; }
+:root { --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.939l3.72-3.719a.749.749 0 0 1 1.06 0Z'/%3E%3C/svg%3E"); }
+:is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group, .tree-dir, .thread) > summary::before { content: ''; display: inline-block; flex: none; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; background: currentColor; -webkit-mask: var(--caret) center / 10px no-repeat; mask: var(--caret) center / 10px no-repeat; transform: rotate(-90deg); transition: transform .12s; }
+:is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group, .tree-dir, .thread)[open] > summary::before { transform: none; }
+@media (prefers-reduced-motion: reduce) { :is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group, .tree-dir, .thread) > summary::before { transition: none; } }
+/* A resolved thread folded to one line in the diff: close to the code around it (its row was three code lines tall). */
+.notes:has(> .thread.settled:not([open]):only-child) { margin: 0; }
+.notes-cell:has(> .notes > .thread.settled:not([open]):only-child) { padding-top: 2px; padding-bottom: 2px; }

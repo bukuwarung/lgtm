@@ -1135,7 +1135,7 @@ Object.assign(DEMOS, {
       <File path="OrderNotifier.kt" add={1} del={1}>
         <table class="diff">
           <tbody>
-            {([[40, 'if (paid) {', 40, 'if (paid) {', ''], [41, 'notify(owner)', 41, 'notify(owner, PUSH)', 'x'], [42, '}', 42, '}', '']] as const).map(([o, a, n, b, x]) => (
+            {([[40, 'if (paid) {', 40, 'if (paid) {', ''], [41, '    notify(owner)', 41, '    notify(owner, PUSH)', 'x'], [42, '}', 42, '}', '']] as const).map(([o, a, n, b, x]) => (
               <tr class="ln split"><td colSpan={3}><div class="split-row">{half(o, a, x ? 'd' : '')}{half(n, b, x ? 'a' : '')}</div></td></tr>
             ))}
           </tbody>
