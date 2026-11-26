@@ -55,9 +55,11 @@ let inkShift: CGPoint = {
 struct Seeded { var x: UInt64; mutating func next() -> CGFloat { x = x &* 6364136223846793005 &+ 1442695040888963407; return CGFloat(x >> 33) / CGFloat(1 << 31) } }
 func stamp(dark: Bool, _ ctx: CGContext) {
   ctx.saveGState(); ctx.translateBy(x: stampAt.x, y: S - stampAt.y)
-  let ink = dark ? c(0x8957e5) : c(0x8250df) // GitHub's purple (Primer's bgColor-done-emphasis): where an approved PR goes, merged
+  // GitHub's purple (Primer): bgColor-done-emphasis on the light page; on the dark one its fgColor-done, the purple made to
+  // read on dark (the emphasis one is a fill colour, about 3.6:1 there)
+  let ink = dark ? c(0xab7df8) : c(0x8250df)
   if !dark { ctx.setBlendMode(.multiply) }
-  ctx.setAlpha(dark ? 0.92 : 0.9)
+  ctx.setAlpha(dark ? 1 : 0.9)
   ctx.beginTransparencyLayer(auxiliaryInfo: nil)
   ink.setStroke()
   let ring = NSBezierPath(ovalIn: NSRect(x: -stampR, y: -stampR, width: 2 * stampR, height: 2 * stampR)); ring.lineWidth = 34; ring.stroke()
