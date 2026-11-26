@@ -32,6 +32,13 @@ const show = (s: string) => esc(s).replace(/%(\d+\$)?[-#+ 0,(]*\d*(\.\d+)?[sdfxX
 // The row: its name, then its text (`changed`: the part to mark, in the readable text).
 export function stringHtml(s: StringLine, changed?: [number, number], notes: string[] = []): string {
   const v = s.value;
+  // The mark on the words that changed, not the spaces at its edges ("6-digit", not "6-digit ").
+  if (changed) {
+    let [a, b] = changed;
+    while (a < b && /\s/.test(v[a])) a++;
+    while (b > a && /\s/.test(v[b - 1])) b--;
+    changed = [a, b];
+  }
   const text = changed && changed[1] > changed[0] ? `${show(v.slice(0, changed[0]))}<mark class="sx-ch">${show(v.slice(...changed))}</mark>${show(v.slice(changed[1]))}` : show(v);
   // Name and text side by side, so a long text wraps in its own column; the indentation as a margin.
   return `<span class="sx" style="padding-left:${s.lead.replace(/\t/g, '    ').length}ch"><span class="sx-key">${esc(s.name)}</span><span class="sx-val">${text || '<span class="sx-empty">empty</span>'}${s.untranslated ? '<span class="sx-tag">not translated</span>' : ''}${notes.map((n) => `<span class="sx-warn">${esc(n)}</span>`).join('')}</span></span>`;

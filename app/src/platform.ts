@@ -1594,6 +1594,14 @@ const applyTitle = () => {
 };
 export const setPageName = (n: string) => void (n !== pageName && ((pageName = n), applyTitle()));
 export const setTitleCount = (n: number) => void (n !== titleCount && ((titleCount = n), applyTitle()));
+// A change on screen drawn as a move (the engine's view transitions): what moved slides to its place, what's new fades
+// in. Not with Reduce motion, in a window not on screen, nor where the engine has none: then it just happens. Preact
+// draws on a microtask, so the move starts once the timeout after it has run.
+export function moving(change: () => void) {
+  const d = document as Document & { startViewTransition?: (update: () => Promise<void>) => unknown };
+  if (!d.startViewTransition || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return change();
+  d.startViewTransition(() => (change(), new Promise<void>((r) => setTimeout(r))));
+}
 export function ago(when: string | number) {
   const s = (new Date(when).getTime() - Date.now()) / 1000;
   const u = UNITS.find(([, n]) => Math.abs(s) >= n);

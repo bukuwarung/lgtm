@@ -395,7 +395,7 @@ section.file.flash > .file-h { animation: flash-bg 2.2s ease-out; }
 .viewed-box input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
 .viewed-box:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .file.viewed .file-h { opacity: .75; }
-.file-f { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--soft); border-radius: 0 0 6px 6px; }
+.file-f { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 33px; box-sizing: border-box; /* one height with or without its buttons */ padding: 6px 10px; border-top: 1px solid var(--border); background: var(--soft); border-radius: 0 0 6px 6px; }
 html.no-file-footer .file-f { display: none; }
 .file-f-name { margin-right: auto; font: calc(12px * var(--ts)) var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .collapsed-row { width: 100%; padding: 6px 10px; border: 0; border-radius: 0 0 6px 6px; background: none; text-align: left; font-size: calc(12px * var(--ts)); color: var(--muted); }
@@ -1583,9 +1583,9 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .settings .set-group > p, .settings .set-group > .set-row { max-width: 720px; }
 .settings h5 { margin: 14px 0 6px; font-size: calc(12px * var(--ts)); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .demo-macbar { font: 12px var(--sans); }
-.demo-macbar-strip { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 3px 10px; border-radius: 6px; background: light-dark(#e8e8ea, #2b2b2e); color: var(--fg); }
+.demo-macbar-strip { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 3px 10px; border-radius: 6px; background: light-dark(#e8e8ea, #3a3a3e); border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent); color: var(--fg); } /* a menu bar, distinct from the panel in dark too */
 .demo-tray { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 14%, transparent); }
-.demo-tray img { width: 16px; height: 16px; filter: light-dark(none, invert(1)); }
+.demo-tray img { width: 16px; height: 16px; filter: light-dark(none, invert(1) brightness(1.4)); }
 .demo-traymenu { margin: 4px 0 0 auto; width: max-content; max-width: 100%; padding: 5px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 6px 18px var(--shadow); }
 .demo-traymenu > div { padding: 2px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .demo-traymenu > div:not(.h) { padding-left: 22px; }
@@ -1958,3 +1958,8 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 /* A resolved thread folded to one line in the diff: close to the code around it (its row was three code lines tall). */
 .notes:has(> .thread.settled:not([open]):only-child) { margin: 0; }
 .notes-cell:has(> .notes > .thread.settled:not([open]):only-child) { padding-top: 2px; padding-bottom: 2px; }
+
+/* A list change drawn as a move (platform.ts moving): each PR slides to its new place; the rest of the page doesn't
+   cross-fade, it just is the new one. */
+::view-transition-group(*) { animation-duration: .25s; animation-timing-function: ease-out; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }

@@ -16,7 +16,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { setResign, claudeFolder, duration, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { setResign, claudeFolder, duration, moving, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
 import { unblockPrompt } from './prompts.ts';
 import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
@@ -1734,6 +1734,8 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       return null;
     }
   });
+  const loadedRef = useRef(loaded); // what's on screen, for the load (an effect) to compare with
+  loadedRef.current = loaded;
   const [fresh, setFresh] = useState(false);
   // Settings → "Mute replies and mentions on PRs you've approved": their threads wait on no one here (no pill, count,
   // bell entry or inbox thread), until my latest verdict is something else.
@@ -1850,7 +1852,10 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       const items = [...queue, ...owned, ...asked];
       knowRepos(items.map((i) => i.repo));
       knowJiraKeys(items.map((i) => i.title));
-      setItems(items);
+      // A PR that came, went or changed section moves there (platform.ts moving); a refresh that changed nothing doesn't.
+      const shape = (l: QueueItem[] | null) => (l ?? []).map((i) => [i.id, i.reviewDecision, i.myState, i.isDraft, i.authored].join()).join('|');
+      if (loadedRef.current && shape(loadedRef.current) !== shape(items)) moving(() => setItems(items));
+      else setItems(items);
       // Secondary: the list works without them.
       const [st, est, ms, nr, qa] = await Promise.all([
         getThreadStatus(items, readBots()).catch(() => null),
@@ -2080,13 +2085,14 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   };
   const item = (kind: Kind, i: QueueItem, layer?: string, who?: string) => (
     <a key={i.id} class={`pr-item g-${(kind.colorOf ?? kind.groupOf)(i)}${isCurrent(i) ? ' cur' : ''}${isDismissed(i) ? ' dismissed' : ''}`} href={`#/${i.repo}/pull/${i.number}`}
+      style={kind === REVIEWING || kind === MINE ? { viewTransitionName: `pr-${i.id.replace(/[^\w-]/g, '_')}` } : undefined} // a PR once on these tabs (Browse can list one under several people)
       data-pr={`${i.repo}#${i.number}`} data-url={prWebUrl(i.repo, i.number)} data-title={i.title} data-dismiss={kind === REVIEWING || kind === MINE ? (isDismissed(i) ? 'back' : 'on') : undefined} onMouseEnter={() => preload(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)}>
       {(kind === REVIEWING || kind === MINE) && (isDismissed(i) ? (
-        <button class="pr-x" title="Put it back in the list" aria-label="Put back" onClick={(e) => (e.preventDefault(), e.stopPropagation(), setDismissed(i, false))}>
+        <button class="pr-x" title="Put it back in the list" aria-label="Put back" onClick={(e) => (e.preventDefault(), e.stopPropagation(), moving(() => setDismissed(i, false)))}>
           <Octicon name="reply" />
         </button>
       ) : (
-        <button class="pr-x" title="Dismiss: out of the list until something new happens on it" aria-label="Dismiss" onClick={(e) => (e.preventDefault(), e.stopPropagation(), setDismissed(i, true), offerUndo(`Dismissed ${repoLabel(i.repo)}${numRef(i.repo, i.number)} until something new happens on it`, () => setDismissed(i, false)))}>
+        <button class="pr-x" title="Dismiss: out of the list until something new happens on it" aria-label="Dismiss" onClick={(e) => (e.preventDefault(), e.stopPropagation(), moving(() => setDismissed(i, true)), offerUndo(`Dismissed ${repoLabel(i.repo)}${numRef(i.repo, i.number)} until something new happens on it`, () => setDismissed(i, false)))}>
           <Octicon name="x" />
         </button>
       ))}
