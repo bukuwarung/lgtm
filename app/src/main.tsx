@@ -1036,7 +1036,7 @@ function App() {
           <Settings />
         ) : route === '#/done' ? (
           <div class="page done">
-            <img src="/app-icon.png" alt="" width="96" height="96" />
+            <img src="/mantap.png" alt="" width="96" height="96" /> {/* the :mantap: thumbs-up guy, cheering you on */}
             <h2>{rm?.practice ? 'Practice run done' : rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
             <p>
               {rm?.practice ? `Nothing was sent to ${T.site}.`
