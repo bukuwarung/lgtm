@@ -596,6 +596,7 @@ html.strike-removed .removed pre { text-decoration: line-through; }
 .thread[open] > summary { position: absolute; left: 0; top: 0; width: 28px; height: 28px; font-size: 0; } /* just the toggle */
 .thread[open] > summary + .comment { padding-top: 0; border-top: none; }
 .comment { padding: 6px 0 10px; border-top: 1px solid var(--border); }
+.comment:first-child { border-top: none; } /* a line between comments, not above the first */
 .c-avatar { width: 18px; height: 18px; border-radius: 50%; vertical-align: -4px; }
 .comment .md > :last-child { margin-bottom: 0; }
 time { color: var(--muted); font-size: calc(12px * var(--ts)); }
@@ -824,9 +825,10 @@ dialog.base-dialog input { width: 100%; box-sizing: border-box; }
 .stack-row:has(.stack-merge) { grid-template-columns: 1.4em minmax(0, 1fr) 1.2em auto auto auto; }
 .stack-merge { padding: 1px 10px; font-size: calc(12px * var(--ts)); }
 .stack-note { margin: 4px 8px; }
-.done { display: grid; justify-items: center; align-content: start; gap: 4px; padding-top: 15vh; text-align: center; }
-.done h2 { margin: 12px 0 0; }
-.done p { color: var(--muted); }
+/* All caught up (the page): .page.done, not any .done (a review plan's finished step is li.done). */
+.page.done { display: grid; justify-items: center; align-content: start; gap: 4px; padding-top: 15vh; text-align: center; }
+.page.done h2 { margin: 12px 0 0; }
+.page.done p { color: var(--muted); }
 .review-log { display: grid; gap: 2px; box-sizing: border-box; width: min(640px, 100%); margin: 8px 0 12px; padding: 0 16px; text-align: left; }
 .review-log a { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--fg); }
 .review-log a:hover { background: var(--soft); }
@@ -1146,7 +1148,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .scroll-marks .m-await { background: var(--accent); height: 8px; margin-top: -4px; z-index: 1; }
 .scroll-marks .m-draft { background: #d4a72c; z-index: 1; }
 /* Settings: a side panel of its sections, beside them (gone when the window is narrow). */
-.settings { display: grid; grid-template-columns: 160px minmax(0, 960px); column-gap: 28px; max-width: calc(960px + 188px); }
+.settings { display: grid; grid-template-columns: 176px minmax(0, 960px); column-gap: 28px; max-width: calc(960px + 204px); } /* its section list wide enough for Keyboard shortcuts on one line */
 .settings > :not(.set-toc) { grid-column: 2; }
 .set-toc { grid-column: 1; grid-row: 1 / span 100; align-self: start; position: sticky; top: calc(var(--nav) + 16px); display: grid; gap: 1px; padding-top: 16px; } /* its first row level with the title */
 .set-toc button { padding: 5px 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: calc(13px * var(--ts)); text-align: left; }
@@ -1193,7 +1195,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .ix-add-me { color: var(--accent); }
 .ix-add-me .octicon { vertical-align: -2px; }
 .ix-ask-slack { display: grid; gap: 4px; margin: 4px 8px 6px 14px; font-size: calc(12px * var(--ts)); color: var(--muted); }
-.ix-ask-slack textarea { font-size: calc(12px * var(--ts)); resize: vertical; }
+.ix-ask-slack textarea { font-size: calc(12px * var(--ts)); resize: vertical; field-sizing: content; min-height: 3lh; } /* the whole message, as tall as it is */
 /* A reviewer's verdict, coloured like the pills. */
 .ix-meta.v-APPROVED { color: var(--pill-ok); }
 .ix-meta.v-CHANGES_REQUESTED { color: var(--pill-bad); }
@@ -1547,7 +1549,7 @@ html .demo-strike .removed pre { text-decoration: line-through; }
 .demo-window-in.narrow { max-width: 72%; margin: 0 auto; }
 .demo-window .file { margin-bottom: 0; }
 .demo-list { display: grid; gap: 2px; }
-.demo-list .pr-item { display: grid; gap: 2px; padding: 6px 8px; border-radius: 6px; }
+.demo-list .pr-item { display: grid; gap: 2px; padding: 6px 8px; border-radius: 0 6px 6px 0; } /* as the list's: square where its colour edge is */
 .demo-panel { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: calc(13px * var(--ts)); }
 .demo-panel input:not([type]) { width: 100%; box-sizing: border-box; font: inherit; }
 .demo-panel .merge-row { display: flex; gap: 6px; }
@@ -1700,6 +1702,14 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .merge-qa a { margin-left: auto; }
 .scene-claude { min-height: 170px; }
 .demo-dock { display: flex; align-items: center; gap: 12px; padding: 14px; }
+/* Placeholders in the theme's grey (WebKit's own read almost as bright as typed text in dark). */
+::placeholder { color: var(--muted); opacity: 1; }
+/* Paragraphs and notes wrap without leaving one word alone on the last line, where the engine can. */
+:is(p, li, small, .note) { text-wrap: pretty; }
+/* A preview's dropdown (Keep agent review sessions) drawn open under its pill, inside the preview's frame. */
+.demo-side .pill-drop .quick-menu { position: static; display: block; width: fit-content; margin-top: 6px; }
+/* "N hidden. Show": Show in the link colour, as everywhere else. */
+.gen-show { color: var(--accent); }
 .demo-dock-icon { position: relative; width: 52px; height: 52px; } /* the app's own icon (icons/source/make.sh) */
 .demo-dock-icon img { display: block; width: 100%; height: 100%; }
 .demo-dock-icon b { position: absolute; top: -2px; right: -2px; /* on the tile's corner (the picture has macOS's margin around it) */ min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font-size: 12px; line-height: 20px; text-align: center; background: #ef4444; box-sizing: border-box;  color: #fff; /* white on red, as the Dock draws it */ }

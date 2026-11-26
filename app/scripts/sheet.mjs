@@ -43,20 +43,25 @@ try {
       await sleep(600);
       await shoot('Scenes', k, theme, page.locator('.demo-page'));
     }
-    // The app itself, as you use it.
+    // The app itself, as you use it: each screen once its placeholders are gone (or 30s).
+    const loaded = async () => {
+      await sleep(400);
+      await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]') && ![...document.querySelectorAll('.sk')].some((e) => e.offsetParent), null, { timeout: 30000 }).catch(() => {});
+      await sleep(800);
+    };
     await page.goto(`${ORIGIN}/?${theme}live#/`);
-    await page.waitForSelector('.pr-item, .empty', { timeout: 30000 }).catch(() => {});
+    await page.waitForSelector('.pr-item, .empty', { timeout: 60000 }).catch(() => {});
     await sleep(1500);
     for (const [name, route] of [['Start page', '#/'], ['Inbox', '#/inbox'], ['Your reviews', '#/history'], ['Settings', '#/settings']]) {
       await page.evaluate((r) => (location.hash = r), route);
-      await sleep(3500);
+      await loaded();
       await shoot('Screens', name, theme);
     }
     const pr = process.env.SHEET_PR ?? (await page.evaluate(() => document.querySelector('a.pr-item')?.getAttribute('href')?.replace(/^#\//, '')));
     if (pr) {
       await page.evaluate((r) => (location.hash = '/' + r), pr);
       await page.waitForSelector('.file, .conversation', { timeout: 30000 }).catch(() => {});
-      await sleep(2500);
+      await loaded();
       await shoot('Screens', 'A PR', theme);
       // Its menus and panels, opened only.
       for (const [name, re] of [['A PR: ⋯ menu', 'Close, reopen'], ['A PR: Finish review', '^(Finish review|Comment|Approve)']]) {

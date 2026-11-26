@@ -370,7 +370,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
           <span>
             <input type="checkbox" checked={slack} onChange={(e) => setSlack(e.currentTarget.checked)} /> Also message them on Slack
           </span>
-          {slack && <EmojiTextarea rows={2} value={text} onInput={setText} names={emoji.names} emoji={emoji.emoji} label="Slack message" />}
+          {slack && <EmojiTextarea rows={3} value={text} onInput={setText} names={emoji.names} emoji={emoji.emoji} label="Slack message" />}
         </label>
       ) : null}
     </div>
@@ -2845,7 +2845,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   <div class="pill-row">
                     {show ? (
                       <button onClick={show} title="Show them">
-                        <b>{num(k)}</b> <span>{what}</span> <small>Show</small>
+                        <b>{num(k)}</b> <span>{what}</span> <small class="gen-show">Show</small>
                       </button>
                     ) : (
                       <span>
@@ -2993,7 +2993,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 {kinds.filter((k) => k.open).map((k) => k.files.map(section))}
                 {closed.length === 1 && (
                   <button class="gen-row" onClick={closed[0].show}>
-                    {closed[0].alone(closed[0].files.length)} hidden. Show
+                    {closed[0].alone(closed[0].files.length)} hidden. <span class="gen-show">Show</span>
                   </button>
                 )}
                 {closed.length > 1 && (

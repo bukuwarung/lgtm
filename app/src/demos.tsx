@@ -179,7 +179,7 @@ export const DEMOS: Record<string, Demo> = {
     on: (
       <>
         <File path="docs/specs/payment-retries.md" add={24} del={2} />
-        <button class="gen-row">1 archived spec hidden. Show</button>
+        <button class="gen-row">1 archived spec hidden. <span class="gen-show">Show</span></button>
       </>
     ),
   },
@@ -195,7 +195,7 @@ export const DEMOS: Record<string, Demo> = {
     on: (
       <>
         <File path="OrderRepository.kt" add={42} del={3} />
-        <button class="gen-row">2 generated files hidden. Show</button>
+        <button class="gen-row">2 generated files hidden. <span class="gen-show">Show</span></button>
       </>
     ),
   },
@@ -211,7 +211,7 @@ export const DEMOS: Record<string, Demo> = {
     on: (
       <>
         <File path="orders/OrderRepository.kt" add={42} del={3} />
-        <button class="gen-row">2 files renamed or moved without changes hidden. Show</button>
+        <button class="gen-row">2 files renamed or moved without changes hidden. <span class="gen-show">Show</span></button>
       </>
     ),
   },
@@ -575,7 +575,7 @@ const Showcase = () => (
               <div class="notes">
                 <div class="thread">
                   <MdThread who="you" when="12 minutes ago" text="Does this cover expired cards too? They come back as a different error." />
-                  <MdThread who="rina" when="just now" text="Good catch, adding them to the list :+1:" />
+                  <MdThread who="rina" when="just now" text="Good catch, adding them to the list 👍" />
                 </div>
               </div>
             </div>
@@ -838,11 +838,11 @@ SCENES.specs = {
             <h2>2. Retries</h2>
             <ul>
               <li>
-                [x] 2.1 Add <code class="spec-ref">RetryPolicy</code> with the attempts and the errors to retry
+                <input type="checkbox" checked disabled /> 2.1 Add <code class="spec-ref">RetryPolicy</code> with the attempts and the errors to retry
                 <span class="spec-touch">1 file in this {T.PR}</span>
               </li>
               <li>
-                [ ] 2.2 Call it from <code class="spec-ref">PaymentService.charge()</code>; a declined card is never retried
+                <input type="checkbox" disabled /> 2.2 Call it from <code class="spec-ref">PaymentService.charge()</code>; a declined card is never retried
                 <span class="spec-touch">1 file in this {T.PR}</span>
               </li>
             </ul>
@@ -1155,7 +1155,7 @@ Object.assign(DEMOS, {
   },
   rainbowBrackets: {
     title: 'Rainbow brackets',
-    off: <File path="Cart.kt" add={1} del={0}><Rows rows={[['+', '', 7, BRACKETS]]} /></File>,
+    off: <File path="Cart.kt" add={1} del={0}><Rows rows={[['+', '', 7, `<span>${kt(BRACKETS).replace(/<span class="rb\d">([^<]*)<\/span>/g, '$1')}</span>`]]} /></File>, // without: the highlighter's own colours
     on: <File path="Cart.kt" add={1} del={0}><Rows rows={[['+', '', 7, `<span>${rainbow(kt(BRACKETS))}</span>`]]} /></File>,
   },
   renderLineComments: {
