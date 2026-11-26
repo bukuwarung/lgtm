@@ -495,13 +495,20 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
   const replies = repliesWaiting(items);
-  const cards: [string, number | string, string, string][] = [
-    ['reviewing', needs.length, 'need your review', needs.length ? 'Open the Reviewing tab' : ''],
-    ['reviewing', oldest ? ago(oldest).replace(/ ago$/, '') : '–', 'oldest wait', oldest ? `Since ${new Date(oldest).toLocaleString()}` : ''],
-    ['inbox', replies, `thread${replies === 1 ? '' : 's'} waiting on your reply`, 'Open them, to reply or resolve'],
-    ['mine', mine.filter((i) => i.reviewDecision !== 'APPROVED' && i.reviewDecision !== 'CHANGES_REQUESTED').length, 'of yours waiting for review', `Open Your ${T.PRs}`],
-    ['mine', mine.filter(readyToMerge).length, 'of yours ready to merge', `Open Your ${T.PRs}`],
-    ['mine', mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, 'of yours with changes requested', `Open Your ${T.PRs}`],
+  // Two groups of three: what waits on you, and where your own stand. A number that's nothing (0, –) is grey; one that
+  // asks something of you takes its colour (to act on, ready, changes asked).
+  type Card = [tab: string, n: number | string, label: string, title: string, tone: 'act' | 'ok' | 'bad' | ''];
+  const groups: [string, Card[]][] = [
+    ['To review', [
+      ['reviewing', needs.length, `${T.PR}${needs.length === 1 ? '' : 's'} to review`, needs.length ? 'Open the Reviewing tab' : '', 'act'],
+      ['reviewing', oldest ? ago(oldest).replace(/ ago$/, '') : '–', 'Oldest wait', oldest ? `Since ${new Date(oldest).toLocaleString()}` : '', ''],
+      ['inbox', replies, 'Waiting on your reply', 'Threads and mentions waiting on your reply: open them, to reply or resolve', 'act'],
+    ]],
+    [`Your ${T.PRs}`, [
+      ['mine', mine.filter((i) => i.reviewDecision !== 'APPROVED' && i.reviewDecision !== 'CHANGES_REQUESTED').length, 'Waiting for review', `Open Your ${T.PRs}`, ''],
+      ['mine', mine.filter(readyToMerge).length, 'Ready to merge', `Open Your ${T.PRs}`, 'ok'],
+      ['mine', mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, 'Changes requested', `Open Your ${T.PRs}`, 'bad'],
+    ]],
   ];
   const saved = Object.values(readSaved());
   const savedLines = saved.reduce((a, b) => a + b, 0);
@@ -512,14 +519,19 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
           LGTM has kept <b>{savedLines.toLocaleString()} lines</b> (about {readTime(savedLines)} of reading) out of your way in the {saved.length} {saved.length === 1 ? T.PR : T.PRs} you've reviewed
         </p>
       )}
-      <div class="start-grid">
-        {cards.map(([tab, n, label, title]) => (
-          <button class="start-card" title={title} onClick={() => (tab === 'inbox' ? (location.hash = '/inbox') : onTab(tab))}>
-            <b>{n}</b>
-            <span>{label}</span>
-          </button>
-        ))}
-      </div>
+      {groups.map(([head, cards]) => (
+        <section class="start-group" aria-label={head}>
+          <h3>{head}</h3>
+          <div class="start-grid">
+            {cards.map(([tab, n, label, title, tone]) => (
+              <button class={`start-card${n === 0 || n === '–' ? ' none' : tone ? ' ' + tone : ''}`} title={title} onClick={() => (tab === 'inbox' ? (location.hash = '/inbox') : onTab(tab))}>
+                <b>{n}</b>
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
       <p class="note">
         Pick a PR, or paste a link (⌘K). <a href="#/history">Your reviews this month →</a>
       </p>
