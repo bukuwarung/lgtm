@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { Select } from './select.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { Octicon, Who, Retry, Updating } from './tags.tsx';
 import { hint, readBindings } from './keys.ts';
@@ -279,9 +280,9 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
       )}
       {!confirm && <div class="merge-row">
         {s.methods.length > 1 && (
-          <select value={m} onChange={(e) => setMethod(e.currentTarget.value as MergeMethod)} title="Merge method">
+          <Select value={m} onChange={(e) => setMethod(e.currentTarget.value as MergeMethod)} title="Merge method">
             {s.methods.map((x) => <option value={x}>{VERB[x]}</option>)}
-          </select>
+          </Select>
         )}
         {/* Not ready, but I'm an admin here: one button merges past what's in the way (after the confirm). */}
         <button class={ready ? 'primary' : undefined} disabled={!!busy || !(ready || admin)} title={admin ? "You're an admin here: merge even though requirements aren't met" : undefined} onClick={() => open('merge')}>{admin ? `${VERB[m]} as admin` : VERB[m]}</button>
@@ -375,14 +376,14 @@ export async function movePending(open: Set<string>): Promise<{ pr: string; text
 export function StatusSelect({ value, onChange, statuses }: { value: string; onChange: (s: string) => void; statuses: JiraStatus[] | null }) {
   const groups = [['new', 'To do'], ['indeterminate', 'In progress'], ['done', 'Done']] as const;
   return (
-    <select value={value} onChange={(e) => onChange(e.currentTarget.value)} aria-label="Jira status" title={statuses ? undefined : "Listing the project's statuses…"}>
+    <Select value={value} onChange={(e) => onChange(e.currentTarget.value)} aria-label="Jira status" title={statuses ? undefined : "Listing the project's statuses…"}>
       {!statuses?.some((s) => s.name === value) && <option value={value}>{statuses ? `${value} (not in this project)` : value}</option>}
       {statuses && groups.map(([c, label]) => statuses.some((s) => s.category === c) && (
         <optgroup label={label}>
           {statuses.filter((s) => s.category === c).map((s) => <option value={s.name}>{s.name}</option>)}
         </optgroup>
       ))}
-    </select>
+    </Select>
   );
 }
 

@@ -1,4 +1,5 @@
 import { render, type ComponentChildren, type VNode } from 'preact';
+import { Select } from './select.tsx';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { findSecrets, type Secret } from './secrets.ts';
 import { depChanges, type DepChange } from './deps.ts';
@@ -6172,9 +6173,9 @@ function AskAgent({ pr, repo, headRepo, files, onComment }: { pr: PR; repo: stri
             <b>
               Ask{' '}
               {agents.length > 1 ? (
-                <select aria-label="Agent" value={who} onChange={(e) => (pickAgent(e.currentTarget.value as AgentId), setAskAgent(e.currentTarget.value as AgentId))}>
+                <Select aria-label="Agent" value={who} onChange={(e) => (pickAgent(e.currentTarget.value as AgentId), setAskAgent(e.currentTarget.value as AgentId))}>
                   {agents.map((a) => <option key={a} value={a}>{AGENTS[a].short}</option>)}
-                </select>
+                </Select>
               ) : (
                 <><AgentMark id={who} /> {AGENTS[who].short}</>
               )}{' '}

@@ -1,4 +1,6 @@
 import type { ComponentChildren } from 'preact';
+import { Select } from './select.tsx';
+import { Setup } from './signin.tsx';
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -1121,7 +1123,13 @@ function SetupCheck() {
   return (
     <div class="whats-new-back" onMouseDown={(e) => e.target === e.currentTarget && done()}>
       <div class="whats-new" role="dialog" aria-label="Set up LGTM">
-        <h3 class="whats-new-h">Welcome to LGTM</h3>
+        <header class="welcome-h">
+          <AppIcon size={44} />
+          <div>
+            <h3 class="whats-new-h">Welcome to LGTM</h3>
+            <p class="note">Say LGTM and mean it.</p>
+          </div>
+        </header>
         <div class="welcome-body">
         <p class="note">Uses these tools' sign-ins, stores no tokens. GitHub or GitLab is required; the rest is optional.</p>
         {row(hub, 'GitHub', 'PRs, reviews and comments, through the GitHub CLI.', <pre>brew install gh && gh auth login</pre>)}
@@ -1189,35 +1197,6 @@ function WhatsNew() {
   );
 }
 
-// Before the first sign-in works: what to run, and a button to try again (nothing to restart).
-function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  const missing = /isn't installed/.test(error);
-  return (
-    <div class="signin">
-      <h1 class="brand">
-        <AppIcon size={32} /> LGTM
-      </h1>
-      {isDesktop || /signed in|gh token|gh auth/i.test(error) ? (
-        <>
-          <p>Signs in through gh or glab, never a password or token. {error}</p>
-          <p>In Terminal, run one, or both:</p>
-          <pre>{missing ? 'brew install gh\ngh auth login' : 'gh auth login'}</pre>
-          <pre>{'brew install glab\nglab auth login'}</pre>
-          <p class="note">For GitHub: if your organization enforces SSO, authorize the token for it when GitHub asks. For your own GitLab: <code>glab auth login --hostname gitlab.example.com</code>.</p>
-        </>
-      ) : (
-        <>
-          <p class="error">{error}</p>
-          <p class="note">The browser version needs the <code>lgtm-web</code> command running: start it in Terminal.</p>
-        </>
-      )}
-      <button class="primary" disabled={busy} onClick={() => (setBusy(true), retry().finally(() => setBusy(false)))}>
-        {busy ? 'Checking…' : 'Check again'}
-      </button>
-    </div>
-  );
-}
 
 // The account lgtm shows, as its avatar. A click lists the accounts gh is signed in to and, under them, glab's on each
 // GitLab host: picking one switches to it (the page loads again as that account; a GitLab one lists its MRs). Settings
@@ -2309,17 +2288,17 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
               <div class="team-head">
                 <GroupSwitcher value={shownGroup} teams={teams ?? []} recent={recentGroups} onPick={pickGroup} here={current?.repo} />
                 {shownGroup.startsWith('repo:') && (
-                  <select value={repoGroupBy} onChange={(e) => setRepoGroupBy(e.currentTarget.value)} aria-label="Group the repository's PRs by">
+                  <Select value={repoGroupBy} onChange={(e) => setRepoGroupBy(e.currentTarget.value)} aria-label="Group the repository's PRs by">
                     <option value="status">By status</option>
                     <option value="author">By author</option>
-                  </select>
+                  </Select>
                 )}
                 {!shownGroup.startsWith('repo:') && !shownGroup.startsWith('user:') && (
-                  <select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
+                  <Select value={teamSort} onChange={(e) => setTeamSort(e.currentTarget.value)} aria-label="Order members by">
                     <option value="waiting">Waiting longest</option>
                     <option value="free">Least busy</option>
                     <option value="name">Name</option>
-                  </select>
+                  </Select>
                 )}
               </div>
               {teamErr && <p class="error">{teamErr}</p>}

@@ -1,4 +1,6 @@
 import type { ComponentChildren } from 'preact';
+import { Select } from './select.tsx';
+import { Setup } from './signin.tsx';
 import { highlightCode, rainbow, splitLines } from './highlight.ts';
 import { md } from './markdown.ts';
 import { FileIcon, ModuleIcon } from './shortcuts.tsx';
@@ -702,9 +704,9 @@ export const SCENES: Record<string, { title: string; width: number; body: Compon
         <div class="merge-row merge-reason"><Octicon name="person" /><span class="merge-reason-t">Review required</span><button class="link">Ask reviewers</button></div>
         <div class="merge-row merge-reason"><Octicon name="dot-fill" /><span class="merge-reason-t">2 checks running</span></div>
         <div class="merge-row">
-          <select>
+          <Select>
             <option>Squash and merge</option>
-          </select>
+          </Select>
           <button disabled>Squash and merge</button>
           <button>Enable auto-merge</button>
         </div>
@@ -1253,7 +1255,7 @@ const TICKET = (open: boolean) => (
 const MERGE = (tick: boolean) => (
   <div class="demo-panel merge-confirm">
     <input value="Retry failed payments with backoff (#412)" aria-label="Commit title" />
-    <div class="merge-opt"><label><input type="checkbox" checked={tick} /> Move BUKU-4120 to</label> <select><option>Done</option></select></div>
+    <div class="merge-opt"><label><input type="checkbox" checked={tick} /> Move BUKU-4120 to</label> <Select><option>Done</option></Select></div>
     <div class="acts"><button>Cancel</button><button class="primary">Confirm squash and merge</button></div>
   </div>
 );
@@ -1722,6 +1724,8 @@ DEMOS.hideIndexToReview = { title: `A ${T.PR} waiting for your review, opened`, 
 
 // The whole window: top bar, PR list, the PR's index, and the PR (the README's first picture). After the others, which
 // it's made of.
+// The sign-in page, as a new teammate without gh signed in sees it.
+SCENES.signin = { title: 'Sign in', width: 900, body: <Setup error="gh isn't signed in." retry={async () => {}} /> };
 SCENES.app = {
     title: 'lgtm',
     width: 1400,

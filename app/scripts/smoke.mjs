@@ -519,7 +519,7 @@ try {
   const escapes = async (where) => {
     const n = await evaluate(`(() => {
       window.__float = (e) => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return (['absolute', 'fixed'].includes(s.position) || e.matches('dialog[open]')) && s.visibility !== 'hidden' && s.display !== 'none' && r.width > 40 && r.height > 20 && !e.closest('.demo-side'); };
-      const os = [...document.querySelectorAll('summary, [aria-haspopup]:not([aria-haspopup=false]), [aria-expanded]')].filter((o) => o.getClientRects().length && getComputedStyle(o).visibility !== 'hidden' && !o.closest('.demo-side, [inert]'));
+      const os = [...document.querySelectorAll('summary, [aria-haspopup]:not([aria-haspopup=false]), [aria-expanded]')].filter((o) => !o.matches(':disabled') && o.getClientRects().length && getComputedStyle(o).visibility !== 'hidden' && !o.closest('.demo-side, [inert]'));
       os.forEach((o, k) => (o.dataset.esc = k));
       return os.length;
     })()`);
@@ -540,7 +540,7 @@ try {
         // It went somewhere (Back): not an opener. Back to the page, its openers marked again.
         await evaluate(`location.hash = window.__hash`);
         await sleep(600);
-        await evaluate(`[...document.querySelectorAll('summary, [aria-haspopup]:not([aria-haspopup=false]), [aria-expanded]')].filter((o) => o.getClientRects().length && getComputedStyle(o).visibility !== 'hidden' && !o.closest('.demo-side, [inert]')).forEach((o, k) => (o.dataset.esc = k))`);
+        await evaluate(`[...document.querySelectorAll('summary, [aria-haspopup]:not([aria-haspopup=false]), [aria-expanded]')].filter((o) => !o.matches(':disabled') && o.getClientRects().length && getComputedStyle(o).visibility !== 'hidden' && !o.closest('.demo-side, [inert]')).forEach((o, k) => (o.dataset.esc = k))`);
         continue;
       }
       const opened = await evaluate(`[...document.querySelectorAll('body *')].some((e) => window.__float(e) && !window.__was.has(e) && ![...window.__was].some((w) => w.contains(e)))`);

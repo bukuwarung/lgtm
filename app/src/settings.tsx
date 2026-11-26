@@ -1,4 +1,5 @@
 import { PROMPTS, fillPrompt, type PromptKind } from './prompts.ts';
+import { Select } from './select.tsx';
 import { labMe } from './gitlab.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, commitEmails, tokenScopes, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
@@ -173,9 +174,9 @@ function AutoAgent() {
     <label class="set-row">
       <span>
         Reviewed by{' '}
-        <select value={cur} onChange={(e) => setPick(e.currentTarget.value)}>
+        <Select value={cur} onChange={(e) => setPick(e.currentTarget.value)}>
           {on.map((a) => <option value={a}>{AGENTS[a].name}</option>)}
-        </select>
+        </Select>
 
       </span>
     </label>
@@ -391,7 +392,7 @@ export function Settings() {
           {accounts && accounts.length > 1 ? (
             <label class="gh-account">
               Account LGTM uses{' '}
-              <select
+              <Select
                 value={ghAccount()}
                 onChange={(e) => {
                   const v = e.currentTarget.value;
@@ -404,7 +405,7 @@ export function Settings() {
                 {accounts.map((a) => (
                   <option value={a.login}>{a.login}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           ) : (
             accounts?.length === 1 && (
@@ -454,10 +455,10 @@ export function Settings() {
             {T.Team} to watch
             <small>For reviewer suggestions and Slack lookups.</small>
           </span>
-          <select value={team} onChange={(e) => setTeam(e.currentTarget.value)}>
+          <Select value={team} onChange={(e) => setTeam(e.currentTarget.value)}>
             <option value="">None</option>
             {((all) => all.map((t) => <option value={t}>{teamLabel(t, all)}</option>))([...new Set([...(team ? [team] : []), ...(teams ?? [])])])}
-          </select>
+          </Select>
         </label>
         <TimeToReview />
       </section>
@@ -714,18 +715,18 @@ export function Settings() {
         </label>
         <label class="set-row">
           <span>Code colours</span>
-          <select value={look.theme} onChange={(e) => look.setTheme(e.currentTarget.value)}>
+          <Select value={look.theme} onChange={(e) => look.setTheme(e.currentTarget.value)}>
             <option value="theme">The colour theme's own</option>
             {Object.entries(CODE_THEMES).map(([k, t]) => <option value={k}>{t.name}</option>)}
-          </select>
+          </Select>
         </label>
         <label class="set-row">
           <span>
             Code font
           </span>
-          <select value={look.font} onChange={(e) => look.setFont(e.currentTarget.value)}>
+          <Select value={look.font} onChange={(e) => look.setFont(e.currentTarget.value)}>
             {Object.entries(CODE_FONTS).map(([k, f]) => <option value={k}>{f.name}</option>)}
-          </select>
+          </Select>
         </label>
         <pre class="code-sample" dangerouslySetInnerHTML={{ __html: highlightCode(SAMPLE, 'kotlin') }} />
         <MarkdownStyle />
@@ -769,9 +770,9 @@ function MyTheme({ look }: { look: Look }) {
       <span class="row">
         {(['light', 'dark'] as const).map((a) =>
           of(a).length > 1 ? (
-            <select title={`The ${a} version`} value={t.pick?.[a]} onChange={(e) => saveTheme(look, look.appTheme, pickVariant(t, a, e.currentTarget.value))}>
+            <Select title={`The ${a} version`} value={t.pick?.[a]} onChange={(e) => saveTheme(look, look.appTheme, pickVariant(t, a, e.currentTarget.value))}>
               {of(a).map((v) => <option value={v.name}>{v.name}</option>)}
-            </select>
+            </Select>
           ) : null,
         )}
         <button onClick={() => (saveTheme(look, look.appTheme, null), look.setAppTheme('lgtm'))}>Delete</button>
@@ -977,11 +978,11 @@ function ViewedMarks() {
     <div class="set-flag with-demo">
       <label class="set-row">
         <span>Viewed marks</span>
-        <select value={v} onChange={(e) => set(e.currentTarget.value)}>
+        <Select value={v} onChange={(e) => set(e.currentTarget.value)}>
           <option value="show">Shown</option>
           <option value="small">Hidden on small {T.PRs} (under 10 files on show)</option>
           <option value="hide">Hidden</option>
-        </select>
+        </Select>
       </label>
       <DemoPair k="viewedMarks" active={v !== 'show'} pick={(o) => set(o ? 'hide' : 'show')} />
     </div>
@@ -994,9 +995,9 @@ function CenterCols() {
   return (
     <label class="set-row">
       <span>Width</span>
-      <select value={cols} onChange={(e) => setCols(e.currentTarget.value)}>
+      <Select value={cols} onChange={(e) => setCols(e.currentTarget.value)}>
         {['80', '100', '120', '140', '160'].map((c) => <option value={c}>{c} columns of code</option>)}
-      </select>
+      </Select>
     </label>
   );
 }
@@ -1244,7 +1245,7 @@ function MarkdownStyle() {
   const fontSelect = (k: 'body' | 'heading', label: string) => (
     <label class="md-ctl">
       <span>{label}</span>
-      <select value={s[k] ?? ''} onChange={(e) => (e.currentTarget.value ? set({ [k]: e.currentTarget.value }) : unset(k))}>
+      <Select value={s[k] ?? ''} onChange={(e) => (e.currentTarget.value ? set({ [k]: e.currentTarget.value }) : unset(k))}>
         <option value="">The theme's</option>
         <optgroup label="Your system">
           <option value="sans">Sans (the app's)</option>
@@ -1254,7 +1255,7 @@ function MarkdownStyle() {
         <optgroup label="Bundled">
           {Object.keys(MD_FONTS).map((f) => <option value={f}>{f}</option>)}
         </optgroup>
-      </select>
+      </Select>
       {reset(k)}
     </label>
   );
@@ -1822,21 +1823,21 @@ function AgentRow({ id }: { id: AgentId }) {
             <label>
               Model{' '}
               {models ? (
-                <select value={model} onChange={(e) => (setAgentModel(id, e.currentTarget.value), !effortsOf(id, e.currentTarget.value).includes(agentEffort(id)) && setAgentEffort(id, ''))}>
+                <Select value={model} onChange={(e) => (setAgentModel(id, e.currentTarget.value), !effortsOf(id, e.currentTarget.value).includes(agentEffort(id)) && setAgentEffort(id, ''))}>
                   <option value="">Default</option>
                   {models.map(([v, n]) => <option value={v}>{n}</option>)}
                   {model && !models.some(([v]) => v === model) && <option value={model}>{model}</option>}
-                </select>
+                </Select>
               ) : (
                 <input class="model-input" placeholder={`${a.short}'s default`} value={model} onChange={(e) => setAgentModel(id, e.currentTarget.value.trim())} />
               )}
             </label>
             <label>
               Effort{' '}
-              <select value={agentEffort(id)} onChange={(e) => setAgentEffort(id, e.currentTarget.value)}>
+              <Select value={agentEffort(id)} onChange={(e) => setAgentEffort(id, e.currentTarget.value)}>
                 <option value="">Default</option>
                 {effortsOf(id, model).map((v) => <option value={v}>{EFFORT_NAME[v]}</option>)}
-              </select>
+              </Select>
             </label>
           </div>
           <AgentSkill agent={id} />

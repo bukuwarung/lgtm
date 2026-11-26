@@ -58,16 +58,26 @@ button.primary:hover:not(:disabled) { background: color-mix(in srgb, #000 10%, v
 button.primary:active:not(:disabled) { background: color-mix(in srgb, #000 18%, var(--primary)); border-color: color-mix(in srgb, #000 18%, var(--primary)); }
 button:disabled { opacity: .5; cursor: default; }
 /* Dropdowns: drawn like the buttons (border, a little depth), with their own chevron, in both themes. */
-select {
+:is(select, button.select) {
   appearance: none; -webkit-appearance: none; box-sizing: border-box; max-width: 100%;
   padding: 4px 28px 4px 10px; font: inherit; color: var(--fg); cursor: pointer;
   border: 1px solid var(--btn-edge); border-bottom-color: var(--btn-edge-low); border-radius: 6px;
   background: var(--btn-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%238b949e' d='M4.43 6.18a.75.75 0 0 1 1.06.02L8 8.85l2.51-2.65a.75.75 0 1 1 1.09 1.03l-3.06 3.23a.75.75 0 0 1-1.09 0L4.4 7.23a.75.75 0 0 1 .03-1.05Z'/%3E%3C/svg%3E") no-repeat right 7px center / 16px;
   transition: border-color .12s, box-shadow .12s;
 }
-select:hover { border-color: color-mix(in srgb, var(--fg) 32%, var(--border)); background-color: color-mix(in srgb, var(--fg) 6%, var(--btn-bg)); }
-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-select:disabled { opacity: .5; cursor: default; }
+:is(select, button.select):hover:not(:disabled) { border-color: color-mix(in srgb, var(--fg) 32%, var(--border)); background-color: color-mix(in srgb, var(--fg) 6%, var(--btn-bg)); }
+:is(select, button.select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:is(select, button.select):disabled { opacity: .5; cursor: default; }
+/* The dropdown (select.tsx): its button as a select is, its words from the left, cut with … when long; its list as the
+   app's other menus are (the account menu's card, rows, hover), the chosen one ticked. */
+button.select { display: inline-block; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: auto; min-height: 0; line-height: inherit; font-weight: 400; }
+.select-menu { position: fixed; z-index: 1000; display: grid; gap: 1px; align-content: start; padding: 5px; overflow-y: auto; box-sizing: border-box; font-size: calc(13px * var(--ts)); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); animation: lgtm-in .12s ease-out; }
+.select-opt { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; border-radius: 6px; white-space: nowrap; cursor: default; }
+.select-opt.hi { background: var(--soft); }
+.select-opt.off { opacity: .45; }
+.select-tick { display: inline-flex; width: 14px; flex: none; color: var(--accent); }
+.select-group { padding: 6px 8px 2px 26px; font-size: calc(11px * var(--ts)); font-weight: 600; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .select-menu { animation: none; } }
 input:not([type=radio]):not([type=checkbox]), textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; width: 100%; }
 code, pre { font-family: var(--mono); }
 /* Code ligatures (=>, !=, ===, ->) via the font's contextual alternates. */
@@ -92,7 +102,15 @@ code, pre { font-family: var(--mono); }
 .brand { display: inline-flex; align-items: center; gap: 6px; }
 .brand:hover { text-decoration: none; }
 .spacer { flex: 1; }
-.signin { max-width: 720px; margin: 48px auto; padding: 0 16px; }
+.signin { max-width: 600px; margin: 8vh auto 48px; padding: 0 16px; }
+.hero { display: grid; justify-items: center; gap: 4px; margin-bottom: 24px; text-align: center; }
+.hero h1 { margin: 8px 0 0; font-size: calc(28px * var(--ts)); font-weight: 700; letter-spacing: .02em; }
+.tagline { margin: 0; color: var(--muted); font-size: calc(15px * var(--ts)); }
+.signin-card { display: grid; gap: 10px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); box-shadow: 0 1px 3px var(--shadow); }
+.signin-card :is(p, pre) { margin: 0; }
+.signin-card > button.primary { justify-self: start; margin-top: 4px; }
+.welcome-h { display: flex; align-items: center; gap: 12px; }
+.welcome-h .note { margin: 2px 0 0; }
 .repo { color: var(--muted); margin-right: 4px; }
 .meta { display: block; color: var(--muted); font-size: calc(12px * var(--ts)); }
 
@@ -270,9 +288,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 .pr-group > summary { padding: 4px; font-weight: 600; font-size: calc(12px * var(--ts)); cursor: pointer; }
 .gdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 2px; }
 .pr-tabs { display: flex; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
-.pr-tabs button { flex: 1; min-width: 0; display: flex; justify-content: center; align-items: center; white-space: nowrap; /* a narrow sidebar or large text: "Review…" with its count whole, not a word broken over two lines, nor Browse pushed out; the name in full on hover */ padding: 6px 4px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; font-weight: 600; font-size: calc(12px * var(--ts)); color: var(--muted); cursor: pointer; }
+.pr-tabs button { flex: 1 1 auto; min-width: 0; gap: 4px; display: flex; justify-content: center; align-items: center; white-space: nowrap; /* a narrow sidebar or large text: "Review…" with its count whole, not a word broken over two lines, nor Browse pushed out; the name in full on hover */ padding: 6px 4px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; font-weight: 600; font-size: calc(12px * var(--ts)); color: var(--muted); cursor: pointer; }
 .pr-tabs .tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.pr-tabs .count { flex-shrink: 0; }
+.pr-tabs .count { flex-shrink: 0; margin: 0; } /* each tab as wide as its words (equal thirds cut "Reviewing" while Browse had room), its count close by */
 .pr-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
 .g-m-changes { --g: var(--g-changes); } .g-m-ready { --g: var(--g-approved); } .g-m-nobody { --g: var(--pill-warn, var(--g-commented)); } .g-m-approved { --g: var(--g-approved); } .g-m-waiting { --g: var(--g-needs); } .g-m-draft { --g: var(--g-commented); }
 .g-agents { --g: var(--pill-ok, var(--add)); } .g-needs { --g: var(--g-needs); } .g-mentioned { --g: var(--g-mentioned); } .g-changes { --g: var(--g-changes); } .g-commented { --g: var(--g-commented); } .g-approved { --g: var(--g-approved); }
@@ -819,8 +837,8 @@ dialog.base-dialog input { width: 100%; box-sizing: border-box; }
 .set-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
 .set-row > span:first-of-type { flex: 1; }
 /* A dropdown right after its label (as a switch sits by its own), not out at the row's far edge. */
-.set-row:has(> :is(select, .set-seg)) { align-items: center; }
-.set-row:has(> :is(select, .set-seg)) > span:first-of-type { flex: 0 0 auto; min-width: 140px; }
+.set-row:has(> :is(select, .select, .set-seg)) { align-items: center; }
+.set-row:has(> :is(select, .select, .set-seg)) > span:first-of-type { flex: 0 0 auto; min-width: 140px; }
 .set-row input:is([type=checkbox], [type=radio]) { margin-top: 3px; }
 .settings small { display: block; color: var(--muted); font-size: calc(12px * var(--ts)); }
 .set-int { display: flex; gap: 10px; padding: 8px 0; }
@@ -1075,7 +1093,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .md-style { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .md-ctls { display: grid; gap: 8px; }
 .md-ctl { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) auto auto; align-items: center; gap: 8px; font-size: calc(13px * var(--ts)); }
-.md-ctl select { min-width: 0; }
+.md-ctl :is(select, .select) { min-width: 0; }
 .md-val { font-size: calc(12px * var(--ts)); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .md-check { grid-template-columns: 9.5em 1fr; }
 .md-check > span:last-child { display: flex; align-items: center; gap: 6px; } /* the box centred on "Full width" */
