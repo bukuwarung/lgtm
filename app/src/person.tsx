@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
 import { ago, personKey, usePresence, repoLabel, viewAs, term, shownName, getSlackPeople, fetchIntegrations, openExternal, faceOf } from './platform.ts';
 import { isAway, statusText, zoneLine } from './slackmsg.ts';
-import { Octicon, Empty, Tg, Who, Time } from './tags.tsx';
+import { Octicon, Empty, Stats, Tg, Who, Time } from './tags.tsx';
 import { PageSkeleton } from './history.tsx';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
@@ -81,16 +81,14 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
           {dm && <button onClick={() => void openExternal(dm)}>Message on Slack</button>}
         </div>
       </header>
-      <p class="history-sum">
-        {[
-          `${p.mine.length} open ${term(login.includes('@')).PR}${p.mine.length === 1 ? '' : 's'}`,
-          `${p.asked.length} waiting on their review`,
-          `${p.reviews.length} review${p.reviews.length === 1 ? '' : 's'} this month`,
-          count('APPROVED') && `${count('APPROVED')} approved`,
-          count('CHANGES_REQUESTED') && `${count('CHANGES_REQUESTED')} with changes requested`,
-          median != null && `typically ${hours(median)} after being asked`,
-        ].filter(Boolean).join(' · ')}
-      </p>
+      <Stats items={[
+        { n: p.asked.length, label: 'Waiting on their review' },
+        { n: p.mine.length, label: `Open ${term(login.includes('@')).PR}${p.mine.length === 1 ? '' : 's'}` },
+        { n: median != null ? hours(median) : '–', label: 'Typical response', title: 'How long after being asked they typically reviewed, this month (the median)' },
+        { n: p.reviews.length, label: `Review${p.reviews.length === 1 ? '' : 's'} this month` },
+        { n: count('APPROVED'), label: 'Approved', tone: 'ok' },
+        { n: count('CHANGES_REQUESTED'), label: 'Changes requested' },
+      ]} />
       <section>
         <h4>Waiting on their review</h4>
         {p.asked.length ? p.asked.map((i) => <Row i={i} waiting />) : <p class="note">None.</p>}

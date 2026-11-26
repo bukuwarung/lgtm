@@ -156,6 +156,19 @@ export const Empty = ({ icon = 'check', tone, children, action }: { icon?: strin
   </div>
 );
 
+// Numbers at a glance (the start page, Your reviews, a person's page): each a card, its number above its label. One that's
+// nothing (0, –) is grey; one that asks something of you takes its colour. With onClick, a card opens what it counts.
+export type Stat = { n: number | string; label: string; tone?: 'act' | 'ok' | 'bad'; title?: string; onClick?: () => void };
+export const Stats = ({ items, cols = 3 }: { items: Stat[]; cols?: number }) => (
+  <div class="start-grid" style={{ '--cols': cols }}>
+    {items.map((s) => {
+      const cls = `start-card${s.n === 0 || s.n === '–' ? ' none' : s.tone ? ' ' + s.tone : ''}${s.onClick ? '' : ' still'}`;
+      const body = <><b>{s.n}</b><span>{s.label}</span></>;
+      return s.onClick ? <button class={cls} title={s.title} onClick={s.onClick}>{body}</button> : <div class={cls} title={s.title}>{body}</div>;
+    })}
+  </div>
+);
+
 // LGTM's icon as the app is now, light or dark (the Dock's own follows macOS's icon style instead).
 export const AppIcon = ({ size, alt = '' }: { size?: number; alt?: string }) => (
   <img src={useAppDark() ? '/app-icon-dark.png' : '/app-icon.png'} alt={alt} width={size} height={size} />

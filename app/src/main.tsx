@@ -9,7 +9,7 @@ import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
-import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry, Empty, AppIcon } from './tags.tsx';
+import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry, Empty, AppIcon, Stats, type Stat } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -490,28 +490,37 @@ function GroupSwitcher({ value, teams, recent, onPick, here }: { value: string; 
 // No PR open: the queue at a glance; each number opens its tab of the list.
 function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: string) => void }) {
   const [showDrafts] = useStoredFlag('showDrafts', false);
+  const recent = useRecentPRs();
   if (!items) return <Empty icon="git-pull-request">Pick a {T.PR}, or paste a link (⌘K).</Empty>;
   const needs = toReview(items, showDrafts);
   const mine = items.filter((i) => i.authored && !i.isDraft);
   const oldest = needs.map((i) => i.waitingSince).sort()[0];
   const replies = repliesWaiting(items);
-  // Two groups of three: what waits on you, and where your own stand. A number that's nothing (0, –) is grey; one that
-  // asks something of you takes its colour (to act on, ready, changes asked).
-  type Card = [tab: string, n: number | string, label: string, title: string, tone: 'act' | 'ok' | 'bad' | ''];
-  const groups: [string, Card[]][] = [
+  // Two groups of three: what waits on you, and where your own stand (Stats: a nothing grey, an ask in its colour).
+  const open = (tab: string) => () => (tab === 'inbox' ? (location.hash = '/inbox') : onTab(tab));
+  const groups: [string, Stat[], ComponentChildren?][] = [
     ['To review', [
-      ['reviewing', needs.length, `${T.PR}${needs.length === 1 ? '' : 's'} to review`, needs.length ? 'Open the Reviewing tab' : '', 'act'],
-      ['reviewing', oldest ? ago(oldest).replace(/ ago$/, '') : '–', 'Oldest wait', oldest ? `Since ${new Date(oldest).toLocaleString()}` : '', ''],
-      ['inbox', replies, 'Waiting on your reply', 'Threads and mentions waiting on your reply: open them, to reply or resolve', 'act'],
-    ]],
+      { n: needs.length, label: `${T.PR}${needs.length === 1 ? '' : 's'} to review`, tone: 'act', title: needs.length ? 'Open the Reviewing tab' : '', onClick: open('reviewing') },
+      { n: oldest ? ago(oldest).replace(/ ago$/, '') : '–', label: 'Oldest wait', title: oldest ? `Since ${new Date(oldest).toLocaleString()}` : '', onClick: open('reviewing') },
+      { n: replies, label: 'Waiting on your reply', tone: 'act', title: 'Threads and mentions waiting on your reply: open them, to reply or resolve', onClick: open('inbox') },
+    ], <a href="#/history">Your reviews this month →</a>],
     [`Your ${T.PRs}`, [
-      ['mine', mine.filter((i) => i.reviewDecision !== 'APPROVED' && i.reviewDecision !== 'CHANGES_REQUESTED').length, 'Waiting for review', `Open Your ${T.PRs}`, ''],
-      ['mine', mine.filter(readyToMerge).length, 'Ready to merge', `Open Your ${T.PRs}`, 'ok'],
-      ['mine', mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, 'Changes requested', `Open Your ${T.PRs}`, 'bad'],
+      { n: mine.filter((i) => i.reviewDecision !== 'APPROVED' && i.reviewDecision !== 'CHANGES_REQUESTED').length, label: 'Waiting for review', title: `Open Your ${T.PRs}`, onClick: open('mine') },
+      { n: mine.filter(readyToMerge).length, label: 'Ready to merge', tone: 'ok', title: `Open Your ${T.PRs}`, onClick: open('mine') },
+      { n: mine.filter((i) => i.reviewDecision === 'CHANGES_REQUESTED').length, label: 'Changes requested', tone: 'bad', title: `Open Your ${T.PRs}`, onClick: open('mine') },
     ]],
   ];
   const saved = Object.values(readSaved());
   const savedLines = saved.reduce((a, b) => a + b, 0);
+  // A new teammate: nothing to review, nothing of theirs, nothing opened yet. What to do, not six zeros.
+  if (!needs.length && !mine.length && !replies && !recent.length && !savedLines)
+    return (
+      <div class="page start">
+        <Empty icon="git-pull-request" action={['Browse PRs', () => onTab('team')]}>
+          Nothing waits on you yet. Paste a {T.PR}'s link to open it (⌘K), or browse your team's {T.PRs}.
+        </Empty>
+      </div>
+    );
   return (
     <div class="page start">
       {savedLines > 0 && (
@@ -519,22 +528,12 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
           LGTM has kept <b>{savedLines.toLocaleString()} lines</b> (about {readTime(savedLines)} of reading) out of your way in the {saved.length} {saved.length === 1 ? T.PR : T.PRs} you've reviewed
         </p>
       )}
-      {groups.map(([head, cards]) => (
+      {groups.map(([head, items, link]) => (
         <section class="start-group" aria-label={head}>
-          <h3>{head}</h3>
-          <div class="start-grid">
-            {cards.map(([tab, n, label, title, tone]) => (
-              <button class={`start-card${n === 0 || n === '–' ? ' none' : tone ? ' ' + tone : ''}`} title={title} onClick={() => (tab === 'inbox' ? (location.hash = '/inbox') : onTab(tab))}>
-                <b>{n}</b>
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
+          <h3>{head}{link && <span class="start-link">{link}</span>}</h3>
+          <Stats items={items} />
         </section>
       ))}
-      <p class="note">
-        Pick a PR, or paste a link (⌘K). <a href="#/history">Your reviews this month →</a>
-      </p>
       <RecentList max={8} />
       <StaleBranches />
     </div>

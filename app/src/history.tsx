@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getMyReviews, type MyReview } from './github.ts';
 import { copyText, readSaved, readTime, repoLabel } from './platform.ts';
-import { Empty, Tg, Who } from './tags.tsx';
+import { Empty, Stats, Tg, Who } from './tags.tsx';
 
 // While a page of PRs loads (this one, a person's): its shape, shimmering (style.css .sk). `face`: a picture by the title.
 const SK = [78, 62, 88, 55, 70];
@@ -72,8 +72,16 @@ export function History() {
   return (
     <div class="page history">
       <h2>Your reviews this month</h2>
+      {list.length > 0 && (
+        <Stats cols={4} items={[
+          { n: list.length, label: `Review${list.length === 1 ? '' : 's'}` },
+          { n: count('APPROVED'), label: 'Approved', tone: 'ok' },
+          { n: count('CHANGES_REQUESTED'), label: 'Changes requested' },
+          { n: median != null ? hours(median) : '–', label: 'Typical response', title: 'How long after being asked you typically reviewed (the median)' },
+        ]} />
+      )}
       <p class="history-sum">
-        {list.length ? summary : 'No reviews in the last 30 days.'}
+        {list.length ? (kept ? `LGTM kept ${kept.toLocaleString()} lines (about ${readTime(kept)} of reading) out of your way.` : '') : 'No reviews in the last 30 days.'}
         {list.length > 0 && <button class="link" onClick={copy}>{copied ? 'Copied' : 'Copy as text'}</button>}
       </p>
       {days.map((d) => (
