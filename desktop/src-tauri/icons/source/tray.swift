@@ -1,18 +1,32 @@
-// The menu bar icon: the app icon's LGTM stamp, as a template (black on clear; macOS colours it), 18pt drawn at 36px.
-// arg 1: stamp, arg 2: out.png
+// The menu bar icon: the app icon's LGTM stamp as a template (black on clear; macOS colours it), 18pt at 36px. At that
+// size the letters go on two lines (LG over TM) to stay readable, a little turned as a stamp is, centred by their ink
+// (a font's box leaves capitals low). Drawn at 4x and scaled down. arg 1: out.png (36x36)
 import AppKit
-let a = CommandLine.arguments
-let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 36, pixelsHigh: 36, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-let ctx = NSGraphicsContext.current!.cgContext
-NSColor.black.setFill(); NSColor.black.setStroke()
-func bar(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat = 3) { NSBezierPath(roundedRect: NSRect(x: x, y: 36 - y - h, width: w, height: h), xRadius: h / 2, yRadius: h / 2).fill() }
-if a[1] == "stamp" { // the stamp alone: a double ring, turned, with "LGTM" as two lines of ink
-  ctx.translateBy(x: 18, y: 18); ctx.rotate(by: 0.26)
-  let o = NSBezierPath(ovalIn: NSRect(x: -15.5, y: -15.5, width: 31, height: 31)); o.lineWidth = 3; o.stroke()
-  let i = NSBezierPath(ovalIn: NSRect(x: -11, y: -11, width: 22, height: 22)); i.lineWidth = 1.5; i.stroke()
-  let s = NSAttributedString(string: "LGTM", attributes: [.font: NSFont.systemFont(ofSize: 9.5, weight: .black), .foregroundColor: NSColor.black, .kern: -0.4])
-  let z = s.size(); s.draw(at: NSPoint(x: -z.width / 2, y: -z.height / 2 + 0.5))
+let tilt: CGFloat = 0.2, size: CGFloat = 11.5, gap: CGFloat = 2.2
+func bitmap(_ draw: (CGContext) -> Void) -> NSBitmapImageRep {
+  let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 144, pixelsHigh: 144, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+  NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+  let ctx = NSGraphicsContext.current!.cgContext; ctx.scaleBy(x: 4, y: 4); NSColor.black.setFill(); NSColor.black.setStroke(); draw(ctx)
+  NSGraphicsContext.restoreGraphicsState(); return rep
 }
-NSGraphicsContext.restoreGraphicsState()
-try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: a[2]))
+let font = NSFont.systemFont(ofSize: size, weight: .heavy)
+func letters(_ ctx: CGContext, _ dx: CGFloat, _ dy: CGFloat) {
+  ctx.saveGState(); ctx.translateBy(x: 18 + dx, y: 18 + dy); ctx.rotate(by: tilt)
+  for (t, up) in [("LG", true), ("TM", false)] {
+    let s = NSAttributedString(string: t, attributes: [.font: font, .foregroundColor: NSColor.black, .kern: -0.3])
+    let base = up ? gap / 2 : -gap / 2 - font.capHeight // each line's baseline, the pair's middle at 0
+    s.draw(at: NSPoint(x: -s.size().width / 2, y: base + font.descender))
+  }
+  ctx.restoreGState()
+}
+// Where the letters' ink lands, to move it onto the ring's centre.
+let probe = bitmap { letters($0, 0, 0) }
+var lo = CGPoint(x: 999, y: 999), hi = CGPoint(x: -1, y: -1)
+for y in 0..<144 { for x in 0..<144 where probe.colorAt(x: x, y: y)!.alphaComponent > 0.3 { lo.x = min(lo.x, CGFloat(x)); hi.x = max(hi.x, CGFloat(x)); lo.y = min(lo.y, CGFloat(y)); hi.y = max(hi.y, CGFloat(y)) } }
+let dx = 18 - (lo.x + hi.x + 1) / 8, dy = -(18 - (lo.y + hi.y + 1) / 8) // bitmap rows run down, drawing up
+let rep = bitmap { ctx in
+  let o = NSBezierPath(ovalIn: NSRect(x: 1.5, y: 1.5, width: 33, height: 33)); o.lineWidth = 3; o.stroke()
+  letters(ctx, dx, dy)
+}
+let out = CommandLine.arguments[1] + ".4x.png"
+try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out))

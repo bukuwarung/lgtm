@@ -19,5 +19,5 @@ rm -rf AppIcon.iconset icon-1024.png
 # macOS 26's light/dark/tinted icon: its parts (../AppIcon.icon, compiled by the release build, which has Xcode)
 swift draw.swift layers ../AppIcon.icon/Assets
 # The menu bar icon (and its copy for the Settings preview)
-swift tray.swift stamp ../tray-template.png && cp ../tray-template.png ../../../../app/public/tray-template.png
+swift tray.swift ../tray-template.png && sips -z 36 36 ../tray-template.png.4x.png --out ../tray-template.png >/dev/null && rm ../tray-template.png.4x.png && cp ../tray-template.png ../../../../app/public/tray-template.png
 echo done
