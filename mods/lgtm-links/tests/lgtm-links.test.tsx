@@ -65,8 +65,8 @@ test('/lgtm opens the link given, else the last one in the conversation, with th
   on('session.messages', () => ({ value: said as never }))
   on('command.run', () => ({ text: '' }))
 
-  expect((await $.command.run(run('https://github.com/acme/shop/pull/7/files'))).text).toBe('Opened acme/shop#7 in lgtm.')
-  expect((await $.command.run(run(''))).text).toBe('Opened acme/app#90 in lgtm.')
+  expect((await $.command.run(run('https://github.com/acme/shop/pull/7/files'))).text).toBe('Opened acme/shop#7 in LGTM.')
+  expect((await $.command.run(run(''))).text).toBe('Opened acme/app#90 in LGTM.')
   expect(runs).toEqual([
     ['open', 'lgtm://acme/shop/pull/7?claude=1b2c3d4e-0000-4000-8000-000000000000'],
     ['open', 'lgtm://acme/app/pull/90?claude=1b2c3d4e-0000-4000-8000-000000000000'],
@@ -93,7 +93,7 @@ test('what lgtm left for this session is handed to it once, then the file is gon
   expect(looked).toContain(file)
   expect(runs).toEqual([['rm', '-f', file]])
   expect(sent).toHaveLength(1)
-  expect(sent[0]).toContain('From lgtm')
+  expect(sent[0]).toContain('From LGTM')
   expect(sent[0]).toContain('make the backoff configurable')
 
   // Nothing waiting since: nothing more sent.

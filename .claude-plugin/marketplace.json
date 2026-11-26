@@ -1,6 +1,6 @@
 {
   "name": "lgtm",
-  "description": "Claude Code mods for lgtm, the GitHub and GitLab code review app for your Mac",
+  "description": "Claude Code mods for LGTM, the GitHub and GitLab code review app for your Mac",
   "owner": {
     "name": "BukuWarung"
   },
@@ -8,7 +8,7 @@
     {
       "name": "lgtm-links",
       "source": "./mods/lgtm-links",
-      "description": "Open GitHub pull requests and GitLab merge requests in lgtm from Claude Code: a button under replies that link one, and /lgtm"
+      "description": "Open GitHub pull requests and GitLab merge requests in LGTM from Claude Code: a button under replies that link one, and /lgtm"
     }
   ]
 }

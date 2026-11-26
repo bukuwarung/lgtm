@@ -26,7 +26,7 @@ const deliverOutbox = async ($: EngineInterface, file: string) => {
   await $.process.run(['rm', '-f', file])
   if (!text) return false
   await $.prompt.submit({
-    text: `From lgtm, sent to this session (messages separated by ---). Act on each: a review lists the verdict and its comments; a single comment is one to address.\n\n${text}`,
+    text: `From LGTM, sent to this session (messages separated by ---). Act on each: a review lists the verdict and its comments; a single comment is one to address.\n\n${text}`,
   })
   return true
 }
@@ -37,7 +37,7 @@ const OpenRow = ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolv
   const { Box, Button, Text } = $.ui.resolve(e)
   return (
     <Box flexDirection="row">
-      <Text dimColor>Open in lgtm: </Text>
+      <Text dimColor>Open in LGTM: </Text>
       {prs.map(pr => (
         <Button key={pr} label={pr} onPress={() => void openInLgtm($, pr)} />
       ))}
@@ -56,7 +56,7 @@ export const register: Register = on => {
     })
     await $.command.register({
       name: 'lgtm',
-      description: "Open a pull request in lgtm: the link given, else the last one in this conversation, else this branch's",
+      description: "Open a pull request in LGTM: the link given, else the last one in this conversation, else this branch's",
       argumentHint: '[PR link]',
     })
     return next(e)
@@ -69,7 +69,7 @@ export const register: Register = on => {
     if (!pr) pr = prsIn((await $.process.run(['glab', 'mr', 'view', '-F', 'json'])).stdout)[0]
     if (!pr) return { text: "No pull request to open: give its link, or run /lgtm on a branch that has one." }
     const opened = await openInLgtm($, pr)
-    return { text: opened.exitCode === 0 ? `Opened ${pr} in lgtm.` : "Couldn't open lgtm: is the app installed?" }
+    return { text: opened.exitCode === 0 ? `Opened ${pr} in LGTM.` : "Couldn't open LGTM: is the app installed?" }
   })
 
   // Under a reply that links pull requests: a button for each, opening it in lgtm (the links themselves open GitHub).

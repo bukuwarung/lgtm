@@ -1,4 +1,6 @@
-# lgtm
+<img src="desktop/src-tauri/icons/icon.png" alt="" width="96" align="left">
+
+# LGTM
 
 **Say LGTM and mean it.**
 
@@ -6,7 +8,7 @@ Fast GitHub PR and GitLab MR review for your Mac: every file on one page, the no
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-app-dark.png">
-  <img alt="lgtm: the PR list, a PR's index (conversation, reviewers, checks, threads, files by module) and the PR, with a review thread" src="docs/features/scene-app-light.png" width="900">
+  <img alt="LGTM: the PR list, a PR's index (conversation, reviewers, checks, threads, files by module) and the PR, with a review thread" src="docs/features/scene-app-light.png" width="900">
 </picture>
 
 ## Install
@@ -25,7 +27,7 @@ brew install gh && gh auth login       # GitHub
 brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com for your own)
 ```
 
-`brew upgrade` keeps it current. Slack and Jira are optional: lgtm shows how to set them up on first launch.
+`brew upgrade` keeps it current. Slack and Jira are optional: LGTM shows how to set them up on first launch.
 
 ## Highlights
 
@@ -96,20 +98,20 @@ brew install glab && glab auth login   # GitLab (--hostname gitlab.example.com f
 - Labels, assignees and milestone in the index, each with a + on its header; the Conversation header has the bell (your notifications) and the lock. Empty sections are left out (a switch); icons at the top of the index add them; the first one there lists the commits.
 - Branches you pushed in the last three days with no PR yet wait above Your PRs (and in ⌘K): open one with its title, the repo's template, the base and draft or not.
 - Other PRs for the same Jira ticket, in any of your repos, under the ticket.
-- A link to a PR, a comment or a file of this PR, in anything people wrote, opens here; Jira keys link to the ticket; links that leave lgtm end in ↗.
+- A link to a PR, a comment or a file of this PR, in anything people wrote, opens here; Jira keys link to the ticket; links that leave LGTM end in ↗.
 - Files and repos by their short names, with as many parent folders (or the owner) as it takes to tell them apart.
 - Side-by-side or unified, centred or full width, in your pick of themes and fonts.
 - Android `strings.xml` as texts, with the other languages checked.
 
 ## Checks
 
-lgtm reads the diff for what's easy to miss, and says so in a pill with a comment drafted for you. Each one can be switched off in Settings.
+LGTM reads the diff for what's easy to miss, and says so in a pill with a comment drafted for you. Each one can be switched off in Settings.
 
 - **Any repo:** possible secrets, dependency changes (major jumps and versions not pinned marked), binaries that belong in Git LFS, code changed without tests, test files deleted, tests, CI and checks switched off (`@Ignore`, `.skip`, `continue-on-error`, `-x test`, `@Suppress`, `eslint-disable`, `noqa`, `nolint`…), protections switched off (release builds not minified, `debuggable`, plain HTTP, TLS not checked).
 - **Android:** UI text not in `strings.xml`, Room tables changed without a version bump, what a manifest change means, new lint suppressions.
 - **Java backend:** Flyway migrations edited or out of order, JPA entities changed with no migration, `@Transactional` on a private method.
 - **Web:** a lockfile not updated, `.only` and `debugger` left in, raw HTML (`v-html`, `dangerouslySetInnerHTML`).
-- On your own PR, lgtm shows what it found before you ask anyone to review.
+- On your own PR, LGTM shows what it found before you ask anyone to review.
 
 ## Specs and code
 
@@ -233,7 +235,7 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
   <img alt="The Agents menu on a PR: a review by Claude Code or Codex, a question about the PR, and its linked Claude Code session (the green dot)" src="docs/features/scene-claude-light.png" width="760">
 </picture>
 
-- Claude Code and Codex, each found through its CLI and switched on or off in Settings → Coding agents, with its own model and effort. They run with no tools: they read what lgtm gives them and answer.
+- Claude Code and Codex, each found through its CLI and switched on or off in Settings → Coding agents, with its own model and effort. They run with no tools: they read what LGTM gives them and answer.
 - A PR's **Agents** menu (<kbd>a</kbd>) runs any of them on it: you pick the agent each time.
 
 **Reviews**
@@ -262,19 +264,19 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
 </picture>
 
 - When a PR you reviewed comes back with new commits, the agent checks each of your open threads against them: addressed (Resolve, or all at once) or not yet, and why. On your own PRs, the same for the reviewers who asked for changes, before you ask them to look again.
-- A desktop notification when an agent finishes while lgtm is in the background.
+- A desktop notification when an agent finishes while LGTM is in the background.
 
 **Sessions**
 
 - The Agents menu also opens the PR's Claude Code session or Codex conversation, or starts one with the PR in the prompt; for Claude Code you see whether it's working or waiting for you.
 - With the lgtm-review skill (Settings → Coding agents, for each agent), Claude Code and Codex send PRs here for review, and get your review back to act on.
-- The `lgtm-links` mod for Claude Code puts an **Open in lgtm** button under replies that link a PR and under `gh pr create`, and adds `/lgtm` (the PR given, else the last one linked, else this branch's). PRs it opens are linked to the session, so the Agents menu comes back to it, and a review or comment you send the session from lgtm reaches it by itself, no "check lgtm" needed. At the prompt of a terminal session:
+- The `lgtm-links` mod for Claude Code puts an **Open in LGTM** button under replies that link a PR and under `gh pr create`, and adds `/lgtm` (the PR given, else the last one linked, else this branch's). PRs it opens are linked to the session, so the Agents menu comes back to it, and a review or comment you send the session from LGTM reaches it by itself, no "check lgtm" needed. At the prompt of a terminal session:
 
   ```
   /plugin install lgtm-links --marketplace bukuwarung/lgtm
   ```
 
-- The `lgtm-links` plugin for Codex hands a review or comment you send a conversation from lgtm to it on your next message, no "check lgtm" needed, and adds `/lgtm`. Codex asks you to trust its hook once. In a terminal:
+- The `lgtm-links` plugin for Codex hands a review or comment you send a conversation from LGTM to it on your next message, no "check lgtm" needed, and adds `/lgtm`. Codex asks you to trust its hook once. In a terminal:
 
   ```
   codex plugin marketplace add bukuwarung/lgtm && codex plugin add lgtm-links@lgtm
@@ -284,21 +286,21 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/features/scene-themes-dark.png">
-  <img alt="Colour themes as cards, each with its light and dark version: lgtm, One, Ayu and Gruvbox; more from Zed's theme gallery or a file" src="docs/features/scene-themes-light.png" width="760">
+  <img alt="Colour themes as cards, each with its light and dark version: LGTM, One, Ayu and Gruvbox; more from Zed's theme gallery or a file" src="docs/features/scene-themes-light.png" width="760">
 </picture>
 
-- Whole-app colour themes, light and dark: lgtm's own, One, Ayu, Gruvbox, and hundreds from Zed and VS Code.
-- lgtm's own marks (warnings, findings, away) take the theme's colours where they read well on it; a switch keeps lgtm's.
+- Whole-app colour themes, light and dark: LGTM's own, One, Ayu, Gruvbox, and hundreds from Zed and VS Code.
+- LGTM's own marks (warnings, findings, away) take the theme's colours where they read well on it; a switch keeps LGTM's.
 - Text size reaches everything, Mermaid diagrams included; times read as "2 hours ago" or the date, your pick.
 
 ## On your Mac
 
 - A menu bar item and Dock badge with what needs your review.
-- `lgtm <PR link>` in Terminal opens it in the app; so do `lgtm://` links, and lgtm offers to open a PR link you copy.
+- `lgtm <PR link>` in Terminal opens it in the app; so do `lgtm://` links, and LGTM offers to open a PR link you copy.
 - Several GitHub accounts, Launch at login, and updates through Homebrew.
 - A narrow window keeps the diff readable: the index, then the PR list, open over it from their buttons.
 - Reduce motion and Increase contrast in macOS's Accessibility settings are followed.
-- Offline, one bar says so; what was loaded stays, and lgtm loads again once GitHub answers. A part that fails to load has its own Retry.
+- Offline, one bar says so; what was loaded stays, and LGTM loads again once GitHub answers. A part that fails to load has its own Retry.
 
 ## More
 
@@ -306,4 +308,4 @@ Each with a switch and a preview in Settings, on unless it says otherwise:
 
 ## License
 
-[MIT](LICENSE). The markdown themes are adapted from [markdown.style](https://markdown.style) (Apache 2.0); the icons are GitHub's [Octicons](https://github.com/primer/octicons) (MIT, © GitHub Inc.) and, for file types, [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) (MIT, © Material Extensions). The code colour themes take their palettes from One (Atom), GitHub Primer, VS Code, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night and Nord, all MIT. Every license, with the npm packages and Rust crates lgtm includes, is in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+[MIT](LICENSE). The markdown themes are adapted from [markdown.style](https://markdown.style) (Apache 2.0); the icons are GitHub's [Octicons](https://github.com/primer/octicons) (MIT, © GitHub Inc.) and, for file types, [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) (MIT, © Material Extensions). The code colour themes take their palettes from One (Atom), GitHub Primer, VS Code, Dracula, Solarized, Gruvbox, Catppuccin, Tokyo Night and Nord, all MIT. Every license, with the npm packages and Rust crates LGTM includes, is in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

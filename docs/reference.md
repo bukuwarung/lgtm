@@ -41,7 +41,7 @@ In the inbox (fixed keys):
 
 - The app isn't notarized, so the cask clears macOS's quarantine on install. Downloading the zip from [Releases](https://github.com/bukuwarung/lgtm/releases) instead, allow it in System Settings → Privacy & Security → Open Anyway.
 - If your org enforces SSO, authorize the gh token for it when GitHub asks.
-- Slack and Jira, optional (lgtm uses these tools' sign-ins, never a password or token):
+- Slack and Jira, optional (LGTM uses these tools' sign-ins, never a password or token):
 
   ```bash
   brew install shaharia-lab/tap/slackcli && slackcli auth login-auto
@@ -50,7 +50,7 @@ In the inbox (fixed keys):
 
 ## Slack people
 
-lgtm messages people as you through slackcli, so it needs each GitHub account's Slack user. Settings → Slack → People finds them (company email, then name) and you confirm each; with several matches you pick, or search by name, handle, email or a Slack link (their profile, or your DM with them). Mappings are saved in `~/.config/lgtm/config.json` (`{ "slackUsers": { "github-login": "U012ABC" } }`). Mark automation accounts as bots so they're never messaged.
+LGTM messages people as you through slackcli, so it needs each GitHub account's Slack user. Settings → Slack → People finds them (company email, then name) and you confirm each; with several matches you pick, or search by name, handle, email or a Slack link (their profile, or your DM with them). Mappings are saved in `~/.config/lgtm/config.json` (`{ "slackUsers": { "github-login": "U012ABC" } }`). Mark automation accounts as bots so they're never messaged.
 
 ## QA requests
 

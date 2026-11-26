@@ -13,7 +13,8 @@ sips -z 32 32 icon-1024.png --out ../32x32.png >/dev/null
 sips -z 128 128 icon-1024.png --out ../128x128.png >/dev/null
 sips -z 256 256 icon-1024.png --out "../128x128${at}2x.png" >/dev/null
 sips -z 512 512 icon-1024.png --out ../icon.png >/dev/null
-sips -z 256 256 icon-1024.png --out ../../../../app/public/app-icon.png >/dev/null # the Dock preview in Settings
+sips -z 256 256 icon-1024.png --out ../../../../app/public/app-icon.png >/dev/null # in the app: the sign-in page, All caught up, the Dock preview
+sips -z 64 64 icon-1024.png --out ../../../../app/public/favicon.png >/dev/null # the browser tab's icon
 rm -rf AppIcon.iconset icon-1024.png
 
 # macOS 26's light/dark/tinted icon: its parts (../AppIcon.icon, compiled by the release build, which has Xcode)

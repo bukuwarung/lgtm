@@ -19,7 +19,7 @@ export PATH="/opt/homebrew/opt/rustup/bin:$PATH"   # rustup is keg-only
 cd desktop && npm install && npm run build         # → src-tauri/target/release/bundle/macos/lgtm.app
 ```
 
-`npm run smoke` in `app/` (after `npm run build`) runs the built app end to end in WebKit, the Mac app's engine, on made-up GitHub data: the PR list, a PR, a line comment, Finish review and Submit, the inbox and the bell, then layout only WebKit shows (icon buttons centred, checkboxes lgtm's own). Fetch WebKit once with `npx playwright-core install webkit`. It fails on an uncaught error or a `confirm()`/`alert()`/`prompt()` (the Mac app answers those without asking), and the release script runs it.
+`npm run smoke` in `app/` (after `npm run build`) runs the built app end to end in WebKit, the Mac app's engine, on made-up GitHub data: the PR list, a PR, a line comment, Finish review and Submit, the inbox and the bell, then layout only WebKit shows (icon buttons centred, checkboxes LGTM's own). Fetch WebKit once with `npx playwright-core install webkit`. It fails on an uncaught error or a `confirm()`/`alert()`/`prompt()` (the Mac app answers those without asking), and the release script runs it.
 
 `cargo test -- --ignored --nocapture` in `desktop/src-tauri` checks the app's commands against your real gh, slackcli and acli (read-only; Slack in dry run).
 
@@ -45,6 +45,6 @@ scripts/release.sh X.Y.Z
 
 It sets the version everywhere, refreshes the third-party notices, runs the tests, and commits and tags `vX.Y.Z`. Pushing the tag (the script prints the command) releases: [GitHub Actions](../.github/workflows/release.yml) builds a universal `lgtm.app`, runs the smoke test on it, signs it, publishes the release with your notes, and points [`Casks/lgtm.rb`](../Casks/lgtm.rb) at it. This repo is its own Homebrew tap, so `brew upgrade` picks the release up once it's out. Running the workflow by hand builds and signs only, and keeps the zip.
 
-**Signing.** Releases are signed with lgtm's own certificate, "lgtm Code Signing" (self-signed, valid to 2046), by [`scripts/sign.sh`](../scripts/sign.sh). It must be the same certificate every time: macOS remembers what people allowed lgtm (Files and Folders, data from other apps) by it, and asks again if it changes. It's in the repo's secrets as `LGTM_SIGNING_P12` (the `.p12`, base64) and `LGTM_SIGNING_PASSWORD`; keep the `.p12` and its password somewhere safe too, since secrets can't be read back. It isn't an Apple Developer ID, so lgtm still isn't notarized: the cask clears the quarantine flag as before.
+**Signing.** Releases are signed with LGTM's own certificate, "lgtm Code Signing" (self-signed, valid to 2046), by [`scripts/sign.sh`](../scripts/sign.sh). It must be the same certificate every time: macOS remembers what people allowed LGTM (Files and Folders, data from other apps) by it, and asks again if it changes. It's in the repo's secrets as `LGTM_SIGNING_P12` (the `.p12`, base64) and `LGTM_SIGNING_PASSWORD`; keep the `.p12` and its password somewhere safe too, since secrets can't be read back. It isn't an Apple Developer ID, so LGTM still isn't notarized: the cask clears the quarantine flag as before.
 
 Design and specs: [`openspec/`](../openspec).

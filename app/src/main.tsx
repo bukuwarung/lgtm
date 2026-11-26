@@ -1036,7 +1036,7 @@ function App() {
           <Settings />
         ) : route === '#/done' ? (
           <div class="page done">
-            <img src="/favicon.png" alt="" width="96" height="96" />
+            <img src="/app-icon.png" alt="" width="96" height="96" />
             <h2>{rm?.practice ? 'Practice run done' : rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
             <p>
               {rm?.practice ? `Nothing was sent to ${T.site}.`
@@ -1179,7 +1179,7 @@ function Setup({ error, retry }: { error: string; retry: () => Promise<void> }) 
   return (
     <div class="signin">
       <h1 class="brand">
-        <img src="/favicon.png" alt="" width="32" height="32" /> LGTM
+        <img src="/app-icon.png" alt="" width="32" height="32" /> LGTM
       </h1>
       {isDesktop || /signed in|gh token|gh auth/i.test(error) ? (
         <>

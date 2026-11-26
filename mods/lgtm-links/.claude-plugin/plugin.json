@@ -1,7 +1,7 @@
 {
   "name": "lgtm-links",
-  "version": "0.5.0",
-  "description": "Open GitHub pull requests and GitLab merge requests in lgtm: a button under Claude's messages that link one, and /lgtm",
+  "version": "0.6.0",
+  "description": "Open GitHub pull requests and GitLab merge requests in LGTM: a button under Claude's messages that link one, and /lgtm",
   "author": {
     "name": "BukuWarung"
   },
