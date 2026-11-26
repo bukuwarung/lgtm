@@ -833,6 +833,12 @@ function App() {
     else if (id === 'back') history.back();
     else if (id === 'forward') history.forward();
     else if (id === 'toggle-prs') togglePRs();
+    // The menu bar menu's headings: the list, shown, on that tab.
+    else if (id === 'list-reviewing' || id === 'list-mine') {
+      if (narrowPRs) setPrsOver(true);
+      else if (!showPRs) toggleStoredPRs();
+      dispatchEvent(new CustomEvent('lgtm:list-tab', { detail: id === 'list-mine' ? 'mine' : 'reviewing' }));
+    }
     else if (id === 'review-mode') needs(queue.current, [], false).length ? startReview() : say({ text: `No ${T.PRs} need your review right now.`, action: ['Practice run', () => startReview(true)] });
     else if (id === 'text-bigger') textStep(1);
     else if (id === 'text-smaller') textStep(-1);
@@ -1767,10 +1773,12 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     };
     // Browse This Repository (a PR's menu): that repo, picked.
     const browseRepo = (e: Event) => (pickGroupRef.current?.('repo:' + (e as CustomEvent<string>).detail), setTab('team'));
+    const toTab = (e: Event) => setTab((e as CustomEvent<string>).detail); // the menu bar menu's headings
     addEventListener('lgtm:browse', browse);
     addEventListener('lgtm:browse-repo', browseRepo);
+    addEventListener('lgtm:list-tab', toTab);
     addEventListener('keydown', key);
-    return () => (removeEventListener('lgtm:browse', browse), removeEventListener('lgtm:browse-repo', browseRepo), removeEventListener('keydown', key));
+    return () => (removeEventListener('lgtm:browse', browse), removeEventListener('lgtm:browse-repo', browseRepo), removeEventListener('lgtm:list-tab', toTab), removeEventListener('keydown', key));
   }, []);
   const tab = tabValue as Tab;
   const tabRef = useRef(tab); // the refresh timer closes over the first render

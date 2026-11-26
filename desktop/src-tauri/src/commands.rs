@@ -2002,11 +2002,50 @@ pub struct TrayItem {
     note: Option<String>, // a PR of mine: where it stands (ready to merge, CI failing…)
 }
 
-/// The menu bar item: how many PRs wait on my review beside its icon, and a menu of those, then my own PRs and where
-/// they stand, then lgtm's actions. None: no menu bar item (Settings turned it off).
+/// How a menu bar menu row looks: plain, with a symbol, a heading (bold, with its symbol), or a PR under a heading.
+pub enum TrayLook { Plain, Symbol(&'static str), Heading(&'static str), Pr }
+/// The menu bar menu from its rows ("-" a separator), styled natively; on the main thread, where the tray lives.
+fn tray_menu(rows: &[(String, String, bool, TrayLook)]) -> Result<muda::Menu, String> {
+    let menu = muda::Menu::new();
+    for (id, text, on, _) in rows {
+        if id == "-" { menu.append(&muda::PredefinedMenuItem::separator()).map_err(|e| e.to_string())?; }
+        else { menu.append(&muda::MenuItem::with_id(id.as_str(), text, *on, None)).map_err(|e| e.to_string())?; }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::rc::Retained;
+        use objc2_app_kit::{NSFont, NSFontAttributeName, NSImage, NSMenu};
+        use objc2_foundation::{NSAttributedString, NSDictionary, NSString};
+        use muda::ContextMenu;
+        // Safety: muda's menu is an NSMenu, alive while `menu` is; this runs on the main thread (with_inner_tray_icon).
+        let ns: &NSMenu = unsafe { &*(menu.ns_menu() as *const NSMenu) };
+        for (k, (_, text, _, look)) in rows.iter().enumerate() {
+            let Some(item) = ns.itemAtIndex(k as isize) else { continue };
+            let symbol = |name: &str| NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None);
+            match look {
+                TrayLook::Symbol(name) => item.setImage(symbol(name).as_deref()),
+                TrayLook::Heading(name) => {
+                    item.setImage(symbol(name).as_deref());
+                    let font = NSFont::boldSystemFontOfSize(NSFont::systemFontSize());
+                    let attrs: Retained<NSDictionary<NSString, objc2::runtime::AnyObject>> = unsafe { NSDictionary::from_slices(&[NSFontAttributeName], &[&*Retained::into_super(Retained::into_super(font))]) };
+                    let title = unsafe { NSAttributedString::new_with_attributes(&NSString::from_str(text), &attrs) };
+                    item.setAttributedTitle(Some(&title));
+                }
+                TrayLook::Pr => item.setIndentationLevel(1),
+                TrayLook::Plain => {}
+            }
+        }
+    }
+    Ok(menu)
+}
+
+/// The menu bar item: how many PRs wait on my review beside its icon, and a menu laid out as a Mac menu bar app's:
+/// Open LGTM, then the PRs waiting on my review and my own (each heading opens the list on its tab, its PRs indented
+/// under it with their repo and number), then the actions, Quit last; macOS's own symbols beside them. Built on the
+/// native menu (muda, as Tauri's own) so it can have those symbols, indents and bold headings; its clicks reach
+/// Tauri's menu events as any menu's do. None: no menu bar item (Settings turned it off).
 #[tauri::command]
 pub fn set_tray(app: tauri::AppHandle, items: Option<Vec<TrayItem>>) -> Result<(), String> {
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
     use tauri::{Emitter, Manager};
     let Some(items) = items else {
@@ -2015,41 +2054,54 @@ pub fn set_tray(app: tauri::AppHandle, items: Option<Vec<TrayItem>>) -> Result<(
     };
     let e = |e: tauri::Error| e.to_string();
     let cut = |t: &str, n: usize| if t.chars().count() > n { t.chars().take(n - 1).collect::<String>() + "…" } else { t.to_string() };
-    let menu = Menu::new(&app).map_err(e)?;
-    let add = |id: String, text: String, on: bool| -> Result<(), String> { menu.append(&MenuItem::with_id(&app, id, text, on, None::<&str>).map_err(e)?).map_err(e) };
+    // "/owner/repo/pull/n" (a GitLab one: "/host/group/project/pull/n") as "repo#n"
+    let short = |route: &str| {
+        let p: Vec<&str> = route.trim_matches('/').split('/').collect();
+        match p.as_slice() { [.., repo, "pull", n] => format!("{repo}#{n}"), _ => String::new() }
+    };
     let needs: Vec<&TrayItem> = items.iter().filter(|i| i.section == "needs").collect();
     let mine: Vec<&TrayItem> = items.iter().filter(|i| i.section == "mine").collect();
-    add("h-needs".into(), if needs.is_empty() { "Nothing needs your review".into() } else { format!("Needs your review ({})", needs.len()) }, false)?;
+    // Each row: its id, text, whether it's on, and how it looks (a symbol, a heading, a PR under one).
+    let mut rows: Vec<(String, String, bool, TrayLook)> = vec![("open".into(), "Open LGTM".into(), true, TrayLook::Symbol("macwindow")), ("-".into(), String::new(), false, TrayLook::Plain)];
+    rows.push(("menu:list-reviewing".into(), if needs.is_empty() { "Nothing needs your review".into() } else { format!("Needs your review ({})", needs.len()) }, true, TrayLook::Heading("eye")));
     for i in &needs {
-        add(format!("pr:{}", i.route), format!("    {}", cut(&i.title, 60)), true)?;
+        rows.push((format!("pr:{}", i.route), format!("{}  ·  {}", cut(&i.title, 60), short(&i.route)), true, TrayLook::Pr));
     }
     if !mine.is_empty() {
-        menu.append(&PredefinedMenuItem::separator(&app).map_err(e)?).map_err(e)?;
-        add("h-mine".into(), format!("Your PRs ({})", mine.len()), false)?;
+        rows.push(("-".into(), String::new(), false, TrayLook::Plain));
+        rows.push(("menu:list-mine".into(), format!("Your PRs ({})", mine.len()), true, TrayLook::Heading("person")));
         for i in &mine {
             let note = i.note.as_deref().map(|n| format!(" — {n}")).unwrap_or_default();
-            add(format!("pr:{}", i.route), format!("    {}{}", cut(&i.title, 50), note), true)?;
+            rows.push((format!("pr:{}", i.route), format!("{}  ·  {}{}", cut(&i.title, 50), short(&i.route), note), true, TrayLook::Pr));
         }
     }
-    menu.append(&PredefinedMenuItem::separator(&app).map_err(e)?).map_err(e)?;
-    add("menu:review-mode".into(), "Start Review Mode".into(), !needs.is_empty())?;
-    add("menu:refresh-list".into(), "Refresh".into(), true)?;
-    add("menu:settings".into(), "Settings…".into(), true)?;
-    add("open".into(), "Open LGTM".into(), true)?;
+    rows.push(("-".into(), String::new(), false, TrayLook::Plain));
+    rows.push(("menu:review-mode".into(), "Start Review Mode".into(), !needs.is_empty(), TrayLook::Symbol("play")));
+    rows.push(("menu:refresh".into(), "Refresh".into(), true, TrayLook::Symbol("arrow.clockwise")));
+    rows.push(("menu:settings".into(), "Settings…".into(), true, TrayLook::Symbol("gearshape")));
+    rows.push(("-".into(), String::new(), false, TrayLook::Plain));
+    rows.push(("quit".into(), "Quit LGTM".into(), true, TrayLook::Symbol("power")));
+
     let title = if needs.is_empty() { None } else { Some(needs.len().to_string()) };
     if let Some(tray) = app.tray_by_id("lgtm") {
-        tray.set_menu(Some(menu)).map_err(e)?;
+        tray.with_inner_tray_icon(move |t| tray_menu(&rows).map(|m| t.set_menu(Some(Box::new(m))))).map_err(e)??;
         tray.set_title(title).map_err(e)?;
         return Ok(());
     }
     // A template image: macOS draws it in the menu bar's own colour, light or dark, like its other items.
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-template.png")).map_err(e)?;
-    let mut b = TrayIconBuilder::with_id("lgtm").icon(icon).icon_as_template(true).menu(&menu).show_menu_on_left_click(true).tooltip("LGTM");
+    let mut b = TrayIconBuilder::with_id("lgtm").icon(icon).icon_as_template(true).show_menu_on_left_click(true).tooltip("LGTM");
     if let Some(t) = title {
         b = b.title(t);
     }
     b.on_menu_event(|app, ev| {
         let id = ev.id().as_ref();
+        if id == "quit" {
+            return app.exit(0);
+        }
+        if !(id == "open" || id.starts_with("pr:") || id.starts_with("menu:")) {
+            return; // the app's own menus come here too
+        }
         if let Some(w) = app.get_webview_window("main") {
             let _ = w.unminimize();
             let _ = w.show();
@@ -2062,7 +2114,9 @@ pub fn set_tray(app: tauri::AppHandle, items: Option<Vec<TrayItem>>) -> Result<(
         }
     })
     .build(&app)
-    .map_err(e)?;
+    .map_err(e)?
+    .with_inner_tray_icon(move |t| tray_menu(&rows).map(|m| t.set_menu(Some(Box::new(m)))))
+    .map_err(e)??;
     Ok(())
 }
 
