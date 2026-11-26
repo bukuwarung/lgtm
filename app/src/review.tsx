@@ -4328,7 +4328,19 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
     [hunks, renderDocs, renderEdited, renderLine, renderSingle, split],
   );
   const [openDocs, setOpenDocs] = useState<Set<string>>(new Set());
-  const docAt = (hi: number, li: number) => covering(docs, openDocs, hi, li);
+  // A doc comment stays rendered with comments on it when they sit on its last line (the whole of it, as its number
+  // picks): they show under it. One on a line within it opens its source, to show where.
+  const docEnd = (b: { hunk: number; start: number; end: number; kind: string }) => {
+    const side: Side = b.kind === '-' ? 'LEFT' : 'RIGHT';
+    const nums = hunks[b.hunk].lines.slice(b.start, b.end + 1).map((x) => (side === 'LEFT' ? x.old : x.new)).filter((n): n is number => n != null);
+    return { side, nums, last: nums.length ? Math.max(...nums) : undefined };
+  };
+  const docAt = (hi: number, li: number) =>
+    docs.find((b) => {
+      if (b.hunk !== hi || li < b.start || li > b.end || openDocs.has(`${hi}-${b.start}`)) return false;
+      const { side, last } = docEnd(b);
+      return !hunks[hi].lines.slice(b.start, b.end + 1).some((l) => (l.old != null && noted('LEFT', l.old) && !(side === 'LEFT' && l.old === last)) || (l.new != null && noted('RIGHT', l.new) && !(side === 'RIGHT' && l.new === last)));
+    });
   // A doc comment switched to its source: a header row above its first line switches it back.
   const docOpenedAt = (hi: number, li: number) => docs.find((d) => d.hunk === hi && d.start === li && openDocs.has(`${hi}-${li}`));
 
@@ -4384,15 +4396,15 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                 const at = doc.kind === '~' ? run.find((x) => x.kind !== '-')! : first;
                 // A comment on it is on all of it: its lines on that side, first to last (⌥-click still links its first
                 // line, shift-click extends as on any line).
-                const side: Side = doc.kind === '-' ? 'LEFT' : 'RIGHT';
-                const nums = run.map((x) => (side === 'LEFT' ? x.old : x.new)).filter((n): n is number => n != null);
+                const { side, nums, last: docLast } = docEnd(doc);
                 const onNum = (e: MouseEvent) => {
                   if (e.altKey || e.shiftKey || nums.length < 2) return pick(e, side, nums[0] ?? (side === 'LEFT' ? first.old! : at.new!));
                   if (side === 'LEFT' && ctx.since) return;
                   ctx.setTarget({ path, side, line: Math.max(...nums), startLine: Math.min(...nums) });
                 };
                 return (
-                  <tr class={`ln doc${doc.kind === '+' ? ' a' : doc.kind === '-' ? ' d' : doc.kind === '~' ? ' edited' : ''}`}>
+                  <>
+                  <tr class={`ln doc${doc.kind === '+' ? ' a' : doc.kind === '-' ? ' d' : doc.kind === '~' ? ' edited' : ''}`} data-tgt={t && t.side === side && t.line === docLast ? '' : undefined}>
                     <td class="num" title={`Lines ${first.old}–${last.old}: comment on them all`} onClick={onNum}>
                       {run.find((x) => x.old != null)?.old ?? ''}
                     </td>
@@ -4403,6 +4415,8 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                       <DocView doc={indent ? { ...doc, indent: Math.max(0, doc.indent - indent) } : doc} syntax={docSyntax(path) ?? 'kdoc'} onSource={() => setOpenDocs((s) => new Set(s).add(`${hi}-${doc.start}`))} />
                     </td>
                   </tr>
+                  {docLast != null && notes(side, docLast)}
+                  </>
                 );
               }
               const moveRun = !splitPlan && moveAt(hi, li);
