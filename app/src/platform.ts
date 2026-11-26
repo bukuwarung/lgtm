@@ -1584,6 +1584,16 @@ export const duration = (ms: number) => {
   }
   return `${Math.round(q / 1440)} d`;
 };
+// What's open, in the window's title (the Window menu, Mission Control, screen sharing) and the tab's: "#412 Retry
+// failed payments — LGTM", "Settings — LGTM". The tab's also starts with the count waiting on you ("(3) …").
+let pageName = '', titleCount = 0;
+const applyTitle = () => {
+  const name = pageName ? `${pageName} — LGTM` : 'LGTM';
+  document.title = titleCount ? `(${titleCount}) ${name}` : name;
+  if (isDesktop) void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => getCurrentWindow().setTitle(name)).catch(() => {});
+};
+export const setPageName = (n: string) => void (n !== pageName && ((pageName = n), applyTitle()));
+export const setTitleCount = (n: number) => void (n !== titleCount && ((titleCount = n), applyTitle()));
 export function ago(when: string | number) {
   const s = (new Date(when).getTime() - Date.now()) / 1000;
   const u = UNITS.find(([, n]) => Math.abs(s) >= n);

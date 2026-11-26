@@ -16,7 +16,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { setResign, claudeFolder, duration, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { setResign, claudeFolder, duration, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
 import { unblockPrompt } from './prompts.ts';
 import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
@@ -630,6 +630,12 @@ function App() {
   const keyFor = (a: Action) => keyLabel(bindings[a]);
   const [state, setState] = useState<'loading' | 'in' | { error: string }>('loading');
   const [route, setRoute] = useState(location.hash);
+  // The window's title names the page (a PR's own title once it loads: review.tsx).
+  useEffect(() => {
+    const pr = route.match(/^#\/(.+)\/pull\/(\d+)/);
+    const name = pr ? `${pr[1].split('/').pop()}#${pr[2]}` : route.startsWith('#/settings') ? 'Settings' : route.startsWith('#/inbox') ? 'Inbox' : route.startsWith('#/history') ? 'Your reviews' : route.startsWith('#/person/') ? decodeURIComponent(route.slice(9)).replace(/@.*$/, '') : '';
+    setPageName(name);
+  }, [route]);
   // Opening a PR acts on what the bell said about it.
   useEffect(() => {
     const cur = parseRoute(route);
@@ -1953,7 +1959,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     // mentions waiting on your reply, as the inbox button counts them.
     const inbox = badgeInbox ? repliesWaiting(items) : 0;
     const count = waiting.length + items.filter((i) => !waiting.includes(i) && claudeWaiting(i)).length + inbox;
-    document.title = count ? `(${count}) LGTM` : 'LGTM';
+    setTitleCount(count);
     void setBadge(count); // the app's Dock icon
     const forMe = [...waiting, ...items.filter((i) => !waiting.includes(i) && claudeWaiting(i))];
     // The menu bar: what waits on my review, then my own PRs and where each stands.
