@@ -714,9 +714,16 @@ function App() {
   // Leaving one in review mode: reviewed (done) or skipped, then the next.
   const moveOn = (from: { repo: string; n: number }, how: 'done' | 'skipped', notice: { text: string; ok: boolean } | null = null) => {
     if (!rm) return goNext(from, notice);
-    const seen = [...rm.seen, `${from.repo}#${from.n}`];
+    // One gone back to (Back): skipped again, it keeps what it had; reviewed now, that replaces it in the summary.
+    const key = `${from.repo}#${from.n}`;
+    const at = rm.log.findIndex((l) => `${l.repo}#${l.n}` === key);
+    const was = at < 0 ? null : rm.log[at].how === 'skipped' ? 'skipped' : 'done';
+    if (was && how === 'skipped') return goNext(null, notice, rm.seen);
     const title = queue.current.find((i) => i.repo === from.repo && i.number === from.n)?.title ?? '';
-    setRm({ ...rm, seen, [how]: rm[how] + 1, log: [...rm.log, { ...from, title, how: how === 'done' ? lastEvent.current : 'skipped' }] });
+    const entry = { ...from, title, how: how === 'done' ? lastEvent.current : ('skipped' as const) };
+    const seen = was ? rm.seen : [...rm.seen, key];
+    const log = was ? rm.log.map((l, i) => (i === at ? entry : l)) : [...rm.log, entry];
+    setRm({ ...rm, seen, log, done: rm.done + (how === 'done' && was !== 'done' ? 1 : 0), skipped: rm.skipped + (how === 'skipped' ? 1 : 0) - (was === 'skipped' ? 1 : 0) });
     return goNext(null, notice, seen);
   };
   // Auto-merge's ticket moves (merge.tsx), once the PR has merged and left the list: a notification says how it went.
@@ -916,10 +923,12 @@ function App() {
             <b class="rm-title" data-tauri-drag-region>Review mode</b>
             {rm.practice && <span class="pill p-warn" title={`Your own ${T.PRs}; finishing a review only moves on, and nothing is sent to ${T.site}`}>practice</span>}
             {r && (() => {
-              const left = needs(queue.current, rm.seen).length || 1; // this one, and what's after it
-              return <span class="rm-count" data-tauri-drag-region>{rm.seen.length + 1} of {rm.seen.length + left}</span>;
+              const back = rm.seen.indexOf(`${r.repo}#${r.n}`); // gone back to one already reviewed or skipped
+              const left = needs(queue.current, rm.seen).length; // what's after it (this one too, when it's new)
+              return <span class="rm-count" data-tauri-drag-region>{back < 0 ? rm.seen.length + 1 : back + 1} of {rm.seen.length + Math.max(left, back < 0 ? 1 : 0)}</span>;
             })()}
             <span class="spacer" data-tauri-drag-region />
+            <span class="nav-go" data-tauri-drag-region><HistoryNav backTo={backTo} /></span>
             {r && <button onClick={() => moveOn(r, 'skipped')} title={`On to the next ${T.PR} without reviewing this one (${keyFor('skip')})`}>Skip <kbd>{keyFor('skip')}</kbd></button>}
             <button onClick={() => setRm(null)} title="Back to everything (Esc)">Exit <kbd>Esc</kbd></button>
           </>

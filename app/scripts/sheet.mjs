@@ -2,6 +2,8 @@
 // to scan for what looks off (review-sheet/index.html, opened in your browser). Local only, git ignores it: the live
 // screens show your PRs. Needs a running LGTM (LGTM_PORT, else 4517) and Playwright's WebKit, the Mac app's engine.
 // SHEET_PR: a PR to include ("owner/repo/pull/n"), else the list's first. Only opens menus and panels; sends nothing.
+// SHEET_WIDTH (px, else 1400), SHEET_TEXT (the text size, 11–20) and SHEET_THEMES ("light", "dark", else both): a
+// pass at a small window or large text, where things wrap and collide.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,9 +22,10 @@ const keep = (group, name, theme, file) => {
 
 const browser = await webkit.launch();
 try {
-  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  const page = await browser.newPage({ viewport: { width: Number(process.env.SHEET_WIDTH ?? 1400), height: 900 } });
   await page.goto(`${ORIGIN}/#/demo/_keys`);
   await page.evaluate(() => (localStorage.setItem('setupSeen', '1'), localStorage.setItem('seenVersion', '9.9.9'), localStorage.removeItem('theme')));
+  if (process.env.SHEET_TEXT) await page.evaluate((t) => localStorage.setItem('textSize', t), process.env.SHEET_TEXT);
   await page.goto(`${ORIGIN}/?k#/demo/_keys`);
   const { demos, scenes } = JSON.parse(await page.locator('#demo-keys').textContent());
   let n = 0;
@@ -31,7 +34,7 @@ try {
     await (target ?? page).screenshot({ path: join(OUT, file) });
     keep(group, name, theme, file);
   };
-  for (const theme of ['light', 'dark']) {
+  for (const theme of process.env.SHEET_THEMES?.split(',') ?? ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: theme });
     for (const k of demos) {
       await page.goto(`${ORIGIN}/?${theme}#/demo/${k}/${theme}`);
@@ -92,7 +95,7 @@ img { width: 100%; border: 1px solid #d1d9e0; border-radius: 6px; background: #f
 .dark img { background: #000; }
 </style>
 <h1>LGTM review sheet</h1>
-<p>${new Date().toLocaleString()} · light on the left, dark on the right · ${shots.size} screens</p>
+<p>${new Date().toLocaleString()} · light on the left, dark on the right · ${shots.size} screens${process.env.SHEET_WIDTH ? ` · ${process.env.SHEET_WIDTH}px wide` : ''}${process.env.SHEET_TEXT ? ` · ${process.env.SHEET_TEXT}px text` : ''}</p>
 <nav>${groups.map((g) => `<a href="#${esc(g)}">${esc(g)}</a>`).join('')}</nav>
 ${groups.map((g) => `<h2 id="${esc(g)}">${esc(g)}</h2>${[...shots].filter(([k]) => k.startsWith(g + '|')).map(([k, v]) => `<div class="row"><div class="name">${esc(k.split('|')[1])}</div><div>${v.light ? `<img loading="lazy" src="${v.light}">` : ''}</div><div class="dark">${v.dark ? `<img loading="lazy" src="${v.dark}">` : ''}</div></div>`).join('')}`).join('')}
 `);

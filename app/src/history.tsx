@@ -91,7 +91,7 @@ export function History() {
             <a class="history-row" href={`#/${r.repo}/pull/${r.number}`}>
               <span class={`ix-meta v-${r.state}`}><Tg i={VERDICT[r.state][0]} t={VERDICT[r.state][1]} /></span>
               <b>{r.title}</b>
-              <small>{repoLabel(r.repo)}#{r.number} · <Who login={r.author} />{r.waited != null ? ` · ${hours(r.waited)} after you were asked` : ''}{keptOn.has(r) ? ` · ${keptOn.get(r)!.toLocaleString()} lines kept out of your way` : ''} · {new Date(r.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small>
+              <small>{repoLabel(r.repo)}#{r.number} · <Who login={r.author} />{r.waited != null ? ` · ${hours(r.waited)} after you were asked` : ''}{keptOn.has(r) ? ` · ${keptOn.get(r)!.toLocaleString()} lines kept out of your way` : ''} <span class="nw">· {new Date(r.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></small>
             </a>
           ))}
         </section>

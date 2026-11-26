@@ -557,13 +557,13 @@ function ViewedToggle({ viewed, onToggle, title }: { viewed: boolean; onToggle: 
 // index, title, pills and files will be.
 const SKEL_LINES = [62, 48, 71, 35, 80, 54, 66, 28];
 // `pr`: once the PR itself is here (its files still loading), its title and description show in place.
-function PRSkeleton({ pr }: { pr?: PR | null }) {
-  // The index as the page will open: not in a narrow window, nor (until the PR is known) with "Hide the index on PRs
-  // waiting for your review" on, as Review decides.
+function PRSkeleton({ pr, toReview }: { pr?: PR | null; toReview?: boolean }) {
+  // The index as the page will open: not in a narrow window, nor with "Hide the index on PRs waiting for your review"
+  // on, unless the list already says this one isn't (as Review decides), so the page doesn't move when it's in.
   const [showIx] = useStoredFlag('showIndex', true);
   const [hideToReview] = useStoredFlag('hideIndexToReview', true);
   const narrow = useMedia('(max-width: 1280px)');
-  const showIndex = showIx && !narrow && !hideToReview;
+  const showIndex = showIx && !narrow && !(hideToReview && toReview !== false);
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle);
   return (
@@ -591,10 +591,17 @@ function PRSkeleton({ pr }: { pr?: PR | null }) {
             <span class="sk sk-pill" style={{ width: `${w}px` }} />
           ))}
         </div>
+        {/* The description in the conversation's frame, as it will be. */}
         {pr?.body_html && (
-          <div class={`rich pr-desc skel-desc ${look.class}`} style={look.style}>
-            <div class="md chunk" dangerouslySetInnerHTML={{ __html: pr.body_html }} />
-          </div>
+          <details class="conversation" open>
+            <summary><span class="sk" style={{ width: '160px' }} /></summary>
+            <div class="comment">
+              <span class="sk" style={{ width: '120px' }} />
+              <div class={`rich pr-desc skel-desc ${look.class}`} style={look.style}>
+                <div class="md chunk" dangerouslySetInnerHTML={{ __html: pr.body_html }} />
+              </div>
+            </div>
+          </details>
         )}
         {[8, 5, 7].map((n, k) => (
           <div class="skel-file">
@@ -1554,7 +1561,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     return () => void (stop = true);
   }, [data?.files]);
   if (error) return <p class="error page">{error} <Retry onClick={() => (setError(''), dispatchEvent(new Event('lgtm:refresh')))} /></p>;
-  if (!data) return <PRSkeleton pr={early} />;
+  if (!data) return <PRSkeleton pr={early} toReview={listed} />;
   const { pr, headRepo } = data;
   // The commit on show, undone on the branch (your PR, or one you may push to), after asking.
   const canRevert = commitView && firstSha === toSha && pr.state === 'open' && !!rights?.update;
@@ -3538,15 +3545,16 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
   // Better still, its height when last drawn (this version, shown this way), so reopening a PR barely moves at all.
   const shape = `${path}@${file.sha}:${rich || (canLint && lint) ? 'r' : 'd'}${ctx.ignoreWs ? 'w' : ''}${collapsed || hideDeleted ? 'c' : ''}`;
   const seen = drawnHeight(shape);
-  const placeholder = seen ? `auto ${seen}px` : `auto calc(${rows} * 20px * var(--cs) + 48px)`;
-  body.stand = seen ? `${Math.max(0, seen - 48)}px` : `calc(${rows} * 20px * var(--cs))`;
+  // A rendered document's lines are text, taller than code's, with the view's padding.
+  body.stand = seen ? `${Math.max(0, seen - 48)}px` : rich ? `calc(${Math.max(1, rows - hunks.length)} * 26px * var(--ts) + 36px)` : `calc(${rows} * 20px * var(--cs))`;
+  const placeholder = seen ? `auto ${seen}px` : `auto calc(${body.stand} + 48px)`;
   useEffect(() => {
     const el = ref.current;
     if (!el || !near) return;
     const check = () => {
       const r = el.getBoundingClientRect();
       // Drawn (on screen, not stood in for) and complete (not waiting for its file).
-      if (r.bottom > 0 && r.top < innerHeight && !el.querySelector('p.note.pad[style]')) keepHeight(shape, Math.round(r.height));
+      if (r.bottom > 0 && r.top < innerHeight && !el.querySelector('p.note.pad[style], [aria-busy]')) keepHeight(shape, Math.round(r.height));
     };
     // When it changes size, and when it comes on screen (it may have finished drawing while away).
     const ro = new ResizeObserver(check);
@@ -3631,7 +3639,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
           Deleted. <span class="collapsed-show">Show its {file.deletions} line{file.deletions === 1 ? '' : 's'}</span>
         </button>
       ) : !near && !ctx.renderAll ? (
-        <div style={{ height: `${hunks.reduce((s, h) => s + h.lines.length + 1, 0) * 20}px` }} />
+        <div style={{ height: body.stand }} />
       ) : canLint && lint ? (
         <LintBaselineView file={file} ctx={ctx} />
       ) : rich ? (
@@ -3799,7 +3807,7 @@ function ReviewPlan({ plan, viewed }: { plan: PlanStep[]; viewed: Set<string> })
           return (
             <li class={left.length ? '' : 'done'}>
               <span class="plan-t">
-                <Octicon name={stepIcon(s.key)} /> <b>{s.title}</b> <small>{s.why}</small>
+                <span class="nw"><Octicon name={stepIcon(s.key)} /> <b>{s.title}</b></span> <small>{s.why}</small>
               </span>
               <span class="plan-bar" title={`${seen} of ${s.paths.length} viewed`}>
                 <i style={{ width: `${(100 * seen) / s.paths.length}%` }} />
@@ -4708,7 +4716,8 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const [openRuns, setOpenRuns] = useState<Set<number>>(new Set());
   const removed = useMemo(() => removedRuns(hunks), [hunks]);
 
-  if (src === undefined) return <div class="pad" style={{ minHeight: stand }}><Lines n={6} /></div>;
+  // As many grey lines as it may have (a new one-line note: one), so the page doesn't shrink when it's drawn.
+  if (src === undefined) return <div class="pad" style={{ minHeight: stand }}><Lines n={file.status === 'added' ? Math.min(6, Math.max(1, file.additions)) : 6} /></div>;
   if (src === null) return <p class="error pad">Couldn't load this file. <Retry onClick={() => setSrc(undefined)} /></p>;
 
   const t = ctx.target?.path === path ? ctx.target : null;

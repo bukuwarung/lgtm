@@ -160,7 +160,7 @@ export const Empty = ({ icon = 'check', tone, children, action }: { icon?: strin
 // nothing (0, –) is grey; one that asks something of you takes its colour. With onClick, a card opens what it counts.
 export type Stat = { n: number | string; label: string; tone?: 'act' | 'ok' | 'bad'; title?: string; onClick?: () => void };
 export const Stats = ({ items, cols = 3 }: { items: Stat[]; cols?: number }) => (
-  <div class="start-grid" style={{ '--cols': cols }}>
+  <div class={`start-grid cols-${cols}`} style={{ '--cols': cols }}>
     {items.map((s) => {
       const cls = `start-card${s.n === 0 || s.n === '–' ? ' none' : s.tone ? ' ' + s.tone : ''}${s.onClick ? '' : ' still'}`;
       const body = <><b>{s.n}</b><span>{s.label}</span></>;

@@ -108,7 +108,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
         {`${[threadCount && `${threadCount} thread${threadCount === 1 ? '' : 's'}`, mentionCount && `${mentionCount} mention${mentionCount === 1 ? '' : 's'}`].filter(Boolean).join(' and ')} in ${open.length} ${T.PR}${open.length === 1 ? '' : 's'}.`}
         {(
           <span class="inbox-keys">
-            <kbd>j</kbd> <kbd>k</kbd> move · <kbd>r</kbd> reply · <kbd>e</kbd> done · <kbd>x</kbd> resolve · <kbd>o</kbd> open the PR
+            <span><kbd>j</kbd> <kbd>k</kbd> move</span> · <span><kbd>r</kbd> reply</span> · <span><kbd>e</kbd> done</span> · <span><kbd>x</kbd> resolve</span> · <span><kbd>o</kbd> open the PR</span>
           </span>
         )}
       </p>}

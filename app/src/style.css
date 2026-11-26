@@ -40,6 +40,8 @@ body { margin: 0; font: calc(14px * var(--ts))/1.5 var(--sans); background: var(
 /* Focus: one ring everywhere, 2px in the accent colour (macOS draws one ring too); inside a menu, inset. Fields and
    dropdowns alike (they had an accent edge and a soft halo instead). */
 :where(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Inside a scrolling list or a clipped title the ring would be cut off: there, it sits just inside the edge. */
+:where(.side.tree .side-scroll, .bar h1) :focus-visible { outline-offset: -2px; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 /* Buttons filled, with an edge that shows (on the page a shade darker than it; in the top and review bars, which are
@@ -169,7 +171,7 @@ code, pre { font-family: var(--mono); }
 .start-saved { margin: 0; color: var(--muted); }
 .start-saved b { color: var(--fg); }
 .start-card.start-card { display: grid; align-content: start; gap: 6px; justify-items: start; height: auto; padding: 14px 16px; text-align: left; border-radius: 10px; white-space: normal; }
-.start-card b { font-size: calc(28px * var(--ts)); font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.start-card b { white-space: nowrap; font-size: calc(28px * var(--ts)); font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .start-card span { font-size: calc(13px * var(--ts)); color: var(--muted); }
 .start-card.none b { color: var(--muted); font-weight: 500; } /* nothing there: grey */
 .start-card.act b { color: var(--accent); }
@@ -185,12 +187,14 @@ code, pre { font-family: var(--mono); }
 .recent-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .recent-open { color: var(--addfg); } .recent-merged { color: var(--c-merged); } .recent-closed { color: var(--delfg); } .recent-draft { color: var(--muted); }
 .recent-menu { position: relative; display: flex; align-items: center; gap: 6px; }
-.recent-pop { left: 0; right: auto; width: min(460px, 80vw); max-height: 70vh; overflow: auto; }
+.account-menu.recent-pop { left: 0; right: auto; width: min(460px, 80vw); max-height: 70vh; overflow: auto; }
 .stale { display: grid; justify-items: start; gap: 6px; font-size: calc(13px * var(--ts)); }
 .stale ul { margin: 0; padding: 0; list-style: none; max-height: 200px; overflow: auto; text-align: left; }
 .stale small { color: var(--muted); }
 /* Your reviews this week (history.tsx). */
-.history { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+.history { box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 32px 24px; container-type: inline-size; } /* a container sizes by its place, not its content */
+/* Four numbers side by side fit its 712px up to 14px text (a "1 h 15 min" whole); with larger text, two by two. */
+@container (max-width: 50em) { .start-grid.cols-4 { --cols: 2 !important; } }
 .history h2 { margin: 0 0 4px; }
 .history > .start-grid { margin: 16px 0 12px; } /* Your reviews' and a person's numbers */
 .history-sum { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; color: var(--muted); }
@@ -254,7 +258,7 @@ html.offline :is(.bar-actions, .merge-bar, .review-submit, .inbox-thread .row, .
 /* Specs naming the PR's code: their code spans link to it, their tasks count it, and files link back. */
 .rich code.spec-ref { cursor: pointer; text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent); text-underline-offset: 3px; }
 .rich code.spec-ref:hover { color: var(--accent); }
-.spec-touch { margin-left: 8px; padding: 0 6px; border-radius: 999px; font: calc(11px * var(--ts)) var(--sans); color: var(--pill-ok); background: color-mix(in srgb, var(--pill-ok) 12%, transparent); }
+.spec-touch { white-space: nowrap; margin-left: 8px; padding: 0 6px; border-radius: 999px; font: calc(11px * var(--ts)) var(--sans); color: var(--pill-ok); background: color-mix(in srgb, var(--pill-ok) 12%, transparent); }
 .spec-touch:empty { display: none; }
 .spec-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .spec-chip:hover { color: var(--fg); }
@@ -276,9 +280,9 @@ tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transpa
 .sx-val { flex: 1; min-width: 0; font-family: var(--sans); white-space: pre-wrap; }
 .sx-arg { padding: 0 2px; border-radius: 4px; font-family: var(--mono); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .sx-nl { color: var(--muted); }
-.sx-empty, .sx-tag { font: italic calc(11px * var(--ts)) var(--sans); color: var(--muted); }
+.sx-empty, .sx-tag { font: italic calc(11px * var(--cs)) var(--sans); color: var(--muted); }
 .sx-tag { margin-left: 8px; }
-.sx-warn { margin-left: 8px; padding: 0 6px; border-radius: 999px; white-space: nowrap; font: calc(11px * var(--ts)) var(--sans); color: var(--c-when); background: color-mix(in srgb, var(--c-when) 16%, transparent); }
+.sx-warn { margin-left: 8px; padding: 0 6px; border-radius: 999px; white-space: nowrap; font: calc(11px * var(--cs)) var(--sans); color: var(--c-when); background: color-mix(in srgb, var(--c-when) 16%, transparent); }
 mark.sx-ch { color: inherit; border-radius: 4px; background: color-mix(in srgb, currentColor 22%, transparent); }
 /* The title bar's buttons, all one size: icons centred in a 34×29 box (Back grows when it names where it goes). */
 .top :is(button, .nav-btn) { box-sizing: border-box; height: 29px; min-width: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; }
@@ -448,7 +452,7 @@ kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: va
 .bar { position: sticky; top: var(--nav); z-index: 4; /* above the pinned pill bar (3): its merge box and menus drop over it */ height: var(--bar); display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--soft); border-bottom: 1px solid var(--border); }
 .bar h1 { flex: 1; margin: 0; font-size: calc(16px * var(--ts)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .submit { position: relative; }
-.panel { position: absolute; right: 0; top: calc(100% + 6px); width: 420px; display: grid; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px var(--shadow); }
+.panel { position: absolute; right: 0; top: calc(100% + 6px); width: min(calc(420px * max(1, var(--ts))), 100vw - 24px); display: grid; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px var(--shadow); }
 .panel > label:has(> input:is([type=checkbox], [type=radio])) { display: flex; align-items: center; gap: 6px; } /* the box centred on its words, however tall they wrap */
 .panel > label > input:is([type=checkbox], [type=radio]) { vertical-align: 0; margin: 0; }
 /* Finish review at the page's end: flush in the files' column, as GitHub's comment box (no card, no heading); the
@@ -595,7 +599,7 @@ html.strike-removed .removed pre { text-decoration: line-through; }
 .thread > summary::-webkit-details-marker { display: none; }
 .thread > summary { position: relative; }
 .thread > summary::before { content: "▸"; position: absolute; left: -18px; top: calc(50% - 5px); color: var(--muted); } /* on its line's middle, collapsed or open */
-.thread[open] > summary::before { content: "▾"; }
+.thread[open] > summary::before { content: "▾"; left: 10px; } /* open, the summary is the thread's corner */
 .thread[open] > summary { position: absolute; left: 0; top: 0; width: 28px; height: 28px; font-size: 0; } /* just the toggle */
 .thread[open] > summary + .comment { padding-top: 0; border-top: none; }
 .comment { padding: 6px 0 10px; border-top: 1px solid var(--border); }
@@ -802,7 +806,7 @@ dialog.base-dialog input { width: 100%; box-sizing: border-box; }
 .base-list { display: flex; flex-direction: column; max-height: 300px; overflow: auto; margin-top: 8px; }
 .base-list button { flex: none; text-align: left; padding: 6px 8px; border: 0; border-radius: 6px; background: none; font-family: var(--mono, monospace); }
 .base-list button.on { background: var(--soft); }
-.agent-draft:focus { outline: 2px solid var(--accent); }
+.agent-draft:focus-visible { outline: 2px solid var(--accent); }
 .agent-draft .row .note { align-self: center; color: var(--muted); }
 .merge-close { margin-left: auto; }
 .state-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: calc(12px * var(--ts)); font-weight: 600; color: #fff; }
@@ -908,7 +912,7 @@ mark.wd-del { background: var(--wd-del); color: inherit; padding: 0; }
 mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 /* A changed word inside a comment: the code's own text colour, as dim comment colours fade into the highlight. */
 :is(.hljs-comment, .hljs-quote) :is(mark.wd-add, mark.wd-del), :is(mark.wd-add, mark.wd-del) :is(.hljs-comment, .hljs-quote) { color: var(--code-fg); }
-.demo-page { width: 980px; padding: 16px; }
+.demo-page { width: min(980px, 100vw - 32px); padding: 16px; } /* the README's pictures at 980; narrower in a small window, as Settings has them */
 .demo-page h3 { margin: 0 0 10px; font-size: calc(15px * var(--ts)); }
 .demo-page .demo-pair { margin: 0; font-size: calc(13px * var(--ts)); }
 @media (max-width: 760px) { .demo-pair { grid-template-columns: 1fr; margin-left: 0; } }
@@ -1182,7 +1186,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .acct-host { position: absolute; right: -3px; bottom: -3px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; box-shadow: 0 0 0 1.5px var(--bg); }
 .acct-host svg { width: 11px; height: 11px; fill: var(--fg); }
 .acct-host.gitlab svg { fill: #fc6d26; }
-.account-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; gap: 2px; min-width: 240px; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
+.account-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; gap: 2px; min-width: 240px; width: max-content; max-width: min(calc(360px * var(--ts)), 100vw - 24px); padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
 .account-head { padding: 4px 8px 6px; font-size: calc(12px * var(--ts)); color: var(--muted); }
 .account-menu > button { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: none; text-align: left; }
 .account-menu > button:hover { background: var(--soft); }
@@ -1226,6 +1230,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .sk-title { width: 55%; height: 20px; }
 .skel-h1 { margin: 0; font-size: calc(16px * var(--ts)); }
 .skel-h1 .pr-num { color: var(--muted); font-weight: 400; }
+.conversation .skel-desc { border: 0; }
 .skel-desc { max-height: 320px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; -webkit-mask: linear-gradient(#000 70%, transparent); mask: linear-gradient(#000 70%, transparent); }
 .skel-pills { display: flex; gap: 6px; }
 .sk-pill { height: 18px; border-radius: 999px; }
@@ -1503,15 +1508,15 @@ dialog.ask form > input, dialog.ask form > label { flex: 1 0 100%; margin-bottom
 .plan { margin: 0 0 12px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 10px; font-size: calc(13px * var(--ts)); }
 .plan summary { cursor: pointer; color: var(--muted); }
 .plan summary b { color: var(--fg); }
-.plan ol { margin: 8px 0; padding-left: 22px; display: grid; gap: 4px; }
-.plan li { display: grid; grid-template-columns: 1fr 120px 52px 72px; align-items: center; gap: 10px; }
+.plan ol { margin: 8px 0; padding-left: 22px; display: grid; grid-template-columns: minmax(auto, 1fr) minmax(48px, 120px) max-content max-content; gap: 4px 10px; } /* the steps' names whole */
+.plan li { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; } /* one set of columns for every step, as wide as the widest needs */
 .plan li.done .plan-t { opacity: .6; }
 .plan-t small { color: var(--muted); }
 .plan-bar { height: 6px; border-radius: 4px; background: var(--soft); overflow: hidden; }
 .plan-bar i { display: block; height: 100%; background: var(--primary); }
 .plan-n { color: var(--muted); text-align: right; }
 .plan-ok { color: var(--primary); }
-@media (max-width: 700px) { .plan li { grid-template-columns: 1fr 52px 72px; } .plan-bar { display: none; } }
+@media (max-width: 700px) { .plan ol { grid-template-columns: minmax(0, 1fr) max-content max-content; } .plan-bar { display: none; } }
 /* An added line that looks like a secret (secrets.ts) */
 .diff tr.ln.secret td.code { box-shadow: inset 3px 0 0 var(--c-bad); background: var(--c-bad-tint); }
 /* An Android manifest's permissions and components, above its diff */
@@ -1625,6 +1630,7 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .inbox-earlier-one small { color: var(--muted); }
 .inbox-thread.cur { border-color: var(--accent); }
 .inbox-keys { margin-left: 12px; }
+.inbox-keys > span, .nw { white-space: nowrap; }
 .inbox-merged { color: var(--c-merged); }
 .note code { white-space: nowrap; } /* a command or code whole */
 .nav-inbox { position: relative; display: inline-flex; align-items: center; }
@@ -1944,7 +1950,7 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 /* The skeleton's bar as the page's (review.tsx PRSkeleton): same height and place, the title in it. */
 .skel main { width: 100%; } /* full width from the first frame, not a column that widens when the title comes */
 .skel main > .skel-bar { position: static; margin: -14px -16px 0; }
-.skel main > .skel-pills { margin-top: 4px; }
+.skel main > .skel-pills { margin-top: 4px; min-height: 29px; margin-bottom: 10px; align-items: center; } /* the pills' row, as tall */
 .skel-bar .skel-h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .skel-btn { flex: none; width: 29px; height: 29px; border-radius: 999px; }
 /* A comment box's buttons a little below it, everywhere (Resolve thread sat right against the reply box). */

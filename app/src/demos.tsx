@@ -996,7 +996,7 @@ Object.assign(DEMOS, {
         <ol>
           {([['specs', 'Specs and docs', 'what the change is meant to do', 4, 4], ['build', 'Build and config', 'dependencies, permissions, settings', 5, 3], ['code', 'Implementation', 'the change itself', 38, 2], ['tests', 'Tests', 'what it promises', 17, 0]] as const).map(([k, t, why, n, seen]) => (
             <li class={seen === n ? 'done' : ''}>
-              <span class="plan-t"><Octicon name={stepIcon(k)} /> <b>{t}</b> <small>{why}</small></span>
+              <span class="plan-t"><span class="nw"><Octicon name={stepIcon(k)} /> <b>{t}</b></span> <small>{why}</small></span>
               <span class="plan-bar"><i style={{ width: `${(100 * seen) / n}%` }} /></span>
               <small class="plan-n">{seen}/{n}</small>
               {seen === n ? <span class="plan-ok"><Octicon name="check" /></span> : <button class="link">{seen ? 'Continue' : 'Start'}</button>}
