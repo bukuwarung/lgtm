@@ -4815,16 +4815,32 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   };
   const hidden = (i: number) => !chunks[i].inDiff && !holdsNote(i) && !openRuns.has(runStart(i));
 
-  function onChunkClick(e: MouseEvent) {
-    if ((e.target as Element).closest('.note-host')) return; // a click inside a comment placed in the block
-    const el = (e.target as Element).closest('[data-src]');
-    // Only the "+" gutter (drawn left of the block) starts a comment, so text stays selectable; context outside
-    // the diff (data-nd) has none.
-    if (!el || el.hasAttribute('data-nd') || e.clientX >= el.getBoundingClientRect().left) return;
+  // The "+" for the block under the pointer (a paragraph, list item, table row, code line), as the diff's: centred on
+  // the file's left edge, level with the block's first line, so it covers none of the text. One button for the view,
+  // placed by the pointer; in the gutter it keeps the block it was for (on the way to it, the parent list's indent
+  // doesn't take it). Context outside the diff (data-nd) has none.
+  const [plus, setPlus] = useState<{ el: Element; top: number } | null>(null);
+  const aim = (e: PointerEvent) => {
+    const r = root.current, tgt = e.target as Element;
+    if (!r || tgt.closest('.md-plus')) return;
+    if (tgt.closest('.note-host, .notes, .removed')) return setPlus(null);
+    const box = r.getBoundingClientRect(), text = box.left + parseFloat(getComputedStyle(r).paddingLeft);
+    if (e.clientX < text && plus?.el.isConnected) {
+      const b = plus.el.getBoundingClientRect();
+      if (e.clientY >= b.top && e.clientY <= b.bottom) return;
+    }
+    const el = (e.clientX < text ? document.elementFromPoint(text + 2, e.clientY) : tgt)?.closest('[data-src]');
+    if (!el || !r.contains(el) || el.hasAttribute('data-nd')) return setPlus(null);
+    const [a, b] = el.getAttribute('data-src')!.split('-').map(Number);
+    if (!anchor(hunks, a, b)) return setPlus(null);
+    const top = Math.round(el.getBoundingClientRect().top - box.top);
+    setPlus((p) => (p?.el === el && p.top === top ? p : { el, top }));
+  };
+  const commentOn = (el: Element) => {
     const [s, end] = el.getAttribute('data-src')!.split('-').map(Number);
     const a = anchor(hunks, s, end);
     if (a) ctx.setTarget({ path, side: 'RIGHT', ...a });
-  }
+  };
 
   const marker = (r: Removed) => {
     const last = r.oldStart + r.lines.length - 1;
@@ -4851,14 +4867,21 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
 
   return (
     <div
-      class={`rich ${look.class}`}
+      class={`rich rich-file ${look.class}`}
       style={look.style}
       ref={root}
+      onPointerMove={aim}
+      onPointerLeave={() => setPlus(null)}
       onMouseOver={peek.over}
       onMouseOut={peek.out}
       onClick={(e) => peek.click(e) || onDocClick(e, root.current, linkTo)}
     >
       {peek.node}
+      {plus && (
+        <button class="md-plus" style={{ top: `${plus.top}px` }} title="Comment on these lines" aria-label="Comment on these lines" onClick={() => commentOn(plus.el)}>
+          +
+        </button>
+      )}
       <Notes ctx={ctx} threads={orphanT} drafts={orphanD} form={t?.side === 'LEFT' && !removed.some((r) => inRun(r, t.line))} />
       {chunks.map((c, i) => {
         if (hidden(i)) {
@@ -4894,7 +4917,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
         return (
           <>
             {here.filter((r) => !within.includes(r)).map(marker)}
-            <ChunkView html={c.html} onClick={onChunkClick} placed={inside.map((l) => ({ line: l, node: notesAt(l) }))} before={within.map((r) => ({ line: r.at, node: marker(r) }))} />
+            <ChunkView html={c.html} placed={inside.map((l) => ({ line: l, node: notesAt(l) }))} before={within.map((r) => ({ line: r.at, node: marker(r) }))} />
             {lines.filter((l) => !inside.includes(l)).map(notesAt)}
           </>
         );
@@ -4908,7 +4931,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
 // deepest block covering the line. A list item gets them under its own text (before any sub-list), a table row
 // in a new row after it, a code line right after that line, anything else right after the block.
 // `before`: removed lines, shown just before the deepest block they gave way to (a list item, not the whole list).
-function ChunkView({ html, placed, before = [], onClick }: { html: string; placed: { line: number; node: VNode }[]; before?: { line: number; node: VNode }[]; onClick: (e: MouseEvent) => void }) {
+function ChunkView({ html, placed, before = [] }: { html: string; placed: { line: number; node: VNode }[]; before?: { line: number; node: VNode }[] }) {
   const ref = useRef<HTMLDivElement>(null);
   const hosts = useRef(new Map<Element, { host: HTMLElement; outer: HTMLElement }>());
   const ahead = useRef(new Map<Element, { host: HTMLElement; outer: HTMLElement }>());
@@ -4979,7 +5002,7 @@ function ChunkView({ html, placed, before = [], onClick }: { html: string; place
     [],
   );
 
-  return <div ref={ref} class="md chunk" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={ref} class="md chunk" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // Marks along the right edge for where things are on this long page: threads still open (the ones waiting on you
