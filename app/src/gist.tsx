@@ -17,10 +17,10 @@ export function GistPage({ id }: { id: string }) {
     getGist(id).then(setG, (e) => (setErr(e.message), setG(null)));
   }, [id]);
   if (g === undefined) return <PageSkeleton title="the gist" />;
-  if (!g) return <div class="page"><Empty tone="err" action={['Retry', () => (setErr(''), setG(undefined), getGist(id).then(setG, (e) => (setErr(e.message), setG(null))))]}>Couldn't load the gist: {err}</Empty></div>;
+  if (!g) return <div role="main" class="page"><Empty tone="err" action={['Retry', () => (setErr(''), setG(undefined), getGist(id).then(setG, (e) => (setErr(e.message), setG(null))))]}>Couldn't load the gist: {err}</Empty></div>;
   const files = Object.values(g.files);
   return (
-    <div class="page gist">
+    <div role="main" class="page gist">
       <header class="gist-h">
         <h2>{g.description || files[0]?.filename || 'Gist'}</h2>
         <p class="note">

@@ -96,7 +96,7 @@ export function CommentMenu({ id, review, onEdit, onDelete }: { id?: string; rev
       <summary class="copy-link" title="More" aria-label="More"><Octicon name="kebab-horizontal" /></summary>
       <div class="account-menu" role="menu">
         {edit && <button role="menuitem" data-edit onClick={() => (close(), onEdit!())}>Edit</button>}
-        {del && <button role="menuitem" onClick={async () => (close(), (await ask('Delete this comment? It can’t be undone.', 'Delete', true)) && onDelete!())}>Delete…</button>}
+        {del && <button role="menuitem" onClick={async () => (close(), (await ask("Delete this comment? It can't be undone.", 'Delete', true)) && onDelete!())}>Delete…</button>}
         {review && <button role="menuitem" onClick={() => (close(), void dismiss(id, review.who))}>Dismiss review…</button>}
         {s.hidden && s.canUnhide && <button role="menuitem" onClick={() => (close(), void hide(id, null))}>Unhide</button>}
         {!s.hidden && s.canHide && (

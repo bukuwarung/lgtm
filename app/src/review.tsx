@@ -314,7 +314,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
       {held && (
         <div class="preflight ix-pad">
           <p>
-            <b>Before asking @{held}</b>, LGTM found in this PR:
+            <b>Before asking @{held}</b>, LGTM found in this {pageTerm().PR}:
           </p>
           <ul>
             {findings.map((f) => (
@@ -1565,7 +1565,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   if (error) {
     const missing = /^(GitHub|GitLab) 404\b/.test(error);
     return (
-      <div class="page">
+      <div role="main" class="page">
         <Empty tone="err" action={missing ? [`Open on ${site(repo)}`, prWebUrl(repo, n)] : errorAction(error, () => (setError(''), dispatchEvent(new Event('lgtm:refresh'))))}>
           {missing ? <>{pageTerm().PR} {numRef(repo, n)} isn't in {repo}, or this account can't see it (a private repository needs access; an organization with SSO needs the token authorized).</> : error}
         </Empty>
@@ -3581,32 +3581,35 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {file.status !== 'modified' && <span class={`st s-${file.status}`}><Tg i={file.status} t={file.status} /></span>}{/* modified: the usual, untagged */}
         {/* The file's name, prominent; its Gradle module, if known; its folder small beside them (within the module, below
             src/), cut from the left (the nearest folders stay); the full path on hover. */}
-        <a
-          class="file-name"
-          href={file.blob_url}
-          target="_blank"
-          rel="noopener"
-          title={file.previous_filename ? `${file.previous_filename} → ${path}` : path}
-        >
-          <FileIcon path={path} big untested={ctx.untested.has(file.filename)} />
-          <b>
-            {file.previous_filename && leaf(file.previous_filename) !== leaf(path) && <>{leaf(file.previous_filename)} → </>}
-            <FileName path={path} />
-          </b>
-          {mod && (
-            <span class="file-mod" title={mod === '.' ? 'The root project' : `Module ${moduleName(mod)}, in ${mod}/`}>
-              <ModuleIcon /> <span class="file-mod-name">{mod === '.' ? ':' : moduleName(mod)}</span>
-            </span>
-          )}
-          {folder && (
-            <span class="file-dir">
-              <bdi>
-                {file.previous_filename && dir(file.previous_filename) !== dir(path) && `${dir(file.previous_filename)} → `}
-                {folder}
-              </bdi>
-            </span>
-          )}
-        </a>
+        {/* A heading, so a screen reader moves file to file as it would section to section. */}
+        <span class="file-hd" role="heading" aria-level={2}>
+          <a
+            class="file-name"
+            href={file.blob_url}
+            target="_blank"
+            rel="noopener"
+            title={file.previous_filename ? `${file.previous_filename} → ${path}` : path}
+          >
+            <FileIcon path={path} big untested={ctx.untested.has(file.filename)} />
+            <b>
+              {file.previous_filename && leaf(file.previous_filename) !== leaf(path) && <>{leaf(file.previous_filename)} → </>}
+              <FileName path={path} />
+            </b>
+            {mod && (
+              <span class="file-mod" title={mod === '.' ? 'The root project' : `Module ${moduleName(mod)}, in ${mod}/`}>
+                <ModuleIcon /> <span class="file-mod-name">{mod === '.' ? ':' : moduleName(mod)}</span>
+              </span>
+            )}
+            {folder && (
+              <span class="file-dir">
+                <bdi>
+                  {file.previous_filename && dir(file.previous_filename) !== dir(path) && `${dir(file.previous_filename)} → `}
+                  {folder}
+                </bdi>
+              </span>
+            )}
+          </a>
+        </span>
         <span class="counts">
           <b class="a">+{num(file.additions)}</b> <b class="d">−{num(file.deletions)}</b>
         </span>
@@ -5376,7 +5379,8 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
     );
   return (
     <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}${t.isResolved || t.isOutdated ? ' settled' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot && !others}>
-      <summary>
+      {/* Open, it shows only its fold arrow: named, as a screen reader has nothing else to read. */}
+      <summary aria-label={`Thread by @${first?.author?.login ?? 'ghost'}${t.isResolved ? ', resolved' : t.isOutdated ? ', outdated' : ''}`}>
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
         {/* The preview is for a collapsed thread; once open, the comments below say it. */}
         {first?.state === 'PENDING' && <span class="badge">Pending, started on {site(ctx.repo)} · </span>}

@@ -519,14 +519,14 @@ function StartPage({ items, onTab }: { items: QueueItem[] | null; onTab: (tab: s
   // A new teammate: nothing to review, nothing of theirs, nothing opened yet. What to do, not six zeros.
   if (!needs.length && !mine.length && !replies && !recent.length && !savedLines)
     return (
-      <div class="page start">
-        <Empty icon="git-pull-request" action={['Browse PRs', () => onTab('team')]}>
+      <div role="main" class="page start">
+        <Empty icon="git-pull-request" action={[`Browse ${T.PRs}`, () => onTab('team')]}>
           Nothing waits on you yet. Paste a {T.PR}'s link to open it (⌘K), or browse your team's {T.PRs}.
         </Empty>
       </div>
     );
   return (
-    <div class="page start">
+    <div role="main" class="page start">
       {savedLines > 0 && (
         <p class="start-saved" title={`Changes and comments LGTM folded or hid ("less to read") in the ${T.PRs} you reviewed here, as each stood at your latest review. The time: at a careful review's 400 lines an hour`}>
           LGTM has kept <b>{savedLines.toLocaleString()} lines</b> (about {readTime(savedLines)} of reading) out of your way in the {saved.length} {saved.length === 1 ? T.PR : T.PRs} you've reviewed
@@ -1071,7 +1071,7 @@ function App() {
         ) : route === '#/settings' ? (
           <Settings />
         ) : route === '#/done' ? (
-          <div class="page done">
+          <div role="main" class="page done">
             <img src="/mantap.png" alt="" width="96" height="96" /> {/* the :mantap: thumbs-up guy, cheering you on */}
             <h2>{rm?.practice ? 'Practice run done' : rm?.skipped ? 'End of the queue' : 'All caught up!'}</h2>
             <p>

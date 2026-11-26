@@ -476,6 +476,7 @@ main { padding: 16px; }
 
 .file { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 6px; content-visibility: auto; contain-intrinsic-size: auto 400px; }
 .file-h { position: sticky; top: calc(var(--nav) + var(--bar) + var(--pills, 0px)); z-index: 2; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--soft); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; }
+.file-hd { flex: 1; min-width: 0; display: flex; }
 .file-h a.file-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; color: var(--fg); text-decoration: none; }
 .file-h a.file-name:hover b { text-decoration: underline; }
 .file-name b { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 calc(13px * var(--ts)) var(--mono); }
@@ -887,6 +888,7 @@ button.link { border: none; background: none; padding: 0 4px; color: var(--accen
 .set-flag.with-demo { padding-bottom: 10px; }
 .demo-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 2px 0 0 26px; font-size: calc(12px * var(--ts)); }
 .demo-side { position: relative; padding: 22px 8px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; pointer-events: none; }
+.demo-body { display: contents; } /* a picture of LGTM: out of Tab's way and a screen reader's (inert), laid out as if it weren't there */
 .demo-side.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 /* In Settings a side can be clicked to choose it: the side takes the click, its picture stays inert. */
 .demo-pair.pickable .demo-side { pointer-events: auto; }

@@ -412,11 +412,11 @@ export function DemoPair({ k, active, pick }: { k: string; active?: boolean; pic
     <div class={pick ? 'demo-pair pickable' : 'demo-pair'} role={pick ? 'radiogroup' : undefined}>
       <div {...side(false)}>
         <div class="demo-label">Off</div>
-        {d.off}
+        <div class="demo-body" inert>{d.off}</div>
       </div>
       <div {...side(true)}>
         <div class="demo-label">On</div>
-        {d.on}
+        <div class="demo-body" inert>{d.on}</div>
       </div>
     </div>
   );
@@ -1163,7 +1163,7 @@ Object.assign(DEMOS, {
     off: <File path="Payments.kt" add={3} del={0}><Rows rows={LINE_COMMENT.map((l, i) => ['+', '', 30 + i, l] as Row)} /></File>,
     on: (
       <File path="Payments.kt" add={3} del={0}>
-        <Rows rows={[proseRow(30, '<p>Retries a failed charge up to three times, waiting longer each time, so a short outage doesn’t fail the order.</p>'), ['+', '', 32, LINE_COMMENT[2]]]} />
+        <Rows rows={[proseRow(30, "<p>Retries a failed charge up to three times, waiting longer each time, so a short outage doesn't fail the order.</p>"), ['+', '', 32, LINE_COMMENT[2]]]} />
       </File>
     ),
   },

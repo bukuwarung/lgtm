@@ -403,8 +403,9 @@ try {
     const name = (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : e.tagName.toLowerCase());
     return [${JSON.stringify(where)} + ': ' + name + ' "' + e.textContent.trim().replace(/\\s+/g, ' ').slice(0, 30) + '" ' + (x ? (e.scrollWidth - e.clientWidth) + 'px wide' : '') + (y ? (e.scrollHeight - e.clientHeight) + 'px tall' : '') + ' (' + (x ? st.overflowX : st.overflowY) + ')'];
   })`);
-  // An icon button with no name: no tooltip on hover, and "button" to a screen reader.
-  const unnamed = (where) => evaluate(`[...document.querySelectorAll('button, summary, a, [role=button]')].filter((b) => b.getClientRects().length && !b.closest('.demo-side') && b.querySelector('svg') && !b.textContent.trim() && !(b.getAttribute('aria-label') || b.title || b.getAttribute('aria-labelledby') || b.closest('[title]'))).map((b) => ${JSON.stringify(where)} + ': ' + (b.className || b.tagName.toLowerCase()) + ' in ' + (b.parentElement.className || b.parentElement.tagName.toLowerCase()))`);
+  // A control with no name: "button" (or "text field") to a screen reader, and no tooltip on hover. The previews' insides
+  // are pictures (inert), so they're not asked.
+  const unnamed = (where) => evaluate(`[...document.querySelectorAll('button, summary, a[href], [role=button], [role=tab], [role=option], [role=switch], [role=menuitem], input:not([type=hidden]), textarea, select')].filter((b) => b.getClientRects().length && !b.closest('[inert], [aria-hidden=true]') && !(b.getAttribute('aria-label') || b.getAttribute('aria-labelledby') || b.title || b.dataset.lgtmTitle || b.closest('[title]') || b.labels?.[0]?.textContent.trim() || b.placeholder || [...b.childNodes].some((n) => n.nodeType === 3 ? n.textContent.trim() : n.nodeType === 1 && !n.matches('svg, [aria-hidden=true]') && (n.textContent.trim() || n.alt)))).map((b) => ${JSON.stringify(where)} + ': ' + (b.className || b.tagName.toLowerCase()) + ' in ' + (b.parentElement.className || b.parentElement.tagName.toLowerCase()))`);
   // Text too faint to read on what's behind it: under 4.5:1 (3:1 from 24px, or 18.7px bold), WCAG's minimum. Colours
   // read through a canvas (any CSS colour to sRGB), the background the boxes behind it laid one over another. Previews,
   // code (its theme's colours), what's disabled or greyed out (opacity: a switch's sub-switches while it's off) aside.
@@ -693,7 +694,7 @@ try {
     const pinned = await evaluate(`[...document.querySelectorAll('.demo-side .pr-status')].filter((p) => getComputedStyle(p).position !== 'static').length`);
     if (pinned) throw new Error(`${pinned} previews' pills pinned over their code`);
   });
-  await step('at the narrowest window (900px): lined up, nothing sideways, no text cut off, checkboxes on their words, icon buttons named', async () => {
+  await step('at the narrowest window (900px): lined up, nothing sideways, no text cut off, checkboxes on their words, every control named', async () => {
     await page.setViewportSize({ width: 900, height: 700 });
     const found = await tour('900px', [rows, textRows, sideways, clipped, offWords, unnamed]);
     await page.setViewportSize({ width: 1400, height: 900 });

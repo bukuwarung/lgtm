@@ -949,7 +949,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
             {steps && (
               <button
                 class="link ix-files-view"
-                title={byStep ? 'Show the files as folders' : 'Show the files by reading step, in the diff’s order'}
+                title={byStep ? 'Show the files as folders' : "Show the files by reading step, in the diff's order"}
                 onClick={(e) => (e.preventDefault(), e.stopPropagation(), toggleByStep())}
               >
                 <Octicon name={byStep ? 'file-directory' : 'list-ordered'} /> {byStep ? 'Folders' : 'Steps'}

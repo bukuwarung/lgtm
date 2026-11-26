@@ -10,19 +10,37 @@ use std::time::Duration;
 
 /// Apps started from Finder or the Dock get a bare PATH without Homebrew, so `gh`, `slackcli` and `acli` aren't
 /// found. Take the PATH of the user's login shell (where Homebrew is set up), falling back to Homebrew's usual
-/// directories if the shell is slow or fails.
+/// directories if the shell is slow or fails. Asking the shell takes 100ms or more at every launch, so the answer is
+/// kept (~/Library/Caches/com.bukuwarung.lgtm/login-path): later launches use it at once and ask again in the
+/// background for the next one (a PATH changed since applies from then).
 fn adopt_login_path() {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let ask = move || -> Option<String> {
+        let o = Command::new(&shell).args(["-lc", "printf %s \"$PATH\""]).output().ok()?;
+        (o.status.success() && !o.stdout.is_empty()).then(|| String::from_utf8_lossy(&o.stdout).into_owned())
+    };
+    let keep = |path: &str| {
+        if let Some(k) = kept_file() {
+            let _ = std::fs::create_dir_all(k.parent().unwrap()).and_then(|_| std::fs::write(k, path));
+        }
+    };
+    if let Some(path) = kept_file().and_then(|k| std::fs::read_to_string(k).ok()).filter(|p| !p.trim().is_empty()) {
+        std::env::set_var("PATH", path);
+        std::thread::spawn(move || ask().map(|p| keep(&p)));
+        return;
+    }
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let out = Command::new(shell).args(["-lc", "printf %s \"$PATH\""]).output();
-        let _ = tx.send(out);
+        let _ = tx.send(ask());
     });
     let path = match rx.recv_timeout(Duration::from_secs(3)) {
-        Ok(Ok(o)) if o.status.success() && !o.stdout.is_empty() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        Ok(Some(p)) => (keep(&p), p).1,
         _ => format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default()),
     };
     std::env::set_var("PATH", path);
+}
+fn kept_file() -> Option<std::path::PathBuf> {
+    Some(std::path::PathBuf::from(std::env::var_os("HOME")?).join("Library/Caches/com.bukuwarung.lgtm/login-path"))
 }
 
 /// The GitHub CLI's token, read on every call so `gh auth login` / `gh auth switch` apply on reload; `user`, the

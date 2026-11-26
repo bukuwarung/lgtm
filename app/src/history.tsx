@@ -7,7 +7,7 @@ import { Empty, Stats, Tg, Who } from './tags.tsx';
 const SK = [78, 62, 88, 55, 70];
 export function PageSkeleton({ title, face }: { title: string; face?: boolean }) {
   return (
-    <div class="page history" aria-busy="true" aria-label={`Loading ${title}`}>
+    <div role="main" class="page history" aria-busy="true" aria-label={`Loading ${title}`}>
       <header class="person-h">
         {face && <span class="sk sk-face" />}
         <div class="sk-head">
@@ -43,7 +43,7 @@ export function History() {
   const [tries, setTries] = useState(0);
   useEffect(() => void getMyReviews(30).then(setList, (e) => setList(e.message)), [tries]);
   if (list === null) return <PageSkeleton title="your reviews" />;
-  if (typeof list === 'string') return <div class="page history"><h2>Your reviews this month</h2><Empty tone="err" action={['Retry', () => (setList(null), setTries((t) => t + 1))]}>{list}</Empty></div>;
+  if (typeof list === 'string') return <div role="main" class="page history"><h2>Your reviews this month</h2><Empty tone="err" action={['Retry', () => (setList(null), setTries((t) => t + 1))]}>{list}</Empty></div>;
   const count = (s: string) => list.filter((r) => r.state === s).length;
   const waits = list.flatMap((r) => (r.waited != null ? [r.waited] : [])).sort((a, b) => a - b);
   const median = waits.length ? waits[Math.floor(waits.length / 2)] : null;
@@ -70,7 +70,7 @@ export function History() {
     copyText([`Reviews in the last 30 days: ${summary}`, ...list.map((r) => `- ${VERDICT[r.state][1]}: ${r.title} (${r.repo}#${r.number}) ${r.url}`)].join('\n'))
       .then(() => setCopied(true), () => {});
   return (
-    <div class="page history">
+    <div role="main" class="page history">
       <h2>Your reviews this month</h2>
       {list.length > 0 && (
         <Stats cols={4} items={[

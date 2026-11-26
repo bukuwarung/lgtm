@@ -380,7 +380,7 @@ export function Settings() {
   useEffect(() => void fetchIntegrations().then(setInts, (e) => setErr(e.message)), [intTries]);
 
   return (
-    <div class="page settings" ref={page}>
+    <div role="main" class="page settings" ref={page}>
       <nav class="set-toc" aria-label="Settings sections">
         {toc.map((t) => (
           <button class={`${cur === t.id ? 'on' : ''}${t.sub ? ' sub' : ''}`} onClick={() => document.getElementById(t.id)?.scrollIntoView({ block: 'start' })}>
@@ -1363,7 +1363,7 @@ function About() {
             <>
               {' '}
               <button class="primary" disabled={updating === ''} onClick={() => (setUpdating(''), selfUpdate().catch((e) => setUpdating(e.message)))}>
-                {updating === '' ? 'Updating… LGTM restarts when it’s done' : 'Update now'}
+                {updating === '' ? "Updating… LGTM restarts when it's done" : 'Update now'}
               </button>
             </>
           )}
@@ -1719,7 +1719,7 @@ function LaunchAtLogin() {
           <input type="checkbox" checked={menuBar} onChange={toggleMenuBar} />
           <span>
             Show in the menu bar
-            <small>PRs waiting on you beside the icon; its menu lists them and starts review mode.</small>
+            <small>{T.PRs} waiting on you beside the icon; its menu lists them and starts review mode.</small>
           </span>
         </label>
         <DemoPair k="menuBar" active={menuBar} pick={toggleMenuBar} />

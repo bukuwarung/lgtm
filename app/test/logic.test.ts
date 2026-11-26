@@ -1651,3 +1651,16 @@ test('text sizes come from the type scale', async () => {
   }
   assert.deepEqual(off, []);
 });
+
+// One way of writing: a straight apostrophe (as the rest of LGTM), and … for "more to come", never three dots.
+test('wording: straight apostrophes, an ellipsis character', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = new URL('../src/', import.meta.url);
+  const off: string[] = [];
+  for (const f of readdirSync(dir).filter((f) => /\.tsx?$/.test(f))) {
+    readFileSync(new URL(f, dir), 'utf8').split('\n').forEach((l, i) => {
+      if (/[A-Za-z]’[a-z]/.test(l) || /[A-Za-z]\.\.\.["'`<]/.test(l)) off.push(`${f}:${i + 1}`);
+    });
+  }
+  assert.deepEqual(off, []);
+});

@@ -58,12 +58,12 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
   const [tries, setTries] = useState(0);
   useEffect(() => void (setP(null), getPerson(login, orgs).then(setP, (e) => setP(e.message))), [login, orgs.join(), tries]);
   if (p === null) return <PageSkeleton title={`@${login}`} face />;
-  if (typeof p === 'string') return <div class="page history person"><h2>@{login}</h2><Empty tone="err" action={['Retry', () => setTries((t) => t + 1)]}>{p}</Empty></div>;
+  if (typeof p === 'string') return <div role="main" class="page history person"><h2>@{login}</h2><Empty tone="err" action={['Retry', () => setTries((t) => t + 1)]}>{p}</Empty></div>;
   const count = (s: string) => p.reviews.filter((r) => r.state === s).length;
   const waits = p.reviews.flatMap((r) => (r.waited != null ? [r.waited] : [])).sort((a, b) => a - b);
   const median = waits.length ? waits[Math.floor(waits.length / 2)] : null;
   return (
-    <div class="page history person">
+    <div role="main" class="page history person">
       <header class="person-h">
         <img src={p.login.includes("@") ? p.avatar : faceOf(p.login, 96)} alt="" />
         <div>

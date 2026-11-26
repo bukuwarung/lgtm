@@ -99,7 +99,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   if (!list) return <PageSkeleton title="threads waiting on your reply" />;
   let k = 0;
   return (
-    <div class="page history inbox">
+    <div role="main" class="page history inbox">
       {pending && <p class="list-updating" role="status"><span class="sk-dot" /> Updating…</p>}
       <h2>Waiting on your reply</h2>
       {loadErr && <Empty tone="err" action={['Retry', () => (setLoadErr(''), setList(null), setTries((t) => t + 1))]}>Couldn't load your threads. {loadErr}</Empty>}
