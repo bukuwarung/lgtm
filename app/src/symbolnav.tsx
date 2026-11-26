@@ -4,7 +4,7 @@ import { usesOf, type CodeIndex, type Use } from './specrefs.ts';
 import { pageTerm } from './platform.ts';
 
 // Where a function or class the PR declares is declared and used in the PR (Settings → Diff): pointing at its name in
-// the diff underlines it (dotted, under the letters: nothing laid over the code), and ⌘-click or the usages key lists
+// the diff underlines it (dotted, under the letters: nothing laid over the code), and a click or the usages key lists
 // every line naming it, to jump to (specrefs.ts usesOf).
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // The word under the pointer in a diff's code, and where it is on screen.
@@ -54,11 +54,14 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
       });
     };
     const away = () => (setBadge(null), setOpen(null));
-    const click = (e: PointerEvent) => {
-      // ⌘-click on an underlined name: its list, as an editor's "go to definition" (no text selection starts).
-      if (e.metaKey && e.button === 0 && badgeRef.current && (e.target as Element).closest?.('.diff td.code, .diff span.code')) return void (e.preventDefault(), show(badgeRef.current));
-      if (!(e.target as Element).closest?.('.sym-pop, .spec-peek')) setOpen(null);
+    const down = (e: PointerEvent) => !(e.target as Element).closest?.('.sym-pop, .spec-peek') && setOpen(null);
+    // A click on an underlined name: its list, as GitHub's code view has it. Not a click that ends a text selection (a
+    // drag), nor a double-click (selecting the name to copy it: the list goes again), nor shift- or ⌥-click.
+    const click = (e: MouseEvent) => {
+      if (e.button !== 0 || e.shiftKey || e.altKey || e.detail > 1 || !badgeRef.current || !getSelection()?.isCollapsed) return;
+      if ((e.target as Element).closest?.('.diff td.code, .diff span.code')) show(badgeRef.current);
     };
+    const dbl = () => setOpen(null);
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return away();
       // The list open: ↑/↓ move between its lines (the preview follows), Enter goes there.
@@ -80,9 +83,11 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
     };
     addEventListener('pointermove', move, { passive: true });
     addEventListener('scroll', away, { passive: true });
-    addEventListener('pointerdown', click);
+    addEventListener('pointerdown', down);
+    addEventListener('click', click);
+    addEventListener('dblclick', dbl);
     addEventListener('keydown', key, true);
-    return () => (cancelAnimationFrame(frame), clearTimeout(hide.current), removeEventListener('pointermove', move), removeEventListener('scroll', away), removeEventListener('pointerdown', click), removeEventListener('keydown', key, true));
+    return () => (cancelAnimationFrame(frame), clearTimeout(hide.current), removeEventListener('pointermove', move), removeEventListener('scroll', away), removeEventListener('pointerdown', down), removeEventListener('click', click), removeEventListener('dblclick', dbl), removeEventListener('keydown', key, true));
   }, [ix, usageKey]);
   badgeRef.current = badge;
 

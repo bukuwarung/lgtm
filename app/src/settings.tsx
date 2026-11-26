@@ -537,7 +537,7 @@ export function Settings() {
         <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Fold code moved without changes" hint="One row naming where it went." demo />
-        <Flag k="symbolNav" initial={true} label="Where functions and classes are used" hint={`Point at a function or class the ${T.PR} declares (it underlines), then ⌘-click it, or press ${keyLabel(readBindings(localStorage.getItem('shortcuts') ?? '{}').usages)}: every line naming it, and a repo search.`} demo />
+        <Flag k="symbolNav" initial={true} label="Where functions and classes are used" hint={`Point at a function or class the ${T.PR} declares (it underlines), then click it, or press ${keyLabel(readBindings(localStorage.getItem('shortcuts') ?? '{}').usages)}: every line naming it, and a repo search.`} demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too"   demo />
         <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="More room for long lines. Copies and comments keep the real text."  demo />
         <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Also a button beside the ${T.PRs_} title.`}  demo />

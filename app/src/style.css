@@ -1766,7 +1766,8 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .assigned-to { color: var(--muted); font-weight: 400; }
 
 /* Where a declared name is used (symbolnav.tsx): its badge beside the name, as rendered markdown's "+", and the list. */
-.sym-under { position: fixed; z-index: 39; height: 0; border-bottom: 1.5px dotted var(--accent); pointer-events: none; } /* under the name pointed at (symbolnav.tsx): ⌘-click lists its uses */
+html:has(.sym-under) .diff :is(td.code, span.code) { cursor: pointer; } /* over a name that has a list */
+.sym-under { position: fixed; z-index: 39; height: 0; border-bottom: 1.5px dotted var(--accent); pointer-events: none; } /* under the name pointed at (symbolnav.tsx): a click lists its uses */
 .sym-pop { position: fixed; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: 320px; display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px var(--shadow); font-size: calc(12px * var(--ts)); }
 .sym-h { padding: 6px 10px; border-bottom: 1px solid var(--border); }
 .sym-h small { color: var(--muted); }
