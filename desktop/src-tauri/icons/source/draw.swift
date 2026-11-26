@@ -26,14 +26,35 @@ func diff(dark: Bool) {
     for w in ws { box(x, y + h / 2 - 16, w, 32, 16, k == 0 ? ink : ink.withAlphaComponent(0.9)); x += w + 24 }
   }
 }
+// The stamp: two rings and LG over TM, spaced out, a little turned, as the menu bar's (tray.swift); the letters centred by their ink
+// (a font's box leaves capitals low), then a touch right (L and T are heavy on their left).
+let stampAt = CGPoint(x: 560, y: 560), stampR: CGFloat = 205, tilt: CGFloat = 0.2
+let stampFont = NSFont.systemFont(ofSize: 128, weight: .heavy), lineGap: CGFloat = 26
+func letters(_ ctx: CGContext, _ ink: NSColor) {
+  ctx.saveGState(); ctx.rotate(by: tilt)
+  for (t, up) in [("LG", true), ("TM", false)] {
+    let s = NSAttributedString(string: t, attributes: [.font: stampFont, .foregroundColor: ink, .kern: 10])
+    s.draw(at: NSPoint(x: -s.size().width / 2, y: (up ? lineGap / 2 : -lineGap / 2 - stampFont.capHeight) + stampFont.descender))
+  }
+  ctx.restoreGState()
+}
+// Where the letters' ink lands around the stamp's centre, measured once on a scratch canvas.
+let inkShift: CGPoint = {
+  let n = 1024, rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: n, pixelsHigh: n, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+  NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+  let ctx = NSGraphicsContext.current!.cgContext; ctx.translateBy(x: 512, y: 512); letters(ctx, .black)
+  NSGraphicsContext.restoreGraphicsState()
+  var lo = CGPoint(x: 9999, y: 9999), hi = CGPoint(x: -1, y: -1)
+  for y in stride(from: 0, to: n, by: 2) { for x in stride(from: 0, to: n, by: 2) where rep.colorAt(x: x, y: y)!.alphaComponent > 0.3 { lo.x = min(lo.x, CGFloat(x)); hi.x = max(hi.x, CGFloat(x)); lo.y = min(lo.y, CGFloat(y)); hi.y = max(hi.y, CGFloat(y)) } }
+  return CGPoint(x: 512 - (lo.x + hi.x) / 2 + stampR * 0.045, y: -(512 - (lo.y + hi.y) / 2)) // bitmap rows run down
+}()
 func stamp(dark: Bool, _ ctx: CGContext) {
-  ctx.saveGState(); ctx.translateBy(x: 560, y: S - 560); ctx.rotate(by: 0.26)
+  ctx.saveGState(); ctx.translateBy(x: stampAt.x, y: S - stampAt.y)
   let ink = dark ? c(0x3fb950) : c(0x1a7f37)
-  let ring = NSBezierPath(ovalIn: NSRect(x: -205, y: -205, width: 410, height: 410)); ring.lineWidth = 30
+  let ring = NSBezierPath(ovalIn: NSRect(x: -stampR, y: -stampR, width: 2 * stampR, height: 2 * stampR)); ring.lineWidth = 34
   (dark ? c(0x16191d, 0.85) : c(0xffffff, 0.88)).setFill(); ring.fill(); ink.setStroke(); ring.stroke()
   let inner = NSBezierPath(ovalIn: NSRect(x: -165, y: -165, width: 330, height: 330)); inner.lineWidth = 10; inner.stroke()
-  let s = NSAttributedString(string: "LGTM", attributes: [.font: NSFont.systemFont(ofSize: 128, weight: .black), .foregroundColor: ink, .kern: -2])
-  let sz = s.size(); s.draw(at: NSPoint(x: -sz.width / 2, y: -sz.height / 2 + 6))
+  ctx.translateBy(x: inkShift.x, y: inkShift.y); letters(ctx, ink)
   ctx.restoreGState()
 }
 if args[1] == "layers" {
