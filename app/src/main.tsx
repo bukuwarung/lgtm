@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { Select } from './select.tsx';
+import './tooltip.ts'; // LGTM's own tooltips for every title
 import { Setup } from './signin.tsx';
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';

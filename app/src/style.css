@@ -68,6 +68,32 @@ button:disabled { opacity: .5; cursor: default; }
 :is(select, button.select):hover:not(:disabled) { border-color: color-mix(in srgb, var(--fg) 32%, var(--border)); background-color: color-mix(in srgb, var(--fg) 6%, var(--btn-bg)); }
 :is(select, button.select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(select, button.select):disabled { opacity: .5; cursor: default; }
+/* The rest of the form controls in LGTM's look, not macOS's: a slider's slim track and round thumb in the accent; a
+   number box without its spin arrows (−/+ beside it instead: settings.tsx NumberField); a search box's clear as the
+   app's ×; a colour well as a rounded swatch (picking still opens macOS's colour panel). */
+input[type=range] { -webkit-appearance: none; appearance: none; height: 20px; margin: 0; background: transparent; cursor: pointer; accent-color: var(--accent); }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--fg) 18%, transparent); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 20%, transparent), 0 1px 3px rgb(0 0 0 / .25); }
+input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--fg) 18%, transparent); }
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 20%, transparent); }
+input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.num-field { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
+.num-field .num-input { width: 3.5em; margin: 0; text-align: center; }
+input[type=search]::-webkit-search-cancel-button { -webkit-appearance: none; width: 14px; height: 14px; margin-left: 4px; cursor: pointer; background: var(--muted); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z'/%3E%3C/svg%3E") center / 14px no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z'/%3E%3C/svg%3E") center / 14px no-repeat; }
+input[type=search]::-webkit-search-cancel-button:hover { background: var(--fg); }
+input[type=color] { -webkit-appearance: none; appearance: none; width: 30px; height: 22px; padding: 2px; border: 1px solid var(--btn-edge); border-radius: 6px; background: var(--btn-bg); cursor: pointer; }
+input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type=color]::-webkit-color-swatch { border: 0; border-radius: 4px; }
+input[type=color]::-moz-color-swatch { border: 0; border-radius: 4px; }
+.find-field { position: relative; display: inline-flex; }
+/* Tooltips (tooltip.ts): the theme's colours, a shortcut as keys. In the top layer, placed by script. */
+.lgtm-tip { position: fixed; inset: auto; margin: 0; max-width: 320px; padding: 5px 8px; font-size: calc(12px * var(--ts)); line-height: 1.4; white-space: pre-line; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 14px rgb(0 0 0 / .18); pointer-events: none; animation: lgtm-tip-in .1s ease-out; }
+.lgtm-tip kbd { margin-left: 2px; padding: 0 5px; font: 500 calc(11px * var(--ts)) var(--sans); color: var(--muted); background: var(--soft); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; }
+@keyframes lgtm-tip-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .lgtm-tip { animation: none; } }
+.select-menu.find-sugs { position: absolute; top: calc(100% + 4px); left: 0; right: 0; }
 /* The dropdown (select.tsx): its button as a select is, its words from the left, cut with … when long; its list as the
    app's other menus are (the account menu's card, rows, hover), the chosen one ticked. */
 button.select { display: inline-block; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: auto; min-height: 0; line-height: inherit; font-weight: 400; }

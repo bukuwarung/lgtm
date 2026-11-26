@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useStoredValue } from './platform.ts';
+import { Octicon } from './tags.tsx';
 
 // ⌘F in the app: the macOS web view has no find bar of its own. Matches are marked with the CSS Custom Highlight API
 // (no changes to the page); Enter / ⇧Enter move between them, Esc closes. The review page renders every file on ⌘F,
@@ -47,6 +48,11 @@ export function FindBar() {
     if (k.length >= 2 && hits.length && recent[0] !== k) setRecent(JSON.stringify([k, ...recent.filter((x) => x !== k)].slice(0, 10)));
   };
   const close = () => (remember(), setOpen(false));
+  // Those searches, under the box in LGTM's own menu (a <datalist> opened macOS's): as you type, or on ↓.
+  const [sugOpen, setSugOpen] = useState(false);
+  const [sugHi, setSugHi] = useState(-1);
+  const sugs = sugOpen ? recent.filter((k) => k !== q && k.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 6) : [];
+  const take = (k: string) => (setQ(k), setSugOpen(false), setSugHi(-1));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -91,16 +97,30 @@ export function FindBar() {
   const step = (d: number) => hits.length && setI((i + d + hits.length) % hits.length);
   return (
     <div class="find-bar" role="search">
+      <span class="find-field">
       <input
         ref={input}
         value={q}
         placeholder="Find in this page"
         aria-label="Find in this page"
-        list="find-recent"
-        onInput={(e) => setQ(e.currentTarget.value)}
+        aria-autocomplete="list"
+        aria-expanded={sugs.length > 0}
+        onInput={(e) => (setQ(e.currentTarget.value), setSugOpen(true), setSugHi(-1))}
+        onBlur={() => setSugOpen(false)}
         onKeyDown={(e) => {
           if (e.isComposing || e.keyCode === 229) return; // an input method's Enter or arrows (platform.ts composing)
-          if (e.key === 'Enter') {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!sugOpen) return setSugOpen(true);
+            const n = sugs.length;
+            if (n) setSugHi((h) => (e.key === 'ArrowDown' ? (h + 1) % n : (h - 1 + n) % n));
+          } else if (e.key === 'Enter' && sugs[sugHi]) {
+            e.preventDefault();
+            take(sugs[sugHi]);
+          } else if (e.key === 'Escape' && sugs.length) {
+            e.stopPropagation();
+            setSugOpen(false); // the list first, then the bar
+          } else if (e.key === 'Enter') {
             e.preventDefault();
             remember();
             step(e.shiftKey ? -1 : 1);
@@ -109,13 +129,21 @@ export function FindBar() {
           }
         }}
       />
-      <datalist id="find-recent">
-        {recent.map((k) => <option value={k} />)}
-      </datalist>
+      {sugs.length > 0 && (
+        <div class="select-menu find-sugs" role="listbox" aria-label="Recent searches">
+          {sugs.map((k, j) => (
+            <div role="option" aria-selected={j === sugHi} class={`select-opt${j === sugHi ? ' hi' : ''}`} onMouseEnter={() => setSugHi(j)} onMouseDown={(e) => (e.preventDefault(), take(k))}>
+              <span class="select-tick"><Octicon name="history" /></span>
+              <span class="select-text">{k}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      </span>
       <span class="find-count">{q ? (hits.length ? `${i + 1}/${hits.length}` : 'No matches') : ''}</span>
-      <button title="Previous (⇧↵)" onClick={() => step(-1)} disabled={!hits.length}>↑</button>
-      <button title="Next (↵)" onClick={() => step(1)} disabled={!hits.length}>↓</button>
-      <button title="Close (Esc)" onClick={close}>✕</button>
+      <button class="icon-btn" title="Previous (⇧↵)" aria-label="Previous" onClick={() => step(-1)} disabled={!hits.length}><Octicon name="chevron-up" /></button>
+      <button class="icon-btn" title="Next (↵)" aria-label="Next" onClick={() => step(1)} disabled={!hits.length}><Octicon name="chevron-down" /></button>
+      <button class="icon-btn" title="Close (Esc)" aria-label="Close" onClick={close}><Octicon name="x" /></button>
     </div>
   );
 }

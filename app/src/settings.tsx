@@ -155,12 +155,12 @@ function ReadingSteps() {
 function AgentLimit() {
   const [limit, setLimit] = useStoredValue('agentReviewLimit', '20');
   return (
-    <label class="set-row">
+    <div class="set-row">
       <span>
-        At most <input type="number" min={0} max={500} class="num-input" value={limit} onChange={(e) => setLimit(String(Math.max(0, Math.round(Number(e.currentTarget.value) || 0))))} /> a day
+        At most <NumberField min={0} max={500} step={5} value={Number(limit) || 0} onChange={(n) => setLimit(String(n))} label="Agent reviews a day at most" /> a day
         <small>0: no limit. Reviews you ask for don't count.</small>
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -295,6 +295,18 @@ const SECTION_ICON: Record<string, string> = {
   'Markdown files': 'markdown',
   Backup: 'archive',
 };
+
+// A number with − and + beside it (in LGTM's look: a number box's own spin arrows are macOS's, and tiny); typed in too.
+function NumberField({ value, onChange, min, max, step = 1, label }: { value: number; onChange: (n: number) => void; min: number; max: number; step?: number; label: string }) {
+  const set = (n: number) => onChange(Math.min(max, Math.max(min, Math.round(n))));
+  return (
+    <span class="num-field">
+      <button type="button" class="icon-btn" aria-label={`Fewer (${label})`} disabled={value <= min} onClick={() => set(value - step)}><Octicon name="dash" /></button>
+      <input type="number" class="num-input" min={min} max={max} value={value} aria-label={label} onChange={(e) => set(Number(e.currentTarget.value) || 0)} />
+      <button type="button" class="icon-btn" aria-label={`More (${label})`} disabled={value >= max} onClick={() => set(value + step)}><Octicon name="plus" /></button>
+    </span>
+  );
+}
 
 export function Settings() {
   const [theme, setTheme] = useTheme();
