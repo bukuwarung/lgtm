@@ -489,7 +489,7 @@ const Bar = ({ linked, menu }: { linked?: boolean; menu?: boolean }) => (
       <a><span class="pr-num">#412</span> Retry failed payments with backoff</a>
     </h1>
     <div class="bar-group">
-      <a class="bar-slack">💬</a>
+      <a class="bar-slack"><Octicon name="comment" /></a>
       <span class="agents-menu">
         <button class={linked ? 'agents-btn linked' : 'agents-btn'}>
           <Octicon name="dependabot" /> Agents{linked && <span class="session-dot" />}
@@ -1373,10 +1373,10 @@ Object.assign(DEMOS, {
   },
   keepAgentSessions: {
     title: 'Keep agent review sessions',
-    off: <div class="pills"><span class="pill p-agent"><Tg i="🤖" n={2} t="findings" /></span></div>,
+    off: <div class="pills"><span class="pill p-agent"><Tg i="claude" n={2} t="findings" /></span></div>,
     on: (
       <div class="pills">
-        <span class="pill-drop"><span class="pill p-agent"><Tg i="🤖" n={2} t="findings" /> <span class="caret" aria-hidden="true" /></span><span class="quick-menu">Open the session</span></span>
+        <span class="pill-drop"><span class="pill p-agent"><Tg i="claude" n={2} t="findings" /> <span class="caret" aria-hidden="true" /></span><span class="quick-menu">Open the session</span></span>
       </div>
     ),
   },
@@ -1587,8 +1587,8 @@ Object.assign(DEMOS, {
   },
   jiraOnQa: {
     title: 'Move the Jira ticket when you ask QA',
-    off: <div class="demo-bar"><button>Ask QA</button><span class="pill">BUKU-4120 · In Review</span></div>,
-    on: <div class="demo-bar"><button>Ask QA</button><span class="pill p-ok">BUKU-4120 · In QA</span></div>,
+    off: <div class="demo-bar"><button>Ask QA</button><span class="demo-ticket"><a>BUKU-4120</a> <span class="jira-st js-indeterminate">In Review</span></span></div>,
+    on: <div class="demo-bar"><button>Ask QA</button><span class="demo-ticket"><a>BUKU-4120</a> <span class="jira-st js-indeterminate">In QA</span></span></div>,
   },
   closeReply: {
     title: 'Tell your review request when you close',
@@ -1602,8 +1602,8 @@ Object.assign(DEMOS, {
   },
   jiraOnReview: {
     title: 'Move the Jira ticket when you ask for review',
-    off: <div class="demo-bar"><button>Ready for review</button><span class="pill">BUKU-4120 · In Progress</span></div>,
-    on: <div class="demo-bar"><button>Ready for review</button><span class="pill p-ok">BUKU-4120 · In Review</span></div>,
+    off: <div class="demo-bar"><button>Ready for review</button><span class="demo-ticket"><a>BUKU-4120</a> <span class="jira-st js-indeterminate">In Progress</span></span></div>,
+    on: <div class="demo-bar"><button>Ready for review</button><span class="demo-ticket"><a>BUKU-4120</a> <span class="jira-st js-indeterminate">In Review</span></span></div>,
   },
   slackDone: {
     title: '✅ on review requests',
@@ -1804,7 +1804,7 @@ SCENES.app = {
                           <FileIcon path={f} status={f.endsWith('RetryPolicy.kt') || f.endsWith('Test.kt') ? 'added' : 'modified'} untested={f.endsWith('PaymentService.kt')} />
                           <span class="tree-name">{f.split('/').pop()}</span>
                         </button>
-                        <span class={f.endsWith('strings.xml') ? 'vmark on' : 'vmark'}>{f.endsWith('strings.xml') ? '✓' : ''}</span>
+                        <span class={f.endsWith('strings.xml') ? 'vmark on' : 'vmark'}>{f.endsWith('strings.xml') ? <Octicon name="check" size={10} /> : ''}</span>
                       </div>
                     ))}
                   </>
