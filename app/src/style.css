@@ -68,15 +68,9 @@ button:disabled { opacity: .5; cursor: default; }
 :is(select, button.select):hover:not(:disabled) { border-color: color-mix(in srgb, var(--fg) 32%, var(--border)); background-color: color-mix(in srgb, var(--fg) 6%, var(--btn-bg)); }
 :is(select, button.select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(select, button.select):disabled { opacity: .5; cursor: default; }
-/* The rest of the form controls in LGTM's look, not macOS's: a slider's slim track and round thumb in the accent; a
+/* The rest of the form controls in LGTM's look, not macOS's (sliders stay macOS's own, as liked better): a
    number box without its spin arrows (−/+ beside it instead: settings.tsx NumberField); a search box's clear as the
    app's ×; a colour well as a rounded swatch (picking still opens macOS's colour panel). */
-input[type=range] { -webkit-appearance: none; appearance: none; height: 20px; margin: 0; background: transparent; cursor: pointer; accent-color: var(--accent); }
-input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--fg) 18%, transparent); }
-input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 20%, transparent), 0 1px 3px rgb(0 0 0 / .25); }
-input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--fg) 18%, transparent); }
-input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 20%, transparent); }
-input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .num-field { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
