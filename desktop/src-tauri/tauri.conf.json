@@ -10,7 +10,8 @@
   "app": {
     "windows": [
       {
-        "title": "lgtm",
+        "title": "LGTM",
+        "visible": false,
         "width": 1440,
         "height": 900,
         "minWidth": 900,

@@ -4,7 +4,9 @@ import { renderMermaid } from './mermaid.ts';
 import { composing, own, recentPRs, useSavedReplies } from './platform.ts';
 import { isLab } from './github.ts';
 import { AGENTS, type AgentId } from './agents.ts';
-import { AgentMark } from './tags.tsx';
+import { AgentMark, Octicon } from './tags.tsx';
+import { OCTICONS } from './octicons.ts';
+import type { ComponentChildren } from 'preact';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 
 type Props = {
@@ -205,10 +207,11 @@ export function Editor(p: Props) {
       (e: Error) => setFixErr(`${AGENTS[agent].name} couldn't: ${e.message}`),
     ).finally(() => setFixing(null));
   };
-  const tool = (label: string, title: string, run: () => void) => (
+  // An icon (GitHub's, as its own comment box has them), or words (Replies, Suggest), and what it does.
+  const tool = (label: string | ComponentChildren, title: string, run: () => void) => (
     // Mouse-down keeps the text box's focus and selection; the click runs it, so Enter and Space do too.
     <button type="button" class="ed-tool" title={title} onMouseDown={(e) => e.preventDefault()} onClick={run}>
-      {label}
+      {typeof label === 'string' && label in OCTICONS ? <Octicon name={label} size={14} /> : label}
     </button>
   );
 
@@ -220,15 +223,15 @@ export function Editor(p: Props) {
         <span class="spacer" />
         {tab === 'write' && (
           <>
-            {tool('B', 'Bold (⌘B)', () => wrap('**'))}
-            {tool('I', 'Italic (⌘I)', () => wrap('_'))}
-            {tool('</>', 'Code (⌘E)', () => wrap('`'))}
-            {tool('🔗', 'Link (⌘K)', () => wrap('[', '](url)', 'text'))}
-            {tool('❝', 'Quote', () => prefix('> '))}
-            {tool('•', 'List', () => prefix('- '))}
-            {tool('☐', 'Task', () => prefix('- [ ] '))}
-            {replies.length > 0 && tool('↩︎ Replies', 'Saved replies (or type / at the start of a line)', () => offerReplies('', sel().s))}
-            {p.suggestion != null && tool('± Suggest', 'Suggest a change to these lines', () => insertBlock('```suggestion\n' + p.suggestion + '\n```'))}
+            {tool('bold', 'Bold (⌘B)', () => wrap('**'))}
+            {tool('italic', 'Italic (⌘I)', () => wrap('_'))}
+            {tool('code', 'Code (⌘E)', () => wrap('`'))}
+            {tool('link', 'Link (⌘K)', () => wrap('[', '](url)', 'text'))}
+            {tool('quote', 'Quote', () => prefix('> '))}
+            {tool('list-unordered', 'List', () => prefix('- '))}
+            {tool('tasklist', 'Task', () => prefix('- [ ] '))}
+            {replies.length > 0 && tool(<><Octicon name="reply" /> Replies</>, 'Saved replies (or type / at the start of a line)', () => offerReplies('', sel().s))}
+            {p.suggestion != null && tool(<><Octicon name="diff" /> Suggest</>, 'Suggest a change to these lines', () => insertBlock('```suggestion\n' + p.suggestion + '\n```'))}
             {p.suggestion != null && !!p.fix?.agents.length && (
               <span class="ed-fix">
                 <button

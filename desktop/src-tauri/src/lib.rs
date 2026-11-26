@@ -50,7 +50,14 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 "LGTM",
                 true,
                 &[
-                    &P::about(app, None, Some(AboutMetadata { name: Some("LGTM".into()), version: Some(app.package_info().version.to_string()), ..Default::default() }))?,
+                    &P::about(app, None, Some(AboutMetadata {
+                        name: Some("LGTM".into()),
+                        version: Some(app.package_info().version.to_string()),
+                        short_version: Some(String::new()), // no "(0.16.0)" after the version: the build number is the same
+                        credits: Some("Say LGTM and mean it.\ngithub.com/bukuwarung/lgtm".into()),
+                        copyright: Some("© 2026 PT Buku Usaha Digital · MIT License".into()),
+                        ..Default::default()
+                    }))?,
                     &sep()?,
                     &item("settings", "Settings…", Some("CmdOrCtrl+,"))?,
                     &sep()?,
@@ -123,12 +130,25 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri::Manager;
     adopt_login_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init()) // web links open in the default browser
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init()) // lgtm://<owner>/<repo>/pull/<n>
-        .plugin(tauri_plugin_window_state::Builder::default().build()) // window size and position, remembered
+        // window size and position, remembered; not whether it shows (it opens hidden: below)
+        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::VISIBLE).build())
+        // The window opens hidden and the page shows it once it has drawn, in its theme (platform.ts), so a dark app
+        // never flashes white; if the page can't, it shows anyway after 3 seconds.
+        .setup(|app| {
+            if let Some(w) = app.get_webview_window("main") {
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    let _ = w.show();
+                });
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .menu(menu)
         .on_menu_event(|app, event| {

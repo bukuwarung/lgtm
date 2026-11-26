@@ -196,6 +196,8 @@ if (isDesktop)
     const full = async () => void html.toggle('fullscreen', await w.isFullscreen());
     void full();
     void w.onResized(full);
+    // The window opens hidden (tauri.conf.json): shown once the page has drawn, in its theme, so it never flashes white.
+    setTimeout(() => void w.show(), 30);
   });
 
 // No autocorrect or auto-capitals in any text field (macOS rewrites code, logins and paths otherwise); one-line fields

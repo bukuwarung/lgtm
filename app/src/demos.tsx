@@ -467,7 +467,7 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
               <button type="button" class="ed-tab on">Write</button>
               <button type="button" class="ed-tab">Preview</button>
               <span class="spacer" />
-              {['B', 'I', '</>', '🔗', '❝', '•', '±'].map((t) => <button type="button" class="ed-tool">{t}</button>)}
+              {['bold', 'italic', 'code', 'link', 'quote', 'list-unordered', 'tasklist'].map((t) => <button type="button" class="ed-tool"><Octicon name={t} /></button>)}
             </div>
             <div class="ed-write">
               <textarea rows={2} placeholder="Reply… (⌘↵ to send)" value="Good call :+1: I'll make the backoff configurable" />
