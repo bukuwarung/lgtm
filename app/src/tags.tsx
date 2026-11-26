@@ -148,11 +148,21 @@ export function CopyCode({ children, text }: { children: string; text?: string }
 }
 
 // A page or list with nothing in it, or that couldn't load: an icon, one line, and its action as a button.
-export const Empty = ({ icon = 'check', tone, children, action }: { icon?: string; tone?: 'ok' | 'err'; children: ComponentChildren; action?: [string, () => void] }) => (
+// An action is a button, or (a URL) a link out, opened as any link here is (the app: in your browser).
+const openOut = (href: string) => {
+  const a = Object.assign(document.createElement('a'), { href, target: '_blank', rel: 'noopener' });
+  document.body.append(a);
+  a.click();
+  a.remove();
+};
+// A failed load's one way out: Retry, or, with a GitHub limit used up (Retry does nothing until it resets), what used it.
+export const errorAction = (err: string, retry: () => void): [string, () => void] =>
+  /limit is used up until|rate-limited LGTM until/.test(err) ? ['What used it', () => void (location.hash = '/settings')] : ['Retry', retry];
+export const Empty = ({ icon = 'check', tone, children, action }: { icon?: string; tone?: 'ok' | 'err'; children: ComponentChildren; action?: [string, (() => void) | string] }) => (
   <div class={`empty${tone ? ` empty-${tone}` : ''}`} role={tone === 'err' ? 'alert' : undefined}>
     <Octicon name={tone === 'err' ? 'alert' : icon} size={24} />
     <p>{children}</p>
-    {action && <button type="button" onClick={action[1]}>{action[0]}</button>}
+    {action && <button type="button" onClick={() => (typeof action[1] === 'string' ? openOut(action[1]) : action[1]())}>{action[0]}</button>}
   </div>
 );
 

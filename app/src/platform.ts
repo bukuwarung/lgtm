@@ -669,7 +669,8 @@ export async function fetchIntegrations(): Promise<Integrations> {
     throw new Error("lgtm isn't running. Start it with the lgtm-web command, then reload.");
   });
   // An lgtm started before this page existed doesn't know the route: the page is newer than the running server.
-  if (!res.ok) throw new Error('the running LGTM is older than this page. Restart it (Ctrl-C, then lgtm) and reload.');
+  if (res.status === 404) throw new Error('the running LGTM is older than this page. Restart it (Ctrl-C, then lgtm) and reload.');
+  if (!res.ok) throw new Error(`LGTM's server answered ${res.status}${(await res.text().catch(() => '')).trim().replace(/^(.{1,160}).*$/s, ': $1')}`);
   return res.json();
 }
 

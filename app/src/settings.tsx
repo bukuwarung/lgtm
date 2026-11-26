@@ -3,7 +3,7 @@ import { Select } from './select.tsx';
 import { labMe } from './gitlab.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { budgets, commitEmails, tokenScopes, getBudgets, getEmojis, getPeople, getRaw, getReviewQueue, getTeamMembers, getTeams, getGitHubViewer, listDir, spentThisHour } from './github.ts';
-import { AgentMark, CheckMark, Octicon, Tg, Who, Lines } from './tags.tsx';
+import { AgentMark, CheckMark, Octicon, Tg, Who, Lines, Retry } from './tags.tsx';
 import { AGENTS, AGENT_IDS, EFFORT_NAME, effortsOf, modelsOf, agentEffort, agentModel, agentOn, detectAgents, setAgentEffort, setAgentModel, setAgentOn, useAgents, type AgentId } from './agents.ts';
 import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, agentSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, forgetKept, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, agentMod, MOD_INSTALL, CODEX_MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel, loginEnding } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
@@ -375,8 +375,9 @@ export function Settings() {
     getGitHubViewer().then(setMe, () => setMe(''));
     getGhAccounts().then(setAccounts, () => setAccounts([]));
     getTeams().then(setTeams, () => setTeams([]));
-    fetchIntegrations().then(setInts, (e) => setErr(e.message));
   }, []);
+  const [intTries, setIntTries] = useState(0);
+  useEffect(() => void fetchIntegrations().then(setInts, (e) => setErr(e.message)), [intTries]);
 
   return (
     <div class="page settings" ref={page}>
@@ -433,17 +434,17 @@ export function Settings() {
           {glab && !glab.length && <pre>brew install glab{'\n'}glab auth login</pre>}
           <small>Optional. Another host: <code>glab auth login --hostname gitlab.example.com</code>.</small>
         </Status>
-        <Status ok={ints ? ints.slack.ok : null}>
+        <Status ok={ints ? ints.slack.ok : err ? false : null}>
           <b>Slack</b> (review DMs){' '}
-          {!ints ? 'checking…' : ints.slack.ok ? <>signed in{ints.slack.who && <> as <code>{ints.slack.who}</code></>} through slackcli</> : <>not available: {ints.slack.error}</>}
+          {!ints ? (err ? "couldn't be checked" : 'checking…') : ints.slack.ok ? <>signed in{ints.slack.who && <> as <code>{ints.slack.who}</code></>} through slackcli</> : <>not available: {ints.slack.error}</>}
           {ints && !ints.slack.ok && <pre>brew install shaharia-lab/tap/slackcli{'\n'}slackcli auth login-auto</pre>}
         </Status>
-        <Status ok={ints ? ints.jira.ok : null}>
+        <Status ok={ints ? ints.jira.ok : err ? false : null}>
           <b>Jira</b> (ticket summaries){' '}
-          {!ints ? 'checking…' : ints.jira.ok ? <>signed in{ints.jira.site && <> to <code>{ints.jira.site}</code></>} through the Atlassian CLI</> : <>not available: {ints.jira.error}</>}
+          {!ints ? (err ? "couldn't be checked" : 'checking…') : ints.jira.ok ? <>signed in{ints.jira.site && <> to <code>{ints.jira.site}</code></>} through the Atlassian CLI</> : <>not available: {ints.jira.error}</>}
           {ints && !ints.jira.ok && <pre>brew install atlassian/homebrew-acli/acli{'\n'}acli jira auth login --web</pre>}
         </Status>
-        {err && <p class="error">Couldn't check Slack and Jira: {err}</p>}
+        {err && <p class="error">Couldn't check Slack and Jira: {err} <Retry onClick={() => (setErr(''), setInts(null), setIntTries((t) => t + 1))} /></p>}
         <div class="set-group">
           <h4>Names</h4>
         <Flag k="realNames" initial={false} label="Real names" hint="From GitHub profiles. The login shows on hover." demo>

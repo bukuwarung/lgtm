@@ -1,7 +1,7 @@
 /* Each token is light-dark(light, dark). The theme toggle sets color-scheme; "auto" follows the OS.
    Dark is soft greys and muted syntax colours, not near-black. */
 /* Text sizes (Settings → Appearance): the app's text and the diff's code, as scales of 14px and 12px. */
-:root { --ts: 1; --cs: 1; }
+:root { --ts: 1; --cs: 1; --quick: var(--quick); --move: .22s; --ease: cubic-bezier(.2, .8, .2, 1); } /* motion: a quick change (hover, a menu opening), a move (panels sliding, items reordering) */
 :root, .lgtm-colors { /* .lgtm-colors: lgtm's own colours again inside another theme (its preview card) */
   color-scheme: light dark;
   --bg: light-dark(#fff, #2b2b2b); --soft: light-dark(#f6f8fa, #313335); --border: light-dark(#d1d9e0, #45484a);
@@ -51,7 +51,7 @@ a:hover { text-decoration: underline; }
 button { font: inherit; padding: 3px 10px; border: 1px solid var(--btn-edge); border-bottom-color: var(--btn-edge-low); border-radius: 6px; background: var(--btn-bg); color: var(--fg); cursor: pointer; } /* depth from a darker lower edge, not a shadow: a flat button (no border: index rows, links) has none */
 button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 /* Hover a step darker, pressed another (through --btn-bg, so what sets its own background keeps it). */
-button { transition: background-color .12s; }
+button { transition: background-color var(--quick); }
 button:hover:not(:disabled) { --btn-bg: light-dark(color-mix(in srgb, var(--fg) 9%, var(--soft)), color-mix(in srgb, var(--fg) 13%, var(--soft))); }
 button:active:not(:disabled) { --btn-bg: light-dark(color-mix(in srgb, var(--fg) 14%, var(--soft)), color-mix(in srgb, var(--fg) 18%, var(--soft))); }
 :is(.top, .bar) button:hover:not(:disabled) { --btn-bg: light-dark(color-mix(in srgb, var(--fg) 5%, var(--bg)), color-mix(in srgb, var(--fg) 14%, var(--soft))); }
@@ -65,7 +65,7 @@ button:disabled { opacity: .5; cursor: default; }
   padding: 4px 28px 4px 10px; font: inherit; color: var(--fg); cursor: pointer;
   border: 1px solid var(--btn-edge); border-bottom-color: var(--btn-edge-low); border-radius: 6px;
   background: var(--btn-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%238b949e' d='M4.43 6.18a.75.75 0 0 1 1.06.02L8 8.85l2.51-2.65a.75.75 0 1 1 1.09 1.03l-3.06 3.23a.75.75 0 0 1-1.09 0L4.4 7.23a.75.75 0 0 1 .03-1.05Z'/%3E%3C/svg%3E") no-repeat right 7px center / 16px;
-  transition: border-color .12s, box-shadow .12s;
+  transition: border-color var(--quick), box-shadow var(--quick);
 }
 :is(select, button.select):hover:not(:disabled) { border-color: color-mix(in srgb, var(--fg) 32%, var(--border)); background-color: color-mix(in srgb, var(--fg) 6%, var(--btn-bg)); }
 :is(select, button.select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -85,7 +85,7 @@ input[type=color]::-webkit-color-swatch { border: 0; border-radius: 4px; }
 input[type=color]::-moz-color-swatch { border: 0; border-radius: 4px; }
 .find-field { position: relative; display: inline-flex; }
 /* Tooltips (tooltip.ts): the theme's colours, a shortcut as keys. In the top layer, placed by script. */
-.lgtm-tip { position: fixed; inset: auto; margin: 0; max-width: 320px; padding: 5px 8px; font-size: calc(12px * var(--ts)); line-height: 1.4; white-space: pre-line; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 14px rgb(0 0 0 / .18); pointer-events: none; animation: lgtm-tip-in .1s ease-out; }
+.lgtm-tip { position: fixed; inset: auto; margin: 0; max-width: 320px; padding: 5px 8px; font-size: calc(12px * var(--ts)); line-height: 1.4; white-space: pre-line; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 14px rgb(0 0 0 / .18); pointer-events: none; animation: lgtm-tip-in var(--quick) ease-out; }
 .lgtm-tip kbd { margin-left: 2px; padding: 0 5px; font: 500 calc(11px * var(--ts)) var(--sans); color: var(--muted); background: var(--soft); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; }
 @keyframes lgtm-tip-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .lgtm-tip { animation: none; } }
@@ -93,7 +93,7 @@ input[type=color]::-moz-color-swatch { border: 0; border-radius: 4px; }
 /* The dropdown (select.tsx): its button as a select is, its words from the left, cut with … when long; its list as the
    app's other menus are (the account menu's card, rows, hover), the chosen one ticked. */
 button.select { display: inline-block; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: auto; min-height: 0; line-height: inherit; font-weight: 400; }
-.select-menu { position: fixed; z-index: 1000; display: grid; gap: 1px; align-content: start; padding: 5px; overflow-y: auto; box-sizing: border-box; font-size: calc(13px * var(--ts)); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); animation: lgtm-in .12s ease-out; }
+.select-menu { position: fixed; z-index: 1000; display: grid; gap: 1px; align-content: start; padding: 5px; overflow-y: auto; box-sizing: border-box; font-size: calc(13px * var(--ts)); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); animation: lgtm-in var(--quick) ease-out; }
 .select-opt { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; border-radius: 6px; white-space: nowrap; cursor: default; }
 .select-opt.hi { background: var(--soft); }
 .select-opt.off { opacity: .45; }
@@ -127,7 +127,7 @@ code, pre { font-family: var(--mono); }
 .signin { max-width: 600px; margin: 8vh auto 48px; padding: 0 16px; }
 .hero { display: grid; justify-items: center; gap: 4px; margin-bottom: 24px; text-align: center; }
 .hero h1 { margin: 8px 0 0; font-size: calc(28px * var(--ts)); font-weight: 700; letter-spacing: .02em; }
-.tagline { margin: 0; color: var(--muted); font-size: calc(15px * var(--ts)); }
+.tagline { margin: 0; color: var(--muted); font-size: calc(16px * var(--ts)); }
 .signin-card { display: grid; gap: 10px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); box-shadow: 0 1px 3px var(--shadow); }
 .signin-card :is(p, pre) { margin: 0; }
 .signin-card > button.primary { justify-self: start; margin-top: 4px; }
@@ -252,7 +252,7 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .offline-bar { position: sticky; top: var(--nav); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: calc(13px * var(--ts)); color: var(--fg); background: var(--warn); border-bottom: 1px solid var(--border); }
 .offline-bar .retry { margin-left: auto; }
 /* Offline: what needs GitHub rests (the bar says why); reading, scrolling, drafts and settings go on. */
-html.offline :is(.bar-actions, .merge-bar, .review-submit, .inbox-thread .row, .thread .row) button:not(.retry) { opacity: .5; pointer-events: none; }
+html.offline :is(.bar-actions, .merge-bar, .review-submit, .submit-inline, .inbox-thread .row, .thread .row) button:not(.retry) { opacity: .5; pointer-events: none; }
 .sends { margin: 6px 0; padding: 6px 8px; border-radius: 6px; font-size: calc(12px * var(--ts)); color: var(--muted); background: var(--soft); }
 .sends-list { display: block; margin-top: 2px; font-family: var(--mono); font-size: calc(11px * var(--ts)); }
 /* Specs naming the PR's code: their code spans link to it, their tasks count it, and files link back. */
@@ -268,7 +268,7 @@ html.offline :is(.bar-actions, .merge-bar, .review-submit, .inbox-thread .row, .
 .spec-item .spec-dir, .spec-item small { color: var(--muted); }
 /* A test's phases (// Given, // When, // Then, Arrange / Act / Assert): a label each, and a faint line where one starts. */
 tr.phase > td { border-top: 1px dashed color-mix(in srgb, var(--fg) 14%, transparent); }
-.ph { display: inline-block; padding: 0 7px; border-radius: 4px; font: 600 calc(11px * var(--ts)) / 1.6 var(--sans); letter-spacing: .02em; }
+.ph { display: inline-block; padding: 0 6px; border-radius: 4px; font: 600 calc(11px * var(--ts)) / 1.6 var(--sans); letter-spacing: .02em; }
 .ph-given { color: var(--c-given); background: color-mix(in srgb, var(--c-given) 16%, transparent); }
 .ph-when { color: var(--c-when); background: color-mix(in srgb, var(--c-when) 18%, transparent); }
 .ph-then { color: var(--c-then); background: color-mix(in srgb, var(--c-then) 16%, transparent); }
@@ -745,7 +745,7 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 /* Rows standing in for lines not shown (unchanged lines, folded imports): a tinted strip, its words on hover (or keyboard
    focus) only. They keep their height, so nothing moves. */
 .diff tr.import-fold td { background: color-mix(in srgb, var(--soft) 50%, transparent); }
-.diff :is(tr.gap, tr.import-fold) button { opacity: 0; transition: opacity .12s; }
+.diff :is(tr.gap, tr.import-fold) button { opacity: 0; transition: opacity var(--quick); }
 .diff :is(tr.gap, tr.import-fold):is(:hover, :focus-within) button { opacity: 1; }
 .demo-page .diff :is(tr.gap, tr.import-fold) button { opacity: 1; } /* the README pictures show what they say */
 /* A 🤖 finding posted again: one quiet line in place of the thread. */
@@ -899,7 +899,7 @@ fieldset:disabled .demo-pair.pickable .demo-side:hover { border-color: var(--bor
 fieldset:disabled .demo-pair { opacity: .5; }
 fieldset:disabled .demo-side.on { border-color: var(--border); box-shadow: none; }
 fieldset:disabled .demo-side.on .demo-label { color: var(--muted); }
-.demo-label { position: absolute; top: 4px; left: 8px; font: 600 calc(10px * var(--ts)) var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.demo-label { position: absolute; top: 4px; left: 8px; font: 600 calc(11px * var(--ts)) var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .demo-side.on .demo-label { color: var(--accent); }
 .demo-side .file { margin-bottom: 6px; content-visibility: visible; }
 .demo-side .file-h { position: static; padding: 3px 8px; }
@@ -913,11 +913,11 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 /* A changed word inside a comment: the code's own text colour, as dim comment colours fade into the highlight. */
 :is(.hljs-comment, .hljs-quote) :is(mark.wd-add, mark.wd-del), :is(mark.wd-add, mark.wd-del) :is(.hljs-comment, .hljs-quote) { color: var(--code-fg); }
 .demo-page { width: min(980px, 100vw - 32px); padding: 16px; } /* the README's pictures at 980; narrower in a small window, as Settings has them */
-.demo-page h3 { margin: 0 0 10px; font-size: calc(15px * var(--ts)); }
+.demo-page h3 { margin: 0 0 10px; font-size: calc(16px * var(--ts)); }
 .demo-page .demo-pair { margin: 0; font-size: calc(13px * var(--ts)); }
 @media (max-width: 760px) { .demo-pair { grid-template-columns: 1fr; margin-left: 0; } }
 .demo-side .file-h:last-child { border-bottom: 0; border-radius: 6px; }
-.code-sample { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: calc(13px * var(--cs)); line-height: 1.5; overflow-x: auto; }
+.code-sample { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: calc(12px * var(--cs)); line-height: 1.5; overflow-x: auto; }
 /* Rendered doc comments (KDoc / Javadoc / JSDoc), like IntelliJ's reader mode */
 .diff tr.doc td.code { white-space: normal; }
 .doc-render { position: relative; display: inline-block; vertical-align: top; box-sizing: border-box; margin: 2px 0; padding: 6px 10px; border-left: 3px solid var(--hl-com); border-radius: 0 4px 4px 0; background: color-mix(in srgb, var(--soft) 70%, transparent); font: calc(13px * var(--ts))/1.5 var(--sans); color: var(--fg); }
@@ -1017,10 +1017,10 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .desktop.inactive .top > * { opacity: .5; } /* another window in front, as a Mac toolbar's controls fade */
 /* Showing and hiding the PR list and the PR index slides their column; the panel keeps its width inside, clipped,
    so its content doesn't reflow on the way. Instant while resizing, and for reduced motion. */
-.shell, .review { transition: grid-template-columns .22s cubic-bezier(.2, .8, .2, 1); }
+.shell, .review { transition: grid-template-columns var(--move) var(--ease); }
 .side { overflow: hidden; min-width: 0; transition: visibility 0s; }
 .side > .side-scroll { min-width: 200px; }
-.side.collapsed { visibility: hidden; border-right-color: transparent; transition: visibility 0s .22s, border-color 0s .22s; }
+.side.collapsed { visibility: hidden; border-right-color: transparent; transition: visibility 0s var(--move), border-color 0s var(--move); }
 .resizing .shell, .resizing .review { transition: none; }
 @media (prefers-reduced-motion: reduce) { .shell, .review, .side.collapsed { transition: none; } }
 /* On my open threads: whether the commented lines changed since */
@@ -1167,7 +1167,7 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .settings > section { scroll-margin-top: calc(var(--nav) + 16px); }
 @media (max-width: 900px) { .settings { display: block; } .set-toc { display: none; } }
 .scroll-marks .m-view { position: absolute; left: 0; right: 0; cursor: grab; min-height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 26%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 38%, transparent); box-sizing: border-box; }
-.scroll-marks .m-view.glide { transition: top .2s ease-out, height .2s ease-out; }
+.scroll-marks .m-view.glide { transition: top var(--move) var(--ease), height var(--move) var(--ease); }
 .scroll-marks .m-view:hover, .scroll-marks:active .m-view { background: color-mix(in srgb, var(--fg) 36%, transparent); }
 .set-size { display: flex; align-items: center; gap: 8px; font-size: calc(12px * var(--ts)); color: var(--muted); font-variant-numeric: tabular-nums; }
 .set-size input[type=range] { width: 160px; }
@@ -1239,10 +1239,10 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .list-skel-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 8px 6px 12px; border-bottom: 1px solid var(--border); }
 .list-skel-tabs .sk { height: 12px; }
 .list-skel-group { width: 45%; height: 11px; margin: 6px 4px 0; }
-.list-skel-item { display: grid; gap: 7px; padding: 10px 8px; border-left: 3px solid var(--soft); border-radius: 4px; }
+.list-skel-item { display: grid; gap: 8px; padding: 10px 8px; border-left: 3px solid var(--soft); border-radius: 4px; }
 .list-skel-item > .sk { height: 11px; }
 .list-skel-meta { width: 52%; height: 8px !important; opacity: .7; }
-.skel-file { display: grid; gap: 9px; padding-bottom: 14px; border: 1px solid var(--border); border-radius: 6px; }
+.skel-file { display: grid; gap: 8px; padding-bottom: 14px; border: 1px solid var(--border); border-radius: 6px; }
 .skel-file > .sk { margin-left: 52px; }
 .skel-fh { padding: 10px; border-bottom: 1px solid var(--border); background: var(--soft); border-radius: 6px 6px 0 0; }
 .skel-fh .sk { --soft: var(--bg); }
@@ -1475,7 +1475,7 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .scene-themes .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .scene-themes .set-row small { display: block; color: var(--muted); }
 /* A file header's folder: the tree and the module tag already place the file; it shows on hover. */
-.file-h .file-dir { opacity: 0; transition: opacity .12s; }
+.file-h .file-dir { opacity: 0; transition: opacity var(--quick); }
 .file-h:hover .file-dir { opacity: 1; }
 /* Without + / − signs (Settings → Diff, off by default) the colour marks changed lines, and the code gets that column. */
 html.no-signs .diff .code::before { content: none; }
@@ -1585,7 +1585,7 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .preflight ul { margin: 0 0 8px; padding-left: 18px; }
 .preflight .row { display: flex; gap: 6px; justify-content: flex-end; }
 /* Settings → Checks: a platform's subsection, and its entry in the list, indented under Checks */
-.settings .set-group { margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--border); scroll-margin-top: calc(var(--nav) + 16px); }
+.settings .set-group { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border); scroll-margin-top: calc(var(--nav) + 16px); }
 .settings .set-group > h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
 .set-toc button.sub { padding-left: 30px; font-size: calc(12px * var(--ts)); }
 .settings .set-group > p, .settings .set-group > .set-row { max-width: 720px; }
@@ -1605,7 +1605,7 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .merge-open { flex-wrap: wrap; gap: 6px; font-size: calc(13px * var(--ts)); }
 .merge-open .link { margin-left: auto; }
 /* #/inbox: threads waiting on my reply */
-.inbox section { margin-bottom: 18px; }
+.inbox section { margin-bottom: 16px; }
 .inbox h4 { text-transform: none; letter-spacing: 0; font-size: calc(14px * var(--ts)); color: var(--fg); }
 .inbox h4 small { color: var(--muted); font-weight: normal; white-space: nowrap; } /* repo#n whole, not broken at a hyphen */
 .inbox-thread { display: grid; gap: 6px; margin: 8px 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
@@ -1656,8 +1656,8 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .top .bell .bell-menu > button small { color: var(--muted); font-size: calc(11px * var(--ts)); }
 .top .bell .bell-menu > button { height: auto; min-height: 0; line-height: 1.35; justify-content: flex-start; }
 /* An on/off switch (role="switch"): a track and a knob, green when on */
-.top .switch, .switch { position: relative; flex: none; width: 34px; min-width: 34px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 38%, transparent); cursor: pointer; transition: background .15s; box-shadow: none; }
-.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform .15s; }
+.top .switch, .switch { position: relative; flex: none; width: 34px; min-width: 34px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 38%, transparent); cursor: pointer; transition: background var(--quick); box-shadow: none; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform var(--quick); }
 .switch[aria-checked="true"] { background: light-dark(#1a7f37, #2ea043); }
 .switch[aria-checked="true"]::after { transform: translateX(14px); }
 .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1799,7 +1799,7 @@ main.only-mine > :not(.my-threads) { display: none; } /* just them: not the desc
 .my-threads h3 { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; }
 .my-threads h3 button { margin-left: auto; font-weight: normal; }
 .my-threads-sub { margin: 4px 0 10px; font-size: calc(12px * var(--ts)); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.my-thread { margin: 0 0 18px; display: grid; gap: 6px; }
+.my-thread { margin: 0 0 16px; display: grid; gap: 6px; }
 .my-thread-at { justify-self: start; font: calc(12px * var(--cs)) var(--mono); }
 .my-thread > .thread { margin: 0; }
 
@@ -1821,7 +1821,7 @@ main.only-mine > :not(.my-threads) { display: none; } /* just them: not the desc
 .gist-h { margin-bottom: 16px; }
 .gist-lead { white-space: pre-wrap; background: var(--soft); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: calc(12px * var(--ts)); }
 .gist .file .snippet { border: 0; border-radius: 0; }
-.gist-hunk { font: 12px var(--mono, monospace); color: var(--muted); background: var(--soft); padding: 4px 10px; border-top: 1px solid var(--border); }
+.gist-hunk { font: calc(12px * var(--cs)) var(--mono, monospace); color: var(--muted); background: var(--soft); padding: 4px 10px; border-top: 1px solid var(--border); }
 .gist .file-h { top: var(--nav); } /* no review bar here */
 
 /* Checkboxes drawn by lgtm, not macOS: bigger, in the theme's colours, and as clear when the window isn't focused (macOS
@@ -1844,7 +1844,7 @@ input:is([type=checkbox], [type=radio]):hover:not(:disabled) { border-color: var
 input:is([type=checkbox], [type=radio]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 input:is([type=checkbox], [type=radio]):disabled { cursor: not-allowed; opacity: .5; }
 .md input[type=checkbox]:disabled { cursor: default; opacity: 1; } /* a task list's box: read-only, not unavailable */
-@media (prefers-reduced-motion: no-preference) { input:is([type=checkbox], [type=radio])::before { transition: scale .12s ease; } }
+@media (prefers-reduced-motion: no-preference) { input:is([type=checkbox], [type=radio])::before { transition: scale var(--quick) ease; } }
 @media (forced-colors: active) { input:is([type=checkbox], [type=radio])::before { background: CanvasText; } }
 .demo-side .pr-status { position: static; } /* a preview's pills: in place, not pinned like the PR page's bar */
 /* Other line findings (switched off, protections, focused tests, raw HTML, @Transactional): a bar in their pill's colour, the reason on hover. */
@@ -1959,8 +1959,9 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
    dialogs); translate, not transform, so the centring some of them use stays. None with Reduce motion. */
 @keyframes lgtm-in { from { opacity: 0; translate: 0 -4px; } }
 @keyframes lgtm-up { from { opacity: 0; translate: 0 6px; } }
-:is(.account-menu, .pill-pop, .panel, .cmd-list, .quick-menu, .whats-new, dialog.ask[open]) { animation: lgtm-in .12s ease-out; }
-.toast { animation: lgtm-up .14s ease-out; }
+:is(.account-menu, .pill-pop, .panel, .cmd-list, .quick-menu, .whats-new, dialog.ask[open]) { animation: lgtm-in var(--quick) ease-out; }
+.toast { animation: lgtm-up var(--quick) ease-out; }
+.leaving { animation: none !important; pointer-events: none; } /* fadeout.ts: a closed menu's copy, fading */
 @media (prefers-reduced-motion: reduce) { :is(.account-menu, .pill-pop, .panel, .cmd-list, .quick-menu, .whats-new, dialog.ask[open], .toast) { animation: none; } }
 
 /* One disclosure caret everywhere: GitHub's chevron, turned right when closed (WebKit's own ▼ was bigger and heavier,
@@ -1968,7 +1969,7 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 :is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group) > summary { list-style: none; }
 :is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group) > summary::-webkit-details-marker { display: none; }
 :root { --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.939l3.72-3.719a.749.749 0 0 1 1.06 0Z'/%3E%3C/svg%3E"); }
-:is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group, .tree-dir, .thread) > summary::before { content: ''; display: inline-block; flex: none; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; background: currentColor; -webkit-mask: var(--caret) center / 10px no-repeat; mask: var(--caret) center / 10px no-repeat; transform: rotate(-90deg); transition: transform .12s; }
+:is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group, .tree-dir, .thread) > summary::before { content: ''; display: inline-block; flex: none; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; background: currentColor; -webkit-mask: var(--caret) center / 10px no-repeat; mask: var(--caret) center / 10px no-repeat; transform: rotate(-90deg); transition: transform var(--quick); }
 :is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group, .tree-dir, .thread)[open] > summary::before { transform: none; }
 @media (prefers-reduced-motion: reduce) { :is(.pr-group, .ix-ckgroup, .conversation, .plan, .ticket, .inbox-earlier, .bots-hidden, .template, .set-fold, .hidden-comment, .earlier-verdict, .bot-group, .tree-dir, .thread) > summary::before { transition: none; } }
 /* A resolved thread folded to one line in the diff: close to the code around it (its row was three code lines tall). */
@@ -1977,5 +1978,5 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 
 /* A list change drawn as a move (platform.ts moving): each PR slides to its new place; the rest of the page doesn't
    cross-fade, it just is the new one. */
-::view-transition-group(*) { animation-duration: .25s; animation-timing-function: ease-out; }
+::view-transition-group(*) { animation-duration: var(--move); animation-timing-function: var(--ease); }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }

@@ -48,6 +48,7 @@ export function Select({ value, onChange, children, title, class: cls, disabled,
     setAt({ left: Math.max(8, Math.min(r.left, innerWidth - Math.max(r.width, 160) - 8)), ...(up ? { bottom: innerHeight - r.top + 4 } : { top: r.bottom + 4 }), minWidth: r.width, maxHeight: Math.min(360, up ? above : below) });
     setHi(Math.max(0, cur ? opts.indexOf(cur) : 0));
     setOpen(true);
+    btn.current!.focus({ preventScroll: true }); // a click doesn't focus a button in WebKit: the keys (Esc, ↑ ↓) go to it
   };
   const close = (refocus = true) => (setOpen(false), refocus && btn.current?.focus());
   const pick = (o: Opt) => {

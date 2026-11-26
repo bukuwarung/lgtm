@@ -258,7 +258,7 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
     },
   }).catch((e) => {
     setOffline(true);
-    throw new Error(`Couldn't reach GitHub (${e.message})`, { cause: e });
+    throw new Error("Couldn't reach GitHub. LGTM tries again by itself.", { cause: e }); // the browser's own words ("Load failed") say nothing more
   });
   setOffline(false);
   if (again && [502, 503, 504].includes(res.status) && !writes(path, init)) return new Promise((r) => setTimeout(r, 1000)).then(() => gh(path, init, accept, false));
@@ -269,12 +269,18 @@ async function gh(path: string, init: RequestInit = {}, accept = 'application/vn
 
 async function ok(res: Response) {
   if (res.ok) return res;
-  const msg = (await res.json().catch(() => null))?.message;
+  // GitHub's reason, and for a 422 the particulars it lists ("Review cannot be requested from pull request author").
+  const body = await res.json().catch(() => null);
+  const why = (body?.errors ?? []).map((e: string | { message?: string; code?: string; field?: string }) => (typeof e === 'string' ? e : e.message ?? [e.field, e.code].filter(Boolean).join(' '))).filter(Boolean);
+  const msg: string | undefined = body?.message && (why.length ? `${body.message}: ${why.join('; ')}` : body.message);
   const path = new URL(res.url).pathname;
   // A secondary limit without a time to retry: GitHub's advice is a minute.
   if ((res.status === 403 || res.status === 429) && /secondary rate limit/i.test(msg ?? '') && !((limited.get(bucketOf(path))?.until ?? 0) > Date.now()))
     limited.set(bucketOf(path), { until: Date.now() + 60_000, slow: true });
   recordError(`GitHub ${res.status} ${path}: ${msg ?? res.statusText}`);
+  // The answer that used a limit up says so as every later request will: which limit, and until when.
+  const bucket = res.headers.get('x-ratelimit-resource') ?? bucketOf(path);
+  if ((res.status === 403 || res.status === 429) && (limited.get(bucket)?.until ?? 0) > Date.now()) throw limitError(bucket);
   throw new Error(`GitHub ${res.status}: ${msg ?? res.statusText}`);
 }
 

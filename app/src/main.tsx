@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { Select } from './select.tsx';
 import './tooltip.ts'; // LGTM's own tooltips for every title
+import './fadeout.ts'; // menus, panels and toasts fade as they close
 import { Setup } from './signin.tsx';
 import '@fontsource-variable/jetbrains-mono';
 import { render } from 'preact';
@@ -12,7 +13,7 @@ import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
 import { awayWhere, isAway, statusText } from './slackmsg.ts';
-import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry, Empty, AppIcon, Stats, type Stat } from './tags.tsx';
+import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Fold, Retry, Empty, errorAction, AppIcon, Stats, type Stat } from './tags.tsx';
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
@@ -2272,7 +2273,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   return (
     <aside class={`side prs${hidden ? ' collapsed' : ''}${over ? ' over' : ''}`} aria-hidden={hidden}>
       <div class="side-scroll">
-      {err && <Empty tone="err" action={['Retry', () => setAgain((n) => n + 1)]}>{err}</Empty>}
+      {err && <Empty tone="err" action={errorAction(err, () => setAgain((n) => n + 1))}>{err}</Empty>}
       {shown && (
         <div class="pr-tabs" role="tablist">
           {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && stuck(i).length).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (

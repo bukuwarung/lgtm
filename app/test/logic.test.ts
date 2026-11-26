@@ -1637,3 +1637,17 @@ test("unblockPrompt: what holds my PR up, for the session that wrote it", async 
   assert.match(t, /- the check "ci \/ test" fails/);
   assert.match(t, /push/);
 });
+
+// LGTM's type scale: text sizes from a short list (sized with the text setting, or with the code), so no 12.5px beside
+// a 13px. Line heights, and the fixed pictures of macOS (menu bar, dock badge, theme thumbnails), aren't text sizes here.
+test('text sizes come from the type scale', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+  const scale = { ts: [11, 12, 13, 14, 16, 20, 28], cs: [11, 12, 14] };
+  const off: string[] = [];
+  for (const m of css.matchAll(/font(?:-size)?\s*:\s*([^;}]*)/g)) {
+    const size = m[1].match(/calc\((\d+(?:\.\d+)?)px \* var\(--(ts|cs)\)\)/);
+    if (size && !scale[size[2] as 'ts' | 'cs'].includes(Number(size[1]))) off.push(m[0].slice(0, 60));
+  }
+  assert.deepEqual(off, []);
+});

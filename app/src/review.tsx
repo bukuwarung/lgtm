@@ -25,7 +25,7 @@ import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
 import { StaleActions, MergeBox, MergedActions, mergeOnceApproved } from './merge.tsx';
 import { StackNav } from './stacknav.tsx';
-import { AgentMark, BotMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode, CodeSnippet } from './tags.tsx';
+import { AgentMark, BotMark, CheckMark, DECISION, Empty, errorAction, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode, CodeSnippet } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
 import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
@@ -1560,7 +1560,18 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     myOwnedFiles(repo, data.files.map((f) => f.filename)).then((l) => !stop && setOwned(new Set(l)), () => {});
     return () => void (stop = true);
   }, [data?.files]);
-  if (error) return <p class="error page">{error} <Retry onClick={() => (setError(''), dispatchEvent(new Event('lgtm:refresh')))} /></p>;
+  // Couldn't open it: said as every page says it, with the one way out. Not there (or not for this account): see it on
+  // the site; otherwise, try again.
+  if (error) {
+    const missing = /^(GitHub|GitLab) 404\b/.test(error);
+    return (
+      <div class="page">
+        <Empty tone="err" action={missing ? [`Open on ${site(repo)}`, prWebUrl(repo, n)] : errorAction(error, () => (setError(''), dispatchEvent(new Event('lgtm:refresh'))))}>
+          {missing ? <>{pageTerm().PR} {numRef(repo, n)} isn't in {repo}, or this account can't see it (a private repository needs access; an organization with SSO needs the token authorized).</> : error}
+        </Empty>
+      </div>
+    );
+  }
   if (!data) return <PRSkeleton pr={early} toReview={listed} />;
   const { pr, headRepo } = data;
   // The commit on show, undone on the branch (your PR, or one you may push to), after asking.
