@@ -224,7 +224,7 @@ export const DEMOS: Record<string, Demo> = {
     ),
     on: (
       <File path="LegacyCheckout.kt" st="removed" add={0} del={120}>
-        <button class="collapsed-row">Deleted. Show its 120 lines</button>
+        <button class="collapsed-row">Deleted. <span class="collapsed-show">Show its 120 lines</span></button>
       </File>
     ),
   },

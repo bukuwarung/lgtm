@@ -49,8 +49,9 @@ export function fromZed(s: any): Tokens {
     '--delfg': s.deleted,
     '--modfg': s.modified,
     '--warnfg': s.warning,
-    '--add': tint(s.created, 16),
-    '--del': tint(s.deleted, 16),
+    // Added and removed lines: a stronger tint on a dark page, where 16% barely shows (all the more with subtle lines on).
+    '--add': tint(s.created, rgb(bg) && lum(rgb(bg)!) < 0.2 ? 24 : 16),
+    '--del': tint(s.deleted, rgb(bg) && lum(rgb(bg)!) < 0.2 ? 24 : 16),
     '--warn': tint(s.warning, 18),
     '--wd-add': tint(s.created, 38),
     '--wd-del': tint(s.deleted, 38),

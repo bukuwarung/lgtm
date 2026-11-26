@@ -4,7 +4,7 @@ import { isLab, awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, ge
 import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel, term } from './platform.ts';
 import { syncLabTodo } from './gitlab.ts';
 import { PageSkeleton } from './history.tsx';
-import { Empty, Tg, Who, Time, Retry, Updating, ThreadCode } from './tags.tsx';
+import { Empty, Tg, Who, Time, Retry, ThreadCode } from './tags.tsx';
 import { highlightBlocks, languageFor } from './highlight.ts';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
@@ -100,7 +100,7 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
   let k = 0;
   return (
     <div class="page history inbox">
-      {pending && <p class="list-updating"><Updating /></p>}
+      {pending && <p class="list-updating" role="status"><span class="sk-dot" /> Updating…</p>}
       {loadErr && <p class="error">Couldn't load your threads: {loadErr} <Retry onClick={() => (setLoadErr(''), setList(null), setTries((t) => t + 1))} /></p>}
       <h2>Waiting on your reply</h2>
       {!count && <Empty tone="ok">Nothing waits on your reply.</Empty>}

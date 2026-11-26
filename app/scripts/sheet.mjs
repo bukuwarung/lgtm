@@ -46,7 +46,7 @@ try {
     // The app itself, as you use it: each screen once its placeholders are gone (or 30s).
     const loaded = async () => {
       await sleep(400);
-      await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]') && ![...document.querySelectorAll('.sk')].some((e) => e.offsetParent), null, { timeout: 30000 }).catch(() => {});
+      await page.waitForFunction(() => !document.querySelector('[aria-busy="true"], .list-updating') && ![...document.querySelectorAll('.sk')].some((e) => e.offsetParent), null, { timeout: 30000 }).catch(() => {});
       await sleep(800);
     };
     await page.goto(`${ORIGIN}/?${theme}live#/`);

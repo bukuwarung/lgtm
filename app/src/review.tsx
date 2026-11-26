@@ -3606,7 +3606,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
       </header>
       {collapsed ? (
         <button class="collapsed-row" onClick={onExpand}>
-          Viewed. Show {file.additions + file.deletions} changed line{file.additions + file.deletions === 1 ? '' : 's'}
+          Viewed. <span class="collapsed-show">Show {file.additions + file.deletions} changed line{file.additions + file.deletions === 1 ? '' : 's'}</span>
         </button>
       ) : (
         <>
@@ -3628,7 +3628,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         </p>
       ) : hideDeleted ? (
         <button class="collapsed-row" onClick={() => setShowDeleted(true)}>
-          Deleted. Show its {file.deletions} line{file.deletions === 1 ? '' : 's'}
+          Deleted. <span class="collapsed-show">Show its {file.deletions} line{file.deletions === 1 ? '' : 's'}</span>
         </button>
       ) : !near && !ctx.renderAll ? (
         <div style={{ height: `${hunks.reduce((s, h) => s + h.lines.length + 1, 0) * 20}px` }} />
