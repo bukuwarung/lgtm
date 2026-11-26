@@ -1618,7 +1618,7 @@ dialog.qa-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; 
 .bar-qa.qa-signed { color: var(--addfg); }
 .bar-qa.qa-issue { color: var(--modfg); }
 .qa-new { position: absolute; top: -4px; right: -6px; min-width: calc(14px * var(--ts)); padding: 0 3px; border-radius: 999px; font-size: calc(11px * var(--ts)); line-height: calc(14px * var(--ts)); text-align: center; color: #fff; background: var(--accent); }
-.demo-bar { display: flex; gap: 6px; justify-content: flex-end; padding: 8px; }
+.demo-bar { display: flex; align-items: center; gap: 6px; justify-content: flex-end; padding: 8px; } /* a chip beside a button: centred on it, not stretched to its height */
 dialog.qa-dialog .slack-preview { max-height: 50vh; overflow: auto; margin-bottom: 12px; white-space: pre-wrap; }
 dialog.qa-dialog .slack-preview code { font-size: .85em; padding: 0 3px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 8%, transparent); }
 dialog.qa-dialog .qa-edit { margin-right: auto; }
