@@ -16,11 +16,12 @@ func canvas(_ out: String, _ draw: (CGContext) -> Void) {
 let S: CGFloat = 824
 func box(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ r: CGFloat, _ col: NSColor) { col.setFill(); NSBezierPath(roundedRect: NSRect(x: x, y: S - y - h, width: w, height: h), xRadius: r, yRadius: r).fill() }
 func diff(dark: Bool) {
-  let rows: [(Int, [CGFloat])] = [(0, [120, 260]), (1, [180, 300]), (2, [180, 210, 90]), (2, [90, 330]), (0, [210]), (0, [150, 120])]
+  let rows: [(Int, [CGFloat])] = [(0, [120, 260]), (1, [180, 300]), (2, [180, 210, 90]), (2, [90, 150]), (0, [210]), (0, [150, 120])]
   for (i, (k, ws)) in rows.enumerated() {
     let h: CGFloat = 92, y = 130 + CGFloat(i) * h
-    if k > 0 { box(0, y, S, h, 0, k == 1 ? c(0xf85149, dark ? 0.22 : 0.16) : c(0x3fb950, dark ? 0.22 : 0.18)) }
-    let ink = k == 1 ? c(0xf85149) : k == 2 ? c(0x3fb950) : (dark ? c(0xffffff, 0.28) : c(0x1f2328, 0.22))
+    // GitHub's (Primer's) diff colours: the line's background, then its text
+    if k > 0 { box(0, y, S, h, 0, k == 1 ? (dark ? c(0xf85149, 0.10) : c(0xffebe9)) : (dark ? c(0x2ea043, 0.15) : c(0xdafbe1))) }
+    let ink = k == 1 ? (dark ? c(0xf85149) : c(0xd1242f)) : k == 2 ? (dark ? c(0x3fb950) : c(0x1a7f37)) : (dark ? c(0x9198a1, 0.45) : c(0x59636e, 0.3))
     if k > 0 { box(64, y + h / 2 - 7, 40, 14, 7, ink); if k == 2 { box(77, y + h / 2 - 20, 14, 40, 7, ink) } }
     var x: CGFloat = 140
     for w in ws { box(x, y + h / 2 - 16, w, 32, 16, k == 0 ? ink : ink.withAlphaComponent(0.9)); x += w + 24 }
@@ -54,7 +55,7 @@ let inkShift: CGPoint = {
 struct Seeded { var x: UInt64; mutating func next() -> CGFloat { x = x &* 6364136223846793005 &+ 1442695040888963407; return CGFloat(x >> 33) / CGFloat(1 << 31) } }
 func stamp(dark: Bool, _ ctx: CGContext) {
   ctx.saveGState(); ctx.translateBy(x: stampAt.x, y: S - stampAt.y)
-  let ink = dark ? c(0x3fb950) : c(0x1a7f37)
+  let ink = dark ? c(0x8957e5) : c(0x8250df) // GitHub's purple (Primer's bgColor-done-emphasis): where an approved PR goes, merged
   if !dark { ctx.setBlendMode(.multiply) }
   ctx.setAlpha(dark ? 0.92 : 0.9)
   ctx.beginTransparencyLayer(auxiliaryInfo: nil)
@@ -90,7 +91,7 @@ if args[1] == "layers" {
     let T = NSRect(x: 100, y: 110, width: S, height: S), tile = NSBezierPath(roundedRect: T, xRadius: 185, yRadius: 185)
     let sh = NSShadow(); sh.shadowOffset = NSSize(width: 0, height: -10); sh.shadowBlurRadius = 28; sh.shadowColor = NSColor(white: 0, alpha: 0.3)
     NSGraphicsContext.saveGraphicsState(); sh.set(); NSColor.white.setFill(); tile.fill(); NSGraphicsContext.restoreGraphicsState()
-    NSGraphicsContext.saveGraphicsState(); tile.addClip(); NSGradient(starting: .white, ending: c(0xeef1f4))!.draw(in: T, angle: -90)
+    NSGraphicsContext.saveGraphicsState(); tile.addClip(); NSGradient(starting: .white, ending: c(0xf6f8fa))!.draw(in: T, angle: -90)
     ctx.translateBy(x: T.minX, y: T.minY); diff(dark: false); stamp(dark: false, ctx)
     NSGraphicsContext.restoreGraphicsState()
     NSColor(white: 0, alpha: 0.12).setStroke(); NSBezierPath(roundedRect: T.insetBy(dx: 0.5, dy: 0.5), xRadius: 184.5, yRadius: 184.5).stroke()
