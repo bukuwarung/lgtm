@@ -42,6 +42,9 @@ jobs:
         env:
           GH_TOKEN: not-a-real-token # the smoke test answers GitHub itself
         run: npx playwright-core install webkit && npm run smoke
+      - name: Light and dark icon
+        # macOS 26 draws AppIcon.icon light, dark or tinted, with your appearance; older macOS keeps icon.icns
+        run: desktop/src-tauri/icons/compile.sh desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/lgtm.app
       - name: Sign
         env:
           LGTM_SIGNING_P12: ${{ secrets.LGTM_SIGNING_P12 }}
