@@ -198,6 +198,16 @@ if (isDesktop)
     void w.onResized(full);
     // The window opens hidden (tauri.conf.json): shown once the page has drawn, in its theme, so it never flashes white.
     setTimeout(() => void w.show(), 30);
+    // macOS → Accessibility → Display, which the page can't read itself (commands.rs display_prefs): asked now and each
+    // time the window comes back, as that's when the setting may have changed.
+    const prefs = () =>
+      command<{ contrast: boolean; transparency: boolean; color: boolean }>('display_prefs').then((p) => {
+        html.toggle('a11y-solid', p.transparency); // no glass (main.tsx)
+        html.toggle('a11y-shapes', p.color); // signs and lines where colour alone said it
+        dispatchEvent(new Event('lgtm:display'));
+      }, () => {});
+    void prefs();
+    void w.onFocusChanged(({ payload }) => payload && void prefs());
   });
 
 // No autocorrect or auto-capitals in any text field (macOS rewrites code, logins and paths otherwise); one-line fields
@@ -212,6 +222,8 @@ if (typeof window !== 'undefined')
   });
 const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => (await import('@tauri-apps/api/core')).invoke<T>(cmd, args);
 // Tauri rejects with the command's error string; make it an Error like the web path's.
+// The menu bar's review actions: each one's key and whether it applies here (desktop/src-tauri commands.rs menu_keys).
+export const menuKeys = (items: { id: string; key: string | null; on: boolean }[]) => (isDesktop ? command('menu_keys', { items }).catch(() => {}) : Promise.resolve());
 export const command = <T>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
   invoke<T>(cmd, args).catch((e) => {
     throw e instanceof Error ? e : new Error(String(e));

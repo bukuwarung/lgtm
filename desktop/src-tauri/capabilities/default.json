@@ -12,6 +12,8 @@
     "allow-glab-accounts",
     "allow-agents",
     "allow-notify",
+    "allow-menu-keys",
+    "allow-display-prefs",
     "allow-gh-accounts",
     "allow-slack-emoji",
     "allow-jira-move",

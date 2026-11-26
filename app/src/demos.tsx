@@ -1536,7 +1536,7 @@ Object.assign(DEMOS, {
     off: <div class="demo-panel"><code>val fee = <span>convertFee</span>(amount)</code></div>,
     on: (
       <div class="demo-panel demo-sym">
-        <code>val fee = <span class="demo-sym-name">convertFee<span class="demo-sym-badge"><Octicon name="list-unordered" size={10} /></span></span>(amount)</code>
+        <code>val fee = <span class="demo-sym-name">convertFee</span>(amount)</code>
         <div class="demo-sym-list">
           <div class="sym-group">Declared</div>
           <div class="sym-use"><span class="sym-at">FeeService.kt:41</span><code>fun <mark>convertFee</mark>(amount: Money): Money {'{'}</code></div>

@@ -2204,3 +2204,42 @@ pub async fn copy_media(path: String) -> Result<(), String> {
     let script = format!("set the clipboard to (read (POSIX file \"{}\") as «class PNGf»)", png.replace('"', ""));
     if run("osascript", &["-e", &script], None, std::time::Duration::from_secs(10)).ok { Ok(()) } else { Err("Couldn't copy it".into()) }
 }
+
+/// The menu bar's review actions (lib.rs: "key:<action>"), as the page has them: each one's key from your bindings
+/// ("Shift+V"; none: no key shown) and whether it applies here (off a PR, greyed out).
+#[derive(serde::Deserialize)]
+pub struct MenuKey {
+    id: String,
+    key: Option<String>,
+    on: bool,
+}
+#[tauri::command]
+pub fn menu_keys(app: tauri::AppHandle, items: Vec<MenuKey>) {
+    let Some(menu) = app.menu() else { return };
+    let subs: Vec<_> = menu.items().unwrap_or_default().into_iter().filter_map(|k| k.as_submenu().cloned()).collect();
+    for i in items {
+        if let Some(item) = subs.iter().find_map(|s| s.get(i.id.as_str())).and_then(|k| k.as_menuitem().cloned()) {
+            let _ = item.set_accelerator(i.key.as_deref());
+            let _ = item.set_enabled(i.on);
+        }
+    }
+}
+
+/// macOS → Accessibility → Display, as the page can't all read it: Differentiate without colour has no CSS media
+/// feature, and WebKit's for Reduce transparency isn't to be relied on. Asked at start and when the window comes back.
+#[derive(serde::Serialize)]
+pub struct DisplayPrefs {
+    contrast: bool,
+    transparency: bool,
+    color: bool,
+}
+#[tauri::command]
+pub fn display_prefs() -> DisplayPrefs {
+    #[cfg(target_os = "macos")]
+    {
+        let w = objc2_app_kit::NSWorkspace::sharedWorkspace();
+        DisplayPrefs { contrast: w.accessibilityDisplayShouldIncreaseContrast(), transparency: w.accessibilityDisplayShouldReduceTransparency(), color: w.accessibilityDisplayShouldDifferentiateWithoutColor() }
+    }
+    #[cfg(not(target_os = "macos"))]
+    DisplayPrefs { contrast: false, transparency: false, color: false }
+}

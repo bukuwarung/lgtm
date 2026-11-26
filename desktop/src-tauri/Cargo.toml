@@ -26,5 +26,5 @@ muda = "0.20" # the menu bar item's menu, built natively (Tauri's own menus are 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6" # the menu bar menu's symbols, indents and bold headings
 objc2-foundation = { version = "0.3", features = ["NSString", "NSAttributedString", "NSDictionary"] }
-objc2-app-kit = { version = "0.3", features = ["NSMenu", "NSMenuItem", "NSImage", "NSFont", "NSAttributedString"] }
+objc2-app-kit = { version = "0.3", features = ["NSMenu", "NSMenuItem", "NSImage", "NSFont", "NSAttributedString", "NSWorkspace", "NSAccessibility"] }
 mac-notification-sys = "0.6" # notifications that say when they're clicked (the plugin's don't, on macOS)

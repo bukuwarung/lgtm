@@ -8,7 +8,7 @@ import { AGENTS, AGENT_IDS, EFFORT_NAME, effortsOf, modelsOf, agentEffort, agent
 import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, ghAccount, getGhAccounts, getSlackEmoji, type GhAccount, askNotifications, agentSkill, type SkillStatus, useSavedReplies, type SavedReply, availableUpdate, copyDiagnostics, forgetKept, diagnostics, selfUpdate, UPGRADE, fetchIntegrations, restoreBackup, saveBackup, findSlackPeople, isDesktop, peopleSeen, launchAtLogin, setLaunchAtLogin, getSlackPeople, saveSlackPeople, useBots, useStoredFlag, useStoredValue, agentMod, MOD_INSTALL, CODEX_MOD_INSTALL, copyText, SLACK_CHANNEL, checkSlackChannel, type ChannelCheck, type Integrations, type SlackMatch, type SlackPeople, glabAccounts, type GlabAccount, term, teamLabel, loginEnding } from './platform.ts';
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
-import { ACTIONS, FIXED, keyLabel, RESERVED, useBindings, type Action } from './keys.ts';
+import { ACTIONS, FIXED, keyLabel, readBindings, RESERVED, useBindings, type Action } from './keys.ts';
 import { DemoPair } from './demos.tsx';
 import { SlackPreview } from './emojibox.tsx';
 import { highlightCode } from './highlight.ts';
@@ -537,7 +537,7 @@ export function Settings() {
         <Flag k="hideNoDiff" initial={true} label="Hide files renamed or moved without changes" demo />
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Fold code moved without changes" hint="One row naming where it went." demo />
-        <Flag k="symbolNav" initial={true} label="Where functions and classes are used" hint={`Point at a function or class the ${T.PR} declares: every line naming it, and a repo search.`} demo />
+        <Flag k="symbolNav" initial={true} label="Where functions and classes are used" hint={`Point at a function or class the ${T.PR} declares (it underlines), then ⌘-click it, or press ${keyLabel(readBindings(localStorage.getItem('shortcuts') ?? '{}').usages)}: every line naming it, and a repo search.`} demo />
         <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too"   demo />
         <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="More room for long lines. Copies and comments keep the real text."  demo />
         <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Also a button beside the ${T.PRs_} title.`}  demo />

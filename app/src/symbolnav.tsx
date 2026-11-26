@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileLabel } from './files.ts';
 import { usesOf, type CodeIndex, type Use } from './specrefs.ts';
-import { Octicon } from './tags.tsx';
 import { pageTerm } from './platform.ts';
 
 // Where a function or class the PR declares is declared and used in the PR (Settings → Diff): pointing at its name in
-// the diff pops a small badge beside it (as rendered markdown's "+"), and the badge lists every line naming it, to jump
-// to (specrefs.ts usesOf).
+// the diff underlines it (dotted, under the letters: nothing laid over the code), and ⌘-click or the usages key lists
+// every line naming it, to jump to (specrefs.ts usesOf).
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // The word under the pointer in a diff's code, and where it is on screen.
 function wordAt(x: number, y: number): { name: string; rect: DOMRect } | null {
@@ -41,7 +40,7 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
     let frame = 0;
     const move = (e: PointerEvent) => {
       const el = e.target as Element;
-      if (el.closest?.('.sym-badge, .sym-pop, .spec-peek')) return clearTimeout(hide.current);
+      if (el.closest?.('.sym-pop, .spec-peek')) return clearTimeout(hide.current);
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const hit = el.closest?.('.diff td.code, .diff span.code') && wordAt(e.clientX, e.clientY);
@@ -55,7 +54,11 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
       });
     };
     const away = () => (setBadge(null), setOpen(null));
-    const click = (e: PointerEvent) => !(e.target as Element).closest?.('.sym-pop, .sym-badge, .spec-peek') && setOpen(null);
+    const click = (e: PointerEvent) => {
+      // ⌘-click on an underlined name: its list, as an editor's "go to definition" (no text selection starts).
+      if (e.metaKey && e.button === 0 && badgeRef.current && (e.target as Element).closest?.('.diff td.code, .diff span.code')) return void (e.preventDefault(), show(badgeRef.current));
+      if (!(e.target as Element).closest?.('.sym-pop, .spec-peek')) setOpen(null);
+    };
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return away();
       // The list open: ↑/↓ move between its lines (the preview follows), Enter goes there.
@@ -112,17 +115,7 @@ export function SymbolNav({ ix, repoSearch, go, peek, usageKey }: { ix: CodeInde
   const pos = (r: DOMRect) => ({ left: `${Math.max(8, Math.min(r.left, innerWidth - 580))}px`, ...(r.bottom + 320 < innerHeight ? { top: `${r.bottom + 4}px` } : { bottom: `${innerHeight - r.top + 4}px` }) });
   return (
     <>
-      {badge && !open && (
-        <button
-          class="sym-badge"
-          style={{ left: `${badge.rect.right + 2}px`, top: `${badge.rect.top - 10}px` }}
-          title={`Where ${badge.name} is declared and used in this ${pageTerm().PR}`}
-          onPointerEnter={() => clearTimeout(hide.current)}
-          onClick={() => show(badge)}
-        >
-          <Octicon name="list-unordered" size={10} />
-        </button>
-      )}
+      {badge && !open && <span class="sym-under" aria-hidden="true" style={{ left: `${badge.rect.left}px`, top: `${badge.rect.bottom - 1}px`, width: `${badge.rect.width}px` }} />}
       {open && (() => {
         const decl = open.uses.filter((u) => u.decl && !u.spec);
         const code = open.uses.filter((u) => !u.spec);

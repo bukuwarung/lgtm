@@ -506,6 +506,9 @@ main { padding: 16px; }
   content: "+"; position: absolute; right: -14px; top: 0; z-index: 1; width: calc(20px * var(--cs)); height: calc(20px * var(--cs));
   font: bold calc(14px * var(--cs))/calc(20px * var(--cs)) var(--sans); text-align: center; color: #fff; background: var(--accent); /* sized with the code, as its box is */ border-radius: 4px;
 }
+/* Without the +/- column (Settings → Diff) the code starts right after its padding: the "+" stays in the gutter and that
+   padding, over the line's number rather than its first letters. */
+html.no-signs:not(.a11y-shapes) .diff tr:hover > .num + .num::after { right: -7px; }
 .diff .code { white-space: pre-wrap; word-break: break-word; }
 .diff .code::before { content: " "; display: inline-block; width: 1.2em; }
 .diff tr.a { background: var(--add); }
@@ -1481,6 +1484,11 @@ html.ln-bar .doc-chg { background: none; box-shadow: none; text-decoration: unde
 .file-h:hover .file-dir { opacity: 1; }
 /* Without + / − signs (Settings → Diff, off by default) the colour marks changed lines, and the code gets that column. */
 html.no-signs .diff .code::before { content: none; }
+/* macOS → Accessibility → Display → Differentiate without colour (platform.ts): what colour alone said, said again.
+   The diff's + and -, even with them switched off (changed words already have their underline). */
+html.a11y-shapes.no-signs .diff .code::before { content: " "; }
+html.a11y-shapes.no-signs .diff tr.a .code::before { content: "+"; }
+html.a11y-shapes.no-signs .diff tr.d .code::before { content: "-"; }
 /* ask(): lgtm's own confirm */
 dialog.ask { max-width: min(440px, calc(100vw - 32px)); padding: 16px 20px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px var(--shadow); }
 dialog.ask::backdrop { background: rgb(0 0 0 / .3); }
@@ -1760,7 +1768,7 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .assigned-to { color: var(--muted); font-weight: 400; }
 
 /* Where a declared name is used (symbolnav.tsx): its badge beside the name, as rendered markdown's "+", and the list. */
-.sym-badge { position: fixed; z-index: 39; display: grid; place-items: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; color: #fff; background: var(--accent); cursor: pointer; box-shadow: 0 1px 3px var(--shadow); }
+.sym-under { position: fixed; z-index: 39; height: 0; border-bottom: 1.5px dotted var(--accent); pointer-events: none; } /* under the name pointed at (symbolnav.tsx): ⌘-click lists its uses */
 .sym-pop { position: fixed; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: 320px; display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px var(--shadow); font-size: calc(12px * var(--ts)); }
 .sym-h { padding: 6px 10px; border-bottom: 1px solid var(--border); }
 .sym-h small { color: var(--muted); }
@@ -1774,8 +1782,7 @@ dialog.qa-dialog .qa-edit { margin-right: auto; }
 .sym-use code { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: calc(12px * var(--cs)) / 1.5 var(--mono); }
 .sym-use mark { color: inherit; background: color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 4px; }
 .sym-more { padding: 6px 10px; border-top: 1px solid var(--border); }
-.demo-sym-name { position: relative; }
-.demo-sym-badge { position: absolute; right: -10px; top: -17px; /* above the line, clear of the code */ display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: #fff; background: var(--accent); }
+.demo-sym-name { text-decoration: underline dotted 1.5px var(--accent); text-underline-offset: 3px; } /* as the diff marks it (symbolnav.tsx) */
 .demo-sym-list { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 0; font-size: calc(12px * var(--ts)); }
 /* The conversation's one-line rows: plain approvals together, and a review whose threads are all settled. */
 .comment.approvals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); }

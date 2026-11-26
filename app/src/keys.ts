@@ -93,5 +93,8 @@ export function useBindings() {
 
 const NAMES: Record<string, string> = { ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Backspace: '⌫', Delete: '⌦' };
 export const keyLabel = (k: string) => (k ? NAMES[k] ?? k : '—');
+// The menu bar's form of a key ("Shift+V", "BracketLeft"), for the app's Go, Review and View menus; null: one it can't show.
+const ACCEL: Record<string, string> = { ' ': 'Space', '[': 'BracketLeft', ']': 'BracketRight', '.': 'Period', ',': 'Comma', '/': 'Slash', '?': 'Shift+Slash', '<': 'Shift+Comma', '>': 'Shift+Period', '+': 'Shift+Equal', '=': 'Equal', '-': 'Minus' };
+export const menuAccel = (k: string) => (!k ? null : ACCEL[k] ?? (/^[a-z0-9]$/.test(k) ? k.toUpperCase() : /^[A-Z]$/.test(k) ? `Shift+${k}` : null));
 // "Ignore whitespace (w)" in tooltips, or nothing when the action has no key.
 export const hint = (k: string) => (k ? ` (${keyLabel(k)})` : '');

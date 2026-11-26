@@ -55,6 +55,7 @@ async fn gh_token(user: Option<String>) -> Result<String, String> {
 fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem as P, Submenu};
     let item = |id: &str, text: &str, keys: Option<&str>| MenuItem::with_id(app, id, text, true, keys);
+    let key = |action: &str, text: &str| MenuItem::with_id(app, format!("key:{action}"), text, false, None::<&str>);
     let sep = || P::separator(app);
     // macOS fills the Window menu (Fill, Center, Move & Resize, the window list) once it knows which menu that is.
     let window = Submenu::with_items(app, "Window", true, &[&P::minimize(app, None)?, &P::maximize(app, None)?, &sep()?, &P::bring_all_to_front(app, None)?])?;
@@ -127,12 +128,57 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                     &sep()?,
                     &item("inbox", "Inbox", Some("CmdOrCtrl+Shift+I"))?,
                     &item("toggle-prs", "Show or Hide the List", Some("CmdOrCtrl+Shift+L"))?,
+                    &key("index", "Show or Hide the Index")?,
+                    &sep()?,
+                    &key("whitespace", "Ignore Whitespace")?, &key("threads", "Show or Hide Threads")?, &key("myThreads", "Your Threads")?,
+                    &key("ownFiles", "Only Files You Own")?, &key("githubDev", "Open in github.dev")?,
                     &sep()?,
                     &item("text-bigger", "Bigger Text", Some("CmdOrCtrl+="))?,
                     &item("text-smaller", "Smaller Text", Some("CmdOrCtrl+-"))?,
                     &item("text-reset", "Actual Size", Some("CmdOrCtrl+0"))?,
                     &sep()?,
                     &P::fullscreen(app, None)?,
+                ],
+            )?,
+            // The review page's actions, each with its key from Settings → Keyboard shortcuts (set by the page:
+            // commands.rs menu_keys) and greyed out off a PR. Picking one presses that key for you.
+            &Submenu::with_items(
+                app,
+                "Go",
+                true,
+                &[
+                    &key("nextFile", "Next File")?, &key("prevFile", "Previous File")?, &key("nextUnviewed", "Next Unviewed File")?,
+                    &sep()?,
+                    &key("nextChange", "Next Change")?, &key("prevChange", "Previous Change")?,
+                    &key("nextThread", "Next Thread")?, &key("prevThread", "Previous Thread")?, &key("agentDraft", "Next Agent Draft")?,
+                    &sep()?,
+                    &key("docCode", "Specs ↔ Code")?, &key("usages", "Where It's Used")?,
+                    &sep()?,
+                    &key("prevCommit", "Previous Commit")?, &key("nextCommit", "Next Commit")?, &key("newCommits", "Commits Since Your Review")?,
+                    &sep()?,
+                    &key("nextPR", "Next in the List")?, &key("prevPR", "Previous in the List")?,
+                    &key("stackPrev", "Previous in the Stack")?, &key("stackNext", "Next in the Stack")?,
+                    &key("skip", "Skip (Review Mode)")?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "Review",
+                true,
+                &[
+                    &key("finish", "Finish Review…")?, &key("approve", "Approve…")?,
+                    &sep()?,
+                    &key("viewed", "Mark File Viewed")?, &key("fileComment", "Comment on File…")?, &key("comment", "Comment on Line…")?,
+                    &key("quoteReply", "Quote in a Reply")?, &key("react", "React 👍")?, &key("editComment", "Edit Your Comment…")?,
+                    &sep()?,
+                    &key("merge", "Merge…")?, &key("prActions", "Close, Reopen or Draft…")?, &key("ready", "Ready for Review")?,
+                    &key("updateBranch", "Update Branch")?, &key("changeBase", "Change Base…")?, &key("revertCommit", "Revert Commit…")?,
+                    &key("fixedAll", "Reply \"Fixed in\" and Resolve")?,
+                    &sep()?,
+                    &key("assign", "Assign…")?, &key("milestone", "Milestone…")?, &key("subscribe", "Subscribe or Unsubscribe")?,
+                    &key("lock", "Lock or Unlock Conversation")?,
+                    &sep()?,
+                    &key("agents", "Coding Agents…")?, &key("agentSession", "Agent Review Session")?, &key("askQa", "Ask QA…")?,
                 ],
             )?,
             &window,
@@ -211,6 +257,8 @@ pub fn run() {
             commands::clipboard_pr,
             commands::copy_text,
             commands::set_tray,
+            commands::menu_keys,
+            commands::display_prefs,
             commands::self_update,
             commands::agent_text,
             commands::agent_skill,

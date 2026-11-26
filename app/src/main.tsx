@@ -17,7 +17,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { setResign, claudeFolder, duration, moving, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { menuKeys, setResign, claudeFolder, duration, moving, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
 import { unblockPrompt } from './prompts.ts';
 import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
@@ -32,7 +32,7 @@ import { CODE_DEFAULT, TEXT_DEFAULT, saveTheme, setTrial, useCodeLook, useTrial 
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 import { GistPage } from './gist.tsx';
-import { hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
+import { ACTIONS, hint, keyLabel, menuAccel, readBindings, useBindings, type Action } from './keys.ts';
 import { movePending } from './merge.tsx';
 
 // A video's address GitHub signed for five minutes, signed again in the PR's repo when it runs out (platform.ts).
@@ -660,7 +660,13 @@ function App() {
   const look = useCodeLook(); // code colours and font, and text sizes, from Settings
   // Glass (Settings → Appearance), unless macOS asks for less transparency.
   const [glass] = useStoredFlag('glass', true);
-  useEffect(() => void document.documentElement.classList.toggle('glass', glass && !matchMedia('(prefers-reduced-transparency: reduce)').matches), [glass]);
+  useEffect(() => {
+    const html = document.documentElement.classList;
+    const set = () => html.toggle('glass', glass && !html.contains('a11y-solid') && !matchMedia('(prefers-reduced-transparency: reduce)').matches);
+    set();
+    addEventListener('lgtm:display', set); // the app's reading of the setting (platform.ts), now and when it changes
+    return () => removeEventListener('lgtm:display', set);
+  }, [glass]);
   const [rainbowOn] = useStoredFlag('rainbowBrackets', true); // Settings → Diff
   setRainbow(rainbowOn); // before the page below highlights anything
   const [tagStyle] = useStoredValue('tagStyle', 'icons'); // Settings → Appearance: tags as text, icons or both
@@ -697,6 +703,12 @@ function App() {
   const [rm, setRm] = useState<{ practice?: boolean; seen: string[]; done: number; skipped: number; log: { repo: string; n: number; title: string; how: ReviewEvent | 'skipped' }[] } | null>(null);
   const lastEvent = useRef<ReviewEvent>('COMMENT'); // the review just submitted, for review mode's summary
   useEffect(() => (document.documentElement.classList.toggle('review-mode', !!rm), setPractice(!!rm?.practice)), [rm]);
+  // The menu bar's Go, Review and View actions: your keys beside them, greyed out off a PR (and Skip outside review mode).
+  const [menuBindings] = useBindings();
+  const onPR = !!parseRoute(route);
+  useEffect(() => {
+    void menuKeys(ACTIONS.map(([a]) => ({ id: `key:${a}`, key: menuAccel(menuBindings[a]), on: !!menuBindings[a] && onPR && (a !== 'skip' || !!rm) })));
+  }, [JSON.stringify(menuBindings), onPR, !!rm]);
   // The PRs to review: the ones that need my review, or (a practice run) my own. Drafts only while the list shows them,
   // after the ready ones.
   const [showDrafts] = useStoredFlag('showDrafts', false);
@@ -858,6 +870,11 @@ function App() {
     else if (id === 'recent') dispatchEvent(new Event('lgtm:recent-menu'));
     else if (id === 'inbox') location.hash = '/inbox';
     else if (id === 'shortcuts') shortcuts();
+    // A review action from the menu bar: its key, pressed for you (the page's own handling, whatever has focus).
+    else if (id.startsWith('key:')) {
+      const k = readBindings(localStorage.getItem('shortcuts') ?? '{}')[id.slice(4) as Action];
+      if (k) document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, shiftKey: k !== k.toLowerCase(), bubbles: true, cancelable: true }));
+    }
     else if (id === 'back') history.back();
     else if (id === 'forward') history.forward();
     else if (id === 'toggle-prs') togglePRs();

@@ -31,12 +31,18 @@ function entries(queue: QueueItem[]): Entry[] {
     sub: `${repoLabel(i.repo)}#${i.number} · ${shownName(i.author, i.repo)}`,
     run: () => (location.hash = `/${i.repo}/pull/${i.number}`),
   }));
-  const index = [...document.querySelectorAll<HTMLElement>('.ix-item')].map((el) => ({
-    kind: el.closest('.ix-sec')?.querySelector('summary')?.firstChild?.textContent?.trim() ?? '',
-    label: el.querySelector('.ix-label')?.firstChild?.textContent?.trim() ?? el.textContent ?? '',
-    sub: el.querySelector('.ix-sub')?.textContent ?? '',
-    run: () => el.click(),
-  }));
+  // The index's rows, by their words: a row that starts with an avatar or an icon has its name further in (its first
+  // text alone left people and checks blank). A row with no words isn't one to go to.
+  const text = (e?: Element | null) => e?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  const index = [...document.querySelectorAll<HTMLElement>('.ix-item')].map((el) => {
+    const head = el.closest('.ix-sec')?.querySelector('summary');
+    return {
+      kind: head?.firstChild?.textContent?.trim() || text(head).replace(/\s*\d+$/, ''),
+      label: el.querySelector('.ix-label')?.firstChild?.textContent?.trim() || text(el.querySelector('.ix-label')) || text(el),
+      sub: text(el.querySelector('.ix-sub')),
+      run: () => el.click(),
+    };
+  }).filter((e) => e.label);
   // Files from the page itself (there even with the index hidden).
   const files = [...document.querySelectorAll<HTMLElement>('[id^="f-"]')].map((el) => {
     const path = el.id.slice(2);
