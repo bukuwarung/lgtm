@@ -689,6 +689,12 @@ function App() {
     document.documentElement.classList.toggle('ln-subtle', lineStyle === 'subtle');
     document.documentElement.classList.toggle('ln-bar', lineStyle === 'bar');
   }, [lineStyle]);
+  const [mdLineStyle] = useStoredValue('mdLineStyle', 'same'); // Settings → Diff: rendered markdown's, or as code's
+  useEffect(() => {
+    const s = mdLineStyle === 'same' ? lineStyle : mdLineStyle;
+    document.documentElement.classList.toggle('md-subtle', s === 'subtle');
+    document.documentElement.classList.toggle('md-bar', s === 'bar');
+  }, [lineStyle, mdLineStyle]);
   const [wordStyle] = useStoredValue('wordStyle', 'squiggle'); // Settings → Diff: changed words filled, boxed or squiggled
   useEffect(() => {
     document.documentElement.classList.toggle('wd-box', wordStyle === 'box');

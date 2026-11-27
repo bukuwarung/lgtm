@@ -45,20 +45,32 @@ export function useTheme() {
 
 // A switch; with an example (demos.tsx) it also shows what it does, the side you have now outlined. Children are
 // sub-switches: indented under it, and greyed out while it's off.
-// How added and removed lines are marked: filled (GitHub's way), a lighter tint, or just a bar at their left edge.
+// How added and removed lines are marked: filled (GitHub's way), a lighter tint, or just a bar at their left edge. In
+// code, and in rendered markdown (code's, unless picked).
 function LineStyle() {
   const [style, setStyle] = useStoredValue('lineStyle', 'subtle');
+  const [md, setMd] = useStoredValue('mdLineStyle', 'same');
+  const STYLES = [['fill', 'Fill'], ['subtle', 'Subtle'], ['bar', 'Bar']] as const;
+  const seg = (label: string, cur: string, set: (v: string) => void, opts: readonly (readonly [string, string])[]) => (
+    <span class="set-seg" role="radiogroup" aria-label={label}>
+      {opts.map(([v, name]) => (
+        <button role="radio" aria-checked={cur === v} class={cur === v ? 'on' : ''} onClick={() => set(v)}>
+          {v !== 'same' && <span class={`ln-sample ln-${v}`}><i class="d" /><i class="a" /></span>} {name}
+        </button>
+      ))}
+    </span>
+  );
   return (
-    <div class="set-row">
-      <span>Changed lines</span>
-      <span class="set-seg" role="radiogroup" aria-label="Changed line style">
-        {([['fill', 'Fill'], ['subtle', 'Subtle'], ['bar', 'Bar']] as const).map(([v, name]) => (
-          <button role="radio" aria-checked={style === v} class={style === v ? 'on' : ''} onClick={() => setStyle(v)}>
-            <span class={`ln-sample ln-${v}`}><i class="d" /><i class="a" /></span> {name}
-          </button>
-        ))}
-      </span>
-    </div>
+    <>
+      <div class="set-row">
+        <span>Changed lines in code</span>
+        {seg('Changed lines in code', style, setStyle, STYLES)}
+      </div>
+      <div class="set-row">
+        <span>Changed lines in rendered markdown</span>
+        {seg('Changed lines in rendered markdown', md, setMd, [['same', 'As code'], ...STYLES])}
+      </div>
+    </>
   );
 }
 
@@ -531,6 +543,7 @@ export function Settings() {
 
       <section>
         <h3>Diff</h3>
+        <LineStyle />
         <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New packages are still named." demo />
         <Flag k="hideArchivedSpecs" initial={true} label="Hide archived specs" hint="Docs in archive folders, behind one row. Code there still shows." demo />
         <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Marked linguist-generated or linguist-binary in .gitattributes." demo />
@@ -548,7 +561,6 @@ export function Settings() {
         <Flag k="diffSigns" initial={false} label="Show + and − before changed lines"   demo />
         <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Name, Comment and Viewed, as in the header."  demo />
         <Flag k="rainbowBrackets" initial={true} label="Rainbow brackets" hint="Coloured by depth, as in IntelliJ."  demo />
-        <LineStyle />
         <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
           <WordStyle />
         </Flag>
