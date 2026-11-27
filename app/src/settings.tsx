@@ -473,6 +473,7 @@ export function Settings() {
 
       <section>
         <h3>{T.PR} list</h3>
+        <Flag k="sortByPriority" initial={true} label="Most urgent first" hint={`In each group, by the highest priority of a ${T.PR}'s Jira tickets or labels (its own and its issues': P1, priority: high…), then people's before bots', then the longest-waiting. Off: latest activity first.`} demo />
         <Flag k="showDrafts" initial={false} label={`Show other people's draft ${T.PRs}`} hint="Yours always show."  demo />
         <Flag k="hideEmptyGroups" initial={false} label="Hide empty groups" hint={`"Needs your review" says when it's clear, and a tab with nothing in it shows no 0.`} demo />
         <Flag k="gitlabTodoSync" initial={true} label="Mark GitLab to-dos done from the inbox" hint="Done in the inbox clears the to-do on GitLab too." />

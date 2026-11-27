@@ -877,7 +877,7 @@ export async function fetchJobLog(repo: string, job: number): Promise<string> {
   return text;
 }
 
-export type JiraIssue = { key: string; url: string; summary: string; status?: string; statusCategory?: string; type?: string; description: any };
+export type JiraIssue = { key: string; url: string; summary: string; status?: string; statusCategory?: string; type?: string; priority?: string; description: any };
 // A Jira ticket through the local server's acli.
 export async function fetchJira(key: string): Promise<JiraIssue> {
   if (isDesktop) return command<JiraIssue>('jira_issue', { key });
@@ -885,6 +885,34 @@ export async function fetchJira(key: string): Promise<JiraIssue> {
   const body = await res.json().catch(() => ({ error: res.statusText }));
   if (!res.ok) throw new Error(body.error || 'Could not load the ticket');
   return body;
+}
+
+// Tickets' priorities by key (the PR list's order, Settings → PR list): known ones kept an hour, the rest asked for in
+// one search. Without acli (or Jira) it stops asking for the session. True when something new arrived.
+let noJiraPriorities = false;
+const readPrios = (): Record<string, [string, number]> => {
+  try {
+    return JSON.parse(localStorage.getItem('jiraPriorities') ?? '{}');
+  } catch {
+    return {};
+  }
+};
+export const jiraPriority = (key: string): string | undefined => readPrios()[key]?.[0];
+export async function loadJiraPriorities(keys: string[]): Promise<boolean> {
+  const have = readPrios(), now = Date.now();
+  const want = [...new Set(keys)].filter((k) => !have[k] || now - have[k][1] > 3_600_000);
+  if (!want.length || noJiraPriorities) return false;
+  try {
+    const got: Record<string, string> = isDesktop
+      ? await command('jira_priorities', { keys: want })
+      : await fetch(`/jira-priorities?keys=${encodeURIComponent(want.join(','))}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))));
+    const all = { ...readPrios(), ...Object.fromEntries(want.map((k) => [k, [got[k] ?? '', now] as [string, number]])) };
+    localStorage.setItem('jiraPriorities', JSON.stringify(Object.fromEntries(Object.entries(all).sort((a, b) => a[1][1] - b[1][1]).slice(-500))));
+    return want.some((k) => (got[k] ?? '') !== (have[k]?.[0] ?? ''));
+  } catch {
+    noJiraPriorities = true;
+    return false;
+  }
 }
 
 // Asking for review on your PR (Ready for review, or a reviewer asked): its Jira tickets move to the status in Settings →

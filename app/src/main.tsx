@@ -8,7 +8,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type AgentRun, agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, getNeverRan, getThreads, getConversation, jobLog, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
+import { labelRank, priorityRank, freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, getNeverRan, getThreads, getConversation, jobLog, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
 import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
@@ -17,7 +17,7 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { menuKeys, setResign, claudeFolder, duration, moving, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen } from './platform.ts';
+import { menuKeys, setResign, claudeFolder, duration, moving, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen, jiraPriority, loadJiraPriorities } from './platform.ts';
 import { unblockPrompt } from './prompts.ts';
 import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
 import { CommandBar } from './palette.tsx';
@@ -718,9 +718,11 @@ function App() {
   // The PRs to review: the ones that need my review, or (a practice run) my own. Drafts only while the list shows them,
   // after the ready ones.
   const [showDrafts] = useStoredFlag('showDrafts', false);
+  const [urgentFirst] = useStoredFlag('sortByPriority', true);
   const needs = (items: QueueItem[], skip: string[], practice = rm?.practice) => {
     const l = (practice ? items.filter((i) => i.mine && !i.isDraft) : toReview(items, showDrafts)).filter((i) => !skip.includes(`${i.repo}#${i.number}`));
-    return rm || practice ? l.sort((a, b) => +a.isDraft - +b.isDraft || a.waitingSince.localeCompare(b.waitingSince)) : l; // review mode: longest-waiting first
+    // Review mode: ready before drafts; the most urgent first (as the list), or the longest-waiting.
+    return rm || practice ? (urgentFirst ? byUrgency(l) : l.sort((a, b) => a.waitingSince.localeCompare(b.waitingSince))).sort((a, b) => +a.isDraft - +b.isDraft) : l;
   };
   const goNext = async (from: { repo: string; n: number } | null, notice: { text: string; ok: boolean } | null, skip = rm?.seen ?? [], practice = rm?.practice) => {
     // With the PR list hidden nothing has loaded it; fetch it now (without thread status, so no "comments resolved").
@@ -1357,6 +1359,19 @@ function ThemeToggle() {
   );
 }
 
+// Settings → PR list, "Most urgent first": in each group, the highest priority among its Jira tickets (their priority
+// field), its linked issues' labels and its own (labelRank; none counts as medium); then people's before bots'; then the
+// longest-waiting. Off: as GitHub lists them, latest activity first.
+const urgency = (i: QueueItem) => {
+  const r = [...jiraKeys(i.title, i.head).map((k) => priorityRank(jiraPriority(k) ?? '')), ...(i.prioLabels ?? []).map(labelRank)].filter((x): x is number => x != null);
+  return r.length ? Math.min(...r) : 2;
+};
+const isBotPR = (i: QueueItem, bots: Set<string>) => !!i.bot || bots.has(i.author);
+export const byUrgency = (items: QueueItem[]) => {
+  const bots = readBots(), u = new Map(items.map((i) => [i.id, urgency(i)]));
+  return [...items].sort((a, b) => u.get(a.id)! - u.get(b.id)! || +isBotPR(a, bots) - +isBotPR(b, bots) || a.waitingSince.localeCompare(b.waitingSince));
+};
+
 type Group = 'agents' | 'needs' | 'mentioned' | 'changes' | 'commented' | 'approved';
 const GROUPS: [Group, string][] = [
   ['agents', 'Agents reviewing'], // Settings → Reviewing: Claude Code reviews it first (agentreview.ts)
@@ -1767,6 +1782,11 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       return null;
     }
   });
+  // Settings → PR list, "Most urgent first" (byUrgency): the Jira tickets' priorities, asked for in one go, then drawn again.
+  const [urgentFirst] = useStoredFlag('sortByPriority', true);
+  const [, prioTick] = useState(0);
+  const ticketKeys = urgentFirst ? [...new Set((loaded ?? []).flatMap((i) => jiraKeys(i.title, i.head)))].sort().join(',') : '';
+  useEffect(() => void (ticketKeys && loadJiraPriorities(ticketKeys.split(',')).then((news) => news && prioTick((x) => x + 1))), [ticketKeys]);
   const loadedRef = useRef(loaded); // what's on screen, for the load (an effect) to compare with
   loadedRef.current = loaded;
   const [fresh, setFresh] = useState(false);
@@ -2250,7 +2270,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
     return (
       <>
         {kind.groups.map(([g, label]) => {
-          const inGroup = list.filter((i) => kind.groupOf(i) === g);
+          const inGroup = ((l) => (urgentFirst ? byUrgency(l) : l))(list.filter((i) => kind.groupOf(i) === g));
           if (g === 'agents' && !inGroup.length && !agentReviewOn()) return null;
           // Empty, with empty groups hidden: gone, but an empty "Needs your review" still says you're clear.
           if (hideEmptyGroups && !kind.people && !inGroup.length) return g === 'needs' ? <p class="g-clear" key={g}><Octicon name="check" /> Nothing needs your review</p> : null;
@@ -2308,7 +2328,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         </div>
       )}
       {tab === 'reviewing' && shown && ((c) => c > 0 && (
-        <button class="primary review-all" onClick={() => onReview()} title={`The ${T.PRs} that need your review, longest-waiting first, with nothing else on screen (⇧⌘R in the app)`}>
+        <button class="primary review-all" onClick={() => onReview()} title={`The ${T.PRs} that need your review, ${urgentFirst ? 'most urgent' : 'longest-waiting'} first, with nothing else on screen (⇧⌘R in the app)`}>
           <Octicon name="play" /> Review {c} {T.PR}{c > 1 ? 's' : ''}
         </button>
       ))(toReview(shown, showDrafts).length)}

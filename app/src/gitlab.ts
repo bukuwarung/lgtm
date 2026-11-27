@@ -7,7 +7,7 @@
 // "gl:host|path!iid", so the calls that only get an ID (resolve a thread, mark ready, merge…) know where to go.
 import { collapseReviews, setOffline, revertOf, STALE_PUSH } from './github.ts';
 import { kept, fetchGlabToken, glabAccounts, knowFace, own, readBots, recordError, agentsAsBots, type GlabAccount } from './platform.ts';
-import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, StaleBranch, MyReview, Social, Pushed } from './github.ts';
+import type { MergedPR, Person, Check, Comment, ConversationItem, Draft, MergeMethod, MergeState, PR, PRFile, PushPoint, QueueItem, ReviewEvent, ReviewState, StackLayer, Thread, LayerStatus, TicketPR, LinkedIssue, StaleBranch, MyReview, Social, Pushed } from './github.ts';
 
 export const isLab = (repo: string) => repo.slice(0, repo.indexOf('/')).includes('.');
 export const isLabId = (id: string) => id.startsWith('gl:');
@@ -1048,6 +1048,27 @@ export async function labTicketPRs(repo: string, n: number, keys: string[]): Pro
     .filter((p) => p.keys.length && !(p.repo === repo && p.number === n));
 }
 
+// The issues an MR closes ("Closes #12"), and the other MRs on them (each issue's related MRs): github.ts linkedIssues.
+export async function labLinkedIssues(repo: string, n: number): Promise<{ issues: LinkedIssue[]; prs: TicketPR[] }> {
+  const { host, path } = split(repo);
+  const list: any[] = (await json(host, `/projects/${pid(repo)}/merge_requests/${n}/closes_issues`)).slice(0, 5);
+  const prs = new Map<string, TicketPR>();
+  const issues = await Promise.all(
+    list.map(async (i): Promise<LinkedIssue> => {
+      const proj = (i.references?.full ?? '').split('#')[0] || path;
+      const ref = proj === path ? `#${i.iid}` : `${proj}#${i.iid}`;
+      for (const m of await json(host, `/projects/${i.project_id}/issues/${i.iid}/related_merge_requests?per_page=30`).catch(() => [] as any[])) {
+        const at = `${host}/${m.references.full.split('!')[0]}`;
+        if (at === repo && m.iid === n) continue;
+        const k = `${at}!${m.iid}`, had = prs.get(k);
+        prs.set(k, had ? { ...had, keys: [...new Set([...had.keys, ref])] } : { repo: at, number: m.iid, title: m.title, state: m.state === 'opened' ? 'OPEN' : m.state === 'merged' ? 'MERGED' : 'CLOSED', isDraft: m.draft, author: m.author?.username ?? 'ghost', keys: [ref] });
+      }
+      return { repo: `${host}/${proj}`, number: i.iid, title: i.title, url: i.web_url, open: i.state === 'opened', labels: i.labels ?? [], assignees: (i.assignees ?? []).map((a: any) => a.username), milestone: i.milestone?.title, md: i.description ?? '' };
+    }),
+  );
+  return { issues, prs: [...prs.values()] };
+}
+
 // --- the PR list ---
 
 // A mention's GitLab to-do marked done (from the inbox's Done), or back to pending (its Undo).
@@ -1133,7 +1154,7 @@ export async function labEstimateInputs(items: { id: string }[]): Promise<Map<st
 const ITEM = `fragment F on MergeRequest{detailedMergeStatus id iid title updatedAt createdAt draft diffHeadSha approved autoMergeEnabled availableAutoMergeStrategies
   project{fullPath} sourceProject{fullPath} sourceBranch targetBranch author{username bot avatarUrl} assignees{nodes{username}}
   reviewers{nodes{username bot mergeRequestInteraction{reviewState}}} headPipeline{status} diffStatsSummary{additions deletions fileCount}
-  userPermissions{canMerge} commits(first:1){nodes{committedDate}} mergeTrainIndex}`;
+  userPermissions{canMerge} commits(first:1){nodes{committedDate}} mergeTrainIndex labels{nodes{title}}}`;
 const itemOf = (host: string, m: any, me: string): QueueItem => {
   const mine = m.reviewers.nodes.find((r: any) => r.username === me)?.mergeRequestInteraction?.reviewState;
   const authored = m.author?.username === me;
@@ -1152,6 +1173,8 @@ const itemOf = (host: string, m: any, me: string): QueueItem => {
     base: m.targetBranch,
     author: m.author?.username ?? 'ghost',
     face: (m.author?.bot && m.assignees.nodes[0]?.username) || (m.author?.username ?? 'ghost'),
+    bot: !!m.author?.bot,
+    prioLabels: (m.labels?.nodes ?? []).map((l: any) => l.title),
     assignees: m.assignees.nodes.map((a: any) => a.username).filter((l: string) => l !== m.author?.username),
     reviewDecision: decision(m),
     mergeState: mergeStatus(m.detailedMergeStatus),

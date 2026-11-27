@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, rangeChange, interdiff, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
-import { applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef, afterApproval, stuck } from '../src/github.ts';
+import { labelRank, priorityRank, applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef, afterApproval, stuck } from '../src/github.ts';
 import type { QueueItem } from '../src/github.ts';
 import { adfToMarkdown, jiraKeys } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, uniqueNames, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
@@ -1663,4 +1663,9 @@ test('wording: straight apostrophes, an ellipsis character', async () => {
     });
   }
   assert.deepEqual(off, []);
+});
+
+test('priority from Jira names and labels', () => {
+  assert.deepEqual(['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Major', 'Minor', 'Trivial', 'Whatever'].map(priorityRank), [0, 1, 2, 3, 4, 0, 1, 3, 4, null]);
+  assert.deepEqual(['P0', 'p2', 'priority: high', 'Priority/Low', 'priority::1', 'prio-p3', 'critical', 'urgent', 'bug', 'high-risk', 'P5', 'priority: someday'].map(labelRank), [0, 2, 1, 3, 1, 3, 0, 0, null, null, null, null]);
 });

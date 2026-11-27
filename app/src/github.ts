@@ -99,6 +99,8 @@ export type QueueItem = {
   mentionWaiting?: boolean; // a conversation comment mentioning me waits on me (getMentionStatus; the inbox lists it)
   qa?: { replies: string[]; status: 'signed' | 'issue' | null }; // my PR's QA request on Slack (platform.ts qaThreads)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
+  bot?: boolean; // opened by an app's account (GitHub's Bot, GitLab's bot user)
+  prioLabels?: string[]; // its labels and its linked issues' (GitLab: its own), for its priority (labelRank)
   pendingReviewers: string[]; // people (not teams) whose review is requested
   myPending?: number; // comments in my pending review on GitHub, not sent yet (only mine are visible)
   viaTeam?: string[]; // asked of me only through teams (these, the PR's requested teams): no one by name
@@ -408,7 +410,7 @@ const QUEUE = `query{viewer{login}
   authored:search(query:"is:open is:pr archived:false author:@me",type:ISSUE,first:100){nodes{...on PullRequest{id}}}
   assigned:search(query:"is:open is:pr archived:false assignee:@me",type:ISSUE,first:100){nodes{...on PullRequest{id}}}
   mentioned:search(query:"is:open is:pr archived:false mentions:@me -author:@me",type:ISSUE,first:50){nodes{...on PullRequest{id}}}}`;
-const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login avatarUrl} assignees(first:5){nodes{login}}
+const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft labels(first:10){nodes{name}} closingIssuesReferences(first:5){nodes{labels(first:10){nodes{name}}}} reviewDecision mergeStateStatus autoMergeRequest{enabledAt} viewerCanEnableAutoMerge mergeQueueEntry{position state} author{__typename login avatarUrl} assignees(first:5){nodes{login}}
   additions deletions changedFiles commits(last:1){nodes{commit{committedDate statusCheckRollup{state}}}} recent:commits(last:20){nodes{commit{authoredDate parents{totalCount}}}} repository{nameWithOwner}
   headRefName headRefOid baseRefName headRepository{nameWithOwner} createdAt
   reviewRequests(first:20){nodes{requestedReviewer{... on User{login} ... on Team{slug}}}}
@@ -494,6 +496,8 @@ const toItem = (p: any): QueueItem => (p.author?.__typename === 'Bot' && p.autho
       head: p.headRefName,
       base: p.baseRefName,
       author: p.author?.login ?? 'ghost',
+      bot: p.author?.__typename === 'Bot',
+      prioLabels: [...(p.labels?.nodes ?? []), ...(p.closingIssuesReferences?.nodes ?? []).flatMap((i: any) => i.labels?.nodes ?? [])].map((l: { name: string }) => l.name),
       face: (p.author?.__typename === 'Bot' && p.assignees?.nodes[0]?.login) || (p.author?.login ?? 'ghost'),
       assignees: (p.assignees?.nodes ?? []).map((a: { login: string }) => a.login).filter((l: string) => l !== p.author?.login),
       reviewDecision: p.reviewDecision,
@@ -1881,6 +1885,48 @@ export async function getNeverRan(items: QueueItem[]): Promise<Map<string, strin
 
 // Other PRs naming the same Jira tickets (in the title, description or branch) across the owner's repos: the backend
 // PR for this app PR's ticket, say.
+// A priority's rank, 0 (most urgent) to 4: Jira's names (Highest…Lowest, or Blocker…Trivial), and a label's: P0–P4,
+// "priority: high", "priority::1", "prio/low", or a bare critical, urgent or blocker. Null when it names none.
+const PRIORITY_WORDS: Record<string, number> = { blocker: 0, highest: 0, critical: 0, urgent: 0, high: 1, major: 1, medium: 2, normal: 2, moderate: 2, low: 3, minor: 3, lowest: 4, trivial: 4 };
+export const priorityRank = (name: string): number | null => PRIORITY_WORDS[name.trim().toLowerCase()] ?? null;
+export function labelRank(label: string): number | null {
+  const s = label.trim().toLowerCase();
+  const m = s.match(/^p([0-4])$/) ?? s.match(/^prio(?:rity)?\s*[:/_\-]{0,2}\s*p?([0-4])$/);
+  if (m) return Number(m[1]);
+  const w = s.match(/^prio(?:rity)?\s*[:/_\-]{0,2}\s*([a-z]+)$/)?.[1];
+  return w ? (PRIORITY_WORDS[w] ?? null) : ['critical', 'urgent', 'blocker'].includes(s) ? 0 : null;
+}
+
+// The issues a PR closes (GitHub's linked issues: "Fixes #12", or linked in its sidebar; GitLab's "Closes #12"), and
+// the other PRs on them (each issue's cross-references and links; GitLab's related MRs), for the cards above the
+// conversation. html: GitHub's rendering; md: GitLab's markdown, rendered here.
+export type LinkedIssue = { repo: string; number: number; title: string; url: string; open: boolean; labels: string[]; assignees: string[]; milestone?: string; html?: string; md?: string };
+export async function linkedIssues(repo: string, n: number): Promise<{ issues: LinkedIssue[]; prs: TicketPR[] }> {
+  if (isLab(repo)) return lab.labLinkedIssues(repo, n);
+  const [o, r] = repo.split('/');
+  const d = await graphql(
+    `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){closingIssuesReferences(first:5){nodes{
+      number title state url bodyHTML repository{nameWithOwner} labels(first:10){nodes{name}} assignees(first:5){nodes{login}} milestone{title}
+      timelineItems(last:40,itemTypes:[CROSS_REFERENCED_EVENT,CONNECTED_EVENT]){nodes{...on CrossReferencedEvent{source{...P}} ...on ConnectedEvent{subject{...P}}}}}}}}}
+    fragment P on PullRequest{number title state isDraft author{login} repository{nameWithOwner}}`,
+    { o, r, n },
+  );
+  const nodes: any[] = d.repository?.pullRequest?.closingIssuesReferences?.nodes ?? [];
+  const prs = new Map<string, TicketPR>();
+  const issues = nodes.map((i): LinkedIssue => {
+    const ref = i.repository.nameWithOwner === repo ? `#${i.number}` : `${i.repository.nameWithOwner}#${i.number}`;
+    for (const e of i.timelineItems?.nodes ?? []) {
+      const p = e?.source ?? e?.subject;
+      if (!p?.number || (p.repository.nameWithOwner === repo && p.number === n)) continue;
+      const k = `${p.repository.nameWithOwner}#${p.number}`;
+      const had = prs.get(k);
+      prs.set(k, had ? { ...had, keys: [...new Set([...had.keys, ref])] } : { repo: p.repository.nameWithOwner, number: p.number, title: p.title, state: p.state, isDraft: p.isDraft, author: p.author?.login ?? 'ghost', keys: [ref] });
+    }
+    return { repo: i.repository.nameWithOwner, number: i.number, title: i.title, url: i.url, open: i.state === 'OPEN', labels: i.labels.nodes.map((l: any) => l.name), assignees: i.assignees.nodes.map((a: any) => a.login), milestone: i.milestone?.title, html: i.bodyHTML };
+  });
+  return { issues, prs: [...prs.values()] };
+}
+
 export type TicketPR = { repo: string; number: number; title: string; state: 'OPEN' | 'CLOSED' | 'MERGED'; isDraft: boolean; author: string; keys: string[] };
 export async function ticketPRs(repo: string, n: number, keys: string[]): Promise<TicketPR[]> {
   if (isLab(repo)) return lab.labTicketPRs(repo, n, keys);

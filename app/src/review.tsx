@@ -16,7 +16,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, requiredChecks, neverRan, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   isStalePush, awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, prCommits, revertCommit, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
+  ticketPRs, linkedIssues, type LinkedIssue, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc, toggleTask } from './markdown.ts';
@@ -2975,6 +2975,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           {plan && !commitView && <ReviewPlan plan={plan} viewed={seen} />}
           {!commitView && jiraKeys(pr.title, pr.head.ref).map((k) => <Ticket key={k} id={k} lang={mainLang} />)}
           {!commitView && <TicketPRs repo={repo} n={n} keys={jiraKeys(pr.title, pr.head.ref)} />}
+          {!commitView && <LinkedIssues key={`${repo}#${n}`} repo={repo} n={n} lang={mainLang} />}
           <AskAgent pr={pr} repo={repo} headRepo={data.headRepo} files={data.files} onComment={(path, line, body) => ctx.suggest(path, line && ctx.suggestion({ path, side: 'RIGHT', line }) != null ? line : undefined, body)} />
           {commentPeek.node}
           {symPeek.node}
@@ -6010,6 +6011,9 @@ const PR_ICON = { MERGED: 'git-merge', CLOSED: 'git-pull-request-closed', OPEN: 
 function TicketPRs({ repo, n, keys }: { repo: string; n: number; keys: string[] }) {
   const [list, setList] = useState<TicketPR[]>([]);
   useEffect(() => void ticketPRs(repo, n, keys).then(setList, () => setList([])), [repo, n, keys.join()]);
+  return <OtherPRs repo={repo} list={list} />;
+}
+function OtherPRs({ repo, list }: { repo: string; list: TicketPR[] }) {
   if (!list.length) return null;
   return (
     <div class="ticket-prs">
@@ -6041,10 +6045,40 @@ function Ticket({ id, lang }: { id: string; lang?: string }) {
     <details class="ticket" open={open} onToggle={(e) => e.currentTarget.open !== open && toggle()}>
       <summary>
         <a href={issue.url} target="_blank" rel="noopener">{issue.key}</a> <span class={'jira-st js-' + issue.statusCategory}>{issue.status}</span>{' '}
-        <span class="badge">{issue.type}</span> <b>{issue.summary}</b>
+        <span class="badge">{issue.type}</span>{issue.priority && <> <span class="badge" title="Priority">{issue.priority}</span></>} <b>{issue.summary}</b>
       </summary>
       {html ? <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: html }} /> : <p class="note">No description.</p>}
     </details>
+  );
+}
+
+// The issues this PR closes (github.ts linkedIssues), as its Jira tickets are shown: a card each (expanded as Settings
+// → Jira has tickets), and the other PRs on them under it.
+function LinkedIssues({ repo, n, lang }: { repo: string; n: number; lang?: string }) {
+  const [d, setD] = useState<{ issues: LinkedIssue[]; prs: TicketPR[] } | null>(null);
+  useEffect(() => void linkedIssues(repo, n).then(setD, () => setD(null)), [repo, n]);
+  const [open, toggle] = useStoredFlag('ticketOpen', false);
+  if (!d?.issues.length) return null;
+  return (
+    <>
+      {d.issues.map((i) => {
+        const html = i.html ?? md.render(i.md ?? '');
+        const ref = `${i.repo === repo ? '' : repoLabel(i.repo)}#${i.number}`;
+        return (
+          <details class="ticket issue-card" open={open} onToggle={(e) => e.currentTarget.open !== open && toggle()}>
+            <summary>
+              <a href={i.url} target="_blank" rel="noopener">{ref}</a> <span class={`jira-st ${i.open ? 'js-new' : 'js-done'}`}><Octicon name={i.open ? 'issue-opened' : 'issue-closed'} /> {i.open ? 'Open' : 'Closed'}</span>{' '}
+              {i.labels.map((l) => <><span class="badge">{l}</span> </>)}<b>{i.title}</b>
+            </summary>
+            {html.trim() ? <div class="md" data-lang={lang ?? ''} dangerouslySetInnerHTML={{ __html: html }} /> : <p class="note">No description.</p>}
+            {(i.assignees.length > 0 || i.milestone) && (
+              <p class="note">{[i.assignees.length && `Assigned to ${i.assignees.map((a) => shownName(a, repo)).join(', ')}`, i.milestone && `Milestone ${i.milestone}`].filter(Boolean).join(' · ')}</p>
+            )}
+          </details>
+        );
+      })}
+      <OtherPRs repo={repo} list={d.prs} />
+    </>
   );
 }
 

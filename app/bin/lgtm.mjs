@@ -913,9 +913,17 @@ let jiraSite; // https://<site>.atlassian.net, for browse links: the issue's own
 async function jiraIssue(key) {
   if (!/^[A-Z][A-Z0-9]+-\d+$/.test(key)) throw new Error('Bad issue key');
   jiraSite ??= acli(['jira', 'auth', 'status']).then((out) => 'https://' + (out.match(/Site:\s*(\S+)/)?.[1] ?? ''));
-  const [site, out] = await Promise.all([jiraSite, acli(['jira', 'workitem', 'view', key, '--json', '--fields', 'summary,status,issuetype,description'])]);
+  const [site, out] = await Promise.all([jiraSite, acli(['jira', 'workitem', 'view', key, '--json', '--fields', 'summary,status,issuetype,priority,description'])]);
   const f = JSON.parse(out).fields;
-  return { key, url: `${site}/browse/${key}`, summary: f.summary, status: f.status?.name, statusCategory: f.status?.statusCategory?.key, type: f.issuetype?.name, description: f.description ?? null };
+  return { key, url: `${site}/browse/${key}`, summary: f.summary, status: f.status?.name, statusCategory: f.status?.statusCategory?.key, type: f.issuetype?.name, priority: f.priority?.name, description: f.description ?? null };
+}
+
+// Tickets' priorities (the PR list's order), by key: one search for all of them.
+async function jiraPriorities(keys) {
+  keys = [...new Set(keys)].filter((k) => /^[A-Z][A-Z0-9]+-\d+$/.test(k)).slice(0, 100);
+  if (!keys.length) return {};
+  const out = await acli(['jira', 'workitem', 'search', '--jql', `key in (${keys.join(',')})`, '--fields', 'priority', '--limit', '100', '--json']);
+  return Object.fromEntries(JSON.parse(out).map((i) => [i.key, i.fields?.priority?.name ?? '']));
 }
 
 // A ticket moved to another status (after its PR merges: the merge box), by the status's name as Jira shows it.
@@ -1113,7 +1121,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/agent-archive', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/agent-session', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/agent-archive', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/agent-session', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/jira-priorities', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
     // A line of JSON per piece of the answer ({d}), then the whole of it ({text}) or why not ({error}).
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
@@ -1176,6 +1184,7 @@ const server = createServer(async (req, res) => {
     ]);
     return json(res, 200, { slack, jira });
   }
+  if (path === '/jira-priorities') return jiraPriorities((new URL(req.url ?? '/', ORIGIN).searchParams.get('keys') ?? '').split(',')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira-statuses') return jiraStatuses(new URL(req.url ?? '/', ORIGIN).searchParams.get('project')).then((l) => json(res, 200, l), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira-move' && req.method === 'POST')
     return readJson(req).then(jiraMove).then(() => json(res, 200, { ok: true }), (e) => json(res, 500, { error: e.message }));

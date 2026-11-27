@@ -149,13 +149,35 @@ pub async fn jira_issue(key: String) -> Result<Value, String> {
     }
     let site = cached(&JIRA_SITE, || acli(&["jira", "auth", "status"]).ok().map(|out| format!("https://{}", re(r"Site:\s*(\S+)").captures(&plain(&out)).map(|c| c[1].to_string()).unwrap_or_default())))
         .unwrap_or_default();
-    let out = acli(&["jira", "workitem", "view", &key, "--json", "--fields", "summary,status,issuetype,description"])?;
+    let out = acli(&["jira", "workitem", "view", &key, "--json", "--fields", "summary,status,issuetype,priority,description"])?;
     let v: Value = serde_json::from_str(&out).map_err(|e| e.to_string())?;
     let f = &v["fields"];
     Ok(json!({
         "key": key, "url": format!("{site}/browse/{key}"), "summary": f["summary"], "status": f["status"]["name"],
-        "statusCategory": f["status"]["statusCategory"]["key"], "type": f["issuetype"]["name"], "description": f["description"],
+        "statusCategory": f["status"]["statusCategory"]["key"], "type": f["issuetype"]["name"], "priority": f["priority"]["name"], "description": f["description"],
     }))
+}
+
+// Tickets' priorities (the PR list's order), by key: one search for all of them.
+#[tauri::command]
+pub async fn jira_priorities(keys: Vec<String>) -> Result<Value, String> {
+    let mut keys: Vec<String> = keys.into_iter().filter(|k| re(r"^[A-Z][A-Z0-9]+-\d+$").is_match(k)).collect();
+    keys.sort();
+    keys.dedup();
+    keys.truncate(100);
+    if keys.is_empty() {
+        return Ok(json!({}));
+    }
+    let jql = format!("key in ({})", keys.join(","));
+    let out = acli(&["jira", "workitem", "search", "--jql", &jql, "--fields", "priority", "--limit", "100", "--json"])?;
+    let v: Value = serde_json::from_str(&out).map_err(|e| e.to_string())?;
+    let mut m = serde_json::Map::new();
+    for i in v.as_array().into_iter().flatten() {
+        if let Some(k) = i["key"].as_str() {
+            m.insert(k.to_string(), i["fields"]["priority"]["name"].as_str().unwrap_or("").into());
+        }
+    }
+    Ok(Value::Object(m))
 }
 
 // --- CI job logs ---

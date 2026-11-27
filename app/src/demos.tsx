@@ -1294,6 +1294,19 @@ const agentGroup = (g: string, label: string, items: ComponentChildren[]) => (
     {items}
   </details>
 );
+// "Most urgent first": the same four, by latest activity, then by priority (a ticket's or a label's), people's before
+// bots', then the longest-waiting.
+const URGENT = {
+  bump: listItem('Bump okhttp to 4.12.0', 'dependabot', 'acme/shop#431', [['p-time', <Tg i="⏱" n="~1 min" />]]),
+  typo: listItem('Fix a typo in the onboarding copy', 'budi', 'acme/shop#430', [['', 'P3'], ['p-time', <Tg i="⏱" n="~1 min" />]]),
+  crash: listItem('Checkout crashes on an empty cart', 'rina', 'acme/shop#427', [['', 'SHOP-88 · High'], ['p-time', <Tg i="⏱" n="~5 min" />]]),
+  export: listItem('Export orders as CSV', 'sari', 'acme/shop#425', [['p-time', <Tg i="⏱" n="~15 min" />]]),
+};
+DEMOS.sortByPriority = {
+  title: 'Most urgent first',
+  off: <div class="demo-list">{agentGroup('needs', 'Needs your review', [URGENT.bump, URGENT.typo, URGENT.crash, URGENT.export])}</div>,
+  on: <div class="demo-list">{agentGroup('needs', 'Needs your review', [URGENT.crash, URGENT.export, URGENT.bump, URGENT.typo])}</div>,
+};
 const LIST_ONE = listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['p-time', <Tg i="⏱" n="~10 min" />]]);
 // Two files read and scrolled past: their Viewed boxes as they're left.
 const SCROLLED = (on: boolean) => (
