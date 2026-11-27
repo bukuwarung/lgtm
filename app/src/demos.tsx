@@ -1,4 +1,5 @@
 import type { ComponentChildren } from 'preact';
+import { useEffect, useState } from 'preact/hooks';
 import { Select } from './select.tsx';
 import { Setup } from './signin.tsx';
 import { highlightCode, rainbow, splitLines } from './highlight.ts';
@@ -11,7 +12,7 @@ import { ThemeThumb } from './themecard.tsx';
 import { BUILTIN_THEMES } from './themes.ts';
 import { parseDoc } from './docs.ts';
 import { reviewPlan, stepIcon, stepOrder } from './files.ts';
-import { useStoredValue, term } from './platform.ts';
+import { useStoredFlag, useStoredValue, term } from './platform.ts';
 import { changedRange, parseString, stringHtml } from './strings.ts';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
@@ -385,6 +386,69 @@ export const DEMOS: Record<string, Demo> = {
     ),
   },
 };
+
+// Settings → Diff's look, all at once: one sample drawn as the switches have it now (the classes main.tsx puts on the
+// page for line and word styles, signs and struck text; the switches read here for the rest), kept in sight while
+// they're set. Pointing at or focusing a switch outlines what it changes (its area, liveArea()).
+export const liveArea = (area: string) => dispatchEvent(new CustomEvent('lgtm:live', { detail: area }));
+const LIVE_DOC = `/**
+ * Tells the owner the order is paid.
+ */`;
+export function LivePreview() {
+  const [lit, setLit] = useState('');
+  useEffect(() => {
+    const on = (e: Event) => setLit((e as CustomEvent<string>).detail);
+    addEventListener('lgtm:live', on);
+    return () => removeEventListener('lgtm:live', on);
+  }, []);
+  const [words] = useStoredFlag('wordDiff', true);
+  const [docs] = useStoredFlag('renderDocs', true);
+  const [oldNums] = useStoredFlag('oldLineNumbers', false);
+  const [trim] = useStoredFlag('trimIndent', true);
+  const [rb] = useStoredFlag('rainbowBrackets', true);
+  const at = (area: string) => ({ 'data-area': area, 'data-lit': lit && area.split(' ').includes(lit) ? '' : undefined });
+  const pad = trim ? '' : '        ';
+  const plain = (h: string) => h.replace(/<span class="rb\d">([^<]*)<\/span>/g, '$1'); // brackets as the switch has them
+  const html = (code: string, word?: string, cls?: string) => {
+    const h = plain(word && words ? mark(code, word, cls!) : kt(code));
+    return rb ? rainbow(h) : h;
+  };
+  type L = [k: '+' | '-' | ' ', old: number | '', now: number | '', html: string, area: string];
+  const rows: L[] = [
+    ...(docs
+      ? ([['+', '', 39, `<div class="doc-render" style="width: calc(100% - 3ch)">${docHtml(LIVE_DOC + '\nfun x()')}</div>`, 'lines docs']] as L[])
+      : splitLines(plain(kt(LIVE_DOC))).map((l, i): L => ['+', '', 37 + i, l, 'lines docs'])),
+    [' ', 40, 40, html(pad + 'if (paid) {'), ''],
+    ['-', 41, '', html(pad + '    notify(owner)', 'owner', 'wd-del'), 'lines'],
+    ['+', '', 41, html(pad + '    notify(owner, PUSH)', ', PUSH', 'wd-add'), 'lines'],
+    ['+', '', 42, html(pad + '    log(items.count { (it.qty > 0) })'), 'lines brackets'],
+    [' ', 42, 43, html(pad + '}'), ''],
+  ];
+  return (
+    <div class="live-preview" aria-label="Preview" role="img" data-flash={lit || undefined}>
+      <File path="OrderNotifier.kt" add={docs ? 3 : 5} del={1}>
+        <table class={oldNums ? 'diff' : 'diff one-num'}>
+          <tbody>
+            {rows.map(([k, o, n, h, area]) => (
+              <tr class={`ln${k === '+' ? ' a' : k === '-' ? ' d' : ''}`} {...at(area)}>
+                <td class="num" {...at('oldnums')}>{o}</td>
+                <td class="num" {...at('oldnums')} data-old={n === '' ? o : undefined}>{n}</td>
+                <td class="code" {...at(k === ' ' ? 'indent' : 'indent signs')} dangerouslySetInnerHTML={{ __html: h }} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </File>
+      <File path="docs/rollout.md" add={2} del={1}>
+        <div class="md demo-md chunk demo-chunk">
+          <h2 data-src="1-1" data-chg="" {...at('mdlines')}>Rollout</h2>
+          <p data-src="3-3" data-chg="" {...at('mdlines')}>Ship behind the <code>orders_v2</code> flag.</p>
+          <div class="removed" {...at('mdlines strike')}><pre>Keep the old screen as a fallback.</pre></div>
+        </div>
+      </File>
+    </div>
+  );
+}
 
 // Without → with, side by side. `active`: which side the current setting gives (outlined). `pick`: clicking a side
 // chooses it (not while the setting is greyed out under one that's off).

@@ -893,6 +893,18 @@ button.link { border: none; background: none; padding: 0 4px; color: var(--accen
 .bot-chip { display: inline-block; margin: 0 6px 4px 0; padding: 0 2px 0 6px; border: 1px solid var(--border); border-radius: 10px; }
 /* Feature examples (Settings and the README pictures) */
 .set-flag.with-demo { padding-bottom: 10px; }
+/* Settings → Diff's shared preview (demos.tsx LivePreview): kept in sight while the switches under it are set; what
+   the pointed-at switch changes, outlined. */
+.live-group { position: relative; }
+.live-preview { position: sticky; top: calc(var(--nav, 0px) + 8px); z-index: 3; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 10px; align-items: start; margin: 4px 0 10px; padding: 10px; font-size: calc(12px * var(--ts)); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 18px -12px var(--shadow); pointer-events: none; }
+.live-preview .file { margin: 0; }
+.live-preview .file-h { position: static; } /* the preview floats already: its headers stay on their files */
+.live-preview .demo-chunk { padding: 6px 12px 6px 24px; }
+.live-preview [data-area] { transition: box-shadow var(--quick, .12s); }
+.live-preview tr[data-lit] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.live-preview td[data-lit], .live-preview :not(tr, td)[data-lit] { box-shadow: inset 0 0 0 2px var(--accent); border-radius: 3px; }
+.live-preview[data-flash="words"] mark { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 760px) { .live-preview { grid-template-columns: 1fr; position: static; } }
 .demo-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 2px 0 0 26px; font-size: calc(12px * var(--ts)); }
 .demo-side { position: relative; padding: 22px 8px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; pointer-events: none; }
 .demo-body { display: contents; } /* a picture of LGTM: out of Tab's way and a screen reader's (inert), laid out as if it weren't there */

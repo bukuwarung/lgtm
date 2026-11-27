@@ -9,7 +9,7 @@ import { personKey, viewAs, ask, useJiraStatuses, notify as sendNotification, gh
 import { StatusSelect } from './merge.tsx';
 import { estimateLabel, STEPS, stepOrder, stepIcon, type StepKey } from './files.ts';
 import { ACTIONS, FIXED, keyLabel, readBindings, RESERVED, useBindings, type Action } from './keys.ts';
-import { DemoPair } from './demos.tsx';
+import { DemoPair, LivePreview, liveArea } from './demos.tsx';
 import { SlackPreview } from './emojibox.tsx';
 import { highlightCode } from './highlight.ts';
 import { CODE_FONTS, CODE_DEFAULT, CODE_THEMES, TEXT_DEFAULT, useCodeLook, allThemes, saveTheme, setTrial, hasOsAccent } from './look.ts';
@@ -62,11 +62,11 @@ function LineStyle() {
   );
   return (
     <>
-      <div class="set-row">
+      <div class="set-row" {...liveProps('lines')}>
         <span>Changed lines in code</span>
         {seg('Changed lines in code', style, setStyle, STYLES)}
       </div>
-      <div class="set-row">
+      <div class="set-row" {...liveProps('mdlines')}>
         <span>Changed lines in rendered markdown</span>
         {seg('Changed lines in rendered markdown', md, setMd, [['same', 'As code'], ...STYLES])}
       </div>
@@ -212,10 +212,12 @@ function AgentPost() {
   );
 }
 
-function Flag({ k, initial, label, hint, demo, children }: { k: string; initial: boolean; label: string; hint?: string; demo?: boolean; children?: preact.ComponentChildren }) {
+// live: the part of Settings → Diff's shared preview it changes (LivePreview), outlined while it's pointed at or focused.
+const liveProps = (area?: string) => area ? { onPointerEnter: () => liveArea(area), onPointerLeave: () => liveArea(''), onFocusIn: () => liveArea(area), onFocusOut: () => liveArea('') } : {};
+function Flag({ k, initial, label, hint, demo, live, children }: { k: string; initial: boolean; label: string; hint?: string; demo?: boolean; live?: string; children?: preact.ComponentChildren }) {
   const [on, toggle] = useStoredFlag(k, initial);
   return (
-    <div class={demo ? 'set-flag with-demo' : 'set-flag'}>
+    <div class={demo ? 'set-flag with-demo' : 'set-flag'} {...liveProps(live)}>
       <label class="set-row">
         <input type="checkbox" checked={on} onChange={toggle} />
         <span>
@@ -543,7 +545,24 @@ export function Settings() {
 
       <section>
         <h3>Diff</h3>
-        <LineStyle />
+        {/* How the diff looks: one preview for all of these, kept in sight while they're set. */}
+        <div class="live-group">
+          <LivePreview />
+          <LineStyle />
+          <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" live="words">
+            <WordStyle />
+          </Flag>
+          <Flag k="diffSigns" initial={false} label="Show + and − before changed lines" live="signs" />
+          <Flag k="rainbowBrackets" initial={true} label="Rainbow brackets" hint="Coloured by depth, as in IntelliJ." live="brackets" />
+          <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too" live="oldnums" />
+          <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="More room for long lines. Copies and comments keep the real text." live="indent" />
+          <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc, like IntelliJ's reader mode." live="docs">
+            <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Changes highlighted."  demo />
+            <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of // or # lines. Commented-out code stays source." demo>
+              <Flag k="renderSingleComments" initial={true} label="Single comment lines too"   demo />
+            </Flag>
+          </Flag>
+        </div>
         <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New packages are still named." demo />
         <Flag k="hideArchivedSpecs" initial={true} label="Hide archived specs" hint="Docs in archive folders, behind one row. Code there still shows." demo />
         <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Marked linguist-generated or linguist-binary in .gitattributes." demo />
@@ -551,25 +570,12 @@ export function Settings() {
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Fold code moved without changes" hint="One row naming where it went." demo />
         <Flag k="symbolNav" initial={true} label="Where functions and classes are used" hint={`Point at a function or class the ${T.PR} declares (it underlines), then click it, or press ${keyLabel(readBindings(localStorage.getItem('shortcuts') ?? '{}').usages)}: every line naming it, and a repo search.`} demo />
-        <Flag k="oldLineNumbers" initial={false} label="Show old line numbers too"   demo />
-        <Flag k="trimIndent" initial={true} label="Leave out the indentation a file's lines share" hint="More room for long lines. Copies and comments keep the real text."  demo />
         <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Also a button beside the ${T.PRs_} title.`}  demo />
         <Flag k="centerDiff" initial={true} label={`Centre the ${T.PR} at a comfortable width`} hint={`Also a button beside the ${T.PRs_} title.`} demo>
           <CenterCols />
           <Flag k="centerFit" initial={false} label="Fill the window when a line in the diff is wider than that"  demo />
         </Flag>
-        <Flag k="diffSigns" initial={false} label="Show + and − before changed lines"   demo />
         <Flag k="fileFooter" initial={false} label="Show a bar at the end of each file" hint="Name, Comment and Viewed, as in the header."  demo />
-        <Flag k="rainbowBrackets" initial={true} label="Rainbow brackets" hint="Coloured by depth, as in IntelliJ."  demo />
-        <Flag k="wordDiff" initial={true} label="Highlight the changed words inside a line" demo>
-          <WordStyle />
-        </Flag>
-        <Flag k="renderDocs" initial={true} label="Render doc comments" hint="KDoc, Javadoc and JSDoc, like IntelliJ's reader mode." demo>
-          <Flag k="renderEditedDocs" initial={true} label="Edited ones too" hint="Changes highlighted."  demo />
-          <Flag k="renderLineComments" initial={true} label="Line comments too" hint="Runs of // or # lines. Commented-out code stays source." demo>
-            <Flag k="renderSingleComments" initial={true} label="Single comment lines too"   demo />
-          </Flag>
-        </Flag>
         <Flag k="richMarkdown" initial={true} label="Show markdown files rendered" hint="Comment on any block. <> beside a file shows its source." demo>
           <Flag k="strikeRemoved" initial={false} label="Strike through removed text"   demo />
         </Flag>
