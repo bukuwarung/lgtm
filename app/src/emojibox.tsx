@@ -19,6 +19,12 @@ export function useSlackEmoji() {
   };
   return { names, emoji };
 }
+// A standard emoji as its character (drawn by the system's emoji font, as Slack shows it on a Mac) from GitHub's image
+// of it (…/unicode/1f912.png, or 1f468-200d-1f4bb), else the image (Slack's custom ones).
+export const Emoji = ({ src }: { src: string }) => {
+  const cp = src.match(/\/unicode\/([0-9a-f-]+)\.png/)?.[1];
+  return cp ? <span class="emoji-char">{String.fromCodePoint(...cp.split('-').map((h) => parseInt(h, 16)))}</span> : <img src={src} alt="" />;
+};
 
 // A textarea that suggests Slack emoji as you type ":" and a few letters: ↑↓ to pick, ↵ or Tab to put it in, Esc to
 // close; a click works too. The workspace's own come first.
@@ -70,7 +76,7 @@ export function EmojiTextarea({ value, onInput, names, emoji, rows = 3, label, b
         <div class="emoji-list" role="listbox">
           {matches.map((n, i) => (
             <button role="option" aria-selected={i === active} class={i === active ? 'on' : ''} onMouseDown={(e) => (e.preventDefault(), put(n))}>
-              <img src={emoji(n)} alt="" /> :{n}:
+              <Emoji src={emoji(n) ?? ''} /> :{n}:
             </button>
           ))}
         </div>
@@ -105,7 +111,7 @@ export function SlackPreview({ message, emoji }: { message: string; emoji: (name
 export function AwayMark({ s }: { s?: SlackPresence | null }) {
   const { emoji } = useSlackEmoji();
   const img = s?.emoji ? emoji(s.emoji.replace(/:/g, '')) : undefined;
-  return img ? <img class="away-mark" src={img} alt="" /> : <span>🌴</span>;
+  return img ? <span class="away-mark"><Emoji src={img} /></span> : <span>🌴</span>;
 }
 // Someone's Slack status, small, beside their name: its emoji (🌴 when away without one; a few words when it has none), 🌙 when it's late where they are; all of it in words on hover.
 export function StatusMark({ s, late, busy }: { s?: SlackPresence | null; late?: string | null; busy?: string }) {
@@ -117,7 +123,7 @@ export function StatusMark({ s, late, busy }: { s?: SlackPresence | null; late?:
   return (
     <span class={away ? 'ix-mark away' : 'ix-mark'} title={words}>
       {away && !img && <span title="Away">🌴</span>}
-      {img ? <img src={img} alt="" /> : !away && s?.text && <span class="ix-mark-text">{s.text}</span>}
+      {img ? <Emoji src={img} /> : !away && s?.text && <span class="ix-mark-text">{s.text}</span>}
       {late && !away && '🌙'}
     </span>
   );

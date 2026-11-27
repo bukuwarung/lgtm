@@ -218,7 +218,7 @@ b.person-link:hover, span.person-link:hover { text-decoration: underline; }
 .ix-status.away { color: var(--c-away); }
 .ix-status-emoji { width: 14px; height: 14px; }
 .ix-mark { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; vertical-align: middle; } /* a status beside a name; words on hover */
-.ix-mark img { width: 14px; height: 14px; }
+.ix-mark img { width: 14px; height: 14px; } .ix-mark .emoji-char { font-size: 13px; }
 .ix-load { display: inline-flex; align-items: center; gap: 2px; } /* how many PRs wait on them (0 in green) */
 .ix-load.free { color: var(--addfg); }
 .ix-mark-text { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11px * var(--ts)); color: var(--muted); }
@@ -808,7 +808,8 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .pr-state.idle .pr-state-act { display: flex; gap: 6px; }
 .agent-draft { border-radius: 6px; outline-offset: 4px; }
 .ix-labels { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 14px 6px; }
-.away-mark { width: 1.1em; height: 1.1em; vertical-align: -.2em; } /* an away status's own emoji (emojibox.tsx AwayMark) */
+.away-mark img { width: 1.1em; height: 1.1em; vertical-align: -.2em; } /* an away status's own emoji (emojibox.tsx AwayMark) */
+.emoji-char { font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; line-height: 1; } /* a standard emoji as the system draws it (emojibox.tsx Emoji) */
 .label-chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 8px; font-size: calc(11px * var(--ts)); line-height: 18px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--lc) 60%, transparent); background: color-mix(in srgb, var(--lc) 18%, transparent); }
 button.label-chip { font: inherit; font-size: calc(11px * var(--ts)); color: inherit; height: auto; cursor: pointer; --lc: var(--muted); } /* a chip that jumps (the index's Linked) */
 .label-chip .chip-btn { padding: 0; font: inherit; color: inherit; background: none; border: 0; height: auto; cursor: pointer; } .label-chip .chip-btn:disabled { cursor: default; opacity: 1; } /* a chip's own click (the index's Projects: its Status) */
