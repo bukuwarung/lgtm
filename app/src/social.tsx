@@ -2,7 +2,7 @@
 // (GitHub only: lgtm.getSocial). Loaded in one ask for the page (loadSocial), kept here, and drawn where each one is.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { dismissReview, getPageSocial, hideComment, isLab, setReaction, type Social } from './github.ts';
-import { ask, askText } from './platform.ts';
+import { ask, askText, shownName } from './platform.ts';
 import { Octicon } from './tags.tsx';
 
 export const EMOJI: [string, string][] = [['THUMBS_UP', '👍'], ['THUMBS_DOWN', '👎'], ['LAUGH', '😄'], ['HOORAY', '🎉'], ['CONFUSED', '😕'], ['HEART', '❤️'], ['ROCKET', '🚀'], ['EYES', '👀']];
@@ -34,7 +34,8 @@ export function react(id: string, content: string) {
   if (!s?.canReact) return;
   const g = s.groups.find((x) => x.content === content);
   const on = !g?.mine;
-  const groups = g ? s.groups.map((x) => (x === g ? { ...x, mine: on, n: x.n + (on ? 1 : -1) } : x)) : [...s.groups, { content, mine: true, n: 1 }];
+  const who = (w: string[] = []) => (!s.me ? w : on ? [s.me, ...w.filter((x) => x !== s.me)] : w.filter((x) => x !== s.me));
+  const groups = g ? s.groups.map((x) => (x === g ? { ...x, mine: on, n: x.n + (on ? 1 : -1), who: who(x.who) } : x)) : [...s.groups, { content, mine: true, n: 1, who: who() }];
   put(id, { ...s, groups });
   setReaction(s.target ?? id, content, on).catch((e) => (put(id, s), toast(`Couldn't react: ${e.message}`)));
 }
@@ -50,7 +51,16 @@ async function dismiss(id: string, who: string) {
   await dismissReview(id, r.text.trim()).then(() => dispatchEvent(new Event('lgtm:refresh')), (e) => toast(`Couldn't dismiss it: ${e.message}`));
 }
 
-// The emoji people left, mine marked: a click adds or takes back mine.
+// Who left an emoji, as GitHub's tooltip has it: "You, Rina and 3 more reacted with 👍" (the first ten named).
+const reactedBy = (g: Social['groups'][number], me: string | undefined, emoji: string) => {
+  const names = [...(g.mine ? ['You'] : []), ...(g.who ?? []).filter((w) => w !== me).map((w) => shownName(w))].slice(0, Math.max(g.n, 0));
+  const more = g.n - names.length;
+  if (!names.length) return '';
+  const list = more > 0 ? `${names.join(', ')} and ${more} more` : names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+  return `${list} reacted with ${emoji}`;
+};
+
+// The emoji people left, mine marked: a click adds or takes back mine. Hovering one names who left it.
 export function Reactions({ id }: { id?: string }) {
   const s = useSocial()(id);
   const shown = s?.groups.filter((g) => g.n > 0) ?? [];
@@ -58,9 +68,11 @@ export function Reactions({ id }: { id?: string }) {
   return (
     <div class="reactions">
       {shown.map((g) => (
-        <button class={g.mine ? 'reaction mine' : 'reaction'} aria-pressed={g.mine} disabled={!s.canReact} title={g.mine ? 'Take yours back' : 'React with this too'} onClick={() => react(id, g.content)}>
-          {EMOJI.find(([c]) => c === g.content)?.[1] ?? g.content} {g.n}
-        </button>
+        ((e) => (
+          <button class={g.mine ? 'reaction mine' : 'reaction'} aria-pressed={g.mine} disabled={!s.canReact} title={[reactedBy(g, s.me, e), s.canReact && (g.mine ? 'Click to take yours back' : 'Click to react with this too')].filter(Boolean).join('\n')} onClick={() => react(id, g.content)}>
+            {e} {g.n}
+          </button>
+        ))(EMOJI.find(([c]) => c === g.content)?.[1] ?? g.content)
       ))}
     </div>
   );

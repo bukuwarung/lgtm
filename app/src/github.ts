@@ -2449,7 +2449,7 @@ export async function getGist(id: string): Promise<Gist> {
 
 // Reactions and hiding on a PR, its comments and reviews (GitHub only), by node ID: each one's emoji with mine among
 // them, whether I may react, and whether it's hidden (minimized) and I may hide or unhide it.
-export type Social = { canReact: boolean; groups: { content: string; mine: boolean; n: number }[]; hidden: string | null; canHide: boolean; canUnhide: boolean; canEdit: boolean; canDelete: boolean; target?: string }; // target: where a reaction goes, when not the ID itself (a GitLab MR)
+export type Social = { canReact: boolean; me?: string; groups: { content: string; mine: boolean; n: number; who?: string[] }[]; hidden: string | null; canHide: boolean; canUnhide: boolean; canEdit: boolean; canDelete: boolean; target?: string }; // target: where a reaction goes, when not the ID itself (a GitLab MR)
 // The page's: GitHub's by node ID, GitLab's from the MR's discussions (gitlab.ts getLabSocial).
 export const getPageSocial = (repo: string, n: number, prNode: string, ids: string[]) => (isLab(repo) ? lab.getLabSocial(repo, n, prNode) : getSocial(ids));
 let socialGone = false; // asked the page to drop deleted comments already (once a session: no loop if one won't go)
@@ -2457,7 +2457,7 @@ export async function getSocial(ids: string[]): Promise<Map<string, Social>> {
   const out = new Map<string, Social>();
   for (let i = 0; i < ids.length; i += 100) {
     const r = await graphqlFull(
-      `query($ids:[ID!]!){nodes(ids:$ids){id ...on Reactable{viewerCanReact reactionGroups{content viewerHasReacted reactors{totalCount}}} ...on Minimizable{isMinimized minimizedReason viewerCanMinimize viewerCanUnminimize} ...on Updatable{viewerCanUpdate} ...on Deletable{viewerCanDelete}}}`,
+      `query($ids:[ID!]!){viewer{login} nodes(ids:$ids){id ...on Reactable{viewerCanReact reactionGroups{content viewerHasReacted reactors(first:10){totalCount nodes{...on User{login} ...on Bot{login} ...on Mannequin{login} ...on Organization{login}}}}} ...on Minimizable{isMinimized minimizedReason viewerCanMinimize viewerCanUnminimize} ...on Updatable{viewerCanUpdate} ...on Deletable{viewerCanDelete}}}`,
       { ids: ids.slice(i, i + 100) },
     );
     // A comment deleted since the page loaded: its conversation and threads load again, once, so it goes.
@@ -2466,7 +2466,9 @@ export async function getSocial(ids: string[]): Promise<Map<string, Social>> {
       if (x?.id)
         out.set(x.id, {
           canReact: !!x.viewerCanReact,
-          groups: (x.reactionGroups ?? []).map((g: any) => ({ content: g.content, mine: !!g.viewerHasReacted, n: g.reactors?.totalCount ?? 0 })),
+          me: r.data?.viewer?.login,
+          // Who: the first ten (the same cost to GitHub as none), for the emoji's tooltip.
+          groups: (x.reactionGroups ?? []).map((g: any) => ({ content: g.content, mine: !!g.viewerHasReacted, n: g.reactors?.totalCount ?? 0, who: (g.reactors?.nodes ?? []).map((u: any) => u?.login).filter(Boolean) })),
           hidden: x.isMinimized ? String(x.minimizedReason || 'hidden').toLowerCase().replace(/_/g, '-') : null,
           canHide: !!x.viewerCanMinimize,
           canUnhide: !!x.viewerCanUnminimize,

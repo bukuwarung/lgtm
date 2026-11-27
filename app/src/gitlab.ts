@@ -1365,7 +1365,7 @@ const awardGroups = (awards: any[], me: string | null) =>
   Object.entries(AWARD)
     .map(([content, name]) => {
       const of = awards.filter((a) => a.name === name);
-      return { content, n: of.length, mine: !!me && of.some((a) => a.user?.username === me) };
+      return { content, n: of.length, mine: !!me && of.some((a) => a.user?.username === me), who: of.map((a) => a.user?.username).filter(Boolean) };
     })
     .filter((g) => g.n);
 export async function getLabSocial(repo: string, n: number, prNode: string): Promise<Map<string, Social>> {
@@ -1373,10 +1373,10 @@ export async function getLabSocial(repo: string, n: number, prNode: string): Pro
   const [{ nodes, mr }, me] = await Promise.all([discussions(repo, n), labMe(host).then((u) => u.login, () => null)]);
   const out = new Map<string, Social>();
   const none = { hidden: null, canHide: false, canUnhide: false };
-  out.set(prNode, { ...none, canReact: !!me, groups: awardGroups(mr.awards, me), canEdit: false, canDelete: false, target: gid(host, mr.id) });
+  out.set(prNode, { ...none, me: me ?? undefined, canReact: !!me, groups: awardGroups(mr.awards, me), canEdit: false, canDelete: false, target: gid(host, mr.id) });
   for (const d of nodes)
     for (const x of d.notes.nodes)
-      if (!x.system) out.set(gid(host, x.id), { ...none, canReact: !!x.userPermissions?.awardEmoji, groups: awardGroups(x.awardEmoji?.nodes ?? [], me), canEdit: !!x.userPermissions?.adminNote, canDelete: !!x.userPermissions?.adminNote });
+      if (!x.system) out.set(gid(host, x.id), { ...none, me: me ?? undefined, canReact: !!x.userPermissions?.awardEmoji, groups: awardGroups(x.awardEmoji?.nodes ?? [], me), canEdit: !!x.userPermissions?.adminNote, canDelete: !!x.userPermissions?.adminNote });
   return out;
 }
 export const setLabReaction = (id: string, content: string, on: boolean) =>
