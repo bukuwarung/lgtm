@@ -2282,7 +2282,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       nextFile: () => sections[Math.min(cur + 1, sections.length - 1)]?.scrollIntoView(),
       prevFile: () => sections[Math.max(cur - 1, 0)]?.scrollIntoView(),
       // The next file not marked viewed (after the last, the first one left).
-      quoteReply: () => void (quoteSelection() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Select text in a comment to quote it', ms: 2500 } }))),
+      quoteReply: () => void (quoteSelection(ctx) || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Select text in a comment to quote it, or code to comment on it', ms: 2500 } }))),
       agentSession: () => {
         const sess = agentRunOf({ id: pr.node_id })?.session;
         const say = (text: string) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, ms: 3500 } }));
@@ -2913,7 +2913,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             </p>
           )}
           {!commitView && allFixes.length > 1 && <FixedAll fixes={allFixes} ctx={ctx} />}
-          <QuoteButton keyHint={hint(bindings.quoteReply)} />
+          <QuoteButton keyHint={hint(bindings.quoteReply)} ctx={ctx} />
           {!commitView && !!me && pr.user.login === me && <LookAgain conv={conv} pr={pr} again={reRequest} check={check} onRecheck={() => setCheckTry((k) => k + 1)} />}
           {(lastReviewed || fromSha) && (
             <div class={since ? 'since on' : 'since'}>
@@ -4151,20 +4151,21 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
 
   // Dragging from a line's number (or its "+") up or down: the lines passed over, commented on together, as GitHub and
   // GitLab do (shift-click still extends). Lit as you go; let go and the form opens for them. On one side: a removed
-  // line's run, or the new file's lines.
+  // line's run, or the new file's lines. In one column and side by side (where a half is the line).
+  const inT = (side: Side, n: number) => !!t && t.line != null && t.side === side && n >= (t.startLine ?? t.line) && n <= t.line;
   const dragged = useRef(false);
   const dragFrom = (e: PointerEvent, side: Side, line: number) => {
     const table = (e.currentTarget as Element).closest('table');
     if (e.button !== 0 || e.shiftKey || e.altKey || e.metaKey || !table || (side === 'LEFT' && ctx.since)) return;
     e.preventDefault(); // no text selection while dragging
     let end = line;
-    const rows = () => [...table.querySelectorAll<HTMLElement>(`tr[data-side="${side}"][data-line]`)];
+    const rows = () => [...table.querySelectorAll<HTMLElement>(`[data-side="${side}"][data-line]`)];
     const light = () => {
       const lo = Math.min(line, end), hi = Math.max(line, end);
       for (const r of rows()) r.classList.toggle('drag-sel', +r.dataset.line! >= lo && +r.dataset.line! <= hi);
     };
     const move = (m: PointerEvent) => {
-      const r = document.elementFromPoint(m.clientX, m.clientY)?.closest<HTMLElement>(`tr[data-side="${side}"][data-line]`);
+      const r = document.elementFromPoint(m.clientX, m.clientY)?.closest<HTMLElement>(`[data-side="${side}"][data-line]`);
       if (r && table.contains(r) && +r.dataset.line! !== end) (end = +r.dataset.line!, light());
     };
     const up = () => {
@@ -4404,7 +4405,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                 };
                 return (
                   <>
-                  <tr class={`ln doc${doc.kind === '+' ? ' a' : doc.kind === '-' ? ' d' : doc.kind === '~' ? ' edited' : ''}`} data-tgt={t && t.side === side && t.line === docLast ? '' : undefined}>
+                  <tr class={`ln doc${doc.kind === '+' ? ' a' : doc.kind === '-' ? ' d' : doc.kind === '~' ? ' edited' : ''}`} data-side={nums.length ? side : undefined} data-from={nums.length ? Math.min(...nums) : undefined} data-line={docLast ?? undefined} data-tgt={t && t.side === side && t.line === docLast ? '' : undefined}>
                     <td class="num" title={`Lines ${first.old}–${last.old}: comment on them all`} onClick={onNum}>
                       {run.find((x) => x.old != null)?.old ?? ''}
                     </td>
@@ -4438,14 +4439,17 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                 const rows = splitPlan[hi].get(li);
                 if (!rows) return null; // drawn with its run, at the run's first line
                 const half = (x: Line | null, i: number | null, right: boolean) => {
-                  const s: Side = x?.kind === '-' ? 'LEFT' : 'RIGHT';
+                  // A removed line is the old file's; any other (an unchanged one on the left too) the new file's.
+                  const s: Side = !right && x?.kind === '-' ? 'LEFT' : 'RIGHT';
                   const n = x ? (right ? x.new! : x.old!) : 0;
+                  const c = x ? (s === 'LEFT' ? x.old! : x.new!) : 0;
+                  const at = x ? { 'data-side': s, 'data-line': c, 'data-tgt': inT(s, c) ? '' : undefined } : {};
                   return (
                     <>
-                      <span class={x ? 'num' : 'num none'} title={x ? 'Comment (shift-click to extend)' : undefined} onClick={x ? (e) => pick(e, right ? 'RIGHT' : s, n) : undefined} onContextMenu={x ? (e) => void lineMenu(e, right ? 'RIGHT' : s, n) : undefined}>
+                      <span class={x ? 'num' : 'num none'} {...at} title={x ? 'Comment (drag or shift-click for more lines)' : undefined} onPointerDown={x ? (e) => dragFrom(e, s, c) : undefined} onClick={x ? (e) => !dragged.current && pick(e, s, c) : undefined} onContextMenu={x ? (e) => void lineMenu(e, s, c) : undefined}>
                         {x ? n : ''}
                       </span>
-                      <span class={`code${!x ? ' none' : x.kind === '-' ? ' d' : x.kind === '+' ? ' a' : ''}`} onContextMenu={x ? (e) => void lineMenu(e, right ? 'RIGHT' : s, n) : undefined} dangerouslySetInnerHTML={{ __html: x && i != null ? codeHtml(hi, i, x.text) : '' }} />
+                      <span class={`code${!x ? ' none' : x.kind === '-' ? ' d' : x.kind === '+' ? ' a' : ''}`} {...at} onContextMenu={x ? (e) => void lineMenu(e, s, c) : undefined} dangerouslySetInnerHTML={{ __html: x && i != null ? codeHtml(hi, i, x.text) : '' }} />
                     </>
                   );
                 };
@@ -4495,7 +4499,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
                       </td>
                     </tr>
                   )}
-                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : l.kind !== '-' && flagAt?.has(l.new!) ? (flagAt.get(l.new!)!.bad ? ' flag-bad' : ' flag-warn') : '')} data-k={`${hi}-${li}`} onContextMenu={(e) => void lineMenu(e, side, num)} title={l.kind === '-' ? undefined : l.kind === '+' && secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : l.kind === '+' && textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : flagAt?.get(l.new!)?.why} data-side={side} data-line={num} data-tgt={t && t.line != null && t.side === side && num >= (t.startLine ?? t.line) && num <= t.line ? '' : undefined}>
+                  <tr class={(l.kind === '+' ? 'ln a' : l.kind === '-' ? 'ln d' : 'ln') + (move !== undefined ? ' moved' : '') + (testFile && testPhase(l.text) ? ' phase' : '') + (l.kind === '+' && secretAt?.has(l.new!) ? ' secret' : l.kind === '+' && textAt?.has(l.new!) ? ' hardcoded' : l.kind !== '-' && flagAt?.has(l.new!) ? (flagAt.get(l.new!)!.bad ? ' flag-bad' : ' flag-warn') : '')} data-k={`${hi}-${li}`} onContextMenu={(e) => void lineMenu(e, side, num)} title={l.kind === '-' ? undefined : l.kind === '+' && secretAt?.has(l.new!) ? `Looks like a secret: ${secretAt.get(l.new!)}` : l.kind === '+' && textAt?.has(l.new!) ? 'Text written in the code, not in strings.xml: it won\u2019t be translated' : flagAt?.get(l.new!)?.why} data-side={side} data-line={num} data-tgt={inT(side, num) ? '' : undefined}>
                     <td class="num" title="Comment (drag or shift-click for more lines; ⌥-click copies a link to the line)" onPointerDown={(e) => dragFrom(e, side, num)} onClick={(e) => !dragged.current && pick(e, side, num)}>{l.old ?? ''}</td>
                     <td class="num" title="Comment (drag or shift-click for more lines; ⌥-click copies a link to the line)" onPointerDown={(e) => dragFrom(e, side, num)} onClick={(e) => !dragged.current && pick(e, side, num)} data-old={l.new == null ? l.old : undefined}>{l.new ?? ''}</td>
                     <td class="code" dangerouslySetInnerHTML={{ __html: codeHtml(hi, li, l.text) }} />
@@ -4822,7 +4826,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
   const [plus, setPlus] = useState<{ el: Element; top: number } | null>(null);
   const aim = (e: PointerEvent) => {
     const r = root.current, tgt = e.target as Element;
-    if (!r || tgt.closest('.md-plus')) return;
+    if (!r || tgt.closest('.md-plus') || getSelection()?.toString()) return; // text selected: a redraw would lose it
     if (tgt.closest('.note-host, .notes, .removed')) return setPlus(null);
     const box = r.getBoundingClientRect(), text = box.left + parseFloat(getComputedStyle(r).paddingLeft);
     if (e.clientX < text && plus?.el.isConnected) {
@@ -4841,6 +4845,48 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
     const a = anchor(hunks, s, end);
     if (a) ctx.setTarget({ path, side: 'RIGHT', ...a });
   };
+  // Dragging the "+" down (or up) over paragraphs, items, rows: all of them, as the diff's numbers.
+  const dragged = useRef(false);
+  const span = (el: Element) => el.getAttribute('data-src')!.split('-').map(Number);
+  const dragPlus = (e: PointerEvent) => {
+    const r = root.current, from = plus?.el;
+    if (e.button !== 0 || !r || !from) return;
+    e.preventDefault();
+    const x = r.getBoundingClientRect().left + parseFloat(getComputedStyle(r).paddingLeft) + 2;
+    const [a0, b0] = span(from);
+    let lo = a0, hi = b0, over = from;
+    const blocks = [...r.querySelectorAll('[data-src]:not([data-nd])')];
+    const move = (m: PointerEvent) => {
+      const el = document.elementFromPoint(x, m.clientY)?.closest('[data-src]');
+      if (!el || el === over || !r.contains(el) || el.hasAttribute('data-nd')) return;
+      const [a, b] = span(el);
+      (over = el), (lo = Math.min(a0, a)), (hi = Math.max(b0, b));
+      for (const bl of blocks) bl.classList.toggle('drag-sel', ((s) => s[0] >= lo && s[1] <= hi)(span(bl)));
+    };
+    const up = () => {
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', up);
+      for (const bl of blocks) bl.classList.remove('drag-sel');
+      if (over === from) return; // a click
+      dragged.current = true;
+      setTimeout(() => (dragged.current = false));
+      const at = anchor(hunks, lo, hi);
+      if (at) ctx.setTarget({ path, side: 'RIGHT', ...at });
+    };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  };
+  // Text selected here, commented on (the Comment button under a selection): its blocks' lines, the text quoted.
+  useEffect(() => {
+    const r = root.current;
+    const on = (e: Event) => {
+      const { from, to, body } = (e as CustomEvent<{ from: number; to: number; body: string }>).detail;
+      const at = anchor(hunks, from, to);
+      if (at) ctx.setTarget({ path, side: 'RIGHT', ...at, body });
+    };
+    r?.addEventListener('lgtm:select-comment', on);
+    return () => r?.removeEventListener('lgtm:select-comment', on);
+  });
 
   const marker = (r: Removed) => {
     const last = r.oldStart + r.lines.length - 1;
@@ -4878,7 +4924,7 @@ function RichView({ file, hunks, ctx, threads, drafts, stand }: BodyProps) {
     >
       {peek.node}
       {plus && (
-        <button class="md-plus" style={{ top: `${plus.top}px` }} title="Comment on these lines" aria-label="Comment on these lines" onClick={() => commentOn(plus.el)}>
+        <button class="md-plus" style={{ top: `${plus.top}px` }} title="Comment on these lines (drag for more)" aria-label="Comment on these lines" onPointerDown={dragPlus} onClick={() => !dragged.current && commentOn(plus.el)}>
           +
         </button>
       )}
@@ -5278,7 +5324,7 @@ function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; dr
       {drafts
         .filter((d) => d.id !== ctx.target?.editId)
         .map((d) => (
-          <div class="draft" key={d.id} id={'d-' + d.id}>
+          <div class="draft" key={d.id} id={'d-' + d.id} data-on={d.line ? `${d.side}:${d.startLine ?? d.line}-${d.line}` : undefined}>
             <div class="badge">Pending · {where(d)}</div>
             {/* A suggestion shows the lines it replaces (data-old, from data-from on), as GitHub will. */}
             <div
@@ -5304,7 +5350,9 @@ function Notes({ ctx, threads, drafts, form }: { ctx: Ctx; threads: Thread[]; dr
 // account (its first comment starts with 🤖) that doesn't wait on me and isn't in my review still to send.
 // Quote reply (GitHub's): the text selected in a comment, quoted, into the reply box of its thread, or for one in the
 // conversation (or the description), into the Finish review summary. False when nothing quotable is selected.
-function quoteSelection(): boolean {
+function quoteSelection(ctx?: Ctx): boolean {
+  const code = ctx && codeSelection(ctx);
+  if (code) return (commentSelection(code, ctx), true);
   const sel = getSelection();
   const text = sel?.toString().trim();
   const at = sel?.rangeCount ? sel.getRangeAt(0).commonAncestorContainer : null;
@@ -5350,17 +5398,77 @@ function FixedAll({ fixes, ctx }: { fixes: { t: Thread; fixes: Fix[] }[]; ctx: C
   );
 }
 
-// The button under a selection in a comment.
-function QuoteButton({ keyHint }: { keyHint: string }) {
-  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+// Code (or a rendered file's text) selected in a file: the lines it's on, to comment on with it quoted. One side: the
+// last line's (a selection from removed into added lines is on the added ones).
+type CodeSel = { file: Element; side: Side; from: number; to: number; text: string; rich: Element | null };
+function codeSelection(ctx: Ctx): CodeSel | null {
+  const sel = getSelection();
+  if (!sel?.rangeCount || sel.isCollapsed) return null;
+  const r = sel.getRangeAt(0);
+  const el = (n: Node) => (n instanceof Element ? n : n.parentElement);
+  const common = el(r.commonAncestorContainer);
+  const file = common?.closest('section.file');
+  const text = sel.toString().replace(/\s+$/, '');
+  if (!file || !text.trim() || !common!.closest('.diff, .rich-file') || common!.closest('.thread, .draft, .draft-form, .removed, textarea, input')) return null;
+  const rich = common!.closest('.rich-file');
+  if (rich) {
+    const ends = [el(r.startContainer), el(r.endContainer)].map((x) => x?.closest('[data-src]:not([data-nd])'));
+    if (!ends[0] || !ends[1]) return null;
+    const [a] = ends[0].getAttribute('data-src')!.split('-').map(Number), [, b] = ends[1].getAttribute('data-src')!.split('-').map(Number);
+    return { file, side: 'RIGHT', from: a, to: b, text: text.replace(/¶/g, ''), rich }; // without headings' ¶ links
+  }
+  const lines = [...file.querySelectorAll<HTMLElement>('[data-side][data-line]')].filter((x) => r.intersectsNode(x));
+  const side = lines.at(-1)?.dataset.side as Side | undefined;
+  const on = lines.filter((x) => x.dataset.side === side);
+  if (!side || !on.length || (side === 'LEFT' && ctx.since)) return null;
+  return { file, side, from: Math.min(...on.map((x) => +(x.dataset.from ?? x.dataset.line!))), to: Math.max(...on.map((x) => +x.dataset.line!)), text, rich: null };
+}
+function commentSelection(s: CodeSel, ctx: Ctx) {
+  const lines = s.text.split('\n');
+  const tick = s.text.includes('`') ? '``' : '`';
+  const body = s.rich
+    ? lines.map((l) => `> ${l}`.trimEnd()).join('\n') + '\n\n'
+    : lines.length === 1 ? `> ${tick}${tick === '``' ? ' ' : ''}${s.text.trim()}${tick === '``' ? ' ' : ''}${tick}\n\n` : '```\n' + s.text + '\n```\n\n';
+  getSelection()?.removeAllRanges();
+  if (s.rich) s.rich.dispatchEvent(new CustomEvent('lgtm:select-comment', { detail: { from: s.from, to: s.to, body } }));
+  else ctx.setTarget({ path: s.file.id.slice(2), side: s.side, line: s.to, startLine: s.from < s.to ? s.from : undefined, body });
+}
+
+// Pointing at a thread or a pending comment (data-on: side:first-last) tints the lines it's on, as GitHub does: the
+// rows (or halves side by side), or a rendered file's innermost blocks.
+let covering: Element | null = null;
+if (typeof document !== 'undefined')
+  document.addEventListener('pointerover', (e) => {
+    const note = (e.target as Element).closest?.('[data-on]') ?? null;
+    if (note === covering) return;
+    covering = note;
+    for (const x of document.querySelectorAll('.cover')) x.classList.remove('cover');
+    const file = note?.closest('section.file');
+    if (!note || !file) return;
+    const [side, range] = note.getAttribute('data-on')!.split(':');
+    const [a, b] = range.split('-').map(Number);
+    for (const x of file.querySelectorAll<HTMLElement>(`[data-side="${side}"][data-line]`))
+      if (+x.dataset.line! >= a && +(x.dataset.from ?? x.dataset.line!) <= b) x.classList.add('cover');
+    if (side !== 'RIGHT') return;
+    const hit = (x: Element) => ((s) => s[1] >= a && s[0] <= b)(x.getAttribute('data-src')!.split('-').map(Number));
+    for (const x of file.querySelectorAll('.rich-file [data-src]:not([data-nd])'))
+      if (hit(x) && ![...x.querySelectorAll('[data-src]')].some(hit)) x.classList.add('cover');
+  });
+
+// The button under a selection: in a comment, Quote reply; in a file's code or text, Comment (on its lines).
+function QuoteButton({ keyHint, ctx }: { keyHint: string; ctx: Ctx }) {
+  const [at, setAt] = useState<{ x: number; y: number; code: CodeSel | null } | null>(null);
+  const live = useRef(ctx);
+  live.current = ctx;
   useEffect(() => {
     const place = () => {
       const sel = getSelection();
       const node = sel?.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0).commonAncestorContainer : null;
       const el = node && (node instanceof Element ? node : node.parentElement);
-      if (!el?.closest('details.thread[id^="t-"] .comment, .comment[id^="cv-"], #pr-description') || el.closest('textarea, input, .editor')) return setAt(null);
+      const code = el && !el.closest('textarea, input, .editor') ? codeSelection(live.current) : null;
+      if ((!code && !el?.closest('details.thread[id^="t-"] .comment, .comment[id^="cv-"], #pr-description')) || el!.closest('textarea, input, .editor')) return setAt(null);
       const r = sel!.getRangeAt(0).getBoundingClientRect();
-      setAt({ x: Math.max(8, Math.min(r.left, innerWidth - 140)), y: Math.min(r.bottom + 6, innerHeight - 36) });
+      setAt({ x: Math.max(8, Math.min(r.left, innerWidth - 180)), y: Math.min(r.bottom + 6, innerHeight - 36), code });
     };
     const hide = () => setAt(null);
     document.addEventListener('selectionchange', place);
@@ -5369,8 +5477,12 @@ function QuoteButton({ keyHint }: { keyHint: string }) {
   }, []);
   if (!at) return null;
   return (
-    <button class="quote-btn" style={{ left: at.x, top: at.y }} onMouseDown={(e) => e.preventDefault()} onClick={() => (quoteSelection(), setAt(null))}>
-      <Octicon name="quote" /> Quote reply{keyHint}
+    <button class="quote-btn" style={{ left: at.x, top: at.y }} onMouseDown={(e) => e.preventDefault()} onClick={() => (at.code ? commentSelection(at.code, ctx) : quoteSelection(), setAt(null))}>
+      {at.code ? (
+        <><Octicon name="comment" /> Comment{at.code.rich ? '' : ` on ${where({ side: at.code.side, line: at.code.to, startLine: at.code.from < at.code.to ? at.code.from : undefined }).toLowerCase()}`}{keyHint}</>
+      ) : (
+        <><Octicon name="quote" /> Quote reply{keyHint}</>
+      )}
     </button>
   );
 }
@@ -5454,7 +5566,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       </div>
     );
   return (
-    <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}${t.isResolved || t.isOutdated ? ' settled' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot && !others}>
+    <details class={`thread${waiting ? ' awaiting' : ''}${bot ? ' bot' : ''}${t.isResolved || t.isOutdated ? ' settled' : ''}`} id={'t-' + t.id} open={!t.isResolved && !t.isOutdated && !bot && !others} data-on={t.line && !t.isOutdated ? `${t.diffSide}:${t.startLine ?? t.line}-${t.line}` : undefined}>
       {/* Open, it shows only its fold arrow: named, as a screen reader has nothing else to read. */}
       <summary aria-label={`Thread by @${first?.author?.login ?? 'ghost'}${t.isResolved ? ', resolved' : t.isOutdated ? ', outdated' : ''}`}>
         {waiting && <span class="badge awaiting-b">awaiting your reply · </span>}
@@ -5467,6 +5579,8 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
         {ctx.sinceComment.get(t.id)?.kind === 'same' && <span class="badge"> · code unchanged</span>}
         {!t.isResolved && verdict && <span class={`badge ${verdict.addressed ? 'v-done' : 'v-open'}`} title={verdict.why}> · {verdict.addressed ? 'addressed' : 'not addressed yet'}</span>}
       </summary>
+      {/* On several lines: which (the thread sits under the last). */}
+      {t.line && t.startLine && t.startLine < t.line && !t.isOutdated && <div class="t-lines badge">{where({ side: t.diffSide, line: t.line, startLine: t.startLine })}</div>}
       {!t.isResolved && verdict && ctx.checkBy && (
         <p class={`t-verdict ${verdict.addressed ? 'v-done' : 'v-open'}`}>
           <AgentMark id={ctx.checkBy} /> {verdict.addressed ? 'Addressed' : 'Not addressed yet'}: {verdict.why}

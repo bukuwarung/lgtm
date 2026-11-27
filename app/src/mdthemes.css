@@ -47,7 +47,7 @@
   margin-right: auto;
 }
 
-:scope .chunk:first-child > :first-child {
+:scope .chunk:nth-child(1 of .chunk) > :first-child { /* the first chunk, whatever sits before it (the "+", a peek) */
   margin-top: 0;
 }
 

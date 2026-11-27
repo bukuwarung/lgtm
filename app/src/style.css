@@ -505,7 +505,12 @@ main { padding: 16px; }
    diff's edge with one number column, the line between them with two), clear of the number and the code; the number
    cell tinted. Its click handler is the cell's. A file clips what's outside it (content-visibility): not while hovered. */
 .file:hover { content-visibility: visible; }
-.diff tr[data-tgt] > td, .diff tr.drag-sel > td { background-image: linear-gradient(color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--accent) 18%, transparent)); } /* the lines a comment being written is on, and those being dragged over (review.tsx dragFrom) */
+.diff tr[data-tgt] > td, .diff tr.drag-sel > td, .split-row > [data-tgt], .split-row > .drag-sel { background-image: linear-gradient(color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--accent) 18%, transparent)); } /* the lines a comment being written is on, and those being dragged over (review.tsx dragFrom) */
+.diff tr.cover > td, .split-row > .cover { background-image: linear-gradient(color-mix(in srgb, #d4a72c 22%, transparent), color-mix(in srgb, #d4a72c 22%, transparent)); } /* a thread's lines while it's pointed at (review.tsx data-on), as GitHub's yellow */
+.rich-file [data-src].drag-sel, .rich-file [data-src].cover { border-radius: 4px; box-shadow: 0 0 0 4px var(--tint); background-color: var(--tint); }
+.rich-file [data-src].drag-sel { --tint: color-mix(in srgb, var(--accent) 14%, transparent); }
+.rich-file [data-src].cover { --tint: color-mix(in srgb, #d4a72c 20%, transparent); }
+.rich-file [data-src].drag-sel [data-src].drag-sel { background: none; box-shadow: none; } /* a list's items: the list's tint only */
 .diff tr:hover:not(.x) > .num + .num { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .diff tr:hover > .num + .num::after {
   content: "+"; position: absolute; left: calc(-9px * var(--cs)); top: calc(50% - 9px * var(--cs)); z-index: 1; width: calc(18px * var(--cs)); height: calc(18px * var(--cs));
@@ -603,7 +608,8 @@ html.strike-removed .removed pre { text-decoration: line-through; }
 .thread > summary::before { content: "▸"; position: absolute; left: -18px; top: calc(50% - 5px); color: var(--muted); } /* on its line's middle, collapsed or open */
 .thread[open] > summary::before { content: "▾"; left: 10px; } /* open, the summary is the thread's corner */
 .thread[open] > summary { position: absolute; left: 0; top: 0; width: 28px; height: 28px; font-size: 0; } /* just the toggle */
-.thread[open] > summary + .comment { padding-top: 0; border-top: none; }
+.thread[open] > summary + .comment, .thread[open] > summary + .t-lines + .comment { padding-top: 0; border-top: none; }
+.thread > .t-lines { justify-self: start; }
 .comment { padding: 6px 0 10px; border-top: 1px solid var(--border); }
 .comment:first-child { border-top: none; } /* a line between comments, not above the first */
 .c-avatar { width: 18px; height: 18px; border-radius: 50%; vertical-align: -4px; }
