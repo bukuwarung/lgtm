@@ -148,7 +148,7 @@ code, pre { font-family: var(--mono); }
 .side .empty { margin: 32px 16px; }
 /* Sidebars: sticky full-height columns; content scrolls inside, the resize handle stays on the edge. */
 .side { position: sticky; top: var(--nav); height: calc(100vh - var(--nav)); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-.side-scroll { flex: 1; min-height: 0; overflow: hidden auto; }
+.side-scroll { flex: 1; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; } /* a sidebar's scroll stops at its ends: it doesn't carry on into the page */
 .prs .side-scroll { padding: 8px; }
 .review-all { width: 100%; margin-bottom: 6px; }
 .updating { display: inline-flex; align-items: center; gap: 6px; font-size: calc(11px * var(--ts)); font-weight: 400; color: var(--muted); }

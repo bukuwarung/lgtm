@@ -22,3 +22,17 @@ if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') 
       }
   }).observe(document.body, { childList: true, subtree: true });
 }
+
+// A sidebar (the PR list, a PR's index) too short to scroll doesn't hand the trackpad to the page behind it: WebKit
+// passes a scroll on from a box with nothing to scroll even with overscroll-behavior (style.css .side-scroll), which
+// covers one that does scroll. Anything inside it that scrolls on its own (a picker's list) still does.
+addEventListener(
+  'wheel',
+  (e) => {
+    const side = (e.target as Element).closest?.('.side-scroll');
+    if (!side || side.scrollHeight > side.clientHeight + 1) return;
+    for (let el = e.target as Element | null; el && el !== side; el = el.parentElement) if (el.scrollHeight > el.clientHeight && /auto|scroll/.test(getComputedStyle(el).overflowY)) return;
+    e.preventDefault();
+  },
+  { passive: false },
+);
