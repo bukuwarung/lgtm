@@ -37,6 +37,7 @@ export const ACTIONS = [
   ['commentMenu', 'The comment under the mouse: edit, delete, hide or dismiss it', 'H'],
   ['assign', words('Assign someone to the PR (the index)'), 'G'],
   ['milestone', words("Set the PR's milestone (the index)"), 'M'],
+  ['editPR', words("Edit the PR's title and description"), 'e'],
   ['projects', words('Add the PR to a GitHub Project, or set its Status there (the index)'), 'P'],
   ['linkIssue', words('Link an issue or a Jira ticket to the PR (the index)'), 'L'],
   ['newIssue', 'A new issue or Jira ticket from the comment under the mouse', 'h'],

@@ -1087,6 +1087,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       items: [
         { text: `Open on ${site(repo)}`, action: () => void openExternal(url) },
         { text: 'Copy Link', action: () => void copyText(url) },
+        ...((data.pr.user.login === me || rights?.update) ? [{ text: 'Edit Title and Description', action: () => void dispatchEvent(new Event('lgtm:edit-pr')) }] : []),
         { text: 'Copy Checkout Command', action: () => void copyText(checkoutCmd(repo, n)) },
         { text: 'Open as .diff', action: () => void openExternal(`${prWebUrl(repo, n)}.diff`) },
         { text: 'Open as .patch', action: () => void openExternal(`${prWebUrl(repo, n)}.patch`) },
@@ -2424,6 +2425,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       milestone: () => details('milestone'),
       projects: () => (isLab(repo) ? setNotice({ ok: true, text: 'GitLab has no Projects like GitHub\'s.' }) : details('projects')),
       linkIssue: () => details('linkIssue'),
+      editPR: () => (data?.pr.user.login === me || rights?.update ? dispatchEvent(new Event('lgtm:edit-pr')) : setNotice({ ok: true, text: "You can't edit this one's title." })),
       newIssue: () => ((el) => el ? dispatchEvent(new CustomEvent('lgtm:new-issue', { detail: { text: (el.querySelector('.md') as HTMLElement | null)?.innerText.trim() ?? '', url: el.dataset.url ?? el.querySelector<HTMLAnchorElement>('a[href*="#"]')?.href ?? data?.pr.html_url ?? '' } })) : setNotice({ ok: true, text: 'Point at a comment first.' }))(commentUnderMouse()),
       copyCheckout: () => void copyText(checkoutCmd(repo, n)).then(() => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Checkout command copied', ms: 2500 } }))),
       openDiff: () => void openExternal(`${prWebUrl(repo, n)}.diff`),
@@ -6735,6 +6737,12 @@ function ShotCompare({ p }: { p: ShotPair }) {
 // folded: review mode starts with it closed, the diff first.
 function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads, reveal, canEdit, canDismiss }: { pr: PR; items: ConversationItem[]; lang?: string; repo: string; me: string; mentions: string[]; folded?: boolean; ix: CodeIndex; threads: Thread[]; reveal: () => void; canEdit: boolean; canDismiss: boolean }) {
   const [editing, setEditing] = useState(false);
+  // e, or the title's right-click Edit Title and Description: the editor, at the description.
+  useEffect(() => {
+    const edit = () => (canEdit || me === pr.user.login) && (setEditing(true), setTimeout(() => jumpTo('pr-description'), 50));
+    addEventListener('lgtm:edit-pr', edit);
+    return () => removeEventListener('lgtm:edit-pr', edit);
+  }, [canEdit, me, pr.user.login]);
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const [mdStyle] = useMdStyle();
   const look = mdStyleProps(mdStyle); // the description reads like a markdown file (Settings → Markdown files)
@@ -6784,7 +6792,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         <CopyLink url={pr.html_url} />
         <ReactPick id={pr.node_id} />
         {(canEdit || me === pr.user.login) && !editing && (
-          <button class="copy-link" title="Edit the title and description" aria-label="Edit the title and description" onClick={() => setEditing(true)}>
+          <button class="copy-link" title={`Edit the title and description${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').editPR)}`} aria-label="Edit the title and description" onClick={() => setEditing(true)}>
             <Octicon name="pencil" />
           </button>
         )}
