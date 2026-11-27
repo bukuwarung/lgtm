@@ -128,6 +128,7 @@ export function CommentMenu({ id, review, onEdit, onDelete, toIssue }: { id?: st
 let at = { x: -1, y: -1 };
 addEventListener('mousemove', (e) => (at = { x: e.clientX, y: e.clientY }), { passive: true });
 const underMouse = () => document.elementFromPoint(at.x, at.y)?.closest<HTMLElement>('[data-social]') ?? null;
+export const commentUnderMouse = underMouse; // h: a new issue or ticket from it (review.tsx)
 // +: 👍 on the comment under the mouse; again, mine taken back.
 export const reactUnderMouse = () => {
   const el = underMouse();

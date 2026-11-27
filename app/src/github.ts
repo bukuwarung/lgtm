@@ -1929,8 +1929,30 @@ export function labelRank(label: string): number | null {
 // the other PRs on them (each issue's cross-references and links; GitLab's related MRs), for the cards above the
 // conversation. html: GitHub's rendering; md: GitLab's markdown, rendered here.
 export type LinkedIssue = { repo: string; number: number; title: string; url: string; open: boolean; labels: string[]; assignees: string[]; milestone?: string; html?: string; md?: string };
-export async function linkedIssues(repo: string, n: number): Promise<{ issues: LinkedIssue[]; prs: TicketPR[] }> {
-  if (isLab(repo)) return lab.labLinkedIssues(repo, n);
+// Kept a minute per PR: its cards and the index's Linked section ask together.
+const linkedSeen = new Map<string, { at: number; p: Promise<{ issues: LinkedIssue[]; prs: TicketPR[] }> }>();
+export const forgetLinked = (repo: string, n: number) => linkedSeen.delete(`${repo}#${n}`);
+export function linkedIssues(repo: string, n: number): Promise<{ issues: LinkedIssue[]; prs: TicketPR[] }> {
+  const k = `${repo}#${n}`, c = linkedSeen.get(k);
+  if (c && Date.now() - c.at < 60_000) return c.p;
+  const p = isLab(repo) ? lab.labLinkedIssues(repo, n) : fetchLinked(repo, n);
+  linkedSeen.set(k, { at: Date.now(), p });
+  p.catch(() => linkedSeen.delete(k));
+  return p;
+}
+// What's typed to link (the index's Linked section): a Jira key or its link, or an issue number, #12, or an issue's
+// link (another repo's as owner/repo#12). Null when it's none of them.
+export function parseLinkRef(repo: string, s: string): { jira: string } | { issue: string } | null {
+  s = s.trim();
+  const jira = s.match(/^[A-Z][A-Z0-9]+-\d+$/)?.[0] ?? s.match(/\/browse\/([A-Z][A-Z0-9]+-\d+)/)?.[1];
+  if (jira) return { jira };
+  if (/^#?\d+$/.test(s)) return { issue: `#${s.replace('#', '')}` };
+  const url = s.match(/^https?:\/\/([^/]+)\/(.+?)\/(?:-\/)?issues\/(\d+)/);
+  if (!url) return null;
+  const at = isLab(repo) ? `${url[1]}/${url[2]}` : url[2];
+  return { issue: at === repo ? `#${url[3]}` : `${url[2]}#${url[3]}` };
+}
+async function fetchLinked(repo: string, n: number): Promise<{ issues: LinkedIssue[]; prs: TicketPR[] }> {
   const [o, r] = repo.split('/');
   const d = await graphql(
     `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){closingIssuesReferences(first:5){nodes{
@@ -1978,6 +2000,8 @@ export async function prProjects(repo: string, n: number): Promise<ProjectInfo[]
 }
 export const addToProject = (projectId: string, contentId: string): Promise<string> =>
   graphql(`mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}`, { p: projectId, c: contentId }).then((d) => d.addProjectV2ItemById.item.id, (e) => Promise.reject(scopeHint(e)));
+export const removeFromProject = (projectId: string, itemId: string) =>
+  graphql(`mutation($p:ID!,$i:ID!){deleteProjectV2Item(input:{projectId:$p,itemId:$i}){deletedItemId}}`, { p: projectId, i: itemId }).catch((e) => Promise.reject(scopeHint(e)));
 export const setProjectStatus = (projectId: string, itemId: string, fieldId: string, optionId: string) =>
   graphql(`mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){clientMutationId}}`, { p: projectId, i: itemId, f: fieldId, o: optionId }).catch((e) => Promise.reject(scopeHint(e)));
 

@@ -809,6 +809,8 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .agent-draft { border-radius: 6px; outline-offset: 4px; }
 .ix-labels { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 14px 6px; }
 .label-chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 8px; font-size: calc(11px * var(--ts)); line-height: 18px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--lc) 60%, transparent); background: color-mix(in srgb, var(--lc) 18%, transparent); }
+button.label-chip { font: inherit; font-size: calc(11px * var(--ts)); color: inherit; height: auto; cursor: pointer; --lc: var(--muted); } /* a chip that jumps (the index's Linked) */
+.label-chip .chip-btn { padding: 0; font: inherit; color: inherit; background: none; border: 0; height: auto; cursor: pointer; } .label-chip .chip-btn:disabled { cursor: default; opacity: 1; } /* a chip's own click (the index's Projects: its Status) */
 .label-x { padding: 0 0 0 2px; border: 0; background: none; color: var(--muted); cursor: pointer; line-height: 1; }
 .label-x:hover { color: var(--fg); }
 .label-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--lc); vertical-align: -1px; }
