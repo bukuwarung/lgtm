@@ -46,10 +46,10 @@ export function useTheme() {
 // A switch; with an example (demos.tsx) it also shows what it does, the side you have now outlined. Children are
 // sub-switches: indented under it, and greyed out while it's off.
 // How added and removed lines are marked: filled (GitHub's way), a lighter tint, or just a bar at their left edge. In
-// code, and in rendered markdown (code's, unless picked).
+// code, and in rendered markdown (a bar unless picked; As code follows code's).
 function LineStyle() {
   const [style, setStyle] = useStoredValue('lineStyle', 'subtle');
-  const [md, setMd] = useStoredValue('mdLineStyle', 'same');
+  const [md, setMd] = useStoredValue('mdLineStyle', 'bar');
   const STYLES = [['fill', 'Fill'], ['subtle', 'Subtle'], ['bar', 'Bar']] as const;
   const seg = (label: string, cur: string, set: (v: string) => void, opts: readonly (readonly [string, string])[]) => (
     <span class="set-seg" role="radiogroup" aria-label={label}>
