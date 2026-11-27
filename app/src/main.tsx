@@ -299,7 +299,7 @@ function StaleBranches() {
 // "2 with checks failing, 1 with conflicts": what holds my PRs up, for the Your PRs count's hover.
 const stuckTip = (mine: QueueItem[]) => {
   const by = new Map<string, number>();
-  for (const r of mine.flatMap(stuck)) by.set(r, (by.get(r) ?? 0) + 1);
+  for (const r of mine.flatMap(toFix)) by.set(r, (by.get(r) ?? 0) + 1);
   return [...by].map(([r, k]) => `${k} with ${r}`).join(', ');
 };
 const standing = (i: QueueItem) =>
@@ -1372,6 +1372,23 @@ export const byUrgency = (items: QueueItem[]) => {
   return [...items].sort((a, b) => u.get(a.id)! - u.get(b.id)! || +isBotPR(a, bots) - +isBotPR(b, bots) || a.waitingSince.localeCompare(b.waitingSince));
 };
 
+// A PR assigned to me that someone else opened is mine (Your PRs). A bot's is mine to review and merge: it waits for my
+// review, the bot's fixes bring it back for another, and once I've approved it, for my merge. A person's I've taken
+// over: others review it and I merge it, unless Settings → PR list says I review those too.
+const reviewsAssigned = () => {
+  try {
+    return localStorage.getItem(own('reviewAssignedPeople')) === '1';
+  } catch {
+    return false;
+  }
+};
+const ownsReview = (i: QueueItem) => i.assigned && !i.authored && (isBotPR(i, readBots()) || reviewsAssigned());
+// Its review round is mine now: not reviewed yet, or commits written since my last review.
+const reviewDue = (i: QueueItem) => !i.myState || (i.newSinceMyReview ?? 0) > 0;
+// What's mine to fix (stuck): on one I review, not the changes I asked for (the author's to make).
+const toFix = (i: QueueItem) => (ownsReview(i) ? stuck(i).filter((r) => r !== 'changes requested') : stuck(i));
+const mergeable = (i: QueueItem) => i.ci === 'SUCCESS' && ['CLEAN', 'HAS_HOOKS'].includes(i.mergeState) && !i.autoMerge && !i.queue;
+
 type Group = 'agents' | 'needs' | 'mentioned' | 'changes' | 'commented' | 'approved';
 const GROUPS: [Group, string][] = [
   ['agents', 'Agents reviewing'], // Settings → Reviewing: Claude Code reviews it first (agentreview.ts)
@@ -1387,11 +1404,11 @@ const backToMe = (i: QueueItem) => !i.requested && !!i.myState && i.myState !== 
 // verdict is hidden then, since it's usually my own earlier one.
 const reReview = (i: QueueItem) => (i.requested && (!!i.myState || i.reviewedBefore)) || backToMe(i);
 // Waiting for my review: the list's "Needs your review" (the badge counts these).
-const needsMyReview = (i: QueueItem) => i.reviewing && groupOf(i) === 'needs' && !i.isDraft;
+const needsMyReview = (i: QueueItem) => ((i.reviewing && groupOf(i) === 'needs') || (ownsReview(i) && reviewDue(i))) && !i.isDraft;
 // What every count of "waiting for you" reads, so the list, the start page, Review Mode, the Dock badge, the window title
 // and the menu bar agree: the PRs in "Needs your review" (drafts too while the list shows them), and the threads and
 // mentions waiting on your reply (the inbox).
-const toReview = (items: QueueItem[], showDrafts: boolean) => items.filter((i) => i.reviewing && groupOf(i) === 'needs' && (!i.isDraft || showDrafts) && !isDismissed(i));
+const toReview = (items: QueueItem[], showDrafts: boolean) => items.filter((i) => ((i.reviewing && groupOf(i) === 'needs') || (ownsReview(i) && reviewDue(i))) && (!i.isDraft || showDrafts) && !isDismissed(i)); // those assigned to me for review too (in Your PRs)
 // PRs dismissed from the list (its ×), by "owner/repo#n": as they stood then (updatedAt). Anything new on one (a push, a
 // comment, a review, asked again) brings it back; until then it's out of the list, the counts and Review mode.
 const readDismissed = (): Record<string, string> => {
@@ -1444,6 +1461,7 @@ const REVIEWING: Kind = { name: 'Reviewing', groups: GROUPS, groupOf };
 const MINE: Kind = {
   name: `Your ${T.PRs}`,
   groups: [
+    ['m-review', 'Needs your review'], // assigned to me for review and merge (ownsReview): my round
     ['m-ready', 'Ready to merge'],
     ['m-changes', 'To fix'], // held up by something of mine to fix (stuck): each row's pills say what
     ['m-waiting', 'Waiting'], // nothing for me to do: reviewers, checks, auto-merge or the merge queue at work (its pills say which)
@@ -1451,7 +1469,10 @@ const MINE: Kind = {
     ['m-draft', 'Draft'],
   ],
   groupOf: (i) =>
-    i.isDraft ? 'm-draft' : stuck(i).length ? 'm-changes' : readyToMerge(i) ? 'm-ready' : i.noReviewers && i.reviewDecision !== 'APPROVED' ? 'm-nobody' : 'm-waiting',
+    i.isDraft ? 'm-draft'
+    // One I review: my round, the author's (Waiting), then once I've approved, as any of mine.
+    : ownsReview(i) ? (reviewDue(i) ? 'm-review' : i.myState !== 'APPROVED' ? 'm-waiting' : toFix(i).length ? 'm-changes' : mergeable(i) ? 'm-ready' : 'm-waiting')
+    : stuck(i).length ? 'm-changes' : readyToMerge(i) ? 'm-ready' : i.noReviewers && i.reviewDecision !== 'APPROVED' ? 'm-nobody' : 'm-waiting',
 };
 // Others' PRs coloured by their review's verdict (the team's and a repo's lists).
 const byVerdict = (i: QueueItem) =>
@@ -1784,6 +1805,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   });
   // Settings → PR list, "Most urgent first" (byUrgency): the Jira tickets' priorities, asked for in one go, then drawn again.
   const [urgentFirst] = useStoredFlag('sortByPriority', true);
+  useStoredFlag('reviewAssignedPeople', false); // ownsReview reads it: drawn again when it changes
   const [, prioTick] = useState(0);
   const ticketKeys = urgentFirst ? [...new Set((loaded ?? []).flatMap((i) => jiraKeys(i.title, i.head)))].sort().join(',') : '';
   useEffect(() => void (ticketKeys && loadJiraPriorities(ticketKeys.split(',')).then((news) => news && prioTick((x) => x + 1))), [ticketKeys]);
@@ -2209,7 +2231,9 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           </span>
         )}
         {/* Approved, but under To fix (failing checks, conflicts…): the approval still said */}
-        {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && stuck(i).length > 0 && <span class="pill p-ok"><Tg i="approved" t="approved" /></span>}
+        {kind === MINE && !i.isDraft && i.reviewDecision === 'APPROVED' && toFix(i).length > 0 && <span class="pill p-ok"><Tg i="approved" t="approved" /></span>}
+        {kind === MINE && !i.isDraft && ownsReview(i) && !reviewDue(i) && i.myState !== 'APPROVED' && <span class="pill" title={`You ${i.myState === 'CHANGES_REQUESTED' ? 'asked for changes' : 'commented'}: back for your review once ${shownName(i.author)} pushes`}><Tg i="aging" t={`waiting on ${shownName(i.author)}`} /></span>}
+        {kind === MINE && !i.isDraft && ownsReview(i) && reviewDue(i) && !!i.myState && <span class="pill p-strong" title="Commits written since your last review"><Tg i="again" t={`${i.newSinceMyReview} new since your review`} /></span>}
         {i.assigned && !i.authored && <span class="pill"><Tg i="assigned" t="assigned to you" /></span>}
         {kind === REVIEWING && !reReview(i) && i.newSinceApproval > 0 && (
           <span class="pill p-warn" title="Commits written since you approved it (not rebases or merges of the base): worth another look before it merges">
@@ -2242,14 +2266,14 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           ))
         )}
         {kind === REVIEWING && <AgentPill i={i} />}
-        {kind === MINE && stuck(i).length > 0 && !!linkedSession(i.repo, i.number) && (
+        {kind === MINE && toFix(i).length > 0 && !!linkedSession(i.repo, i.number) && (
           <QuickPill icon={linkedSession(i.repo, i.number)?.agent === 'codex' ? 'codex' : '✳'} tone="" idle="its session" action="Ask its session to fix it" busy="asking…" done="asked" title={`What's in the way (${stuck(i).join(', ')}), left for the ${linkedSession(i.repo, i.number)?.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'} that wrote it`} run={() => askToFix(i)} />
         )}
         {claudeWaiting(i) && <span class="pill p-session-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && (linkedSession(i.repo, i.number)?.agent === 'codex'
           ? <span class="pill p-agent" title="Its Codex conversation pushed commits since you last opened it here"><Tg i="codex" t="updated" /></span>
           : <span class="pill p-agent" title="Its Claude Code session pushed commits since you last opened it here"><Tg i="✳" t="updated" /></span>)}
-        {(kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} presence={presence} /> : null}
+        {((kind.colorOf ?? kind.groupOf)(i) === 'm-waiting' && !(kind === MINE && ownsReview(i))) || (kind === REVIEWING && groupOf(i) === 'needs') ? <Waiting i={i} nudge={kind === MINE} presence={presence} /> : null}
         {i.estimate && <span
           class="pill p-time"
           title={`Rough time to review: the description (${i.estimate.words} words), then ${Math.round(i.estimate.code)} lines of code, ${Math.round(i.estimate.tests)} of tests and ${Math.round(i.estimate.docs)} of docs (deleted lines count a third; generated files and lockfiles are skipped)${pace !== 1 ? `, at your ${Math.round(pace * 100)}% pace` : ''}${i.files > 100 ? '. Only the first 100 files are counted' : ''}. See Settings → Time to review`}
@@ -2319,7 +2343,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
       {err && <Empty tone="err" action={errorAction(err, () => setAgain((n) => n + 1))}>{err}</Empty>}
       {shown && (
         <div class="pr-tabs" role="tablist">
-          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && stuck(i).length).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
+          {([['reviewing', 'Reviewing', toReview(shown, showDrafts).filter((i) => i.reviewing).length], ['mine', `Your ${T.PRs}`, shown.filter((i) => i.mine && (toFix(i).length || (ownsReview(i) && reviewDue(i) && !i.isDraft))).length], ['team', 'Browse', teamData && teamItems.length]] as const).map(([t, name, n]) => (
             <button role="tab" aria-selected={tab === t} title={name} onClick={() => setTab(t)}>
               {/* Your PRs counts the ones held up by something of yours to fix (stuck), none shown when there are none */}
               <span class="tab-name">{name}</span> {t === 'mine' ? n > 0 && <span class="count changes" title={stuckTip(shown.filter((i) => i.mine))}>{n}</span> : n != null && !(hideEmptyGroups && !n) && <span class="count">{n}</span>}

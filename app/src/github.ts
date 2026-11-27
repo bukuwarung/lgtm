@@ -100,6 +100,7 @@ export type QueueItem = {
   qa?: { replies: string[]; status: 'signed' | 'issue' | null }; // my PR's QA request on Slack (platform.ts qaThreads)
   waitingSince: string; // when it last asked for review: opened, marked ready, or a review requested
   bot?: boolean; // opened by an app's account (GitHub's Bot, GitLab's bot user)
+  newSinceMyReview?: number; // commits written since my latest review of any kind (of the last 20): an assigned PR's fixes, for my review again
   prioLabels?: string[]; // its labels and its linked issues' (GitLab: its own), for its priority (labelRank)
   pendingReviewers: string[]; // people (not teams) whose review is requested
   myPending?: number; // comments in my pending review on GitHub, not sent yet (only mine are visible)
@@ -417,7 +418,7 @@ const PR_F = `fragment F on PullRequest{id number title updatedAt isDraft labels
   timelineItems(last:1,itemTypes:[REVIEW_REQUESTED_EVENT,READY_FOR_REVIEW_EVENT]){nodes{... on ReviewRequestedEvent{createdAt} ... on ReadyForReviewEvent{createdAt}}}
   mentions:timelineItems(last:10,itemTypes:[MENTIONED_EVENT]){nodes{... on MentionedEvent{createdAt actor{login}}}}
   myPending:reviews(states:PENDING,first:1){nodes{comments{totalCount}}}
-  latestReviews(first:100){nodes{state author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
+  latestReviews(first:100){nodes{state submittedAt author{__typename login}}} latestOpinionatedReviews(first:100){nodes{state submittedAt author{login}}}}`;
 // PRs read by id, 15 a query side by side. GitHub charges a query for what it could return (a search of up to 100 PRs
 // with all of this: 32 points for the PR list however few it holds), so finding PRs by id first and reading just
 // those costs a few; and a few hundred PRs read in one query outrun GitHub's 10 seconds (a 502).
@@ -451,10 +452,14 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
         r?.state === 'APPROVED' ? p.recent.nodes.filter(({ commit: c }: any) => c.parents.totalCount === 1 && c.authoredDate > r.submittedAt).length : 0)(
         p.latestOpinionatedReviews.nodes.find((r: any) => r.author?.login === me),
       ),
-      // An assigned PR that's waiting on my review belongs in the review queue, not twice.
+      newSinceMyReview: ((at) => (at ? p.recent.nodes.filter(({ commit: c }: any) => c.parents.totalCount === 1 && c.authoredDate > at).length : 0))(
+        [...p.latestReviews.nodes, ...p.latestOpinionatedReviews.nodes].filter((r: any) => r.author?.login === me && r.state !== 'PENDING' && r.submittedAt).map((r: any) => r.submittedAt as string).sort().at(-1),
+      ),
       reviewedBefore: reviewed.has(p.id),
-      reviewing: !authored.has(p.id) && (requested.has(p.id) || reviewed.has(p.id)),
-      mine: authored.has(p.id) || (assigned.has(p.id) && !requested.has(p.id) && !reviewed.has(p.id)),
+      // Assigned to me: mine (Your PRs), whoever opened it; to review there or not (main.tsx ownsReview). So in the
+      // review queue only when it isn't.
+      reviewing: !authored.has(p.id) && !assigned.has(p.id) && (requested.has(p.id) || reviewed.has(p.id)),
+      mine: authored.has(p.id) || assigned.has(p.id),
       assigned: assigned.has(p.id),
       authored: authored.has(p.id),
       mentioned: mentioned.has(p.id),
@@ -2321,9 +2326,10 @@ export type ThreadStatus = { awaiting: number; allMineResolved: boolean };
 
 // What changed on a listed PR between two refreshes, worth a notification: new replies waiting on me; on my PR, a
 // verdict or its checks finishing.
-// My PR approved, its checks passed and GitHub willing to merge it, with nothing (auto-merge, the queue) merging it for me.
+// My PR (or one assigned to me) approved, its checks passed and GitHub willing to merge it, with nothing (auto-merge,
+// the queue) merging it for me.
 export const readyToMerge = (i: QueueItem) =>
-  i.authored && !i.isDraft && i.reviewDecision === 'APPROVED' && i.ci === 'SUCCESS' && ['CLEAN', 'HAS_HOOKS'].includes(i.mergeState) && !i.autoMerge && !i.queue;
+  (i.authored || i.assigned) && !i.isDraft && i.reviewDecision === 'APPROVED' && i.ci === 'SUCCESS' && ['CLEAN', 'HAS_HOOKS'].includes(i.mergeState) && !i.autoMerge && !i.queue;
 // What stands between my PR and merging that's mine to fix (not reviewers yet to look, nor a draft): its reasons, none if nothing.
 export const stuck = (i: QueueItem): string[] =>
   i.isDraft

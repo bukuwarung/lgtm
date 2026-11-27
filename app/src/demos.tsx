@@ -1302,6 +1302,13 @@ const URGENT = {
   crash: listItem('Checkout crashes on an empty cart', 'rina', 'acme/shop#427', [['', 'SHOP-88 · High'], ['p-time', <Tg i="⏱" n="~5 min" />]]),
   export: listItem('Export orders as CSV', 'sari', 'acme/shop#425', [['p-time', <Tg i="⏱" n="~15 min" />]]),
 };
+// A person's PR assigned to you: taken over (it needs a reviewer), or yours to review first.
+const HANDED = listItem('Retry failed payments with backoff', 'rina', 'acme/shop#412', [['', <Tg i="assigned" t="assigned to you" />]]);
+DEMOS.reviewAssignedPeople = {
+  title: `${T.PRs} people assign to you`,
+  off: <div class="demo-list">{agentGroup('m-nobody', 'Need reviewer', [HANDED])}</div>,
+  on: <div class="demo-list">{agentGroup('m-review', 'Needs your review', [HANDED])}</div>,
+};
 DEMOS.sortByPriority = {
   title: 'Most urgent first',
   off: <div class="demo-list">{agentGroup('needs', 'Needs your review', [URGENT.bump, URGENT.typo, URGENT.crash, URGENT.export])}</div>,

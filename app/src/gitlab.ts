@@ -1196,8 +1196,8 @@ const itemOf = (host: string, m: any, me: string): QueueItem => {
     myState: reviewer ? REVIEW_STATE[mine] ?? null : null,
     newSinceApproval: 0,
     reviewedBefore: reviewer && !!REVIEW_STATE[mine],
-    reviewing: reviewer,
-    mine: authored || (assigned && !reviewer),
+    reviewing: reviewer && !assigned, // assigned: mine (github.ts getReviewQueue)
+    mine: authored || assigned,
     assigned,
     authored,
     mentioned: false,
