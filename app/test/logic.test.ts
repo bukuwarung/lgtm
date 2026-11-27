@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addedLines, commonIndent, dedentHtml, anchor, relocate, markText, rangeChange, interdiff, changePairs, gaps, ignoreWhitespace, importFolds, movedLines, ownRoot, parsePatch, removedRuns, wordChange } from '../src/diff.ts';
 import { codeIndex, docSnippet, peekLines, refTo, specRefs } from '../src/specrefs.ts';
-import { labelRank, priorityRank, applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef, afterApproval, stuck } from '../src/github.ts';
+import { closesIn, withoutCloses, labelRank, priorityRank, applySuggestions, awaitsMe, codeOwners, queueNews, withAnswered, markBots, repoPath, suggestionOf, threadTiers, parsePrUrl, isLab, numRef, afterApproval, stuck } from '../src/github.ts';
 import type { QueueItem } from '../src/github.ts';
-import { adfToMarkdown, jiraKeys, withKey } from '../src/jira.ts';
+import { adfToMarkdown, jiraKeys, withKey, withoutKey } from '../src/jira.ts';
 import { addsLogic, codeWithoutTests, deletedTests, isArchivedSpec, uniqueNames, estimate, inTests, estimateLabel, gradleModules, moduleName, modulesOf, moduleView, reviewOrder, untested } from '../src/files.ts';
 import { isGenerated, parseGeneratedRules } from '../src/gitattributes.ts';
 import { highlightCode, highlightHunks, rainbow, languageFor, majorityLanguage, splitLines } from '../src/highlight.ts';
@@ -1675,4 +1675,15 @@ test('a Jira key goes in a PR title', () => {
   assert.equal(withKey('feat(BUKU-2): add export', 'SHOP-1'), 'feat(BUKU-2, SHOP-1): add export');
   assert.equal(withKey('fix!: drop v1', 'SHOP-1'), 'fix(SHOP-1)!: drop v1');
   assert.equal(withKey('Add export', 'SHOP-1'), 'SHOP-1 Add export');
+});
+
+test('unlinking: a Jira key out of a title, an issue closing out of a description', () => {
+  assert.equal(withoutKey('feat(BUKU-2, SHOP-1): add export', 'SHOP-1'), 'feat(BUKU-2): add export');
+  assert.equal(withoutKey('feat(SHOP-1): add export', 'SHOP-1'), 'feat: add export');
+  assert.equal(withoutKey('SHOP-1 Add export', 'SHOP-1'), 'Add export');
+  assert.equal(withoutKey('Add export [SHOP-1]', 'SHOP-1'), 'Add export');
+  const body = 'Adds the export.\n\nCloses #12\nFixes #123, and more';
+  assert.ok(closesIn(body, '#12') && closesIn(body, '#123') && !closesIn(body, '#1'));
+  assert.equal(withoutCloses(body, '#12'), 'Adds the export.\n\nFixes #123, and more');
+  assert.equal(withoutCloses('Resolves acme/shop#4.', 'acme/shop#4'), '');
 });

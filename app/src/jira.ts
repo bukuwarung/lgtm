@@ -108,3 +108,15 @@ export const withKey = (title: string, key: string) => {
   const m = title.match(/^(\w+)(\(([^)]*)\))?(!?):\s*/);
   return m ? title.replace(m[0], `${m[1]}(${m[2] ? `${m[3]}, ` : ''}${key})${m[4]}: `) : `${key} ${title}`;
 };
+
+// A Jira key taken out of a PR title (unlinking it): from a conventional scope (feat(A-1, KEY-2): → feat(A-1):, the scope
+// gone when it was the only one), else wherever it stands, with its brackets.
+export const withoutKey = (title: string, key: string) => {
+  const m = title.match(/^(\w+)\(([^)]*)\)(!?):\s*/);
+  const inScope = m?.[2].split(/\s*,\s*/);
+  if (m && inScope!.includes(key)) {
+    const rest = inScope!.filter((k) => k !== key);
+    return title.replace(m[0], `${m[1]}${rest.length ? `(${rest.join(', ')})` : ''}${m[3]}: `);
+  }
+  return title.replace(new RegExp(`\\s*[\\[(]?\\b${key}\\b[\\])]?:?\\s*`), ' ').trim();
+};

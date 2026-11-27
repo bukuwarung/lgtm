@@ -36,6 +36,7 @@ export const ACTIONS = [
   ['editComment', 'Edit your comment under the mouse', 'E'],
   ['commentMenu', 'The comment under the mouse: edit, delete, hide or dismiss it', 'H'],
   ['assign', words('Assign someone to the PR (the index)'), 'G'],
+  ['label', words('Add a label to the PR (the index)'), 'l'],
   ['milestone', words("Set the PR's milestone (the index)"), 'M'],
   ['editPR', words("Edit the PR's title and description"), 'e'],
   ['projects', words('Add the PR to a GitHub Project, or set its Status there (the index)'), 'P'],

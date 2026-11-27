@@ -1940,7 +1940,19 @@ export function linkedIssues(repo: string, n: number): Promise<{ issues: LinkedI
   p.catch(() => linkedSeen.delete(k));
   return p;
 }
-// What's typed to link (the index's Linked section): a Jira key or its link, or an issue number, #12, or an issue's
+// A "Closes #12" (or fixes, resolves; any tense) for this issue in a PR's description, and the description without it
+// (its line gone when that was all it said): unlinking an issue linked that way.
+const closesRe = (ref: string) => new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\\s+${ref.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?!\\d)`, 'gi');
+export const closesIn = (body: string, ref: string) => closesRe(ref).test(body);
+export const withoutCloses = (body: string, ref: string) =>
+  body
+    .split('\n')
+    .filter((l) => !(closesRe(ref).test(l) && !l.replace(closesRe(ref), '').replace(/[\s,.;-]/g, '')))
+    .map((l) => l.replace(closesRe(ref), '').replace(/\s+([,.;])/g, '$1').trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
+// What's typed to link (the index's Details):  a Jira key or its link, or an issue number, #12, or an issue's
 // link (another repo's as owner/repo#12). Null when it's none of them.
 export function parseLinkRef(repo: string, s: string): { jira: string } | { issue: string } | null {
   s = s.trim();

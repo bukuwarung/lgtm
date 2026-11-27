@@ -2422,6 +2422,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       editComment: () => void (editUnderMouse() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Point at a comment of yours to edit it', ms: 2500 } }))),
       commentMenu: () => void (menuUnderMouse() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Point at a comment to hide, unhide or dismiss it', ms: 2500 } }))),
       assign: () => details('assign'),
+      label: () => details('label'),
       milestone: () => details('milestone'),
       projects: () => (isLab(repo) ? setNotice({ ok: true, text: 'GitLab has no Projects like GitHub\'s.' }) : details('projects')),
       linkIssue: () => details('linkIssue'),

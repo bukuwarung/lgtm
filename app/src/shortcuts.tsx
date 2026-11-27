@@ -8,8 +8,8 @@ import { AgentMark, BotMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold, Ti
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { jiraKeys, withKey } from './jira.ts';
-import { prProjects, addToProject, setProjectStatus, removeFromProject, type ProjectInfo, linkedIssues, parseLinkRef, forgetLinked, updatePR, type LinkedIssue, repoLabels, setLabel, type Label, getPrMeta, getAssignable, getMilestones, setAssignees, setMilestone, setSubscribed, setLocked, type PrMeta, type Milestone, type PushPoint, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, rerunRun, cancelRun, waitingRuns, approveRun, reviewDeployment, isLab, type WaitingRun, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { jiraKeys, withKey, withoutKey } from './jira.ts';
+import { prProjects, addToProject, setProjectStatus, removeFromProject, type ProjectInfo, linkedIssues, parseLinkRef, forgetLinked, closesIn, withoutCloses, updatePR, type LinkedIssue, repoLabels, setLabel, type Label, getPrMeta, getAssignable, getMilestones, setAssignees, setMilestone, setSubscribed, setLocked, type PrMeta, type Milestone, type PushPoint, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, rerunRun, cancelRun, waitingRuns, approveRun, reviewDeployment, isLab, type WaitingRun, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -160,49 +160,6 @@ const toPick = (id: string) => {
   }, 50);
 };
 
-// The PR's labels: × takes one off, the header's + puts one of the repo's on (when you may).
-function Labels({ repo, n, labels, canEdit, onDone }: { repo: string; n: number; labels: Label[]; canEdit: boolean; onDone?: () => void }) {
-  const [on, setOn] = useState(labels);
-  useEffect(() => setOn(labels), [labels.map((l) => l.name).join('\n')]);
-  const [adding, setAdding] = useState(false);
-  const [err, setErr] = useState('');
-  const flip = (l: Label, add: boolean) => {
-    setErr('');
-    setOn((x) => (add ? [...x, l] : x.filter((y) => y.name !== l.name)));
-    setLabel(repo, n, l.name, add).then(
-      () => dispatchEvent(new Event('lgtm:refresh')),
-      (e) => (setErr(e.message), setOn((x) => (add ? x.filter((y) => y.name !== l.name) : [...x, l]))),
-    );
-  };
-  const chip = (l: Label) => ({ '--lc': l.color ? '#' + l.color : 'var(--muted)' }) as preact.JSX.CSSProperties;
-  useDetailsKey('label', () => canEdit && (setAdding(true), toPick('ix-labels')));
-  return (
-    <Section id="ix-labels" title="Labels" count={on.length} extra={canEdit && <HeadBtn icon="plus" label="Add a label" on={adding} run={(sec) => (openSec(sec), setAdding((a) => !a))} />}>
-      {adding && (
-        <Picker
-          placeholder="Find a label…"
-          empty="No label to add."
-          load={async (q) => (await repoLabels(repo)).filter((l) => !on.some((x) => x.name === l.name) && has(q, l.name)).map((l) => ({ key: l.name, title: l.description || undefined, label: <><span class="label-dot" style={chip(l)} /> {l.name}</> }))}
-          onPick={async (name) => {
-            const l = (await repoLabels(repo)).find((x) => x.name === name);
-            if (l) flip(l, true);
-          }}
-          onClose={() => (setAdding(false), onDone?.())}
-        />
-      )}
-      <div class="ix-labels">
-        {on.map((l) => (
-          <span class="label-chip" style={chip(l)} title={l.description || l.name}>
-            {l.name}
-            {canEdit && <button class="label-x" aria-label={`Remove ${l.name}`} title={`Remove ${l.name}`} onClick={() => flip(l, false)}>×</button>}
-          </span>
-        ))}
-      </div>
-      {err && <p class="warn ix-pad">{err}</p>}
-    </Section>
-  );
-}
-
 // The PR's assignees, milestone, my subscription and its lock (github.ts getPrMeta), shared by the sections that show
 // them; a change shows at once and goes back if it fails.
 const metas = new Map<string, PrMeta>();
@@ -226,13 +183,6 @@ function usePrMeta(repo: string, n: number) {
     );
   };
   return [meta, change] as const;
-}
-// The labels section while it's hidden empty (Settings → Reviewing): shown once a label is being added.
-function LabelsOnAsk({ repo, n, canEdit }: { repo: string; n: number; canEdit: boolean }) {
-  const [shown, setShown] = useState(false);
-  useEffect(() => setShown(false), [repo, n]);
-  useDetailsKey('label', () => !shown && (setShown(true), setTimeout(() => dispatchEvent(new CustomEvent('lgtm:details', { detail: 'label' })), 30)));
-  return shown ? <Labels repo={repo} n={n} labels={[]} canEdit={canEdit} onDone={() => setShown(false)} /> : null;
 }
 // The index's shortcuts for these (review.tsx: G, M, S, O), each to its section.
 function useDetailsKey(what: string, run: () => void) {
@@ -273,60 +223,103 @@ function Assignees({ repo, n, canEdit, hideEmpty }: { repo: string; n: number; c
   );
 }
 
-function MilestoneSec({ repo, n, canEdit, hideEmpty }: { repo: string; n: number; canEdit: boolean; hideEmpty: boolean }) {
+// What the PR is and where it's tracked, in one section: its labels, its milestone, its GitHub Projects (each with its
+// Status) and the Jira tickets and issues it's linked to. The header's icons add each (their keys: l, M, P, L); a chip's
+// × takes it off (a ticket from the title, an issue's "Closes #12" from the description; one linked otherwise stays).
+type Adding = 'label' | 'milestone' | 'project' | 'link' | null;
+function DetailsSec({ repo, pr, canEdit }: { repo: string; pr: PR; canEdit: boolean }) {
+  const n = pr.number, lab = isLab(repo);
   const [meta, change] = usePrMeta(repo, n);
-  const [picking, setPicking] = useState(false);
+  const [labels, setLabels] = useState<Label[]>(pr.labels ?? []);
+  useEffect(() => setLabels(pr.labels ?? []), [(pr.labels ?? []).map((l) => l.name).join('\n')]);
+  const [projects, setProjects] = useState<ProjectInfo[] | null>(null);
+  const [projErr, setProjErr] = useState('');
+  const [issues, setIssues] = useState<LinkedIssue[]>([]);
+  const [adding, setAdding] = useState<Adding>(null);
+  const [statusOf, setStatusOf] = useState<string | null>(null);
+  const [err, setErr] = useState('');
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
-  useDetailsKey('milestone', () => canEdit && (setPicking(true), toPick('ix-milestone')));
-  if (!meta || (!meta.milestone && (!canEdit || (hideEmpty && !picking)))) return null;
-  const set = (m: Milestone | null) => change({ ...meta, milestone: m }, () => setMilestone(repo, n, m?.id ?? null));
-  let all: Milestone[] = [];
+  const loadProjects = () => prProjects(repo, n).then((l) => (setProjects(l), setProjErr('')), (e) => setProjErr(e.message));
+  useEffect(() => void (setProjects(null), setProjErr(''), !lab && loadProjects()), [repo, n]);
+  useEffect(() => void linkedIssues(repo, n).then((d) => setIssues(d.issues), () => setIssues([])), [repo, n, pr.body]);
+  const open = (k: Adding) => canEdit && (k !== 'project' || !lab) && (setAdding(k), toPick('ix-details'));
+  useDetailsKey('label', () => open('label'));
+  useDetailsKey('milestone', () => open('milestone'));
+  useDetailsKey('projects', () => open('project'));
+  useDetailsKey('linkIssue', () => open('link'));
+  const tickets = jiraKeys(pr.title, pr.head.ref);
+  const onProjects = projects?.filter((p) => p.item) ?? [];
+  const count = labels.length + (meta?.milestone ? 1 : 0) + onProjects.length + tickets.length + issues.length;
+  if (!count && !canEdit) return null;
+  const fail = (e: Error) => setErr(e.message);
+  const chip = (l: Label) => ({ '--lc': l.color ? '#' + l.color : 'var(--muted)' }) as preact.JSX.CSSProperties;
+  const flipLabel = (l: Label, add: boolean) => {
+    setErr('');
+    setLabels((x) => (add ? [...x, l] : x.filter((y) => y.name !== l.name)));
+    setLabel(repo, n, l.name, add).then(() => dispatchEvent(new Event('lgtm:refresh')), (e) => (fail(e), setLabels((x) => (add ? x.filter((y) => y.name !== l.name) : [...x, l]))));
+  };
+  const setMs = (m: Milestone | null) => meta && change({ ...meta, milestone: m }, () => setMilestone(repo, n, m?.id ?? null));
+  const project = (job: Promise<unknown>) => (setErr(''), job.then(loadProjects, fail));
+  // Linking and unlinking rewrite the PR's title or description, then it reloads.
+  const edit = (f: { title: string; body: string }, said: string) => (setErr(''), updatePR(repo, n, f).then(() => (forgetLinked(repo, n), dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: said, ms: 2500 } })), dispatchEvent(new Event('lgtm:refresh'))), fail));
+  const link = (q: string) => {
+    const r = parseLinkRef(repo, q);
+    if (!r) return;
+    setAdding(null);
+    void ('jira' in r ? edit({ title: withKey(pr.title, r.jira), body: pr.body ?? '' }, `Linked ${r.jira}.`) : edit({ title: pr.title, body: `${(pr.body ?? '').trimEnd()}\n\nCloses ${r.issue}`.trimStart() }, `Linked ${r.issue}.`));
+  };
+  const refOf = (i: LinkedIssue) => (i.repo === repo ? `#${i.number}` : `${lab ? i.repo.slice(i.repo.indexOf('/') + 1) : i.repo}#${i.number}`);
+  let milestones: Milestone[] = [];
+  const btn = (k: Exclude<Adding, null>, icon: string, label: string) => <HeadBtn icon={icon} label={label} on={adding === k} run={(sec) => (openSec(sec), setAdding((a) => (a === k ? null : k)))} />;
+  const close = () => setAdding(null);
   return (
-    <Section id="ix-milestone" title="Milestone" count={meta.milestone ? 1 : 0} extra={canEdit && <HeadBtn icon={meta.milestone ? 'pencil' : 'plus'} label={`${meta.milestone ? 'Change the' : 'Set a'} milestone${hint(keys.milestone)}`} on={picking} run={(s) => (openSec(s), setPicking((p) => !p))} />}>
-      {picking && (
+    <Section
+      id="ix-details"
+      title="Details"
+      count={count}
+      extra={canEdit && (
+        <span class="ix-head-acts">
+          {btn('label', 'tag', `Add a label${hint(keys.label)}`)}
+          {btn('milestone', 'milestone', `${meta?.milestone ? 'Change the' : 'Set a'} milestone${hint(keys.milestone)}`)}
+          {!lab && btn('project', 'tasklist', `Add it to a GitHub Project${hint(keys.projects)}`)}
+          {btn('link', 'link', `Link an issue or Jira ticket${hint(keys.linkIssue)}`)}
+        </span>
+      )}
+    >
+      {adding === 'label' && (
+        <Picker
+          placeholder="Find a label…"
+          empty="No label to add."
+          load={async (q) => (await repoLabels(repo)).filter((l) => !labels.some((x) => x.name === l.name) && has(q, l.name)).map((l) => ({ key: l.name, title: l.description || undefined, label: <><span class="label-dot" style={chip(l)} /> {l.name}</> }))}
+          onPick={async (name) => ((l) => l && flipLabel(l, true))((await repoLabels(repo)).find((x) => x.name === name))}
+          onClose={close}
+        />
+      )}
+      {adding === 'milestone' && meta && (
         <Picker
           placeholder="Find a milestone…"
           empty="No open milestones."
-          load={async (q) => ((all = await getMilestones(repo)), all.filter((m) => m.id !== meta.milestone?.id && has(q, m.title)).map((m) => ({ key: String(m.id), label: <><Octicon name="milestone" /> {m.title}{m.due && <small> · due {new Date(m.due).toLocaleDateString()}</small>}</> })))}
-          onPick={(id) => (set(all.find((m) => String(m.id) === id) ?? null), setPicking(false))}
-          onClose={() => setPicking(false)}
+          load={async (q) => ((milestones = await getMilestones(repo)), milestones.filter((m) => m.id !== meta.milestone?.id && has(q, m.title)).map((m) => ({ key: String(m.id), label: <><Octicon name="milestone" /> {m.title}{m.due && <small> · due {new Date(m.due).toLocaleDateString()}</small>}</> })))}
+          onPick={(id) => (setMs(milestones.find((m) => String(m.id) === id) ?? null), close())}
+          onClose={close}
         />
       )}
-      <div class="ix-labels">
-        {meta.milestone ? (
-          <span class="label-chip" title={meta.milestone.due ? `Due ${new Date(meta.milestone.due).toLocaleDateString()}` : meta.milestone.title}>
-            <Octicon name="milestone" /> {meta.milestone.title}
-            {canEdit && <button class="label-x" aria-label="Remove the milestone" title="Remove the milestone" onClick={() => set(null)}>×</button>}
-          </span>
-        ) : null}
-      </div>
-    </Section>
-  );
-}
-
-// Its GitHub Projects (like its milestone): each with its Status, a click to change it, × to take it off; + adds it to
-// one of the owner's. They need gh's project scope: without it the section stays away until + (P) says how.
-function ProjectsSec({ repo, n, prNode, canEdit, hideEmpty }: { repo: string; n: number; prNode: string; canEdit: boolean; hideEmpty: boolean }) {
-  const [list, setList] = useState<ProjectInfo[] | null>(null);
-  const [err, setErr] = useState('');
-  const [picking, setPicking] = useState(false);
-  const [statusOf, setStatusOf] = useState<string | null>(null); // the project whose Status is being picked
-  const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
-  const load = () => prProjects(repo, n).then((l) => (setList(l), setErr('')), (e) => setErr(e.message));
-  useEffect(() => void (setList(null), setErr(''), !isLab(repo) && load()), [repo, n]);
-  useDetailsKey('projects', () => canEdit && !isLab(repo) && (setPicking(true), toPick('ix-projects')));
-  const on = list?.filter((p) => p.item) ?? [];
-  if (isLab(repo) || (!on.length && (!canEdit || (!picking && (hideEmpty || !!err))))) return null;
-  const run = (job: Promise<unknown>) => job.then(load, (e) => setErr(e.message));
-  return (
-    <Section id="ix-projects" title="Projects" count={on.length} extra={canEdit && <HeadBtn icon="plus" label={`Add it to a Project${hint(keys.projects)}`} on={picking} run={(s) => (openSec(s), setPicking((p) => !p))} />}>
-      {picking && !err && (
+      {adding === 'project' && (projErr ? <p class="warn ix-pad">{projErr}</p> : (
         <Picker
           placeholder="Find a Project…"
           empty="No other open Projects."
-          load={async (q) => (list ?? []).filter((p) => !p.item && has(q, p.title)).map((p) => ({ key: p.id, label: <><Octicon name="tasklist" /> {p.title}</> }))}
-          onPick={(id) => (setPicking(false), void run(addToProject(id, prNode)))}
-          onClose={() => setPicking(false)}
+          load={async (q) => (projects ?? []).filter((p) => !p.item && has(q, p.title)).map((p) => ({ key: p.id, label: <><Octicon name="tasklist" /> {p.title}</> }))}
+          onPick={(id) => (close(), void project(addToProject(id, pr.node_id)))}
+          onClose={close}
+        />
+      ))}
+      {adding === 'link' && (
+        <Picker
+          placeholder="#12, an issue link, or SHOP-12"
+          empty="An issue number (#12), an issue link, or a Jira key (SHOP-12)"
+          load={async (q) => ((r) => (!r || ('jira' in r && tickets.includes(r.jira)) ? [] : [{ key: q, label: 'jira' in r ? <>Link Jira ticket {r.jira} <small>(into the title)</small></> : <><Octicon name="issue-opened" /> Link issue {r.issue} <small>(closes when this merges)</small></> }]))(parseLinkRef(repo, q))}
+          onPick={link}
+          onClose={close}
         />
       )}
       {statusOf && ((p) => p?.status && (
@@ -334,63 +327,54 @@ function ProjectsSec({ repo, n, prNode, canEdit, hideEmpty }: { repo: string; n:
           placeholder={`Status on ${p.title}…`}
           empty="No such status."
           load={async (q) => p.status!.options.filter((o) => has(q, o.name)).map((o) => ({ key: o.id, label: <>{o.name}{o.name === p.item?.status && <small> · now</small>}</> }))}
-          onPick={(o) => (setStatusOf(null), void run(setProjectStatus(p.id, p.item!.id, p.status!.field, o)))}
+          onPick={(o) => (setStatusOf(null), void project(setProjectStatus(p.id, p.item!.id, p.status!.field, o)))}
           onClose={() => setStatusOf(null)}
         />
-      ))(on.find((p) => p.id === statusOf))}
-      <div class="ix-labels">
-        {on.map((p) => (
-          <span class="label-chip" title={p.status ? `${p.title}: ${p.item!.status ?? 'no status'}${canEdit ? '. Click to change it' : ''}` : p.title}>
-            <button class="chip-btn" disabled={!canEdit || !p.status} onClick={() => setStatusOf(p.id)}><Octicon name="tasklist" /> {p.title}{p.item!.status && <small> · {p.item!.status}</small>}</button>
-            {canEdit && <button class="label-x" aria-label={`Take it off ${p.title}`} title={`Take it off ${p.title}`} onClick={() => void run(removeFromProject(p.id, p.item!.id))}>×</button>}
-          </span>
-        ))}
-      </div>
-      {err && <p class="warn ix-pad">{err}</p>}
-    </Section>
-  );
-}
-
-// What it's for, as GitHub's Development: its Jira tickets (in its title or branch) and the issues it closes, each a
-// jump to its card; + (L) links another: an issue as "Closes #12" in its description, a Jira key into its title.
-function LinkedSec({ repo, pr, canEdit, hideEmpty }: { repo: string; pr: PR; canEdit: boolean; hideEmpty: boolean }) {
-  const [issues, setIssues] = useState<LinkedIssue[]>([]);
-  const [adding, setAdding] = useState(false);
-  const [err, setErr] = useState('');
-  const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
-  useEffect(() => void linkedIssues(repo, pr.number).then((d) => setIssues(d.issues), () => setIssues([])), [repo, pr.number, pr.body]);
-  useDetailsKey('linkIssue', () => canEdit && (setAdding(true), toPick('ix-linked')));
-  const tickets = jiraKeys(pr.title, pr.head.ref);
-  if (!tickets.length && !issues.length && (!canEdit || (hideEmpty && !adding))) return null;
-  const link = (s: string) => {
-    const r = parseLinkRef(repo, s);
-    if (!r) return;
-    setAdding(false), setErr('');
-    const f = 'jira' in r ? { title: withKey(pr.title, r.jira), body: pr.body ?? '' } : { title: pr.title, body: `${(pr.body ?? '').trimEnd()}\n\nCloses ${r.issue}`.trimStart() };
-    updatePR(repo, pr.number, f).then(
-      () => (forgetLinked(repo, pr.number), dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Linked ${'jira' in r ? r.jira : r.issue}.`, ms: 2500 } })), dispatchEvent(new Event('lgtm:refresh'))),
-      (e) => setErr(`Couldn't link it: ${e.message}`),
-    );
-  };
-  return (
-    <Section id="ix-linked" title="Linked" count={tickets.length + issues.length} extra={canEdit && <HeadBtn icon="plus" label={`Link an issue or Jira ticket${hint(keys.linkIssue)}`} on={adding} run={(s) => (openSec(s), setAdding((a) => !a))} />}>
-      {adding && (
-        <Picker
-          placeholder="#12, an issue link, or SHOP-12"
-          empty="An issue number (#12), an issue link, or a Jira key (SHOP-12)"
-          load={async (q) => ((r) => (!r || ('jira' in r && tickets.includes(r.jira)) ? [] : [{ key: q, label: 'jira' in r ? <>Link Jira ticket {r.jira} <small>(into the title)</small></> : <><Octicon name="issue-opened" /> Link issue {r.issue} <small>(closes when this merges)</small></> }]))(parseLinkRef(repo, q))}
-          onPick={link}
-          onClose={() => setAdding(false)}
-        />
+      ))(onProjects.find((p) => p.id === statusOf))}
+      {labels.length > 0 && (
+        <div class="ix-labels">
+          {labels.map((l) => (
+            <span class="label-chip" style={chip(l)} title={l.description || l.name}>
+              {l.name}
+              {canEdit && <button class="label-x" aria-label={`Remove ${l.name}`} title={`Remove ${l.name}`} onClick={() => flipLabel(l, false)}>×</button>}
+            </span>
+          ))}
+        </div>
       )}
-      <div class="ix-labels">
-        {tickets.map((k) => <button class="label-chip chip-btn" title={`${k}: its card above the conversation`} onClick={() => jumpTo(`ticket-${k}`)}>{k}</button>)}
-        {issues.map((i) => (
-          <button class="label-chip chip-btn" title={`${i.title} (${i.open ? 'open' : 'closed'}): its card above the conversation`} onClick={() => jumpTo(`issue-${i.repo}#${i.number}`)}>
-            <Octicon name={i.open ? 'issue-opened' : 'issue-closed'} /> {i.repo === repo ? '' : `${i.repo.split('/').pop()}`}#{i.number}
-          </button>
-        ))}
-      </div>
+      {meta?.milestone && (
+        <div class="ix-labels">
+          <span class="label-chip" title={meta.milestone.due ? `Due ${new Date(meta.milestone.due).toLocaleDateString()}` : meta.milestone.title}>
+            <Octicon name="milestone" /> {meta.milestone.title}
+            {canEdit && <button class="label-x" aria-label="Remove the milestone" title="Remove the milestone" onClick={() => setMs(null)}>×</button>}
+          </span>
+        </div>
+      )}
+      {onProjects.length > 0 && (
+        <div class="ix-labels">
+          {onProjects.map((p) => (
+            <span class="label-chip" title={p.status ? `${p.title}: ${p.item!.status ?? 'no status'}${canEdit ? '. Click to change it' : ''}` : p.title}>
+              <button class="chip-btn" disabled={!canEdit || !p.status} onClick={() => setStatusOf(p.id)}><Octicon name="tasklist" /> {p.title}{p.item!.status && <small> · {p.item!.status}</small>}</button>
+              {canEdit && <button class="label-x" aria-label={`Take it off ${p.title}`} title={`Take it off ${p.title}`} onClick={() => void project(removeFromProject(p.id, p.item!.id))}>×</button>}
+            </span>
+          ))}
+        </div>
+      )}
+      {tickets.length + issues.length > 0 && (
+        <div class="ix-labels">
+          {tickets.map((k) => (
+            <span class="label-chip">
+              <button class="chip-btn" title={`${k}: its card above the conversation`} onClick={() => jumpTo(`ticket-${k}`)}><Octicon name="link" /> {k}</button>
+              {canEdit && pr.title.includes(k) && <button class="label-x" aria-label={`Unlink ${k}`} title={`Unlink ${k}: out of the title`} onClick={() => void edit({ title: withoutKey(pr.title, k), body: pr.body ?? '' }, `Unlinked ${k}.`)}>×</button>}
+            </span>
+          ))}
+          {issues.map((i) => (
+            <span class="label-chip">
+              <button class="chip-btn" title={`${i.title} (${i.open ? 'open' : 'closed'}): its card above the conversation`} onClick={() => jumpTo(`issue-${i.repo}#${i.number}`)}><Octicon name={i.open ? 'issue-opened' : 'issue-closed'} /> {refOf(i)}</button>
+              {canEdit && closesIn(pr.body ?? '', refOf(i)) && <button class="label-x" aria-label={`Unlink ${refOf(i)}`} title={`Unlink ${refOf(i)}: its "Closes" out of the description`} onClick={() => void edit({ title: pr.title, body: withoutCloses(pr.body ?? '', refOf(i)) }, `Unlinked ${refOf(i)}.`)}>×</button>}
+            </span>
+          ))}
+        </div>
+      )}
       {err && <p class="warn ix-pad">{err}</p>}
     </Section>
   );
@@ -920,9 +904,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
   // The index's top row: each commit on its own (the commits pill's list), and a label, an assignee or a milestone to
   // add while their sections are hidden empty: what, its icon, its words, its key.
   const adds = !hideEmpty || !canLabel || !meta ? [] : ([
-    !pr.labels?.length && ['label', 'tag', 'Add a label', ''],
-    !meta.assignees.length && ['assign', 'person', 'Assign someone', keys.assign],
-    !meta.milestone && ['milestone', 'milestone', 'Set a milestone', keys.milestone],
+    !meta.assignees.length && ['assign', 'person', 'Assign someone', keys.assign], // labels, milestone and the rest: the Details section's header
   ].filter(Boolean) as [string, string, string, string][]);
   // The commits section: the top row's button shows it (open, in sight); it stays while one is on its own.
   const [commitsOn, setCommitsOn] = useState(false);
@@ -989,12 +971,8 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
         {addMe && !reviewers.has(me) && <AddMe add={addMe} teams={(pr.requested_teams ?? []).map((t) => t.slug)} />}
       </Section>}
 
-      {(!!pr.labels?.length || (canLabel && !hideEmpty)) && <Labels repo={repo} n={pr.number} labels={pr.labels ?? []} canEdit={canLabel} />}
-      {hideEmpty && canLabel && !pr.labels?.length && <LabelsOnAsk repo={repo} n={pr.number} canEdit={canLabel} />}
       <Assignees repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
-      <MilestoneSec repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
-      <ProjectsSec repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} hideEmpty={hideEmpty} />
-      <LinkedSec repo={repo} pr={pr} canEdit={canLabel} hideEmpty={hideEmpty} />
+      <DetailsSec repo={repo} pr={pr} canEdit={canLabel} />
       <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} threads={tiers.mine.length > 0} />}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />
         {/* Where someone @-mentions me (why it's under "Mentioned you" in the list): their comments, and threads. */}

@@ -622,11 +622,12 @@ try {
       cut.push(...(await clipped('a pill\'s menu')));
       await evaluate(`document.querySelectorAll('.pr-status details.pill-menu')[${k}].open = false`);
     }
-    // Each picker the index's top row opens (a label, an assignee, a milestone): open, it stays inside the index.
+    // Each picker the index's add buttons open (an assignee from its top row; a label, a milestone from Details' header):
+    // open, it stays inside the index.
     await evaluate(`document.querySelector('.side.collapsed') && document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', bubbles: true }))`);
-    await until('the index\'s add buttons', `document.querySelectorAll('.ix-top .ix-head-btn').length >= 3`, 5000);
+    await until('the index\'s add buttons', `document.querySelectorAll('.ix-top .ix-head-btn, #ix-details .ix-head-btn').length >= 3`, 5000);
     for (const which of ['label', 'assign', 'milestone']) {
-      await evaluate(`[...document.querySelectorAll('.ix-top .ix-head-btn')].find((b) => /${which}/i.test(b.title)).click()`);
+      await evaluate(`[...document.querySelectorAll('.ix-top .ix-head-btn, #ix-details .ix-head-btn')].find((b) => /${which}/i.test(b.title)).click()`);
       await until(`the ${which} picker`, `!!document.querySelector('.index input.label-find') && document.querySelectorAll('.ix-pick button, .ix-pick .ix-item').length > 0`, 4000);
       const out = await evaluate(`(() => {
         const ix = document.querySelector('.index').closest('.side-scroll').getBoundingClientRect();
