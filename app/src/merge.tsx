@@ -61,7 +61,8 @@ export const canMerge = (s: Pick<MergeState, 'isDraft' | 'mergeStateStatus'>) =>
 // open: the PR's unresolved review threads, the ones waiting on my reply first.
 export type OpenThread = { id: string; path: string; awaiting: boolean; bot: boolean };
 // qa: the PR's QA request (Ask QA) — its link, and its replies once read — when it has one.
-export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, tickets = [], openThreads = [], qa }: { repo: string; n: number; revert?: boolean; asked?: string[]; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[]; qa?: { url: string; thread: QaThread | null } }) {
+// hidden: no button in the bar until it's opened (m, or the ⋯ menu's Merge…): someone else's PR.
+export function MergeBox({ hidden, repo, n, revert, asked = [], url, checks, onChange, tickets = [], openThreads = [], qa }: { hidden?: boolean; repo: string; n: number; revert?: boolean; asked?: string[]; url: string; checks: Check[] | null; onChange: () => void; tickets?: string[]; openThreads?: OpenThread[]; qa?: { url: string; thread: QaThread | null } }) {
   const [s, setS] = useState<MergeState | null>(null);
   const [err, setErr] = useState('');
   const fail = (text: string) => (setErr(text), reportError(text)); // in the box, and in the bar at the top
@@ -107,7 +108,7 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
     return () => removeEventListener('lgtm:merge', toggle);
   }, []);
   // The bar's button and its panel.
-  const bar = (label: preact.ComponentChildren, cls: string, title: string, body: preact.ComponentChildren, onOpen?: () => void) => (
+  const bar = (label: preact.ComponentChildren, cls: string, title: string, body: preact.ComponentChildren, onOpen?: () => void) => hidden && !shown ? null : (
     <div class="submit merge-bar">
       <button class={cls} title={`${title}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').merge)}`} aria-expanded={shown} onClick={() => (!shown && onOpen?.(), setShown(!shown))}>{label} <span class="caret" aria-hidden="true" /></button>
       {shown && body}
@@ -124,7 +125,8 @@ export function MergeBox({ repo, n, revert, asked = [], url, checks, onChange, t
       if (x.state === 'OPEN' && x.mergeStateStatus === 'UNKNOWN' && tries < 5) setTimeout(() => load(tries + 1), 3000);
     }, (e) => (setErr(e.message), setLoading(false)))
   );
-  useEffect(() => void load(), [repo, n, checks]); // checks reloaded: the merge state may have moved too
+  const wanted = !hidden || shown; // someone else's: asked for only once it's opened
+  useEffect(() => void (wanted && load()), [repo, n, checks, wanted]); // checks reloaded: the merge state may have moved too
   const [required, setRequired] = useState<string[]>([]);
   useEffect(() => void (s?.baseRefName && requiredChecks(repo, s.baseRefName).then(setRequired)), [repo, s?.baseRefName]);
 

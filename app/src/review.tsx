@@ -480,8 +480,9 @@ function BaseDialog({ repo, n, base, head, onClose }: { repo: string; n: number;
   );
 }
 
-// The bar's ⋯ (X): StateActs in a menu, its button like Agents'.
-function StateMenu({ askQa, rights, ...p }: { rights: PrRights | null; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void; askQa?: boolean }) {
+// The bar's ⋯ (X): StateActs in a menu, its button like Agents'. merge: Merge… for a PR I may merge whose Merge button
+// isn't in the bar (someone else's): the same panel, as m opens it.
+function StateMenu({ askQa, merge, rights, ...p }: { rights: PrRights | null; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void; askQa?: boolean; merge?: boolean }) {
   const [open, setOpen] = useState(false);
   const pop = useRef<HTMLDivElement>(null);
   useDismiss(open, () => setOpen(false), '.pr-acts');
@@ -493,11 +494,12 @@ function StateMenu({ askQa, rights, ...p }: { rights: PrRights | null; draft: bo
   useEffect(() => void (open && pop.current?.querySelector('button')?.focus()), [open]);
   return (
     <span class="agents-menu pr-acts">
-      <button class="agents-btn" title={`${askQa ? 'Ask QA, ' : ''}Close, reopen or convert to draft${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').prActions)}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button class="agents-btn" title={`${merge ? 'Merge, ' : ''}${askQa ? 'Ask QA, ' : ''}${merge || askQa ? 'close' : 'Close'}, reopen or convert to draft${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').prActions)}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         <Octicon name="kebab-horizontal" />
       </button>
       {open && (
         <div class="account-menu" role="menu" ref={pop} onClick={(e) => (e.target as Element).closest('button') && setOpen(false)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+          {merge && <button title={`Merge it: its merge panel opens in the bar${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').merge)}`} onClick={() => dispatchEvent(new Event('lgtm:merge'))}><Octicon name="git-merge" /> Merge…</button>}
           {askQa && <button title={`Post a QA request for this ${pageTerm().PR} on Slack (you see it first)${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').askQa)}`} onClick={() => dispatchEvent(new Event('lgtm:ask-qa'))}><Octicon name="beaker" /> Ask QA…</button>}
           {rights && <StateActs rights={rights} {...p} skip={['reopen', 'restore']} />}
         </div>
@@ -2575,9 +2577,13 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
             {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
             {askQa && <AskQA inMenu pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
-            {mine && pr.state === 'open' && !pr.draft && <MergeBox repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
+            {/* Its Merge button: mine (opened or assigned to me), or a bot's I may merge (Dependabot, Renovate: no one
+                else will). Anyone else's I may merge: from the ⋯ menu (Merge…) or m, the button showing while it's open. */}
+            {(mine || !!rights?.merge) && pr.state === 'open' && !pr.draft && <MergeBox hidden={!mine && !(pr.user.type === 'Bot' || bots.has(pr.user.login))} repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
-            {(askQa || (rights && (rights.close || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} />}
+            {((p) => (askQa || p || (rights && (rights.close || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} merge={p} />)(
+              !mine && !!rights?.merge && pr.state === 'open' && !pr.draft && !(pr.user.type === 'Bot' || bots.has(pr.user.login)),
+            )}
             {submitPanel()}
           </div>
         </div>
