@@ -1309,6 +1309,14 @@ DEMOS.reviewAssignedPeople = {
   off: <div class="demo-list">{agentGroup('m-nobody', 'Need reviewer', [HANDED])}</div>,
   on: <div class="demo-list">{agentGroup('m-review', 'Needs your review', [HANDED])}</div>,
 };
+// The PR page's layout: the index (files, reviewers, checks) beside the diff, left or right.
+const LAYOUT = (right: boolean) => (
+  <div class={`demo-layout${right ? ' right' : ''}`}>
+    <div class="dl-ix">{['OrderRepo.kt', 'CartScreen.kt', 'Reviewers', 'Checks'].map((t) => <span>{t}</span>)}</div>
+    <div class="dl-main"><Rows rows={dedent(NESTED, 12)} /></div>
+  </div>
+);
+DEMOS.indexRight = { title: 'Where the index sits', off: LAYOUT(false), on: LAYOUT(true) };
 DEMOS.sortByPriority = {
   title: 'Most urgent first',
   off: <div class="demo-list">{agentGroup('needs', 'Needs your review', [URGENT.bump, URGENT.typo, URGENT.crash, URGENT.export])}</div>,

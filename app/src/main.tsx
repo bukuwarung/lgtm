@@ -690,6 +690,8 @@ function App() {
     document.documentElement.classList.toggle('ln-subtle', lineStyle === 'subtle');
     document.documentElement.classList.toggle('ln-bar', lineStyle === 'bar');
   }, [lineStyle]);
+  const [ixRight] = useStoredFlag('indexRight', false); // Settings → Diff: the PR's index on the right of the page
+  useEffect(() => void document.documentElement.classList.toggle('ix-right', ixRight), [ixRight]);
   const [mdLineStyle] = useStoredValue('mdLineStyle', 'bar'); // Settings → Diff: rendered markdown's (a bar by default), or as code's
   useEffect(() => {
     const s = mdLineStyle === 'same' ? lineStyle : mdLineStyle;

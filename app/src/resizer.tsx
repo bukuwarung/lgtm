@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'preact/hooks';
 
-// Drag handle on a sidebar's right edge. The width lives in a CSS variable on <html> (`--<name>-w`, read by
+// Drag handle on a sidebar's inner edge (its right; the index's left when it's on the right, html.ix-right). The width lives in a CSS variable on <html> (`--<name>-w`, read by
 // the grid) and in localStorage. Double-click resets; arrow keys resize when focused.
 export function Resizer({ name, label, min = 160, max = 720 }: { name: string; label: string; min?: number; max?: number }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -27,7 +27,8 @@ export function Resizer({ name, label, min = 160, max = 720 }: { name: string; l
     }
   }, []);
 
-  const left = () => ref.current!.parentElement!.getBoundingClientRect().left;
+  const flipped = () => getComputedStyle(ref.current!).left === '0px'; // the handle on its left: a sidebar on the right
+  const widthAt = (x: number) => ((r) => (flipped() ? r.right - x : x - r.left))(ref.current!.parentElement!.getBoundingClientRect());
 
   return (
     <div
@@ -41,12 +42,11 @@ export function Resizer({ name, label, min = 160, max = 720 }: { name: string; l
       onPointerDown={(e) => {
         e.preventDefault();
         const el = e.currentTarget;
-        const x0 = left();
         el.setPointerCapture(e.pointerId);
         document.body.classList.add('resizing');
-        const move = (ev: PointerEvent) => set(ev.clientX - x0);
+        const move = (ev: PointerEvent) => set(widthAt(ev.clientX));
         const up = (ev: PointerEvent) => {
-          set(ev.clientX - x0, true);
+          set(widthAt(ev.clientX), true);
           el.removeEventListener('pointermove', move);
           el.removeEventListener('pointerup', up);
           document.body.classList.remove('resizing');
@@ -66,7 +66,7 @@ export function Resizer({ name, label, min = 160, max = 720 }: { name: string; l
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
         e.preventDefault();
         const width = ref.current!.parentElement!.getBoundingClientRect().width;
-        set(width + (e.key === 'ArrowLeft' ? -16 : 16), true);
+        set(width + ((e.key === 'ArrowLeft') !== flipped() ? -16 : 16), true); // toward the page: narrower
       }}
     />
   );

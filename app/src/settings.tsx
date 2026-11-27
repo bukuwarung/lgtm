@@ -565,6 +565,7 @@ export function Settings() {
             </Flag>
           </Flag>
         </div>
+        <Flag k="indexRight" initial={false} label={`The ${T.PR}'s index on the right`} hint="Files, reviewers, checks and the rest, beside the diff on the right instead of the left." demo />
         <Flag k="foldImports" initial={true} label="Fold package and import blocks" hint="Kotlin, Java, TypeScript, JavaScript. New packages are still named." demo />
         <Flag k="hideArchivedSpecs" initial={true} label="Hide archived specs" hint="Docs in archive folders, behind one row. Code there still shows." demo />
         <Flag k="hideGenerated" initial={true} label="Hide generated files" hint="Marked linguist-generated or linguist-binary in .gitattributes." demo />

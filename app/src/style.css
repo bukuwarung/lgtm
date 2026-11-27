@@ -347,6 +347,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 .review { display: grid; grid-template-columns: var(--index-w, 280px) minmax(0, 1fr); }
 .review.no-index { grid-template-columns: 0px minmax(0, 1fr); }
+/* Settings → Diff → the index on the right: its column after the page's, its border and resize handle on its left. */
+html.ix-right .review { grid-template-columns: minmax(0, 1fr) var(--index-w, 280px); }
+html.ix-right .review.no-index { grid-template-columns: minmax(0, 1fr) 0px; }
+html.ix-right .review > .side { order: 2; border-right: 0; border-left: 1px solid var(--border); }
+html.ix-right .review > .side.collapsed { border-left-color: transparent; }
+html.ix-right .review > .side .resizer { right: auto; left: 0; }
 .tree { font-size: calc(13px * var(--ts)); }
 
 /* PR Shortcut Index */
@@ -435,12 +441,12 @@ kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: va
 .fdot.s-added { background: var(--addfg); }
 .fdot.s-removed { background: var(--delfg); }
 .fdot.s-renamed, .fdot.s-copied { background: var(--accent); }
-@media (max-width: 1100px) { .shell { grid-template-columns: var(--prs-w, 240px) minmax(0, 1fr); } .review { grid-template-columns: var(--index-w, 220px) minmax(0, 1fr); } }
+@media (max-width: 1100px) { .shell { grid-template-columns: var(--prs-w, 240px) minmax(0, 1fr); } .review { grid-template-columns: var(--index-w, 220px) minmax(0, 1fr); } html.ix-right .review { grid-template-columns: minmax(0, 1fr) var(--index-w, 220px); } }
 @media (max-width: 800px) { .shell, .review { grid-template-columns: minmax(0, 1fr); } .side:not(.over) { display: none; } }
 /* A narrow window: the PR list or the index laid over the page from its button (main.tsx, review.tsx), in a column of no
    width, so the diff keeps its own. */
 .side.over { width: min(320px, 85vw); z-index: 25; background: var(--bg); box-shadow: 0 8px 32px var(--shadow); }
-@media (max-width: 800px) { .side.over { position: fixed; top: var(--nav); bottom: 0; left: 0; height: auto; } }
+@media (max-width: 800px) { .side.over { position: fixed; top: var(--nav); bottom: 0; left: 0; height: auto; } html.ix-right .review > .side.over { left: auto; right: 0; } }
 
 /* macOS → Accessibility → Display → Reduce motion: no flashes, sweeps, slides or fades. */
 @media (prefers-reduced-motion: reduce) {
@@ -900,6 +906,11 @@ button.link { border: none; background: none; padding: 0 4px; color: var(--accen
 .bot-chip { display: inline-block; margin: 0 6px 4px 0; padding: 0 2px 0 6px; border: 1px solid var(--border); border-radius: 10px; }
 /* Feature examples (Settings and the README pictures) */
 .set-flag.with-demo { padding-bottom: 10px; }
+.demo-layout { display: grid; grid-template-columns: 34% 1fr; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; } /* demos.tsx LAYOUT */
+.demo-layout.right { grid-template-columns: 1fr 34%; } .demo-layout.right .dl-ix { order: 2; border-right: 0; border-left: 1px solid var(--border); }
+.dl-ix { display: grid; align-content: start; gap: 2px; padding: 6px; border-right: 1px solid var(--border); background: var(--soft); font-size: .9em; color: var(--muted); }
+.dl-ix span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-main { min-width: 0; padding: 4px; }
 /* Settings → Diff's shared preview (demos.tsx LivePreview): kept in sight while the switches under it are set; what
    the pointed-at switch changes, outlined. */
 .live-group { position: relative; }

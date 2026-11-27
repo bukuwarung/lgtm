@@ -772,7 +772,8 @@ try {
     await until('Settings', `document.querySelectorAll('button.select').length > 3`);
     const was = await evaluate(`(() => { const b = [...document.querySelectorAll('button.select')].find((x) => /^(Shown|Hidden)/.test(x.textContent.trim())); b.scrollIntoView({ block: 'center' }); b.focus(); window.__sel = b; return b.textContent.trim(); })()`);
     await page.keyboard.press('ArrowDown');
-    await sleep(150);
+    // Opened within a moment (a busy page may take more than a frame or two): not a fixed wait that sometimes misses it.
+    for (let t = 0; t < 15 && !(await evaluate(`!!document.querySelector('.select-menu [role=option]')`)); t++) await sleep(100);
     if (!(await evaluate(`!!document.querySelector('.select-menu [role=option]')`))) throw new Error('the dropdown did not open on ↓');
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
