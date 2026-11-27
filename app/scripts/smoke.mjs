@@ -775,10 +775,12 @@ try {
     // Opened within a moment (a busy page may take more than a frame or two): not a fixed wait that sometimes misses it.
     for (let t = 0; t < 15 && !(await evaluate(`!!document.querySelector('.select-menu [role=option]')`)); t++) await sleep(100);
     if (!(await evaluate(`!!document.querySelector('.select-menu [role=option]')`))) throw new Error('the dropdown did not open on ↓');
+    await sleep(150); // open, and taking keys
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await sleep(150);
-    const picked = await evaluate(`({ open: !!document.querySelector('.select-menu'), text: window.__sel.textContent.trim(), focus: document.activeElement === window.__sel })`);
+    const pickedNow = () => evaluate(`({ open: !!document.querySelector('.select-menu'), text: window.__sel.textContent.trim(), focus: document.activeElement === window.__sel })`);
+    let picked = await pickedNow();
+    for (let t = 0; t < 15 && (picked.open || picked.text === was || !picked.focus); t++) await sleep(100), (picked = await pickedNow());
     if (picked.open || picked.text === was || !picked.focus) throw new Error(`picking with ↓ and Enter: ${JSON.stringify(picked)}`);
     await page.keyboard.press('ArrowDown');
     await sleep(100);
