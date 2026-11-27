@@ -1,3 +1,4 @@
+import { AwayMark } from './emojibox.tsx';
 import type { ComponentChildren } from 'preact';
 import { Select } from './select.tsx';
 import './tooltip.ts'; // LGTM's own tooltips for every title
@@ -1538,7 +1539,7 @@ const MERGE_PILL: Partial<Record<QueueItem['mergeState'], [string, string, strin
 
 // A pill on your PR with its fix in a little menu (so a stray click on the list does nothing): idle, working, done, or
 // failed (open the menu again to retry).
-function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon: string; tone: string; idle: string; action: string; busy: string; done: string; title: string; run: () => Promise<unknown> }) {
+function QuickPill({ icon, tone, idle, action, busy, done, title, run }: { icon: string | preact.ComponentChildren; tone: string; idle: string; action: string; busy: string; done: string; title: string; run: () => Promise<unknown> }) {
   const [step, setStep] = useState<'idle' | 'busy' | 'done' | string>('idle');
   const [said, setSaid] = useState(''); // what the action reported, as the done pill's tooltip
   const [open, setOpen] = useState(false);
@@ -2189,7 +2190,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
         {!i.reviewing && i.mentioned && <span class="pill p-reply" title="Someone @-mentions you in it"><Tg i="mention" t="mentioned you" /></span>}
         {kind === MINE && i.pendingReviewers.filter((r) => isAway(presence[personKey(i.repo, r)])).map((r) => (
           <QuickPill
-            icon="🌴"
+            icon={<AwayMark s={presence[personKey(i.repo, r)]} />}
             tone="p-warn"
             idle={`${shownAt(r, i.repo)} away`}
             action={`Ask someone free instead of @${r}`}
@@ -2305,7 +2306,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
             <ListGroup key={g} k={kind.people ? '' : `${kind.name}:${g}`} initial={!kind.people && (!g.endsWith('approved') || inGroup.length < 10)} class={'pr-group g-' + g}>
               <summary>
                 {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
-                {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) ? <span class="g-away" title={`${awayWhere(presence[viewAs() ? `${g}@${viewAs()}` : g])}: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}>🌴 away</span> : null}
+                {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) ? <span class="g-away" title={`${awayWhere(presence[viewAs() ? `${g}@${viewAs()}` : g])}: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}><AwayMark s={presence[viewAs() ? `${g}@${viewAs()}` : g]} /> away</span> : null}
                 {kind.note?.(g) && <span class="g-note" title={`Open ${T.PRs} asking this person, by name, for a review; how long their oldest ${T.PR} has waited for one`}>{kind.note(g)}</span>}
               </summary>
               {!!kind.asked?.(g) && (

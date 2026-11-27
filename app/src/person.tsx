@@ -1,3 +1,4 @@
+import { AwayMark } from './emojibox.tsx';
 import { useEffect, useState } from 'preact/hooks';
 import { getPerson, type Person, type QueueItem, numRef } from './github.ts';
 import { ago, duration, personKey, usePresence, repoLabel, viewAs, term, shownName, getSlackPeople, fetchIntegrations, openExternal, faceOf } from './platform.ts';
@@ -76,7 +77,7 @@ export function PersonPage({ login, orgs }: { login: string; orgs: string[] }) {
             )}
             {p.bio && ` · ${p.bio}`}
           </p>
-          {presence && <p class={isAway(presence) ? 'ix-status away' : 'ix-status'}>{isAway(presence) && '🌴 '}{statusText(presence)}</p>}
+          {presence && <p class={isAway(presence) ? 'ix-status away' : 'ix-status'}>{isAway(presence) && <><AwayMark s={presence} /> </>}{statusText(presence)}</p>}
           {presence?.tz && zoneLine(presence.tz) && <p class="note"><Octicon name="clock" /> {zoneLine(presence.tz)}</p>}
           {dm && <button onClick={() => void openExternal(dm)}>Message on Slack</button>}
         </div>

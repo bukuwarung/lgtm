@@ -101,7 +101,13 @@ export function SlackPreview({ message, emoji }: { message: string; emoji: (name
   );
 }
 
-// Someone's Slack status, small, beside their name: 🌴 when away, its emoji (a few words when it has none), 🌙 when it's late where they are; all of it in words on hover.
+// Away: their status's own emoji (🤒 out sick, ✈️ travelling), 🌴 only when it has none.
+export function AwayMark({ s }: { s?: SlackPresence | null }) {
+  const { emoji } = useSlackEmoji();
+  const img = s?.emoji ? emoji(s.emoji.replace(/:/g, '')) : undefined;
+  return img ? <img class="away-mark" src={img} alt="" /> : <span>🌴</span>;
+}
+// Someone's Slack status, small, beside their name: its emoji (🌴 when away without one; a few words when it has none), 🌙 when it's late where they are; all of it in words on hover.
 export function StatusMark({ s, late, busy }: { s?: SlackPresence | null; late?: string | null; busy?: string }) {
   const { emoji } = useSlackEmoji();
   const away = !!busy || isAway(s);
@@ -110,7 +116,7 @@ export function StatusMark({ s, late, busy }: { s?: SlackPresence | null; late?:
   const img = s?.emoji ? emoji(s.emoji.replace(/:/g, '')) : undefined;
   return (
     <span class={away ? 'ix-mark away' : 'ix-mark'} title={words}>
-      {away && <span title="Away">🌴</span>}
+      {away && !img && <span title="Away">🌴</span>}
       {img ? <img src={img} alt="" /> : !away && s?.text && <span class="ix-mark-text">{s.text}</span>}
       {late && !away && '🌙'}
     </span>
