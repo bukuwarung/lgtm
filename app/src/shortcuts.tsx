@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { hint, readBindings } from './keys.ts';
-import { ask, composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm, shortLogin } from './platform.ts';
+import { ask, askText, composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm, shortLogin } from './platform.ts';
 import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { StatusMark } from './emojibox.tsx';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
@@ -8,7 +8,7 @@ import { AgentMark, BotMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold, Ti
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
-import { repoLabels, setLabel, type Label, getPrMeta, getAssignable, getMilestones, setAssignees, setMilestone, setSubscribed, setLocked, type PrMeta, type Milestone, type PushPoint, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
+import { repoLabels, setLabel, type Label, getPrMeta, getAssignable, getMilestones, setAssignees, setMilestone, setSubscribed, setLocked, type PrMeta, type Milestone, type PushPoint, agentSays, awaitsMe, earlierVerdicts, repeatedFindings, jobLog, playJob, rerunFailedJobs, rerunJob, runOf, rerunRun, cancelRun, waitingRuns, approveRun, reviewDeployment, isLab, type WaitingRun, threadTiers, type Check, type ConversationItem, type Draft, type PR, type PRFile, type Thread } from './github.ts';
 
 // noDiff: renamed/copied/mode-changed with no content change, or an empty file added or deleted: nothing to review.
 export type File = PRFile & { generated: boolean; noDiff: boolean; untested?: boolean; lfs?: boolean }; // lfs: .gitattributes puts it in Git LFS
@@ -479,6 +479,56 @@ function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[
   );
 }
 
+// Every job of every GitHub Actions run on it again (the header's, when none failed: a flaky pass to confirm, say).
+function RerunAll({ repo, runs, onRefresh }: { repo: string; runs: string[]; onRefresh: () => void }) {
+  const [state, setState] = useState<'' | 'asking' | 'queued' | string>('');
+  const go = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setState('asking');
+    Promise.all(runs.map((r) => rerunRun(repo, r))).then(() => (setState('queued'), setTimeout(onRefresh, 3000)), (err) => setState(`couldn't: ${err.message}`));
+  };
+  return (
+    <button class={`ix-icon-btn ix-rerun${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`} disabled={state === 'asking' || state === 'queued'} title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run all ${runs.length > 1 ? `${runs.length} runs'` : "the run's"} jobs again`} aria-label="Run all jobs again" onClick={go}>
+      <Icon name={state === 'queued' ? 'dot-fill' : 'sync'} />
+    </button>
+  );
+}
+
+// Runs waiting on a person (GitHub): a first-time or fork contributor's workflows, to approve before they run (their
+// code runs with the repo's runners), and deployments to an environment I review, to approve or reject.
+function WaitingRuns({ repo, sha, onRefresh }: { repo: string; sha: string; onRefresh: () => void }) {
+  const [list, setList] = useState<WaitingRun[]>([]);
+  const [busy, setBusy] = useState(0);
+  const [err, setErr] = useState('');
+  const load = () => waitingRuns(repo, sha).then(setList, () => setList([]));
+  useEffect(() => void load(), [repo, sha]);
+  const act = async (r: WaitingRun, run: () => Promise<void>) => {
+    setBusy(r.id), setErr('');
+    await run().then(() => (load(), setTimeout(onRefresh, 3000)), (e) => setErr(e.message));
+    setBusy(0);
+  };
+  if (!list.length) return null;
+  return (
+    <div class="ix-waiting">
+      {list.map((r) => (
+        <div class="ix-wait-row">
+          <span><Icon name="clock" /> {r.kind === 'approve' ? <>{r.name} waits for approval to run <small>(a first-time or outside contributor's)</small></> : <>{r.name} waits to deploy to {r.envs.map((e) => e.name).join(', ')}</>}</span>
+          {r.kind === 'approve' ? (
+            <button disabled={busy === r.id} title="Its code runs on the repo's runners: look at what it changes first" onClick={async () => (await ask(`Approve and run ${r.name}? It runs this ${pageTerm().PR}'s code on the repo's runners.`, 'Approve and run')) && act(r, () => approveRun(repo, r.id))}>Approve and run</button>
+          ) : (
+            <>
+              <button disabled={busy === r.id} onClick={async () => { const s = await askText(`Approve deploying to ${r.envs.map((e) => e.name).join(', ')}?`, 'Approve', 'A comment (optional)'); if (s) await act(r, () => reviewDeployment(repo, r.id, r.envs.map((e) => e.id), true, s.text)); }}>Approve</button>
+              <button disabled={busy === r.id} onClick={async () => { const s = await askText(`Reject deploying to ${r.envs.map((e) => e.name).join(', ')}?`, 'Reject', 'Why (optional)', undefined, true); if (s) await act(r, () => reviewDeployment(repo, r.id, r.envs.map((e) => e.id), false, s.text)); }}>Reject</button>
+            </>
+          )}
+        </div>
+      ))}
+      {err && <p class="error">{err}</p>}
+    </div>
+  );
+}
+
 // A failing check, on the base branch's latest commit: failing there too (likely not this PR's doing), passing (so
 // it's likely this PR's), or still running. Nothing when the base doesn't run it (a PR-only check).
 export const OnBase = ({ c, branch: full }: { c: Check; branch: string }) => {
@@ -526,6 +576,15 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
       (e) => setRerun(`couldn't: ${e.message}`),
     );
   };
+  // Cancel the run this running job is part of; the checks reload once GitHub has it.
+  const [stopped, setStopped] = useState<'' | 'asking' | 'done' | string>('');
+  const stop = () => {
+    setStopped('asking');
+    cancelRun(repo, runOf(c)!).then(
+      () => (setStopped('done'), setTimeout(onRefresh, 3000)),
+      (e) => setStopped(`couldn't: ${e.message}`),
+    );
+  };
   // Start a GitLab manual job (deploy to staging, say); the checks reload once it's started.
   const [played, setPlayed] = useState<'' | 'asking' | 'started' | string>('');
   const play = () => {
@@ -562,17 +621,31 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
             <Icon name={played === 'started' ? 'dot-fill' : 'play'} />
           </button>
         )}
+        {/* Any finished job runs again, as on GitHub (a passed one too: a flaky deploy, say); a running one's run stops. */}
+        {c.state !== 'pending' && !c.manual && c.jobId && (
+          <button
+            class={`ix-icon-btn${rerun === 'asking' ? ' busy' : rerun === 'queued' ? ' done' : rerun ? ' failed' : ''}`}
+            title={rerun === 'queued' ? 'Queued to run again' : rerun.startsWith('couldn') ? `${rerun}; click to try again` : 'Run this job again (and the jobs that wait on it)'}
+            aria-label="Run this job again"
+            disabled={rerun === 'asking' || rerun === 'queued'}
+            onClick={again}
+          >
+            <Icon name={rerun === 'queued' ? 'dot-fill' : 'sync'} />
+          </button>
+        )}
+        {c.state === 'pending' && !c.manual && runOf(c) && (c.jobId || isLab(repo)) && (
+          <button
+            class={`ix-icon-btn${stopped === 'asking' ? ' busy' : stopped === 'done' ? ' done' : stopped ? ' failed' : ''}`}
+            title={stopped === 'done' ? 'Cancelled' : stopped.startsWith('couldn') ? `${stopped}; click to try again` : "Cancel this job's run"}
+            aria-label="Cancel this run"
+            disabled={stopped === 'asking' || stopped === 'done'}
+            onClick={stop}
+          >
+            <Icon name="x" />
+          </button>
+        )}
         {c.state === 'failure' && c.jobId && (
           <>
-            <button
-              class={`ix-icon-btn${rerun === 'asking' ? ' busy' : rerun === 'queued' ? ' done' : rerun ? ' failed' : ''}`}
-              title={rerun === 'queued' ? 'Queued to run again' : rerun.startsWith('couldn') ? `${rerun}; click to try again` : 'Run this job again (and the jobs that wait on it)'}
-              aria-label="Run this job again"
-              disabled={rerun === 'asking' || rerun === 'queued'}
-              onClick={again}
-            >
-              <Icon name={rerun === 'queued' ? 'dot-fill' : 'sync'} />
-            </button>
             <button class={open ? 'ix-icon-btn on' : 'ix-icon-btn'} title={open ? 'Hide the job log' : 'Show the end of the job log'} aria-label="Job log" aria-pressed={open} onClick={toggle}>
               <Icon name="list-unordered" />
             </button>
@@ -903,6 +976,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
           <>
             {failing > 0 && <span class="ck-sum ck-failure">{failing} failing</span>}
             {rerunnable.length > 0 && <RerunFailed repo={repo} checks={rerunnable} onRefresh={onRefreshChecks} />}
+            {!failing && !pending && ((runs) => runs.length > 0 && <RerunAll repo={repo} runs={runs} onRefresh={onRefreshChecks} />)([...new Set((checks ?? []).filter((c) => c.jobId).map(runOf).filter((r): r is string => !!r))])}
             {pending > 0 && <span class="ck-sum ck-pending">{pending} running</span>}
             <span
               class="ix-refresh"
@@ -919,6 +993,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
           </>
         }
       >
+        <WaitingRuns repo={repo} sha={pr.head.sha} onRefresh={onRefreshChecks} />
         {!checks ? (
           <div class="ix-pad"><Lines /></div>
         ) : checksErr ? (

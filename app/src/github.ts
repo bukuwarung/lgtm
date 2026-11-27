@@ -1297,6 +1297,7 @@ export function applySuggestions(src: string, list: Pick<Suggestion, 'path' | 's
   return lines.join(eol);
 }
 
+export const suggestionHeadline = (k: number) => (k > 1 ? 'Apply suggestions from code review' : 'Apply suggestion from code review');
 // Suggestions committed to the PR's branch as one commit, like GitHub's "Commit suggestions": each file read at the
 // head, its suggestions applied bottom up, the authors credited. Refused if the branch moved (expectedHeadOid).
 // A push since the page loaded makes GitHub refuse a commit made on the head it saw ("Expected branch to point to …"):
@@ -1308,23 +1309,23 @@ async function freshHead(headRepo: string, branch: string, head: string, paths: 
   const since = await getCompare(headRepo, head, now);
   return since.files.some((f) => paths.includes(f.filename) || paths.includes(f.previous_filename ?? '')) ? null : now;
 }
-export async function commitSuggestions(headRepo: string, branch: string, head: string, list: Suggestion[], me: string): Promise<void> {
+export async function commitSuggestions(headRepo: string, branch: string, head: string, list: Suggestion[], me: string, message = ''): Promise<void> {
   try {
-    return await commitSuggestionsOn(headRepo, branch, head, list, me);
+    return await commitSuggestionsOn(headRepo, branch, head, list, me, message);
   } catch (e) {
     const now = STALE.test((e as Error).message) && !isLab(headRepo) ? await freshHead(headRepo, branch, head, list.map((x) => x.path)).catch(() => null) : null;
     if (!now) throw STALE.test((e as Error).message) ? new Error('New commits changed these files: reload, then apply again') : e;
-    return commitSuggestionsOn(headRepo, branch, now, list, me);
+    return commitSuggestionsOn(headRepo, branch, now, list, me, message);
   }
 }
-async function commitSuggestionsOn(headRepo: string, branch: string, head: string, list: Suggestion[], me: string) {
+async function commitSuggestionsOn(headRepo: string, branch: string, head: string, list: Suggestion[], me: string, message = '') {
   const files = [];
   for (const path of new Set(list.map((x) => x.path))) {
     const src = await getRaw(headRepo, path, head);
     if (src == null) throw new Error(`${path} isn't on the branch`);
     files.push({ path, content: applySuggestions(src, list.filter((x) => x.path === path)) });
   }
-  const headline = list.length > 1 ? 'Apply suggestions from code review' : 'Apply suggestion from code review';
+  const headline = message.trim() || suggestionHeadline(list.length); // yours, else GitHub's
   if (isLab(headRepo)) return void (await lab.commitLabSuggestions(headRepo, branch, head, files, headline, [...new Set(list.map((x) => x.author?.login).filter((l): l is string => !!l && l !== me))]));
   const additions = files.map(({ path, content }) => ({ path, contents: btoa(Array.from(new TextEncoder().encode(content), (b) => String.fromCharCode(b)).join('')) }));
   const credit = new Map(list.filter((x) => x.author && x.author.login !== me && x.author.databaseId).map((x) => [x.author!.login, x.author!.databaseId]));
@@ -1581,6 +1582,28 @@ export const playJob = (repo: string, jobId: number) => lab.playLabJob(repo, job
 export const rerunJob = async (repo: string, jobId: number) => isLab(repo) ? lab.retryLabJob(repo, jobId) : void (await ok(await gh(`/repos/${repo}/actions/jobs/${jobId}/rerun`, { method: 'POST' })));
 export const rerunFailedJobs = async (repo: string, runId: string) =>
   isLab(repo) ? lab.retryLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, { method: 'POST' })));
+// A whole run: every job again, or stopped while it runs (GitHub Actions; a GitLab pipeline retried or cancelled).
+export const rerunRun = async (repo: string, runId: string) => (isLab(repo) ? lab.retryLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun`, { method: 'POST' }))));
+export const cancelRun = async (repo: string, runId: string) => (isLab(repo) ? lab.cancelLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/cancel`, { method: 'POST' }))));
+// Runs on the PR's head waiting on a person (GitHub only): a first-time or fork contributor's, to approve before they
+// run; and deployments to an environment I'm a required reviewer of, to approve or reject.
+export type WaitingRun = { id: number; name: string; kind: 'approve' | 'deploy'; envs: { id: number; name: string }[] };
+export async function waitingRuns(repo: string, sha: string): Promise<WaitingRun[]> {
+  if (isLab(repo)) return [];
+  const runs: any[] = (await json(`/repos/${repo}/actions/runs?head_sha=${sha}&per_page=50`)).workflow_runs ?? [];
+  const out: WaitingRun[] = [];
+  for (const r of runs) {
+    if (r.conclusion === 'action_required' || r.status === 'action_required') out.push({ id: r.id, name: r.name, kind: 'approve', envs: [] });
+    else if (r.status === 'waiting') {
+      const envs = ((await json(`/repos/${repo}/actions/runs/${r.id}/pending_deployments`).catch(() => [])) as any[]).filter((d) => d.current_user_can_approve).map((d) => ({ id: d.environment.id, name: d.environment.name }));
+      if (envs.length) out.push({ id: r.id, name: r.name, kind: 'deploy', envs });
+    }
+  }
+  return out;
+}
+export const approveRun = async (repo: string, runId: number) => void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/approve`, { method: 'POST' })));
+export const reviewDeployment = async (repo: string, runId: number, envIds: number[], approve: boolean, comment: string) =>
+  void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/pending_deployments`, { method: 'POST', body: JSON.stringify({ environment_ids: envIds, state: approve ? 'approved' : 'rejected', comment }) })));
 // A job's run, from its link (…/actions/runs/<run>/job/<job>).
 // The end of a failed job's log: a GitHub Actions job through the local server (gh), a GitLab job from GitLab.
 export const jobLog = (repo: string, job: number) => (isLab(repo) ? lab.labJobLog(repo, job) : fetchJobLog(repo, job));
@@ -1932,6 +1955,32 @@ export async function linkedIssues(repo: string, n: number): Promise<{ issues: L
   return { issues, prs: [...prs.values()] };
 }
 
+// A new issue on the PR's repo (a comment turned into one: GitHub's "Reference in new issue"): its link.
+export const createIssue = async (repo: string, title: string, body: string): Promise<{ url: string; ref: string }> =>
+  isLab(repo) ? lab.createLabIssue(repo, title, body) : json(`/repos/${repo}/issues`, { method: 'POST', body: JSON.stringify({ title, body }) }).then((i: any) => ({ url: i.html_url, ref: `#${i.number}` }));
+
+// GitHub Projects the PR can go on (its owner's, newest first), the ones it's on with their Status, and setting it.
+// They need gh's project scope (gh auth refresh -s project): without it GitHub says so, and the error says how.
+export type ProjectInfo = { id: string; title: string; status?: { field: string; options: { id: string; name: string }[] }; item?: { id: string; status?: string } };
+const scopeHint = (e: Error) => (/scope|project/i.test(e.message) && /INSUFFICIENT_SCOPES|required scopes|read:project|project/i.test(e.message) ? new Error('Needs gh\'s project permission: run gh auth refresh -s project, then try again') : e);
+export async function prProjects(repo: string, n: number): Promise<ProjectInfo[]> {
+  const [o, r] = repo.split('/');
+  const P = `projectsV2(first:30,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{id title closed field(name:"Status"){...on ProjectV2SingleSelectField{id options{id name}}}}}`;
+  const d = await graphql(
+    `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){owner{...on Organization{${P}} ...on User{${P}}}
+      pullRequest(number:$n){projectItems(first:20){nodes{id project{id} fieldValueByName(name:"Status"){...on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}`,
+    { o, r, n },
+  ).catch((e) => Promise.reject(scopeHint(e)));
+  const items = new Map<string, { id: string; status?: string }>((d.repository.pullRequest.projectItems.nodes as any[]).map((i) => [i.project.id, { id: i.id, status: i.fieldValueByName?.name }]));
+  return ((d.repository.owner?.projectsV2?.nodes ?? []) as any[])
+    .filter((p) => !p.closed || items.has(p.id))
+    .map((p) => ({ id: p.id, title: p.title, status: p.field?.id ? { field: p.field.id, options: p.field.options } : undefined, item: items.get(p.id) }));
+}
+export const addToProject = (projectId: string, contentId: string): Promise<string> =>
+  graphql(`mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}`, { p: projectId, c: contentId }).then((d) => d.addProjectV2ItemById.item.id, (e) => Promise.reject(scopeHint(e)));
+export const setProjectStatus = (projectId: string, itemId: string, fieldId: string, optionId: string) =>
+  graphql(`mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){clientMutationId}}`, { p: projectId, i: itemId, f: fieldId, o: optionId }).catch((e) => Promise.reject(scopeHint(e)));
+
 export type TicketPR = { repo: string; number: number; title: string; state: 'OPEN' | 'CLOSED' | 'MERGED'; isDraft: boolean; author: string; keys: string[] };
 export async function ticketPRs(repo: string, n: number, keys: string[]): Promise<TicketPR[]> {
   if (isLab(repo)) return lab.labTicketPRs(repo, n, keys);
@@ -2147,14 +2196,15 @@ export async function unnamedGroup(repo: string, n: number, pr: Pick<PR, 'reques
 // updateBranch: behind its base and you may bring it up to date (GitHub merges the base in; GitLab rebases: `rebase`).
 // label: may add and remove its labels (triage and up; GitLab's update right).
 // merge: may merge it (write and up; GitLab's own say).
-export type PrRights = { merge: boolean; close: boolean; reopen: boolean; restore: boolean; updateBranch: boolean; rebase: boolean; label: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string; headSha: string };
+// push: may commit to its branch (suggestions); restoreMerged: its branch is gone after merging and may be made again.
+export type PrRights = { merge: boolean; push?: boolean; restoreMerged?: boolean; close: boolean; reopen: boolean; restore: boolean; updateBranch: boolean; rebase: boolean; label: boolean; update: boolean; branch: boolean; headRef: { id: string } | null; headRefName: string; headSha: string };
 export async function prRights(repo: string, n: number): Promise<PrRights> {
   if (isLab(repo)) return lab.labPrRights(repo, n);
   const [o, r] = repo.split('/');
-  const d = (await graphql(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){viewerPermission pullRequest(number:$n){viewerCanClose viewerCanReopen viewerCanUpdate viewerCanUpdateBranch isCrossRepository headRefName headRefOid headRef{id}}}}`, { o, r, n })).repository;
+  const d = (await graphql(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){viewerPermission pullRequest(number:$n){merged viewerCanClose viewerCanReopen viewerCanUpdate viewerCanUpdateBranch isCrossRepository headRefName headRefOid headRef{id}}}}`, { o, r, n })).repository;
   const p = d?.pullRequest;
   const push = ['WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission);
-  return { merge: push, close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, restore: !!p?.viewerCanReopen && !p.headRef && !p.isCrossRepository && push, updateBranch: !!p?.viewerCanUpdateBranch, rebase: false, label: ['TRIAGE', 'WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission), update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '', headSha: p?.headRefOid ?? '' };
+  return { merge: push, push: push && !p?.isCrossRepository, restoreMerged: !!p?.merged && !p.headRef && !p.isCrossRepository && push, close: !!p?.viewerCanClose, reopen: !!p?.viewerCanReopen && !!p.headRef, restore: !!p?.viewerCanReopen && !p.headRef && !p.isCrossRepository && push, updateBranch: !!p?.viewerCanUpdateBranch, rebase: false, label: ['TRIAGE', 'WRITE', 'MAINTAIN', 'ADMIN'].includes(d?.viewerPermission), update: !!p?.viewerCanUpdate, branch: !!p?.viewerCanUpdate && !p.isCrossRepository && !KEEP.test(p.headRefName), headRef: p?.headRef ?? null, headRefName: p?.headRefName ?? '', headSha: p?.headRefOid ?? '' };
 }
 // Its branch again, at the commit the PR last had (both forges keep it), so it can be reopened.
 export const restoreBranch = (repo: string, r: PrRights) =>
@@ -2213,20 +2263,21 @@ export async function getStaleBranches(): Promise<StaleBranch[]> {
 
 export const disableAutoMerge = (id: string) =>
   isLabId(id) ? lab.cancelLabAutoMerge(id) : graphql(`mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}`, { id });
-export const updateBranch = (s: { id: string; headRefOid?: string }) =>
-  isLabId(s.id) ? lab.rebaseLab(s.id) : graphql(`mutation($id:ID!,$oid:GitObjectID){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}`, { id: s.id, oid: s.headRefOid });
+// rebase: GitHub's "Update with rebase" (its commits replayed on the base) rather than a merge of the base in.
+export const updateBranch = (s: { id: string; headRefOid?: string }, rebase = false) =>
+  isLabId(s.id) ? lab.rebaseLab(s.id) : graphql(`mutation($id:ID!,$oid:GitObjectID,$m:PullRequestBranchUpdateMethod){updatePullRequestBranch(input:{pullRequestId:$id,expectedHeadOid:$oid,updateMethod:$m}){clientMutationId}}`, { id: s.id, oid: s.headRefOid, m: rebase ? 'REBASE' : 'MERGE' });
 // Then wait for the new head: GitHub (GitLab's rebase too) makes it a moment later; half a minute at most. So what
 // reloads after is the updated branch, its checks included.
 // A push since the PR was loaded makes GitHub refuse the head it was told ("head sha didn't match"): asked again with the
 // branch's head now (updating only merges the base in, so nothing pushed is lost).
-export async function updateBranchAndWait(repo: string, n: number, s: { id: string; headRefOid?: string }) {
+export async function updateBranchAndWait(repo: string, n: number, s: { id: string; headRefOid?: string }, rebase = false) {
   let was = s.headRefOid;
   try {
-    await updateBranch(s);
+    await updateBranch(s, rebase);
   } catch (e) {
     if (!/head sha didn't match|expected head/i.test((e as Error).message)) throw e;
     was = await getHead(repo, n);
-    await updateBranch({ ...s, headRefOid: was });
+    await updateBranch({ ...s, headRefOid: was }, rebase);
   }
   for (let k = 0; was && k < 15 && (await getHead(repo, n).catch(() => was)) === was; k++) await new Promise((r) => setTimeout(r, 2000));
 }

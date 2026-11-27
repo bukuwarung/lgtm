@@ -158,6 +158,22 @@ pub async fn jira_issue(key: String) -> Result<Value, String> {
     }))
 }
 
+// A new ticket (a PR comment turned into one): a Task in the project, its key and link.
+#[tauri::command]
+pub async fn jira_create(project: String, summary: String, description: String) -> Result<Value, String> {
+    let summary = summary.trim().to_string();
+    if !re(r"^[A-Z][A-Z0-9]+$").is_match(&project) || summary.is_empty() || summary.len() > 250 || summary.contains('\n') || summary.starts_with('-') {
+        return Err("Bad request".into());
+    }
+    let site = cached(&JIRA_SITE, || acli(&["jira", "auth", "status"]).ok().map(|out| format!("https://{}", re(r"Site:\s*(\S+)").captures(&plain(&out)).map(|c| c[1].to_string()).unwrap_or_default())))
+        .unwrap_or_default();
+    let desc = if description.trim().is_empty() { " ".to_string() } else { description };
+    let out = acli(&["jira", "workitem", "create", "--project", &project, "--type", "Task", "--summary", &summary, "--description", &desc, "--json"])?;
+    let v: Value = serde_json::from_str(&out).map_err(|e| e.to_string())?;
+    let key = v["key"].as_str().ok_or("No key in Jira's answer")?.to_string();
+    Ok(json!({ "key": key, "url": format!("{site}/browse/{key}") }))
+}
+
 // Tickets' priorities (the PR list's order), by key: one search for all of them.
 #[tauri::command]
 pub async fn jira_priorities(keys: Vec<String>) -> Result<Value, String> {

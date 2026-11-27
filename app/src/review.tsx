@@ -16,7 +16,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, requiredChecks, neverRan, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   isStalePush, awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, prCommits, revertCommit, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, linkedIssues, type LinkedIssue, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
+  ticketPRs, linkedIssues, type LinkedIssue, createIssue, prProjects, addToProject, setProjectStatus, type ProjectInfo, suggestionHeadline, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc, toggleTask } from './markdown.ts';
@@ -34,8 +34,8 @@ import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slack
 import { EmojiTextarea, SlackPreview, StatusMark, useSlackEmoji } from './emojibox.tsx';
 import { docBlocks, docParts, docSyntax, editedDocBlocks, lineCommentBlocks, lineCommentSyntax, testPhase, type DocBlock } from './docs.ts';
 import { isArchivedSpec, deletedTests, inTests, moduleLabel, moduleName, modulesOf, moduleView, PLAN_AT, reviewOrder, reviewPlan, stepIcon, stepOrder, untested, type BuildRoot, type PlanStep, fileLabel, knowFiles } from './files.ts';
-import { setPageName, closeOnBackdrop, checkSlackChannel, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, archiveLinked, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, shortLogin, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked } from './platform.ts';
-import { adfToMarkdown, jiraKeys, knowJiraKeys } from './jira.ts';
+import { setPageName, closeOnBackdrop, checkSlackChannel, composing, dropNotices, markDoneOnSlack, notifyAgentDone, noteReadSaved, getSlackPeople, slackFindsByEmail, rememberPR, agentMod, MOD_INSTALL, qaSeen, qaThreads, seeQa, type QaThread, fetchIntegrations, postSlack, SLACK_CHANNEL, slackPresence, type SlackPresence, reportError, ask, askText, slackRequest, type SlackRequest, ticketsToReview, againInThread, askFor, slackReply, slackSentTo, closeTold, closedOnSlack, ticketsToQa, copyText, own, useStoredValue, mapOnSlack, rememberPeople, ago, backToSession, archiveLinked, claudeSessionState, linkNewClaude, seenClaudePR, unlinkSession, type SessionState, linkedSession, prCache, claudeFolder, agentSkill, openExternal, isDesktop, fetchJira, useFoldBots, slackEscape, getClaudeSessions, type ClaudeSession, notifySlack, openAppLink, slackStatus, storage, useBots, useStoredFlag, type JiraIssue, type SlackThread, type SlackSent, slackDelete, useDismiss, repoLabel, shortLogin, offerUndo, useMedia, faceOf, personKey, pageTerm, shownName, shownAt, WHY_CLOSE, lookedDrafts, markLooked, createJira } from './platform.ts';
+import { adfToMarkdown, jiraKeys, knowJiraKeys, withKey } from './jira.ts';
 import { changedRange, changedStrings, isLocaleDir, isStringsXml, parseString, stringHtml, stringsOf, translationNotes } from './strings.ts';
 import { agentRunOf, reviewNow } from './agentreview.ts';
 import { openAgentSession, AGENTS, askAgent, autoAgent, detectAgents, setAskAgent, runAgent, useAgents, type AgentId } from './agents.ts';
@@ -407,23 +407,165 @@ function ModulesPill({ modules }: { modules?: Map<string, string> }) {
 
 // A pill that says what it counts: a click opens the list behind it (what each item is, in a line on top), each one a
 // link or a jump; a click elsewhere, or Esc, closes it.
-type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore' | 'update' | 'ready' | 'base';
+type StateAct = 'close' | 'closeBranch' | 'draft' | 'reopen' | 'restore' | 'update' | 'rebaseUpdate' | 'ready' | 'base' | 'restoreMerged';
 // only: just these (the idle banner: close it or park it); skip: ones shown elsewhere (the ⋯ menu: not Reopen, in the tag's menu).
 function StateActs({ rights, draft, acting, act, only, skip }: { rights: PrRights; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void; only?: StateAct[]; skip?: StateAct[] }) {
-  const ICON: Record<StateAct, string> = { ready: 'git-pull-request', update: 'sync', draft: 'git-pull-request-draft', base: 'git-branch', close: 'git-pull-request-closed', closeBranch: 'git-pull-request-closed', reopen: 'git-pull-request', restore: 'git-branch' };
+  const ICON: Record<StateAct, string> = { ready: 'git-pull-request', update: 'sync', rebaseUpdate: 'sync', restoreMerged: 'git-branch', draft: 'git-pull-request-draft', base: 'git-branch', close: 'git-pull-request-closed', closeBranch: 'git-pull-request-closed', reopen: 'git-pull-request', restore: 'git-branch' };
   const b = (a: StateAct, label: string, busy: string, title: string): preact.JSX.Element | null => (only && !only.includes(a)) || skip?.includes(a) ? null : <button disabled={!!acting} title={title} onClick={() => act(a)}><Octicon name={ICON[a]} /> {acting === a ? busy : label}</button>;
   const t = pageTerm().PR;
   return (
     <>
       {draft && rights.update && rights.close && b('ready', 'Ready for review', 'Marking…', 'Mark it ready: reviewers are notified')}
       {rights.updateBranch && (rights.rebase ? b('update', 'Rebase', 'Rebasing…', 'Rebase it onto its target branch, which has moved on') : b('update', 'Update branch', 'Updating…', 'Merge its base branch in: it has moved on'))}
+      {rights.updateBranch && !rights.rebase && b('rebaseUpdate', 'Update with rebase', 'Rebasing…', 'Replay its commits on its base branch, which has moved on (rewrites them)')}
       {rights.close && !draft && rights.update && b('draft', 'Convert to draft', 'Converting…', `Keep it open, but not asking for review until it's marked ready`)}
       {rights.close && rights.update && b('base', 'Change base…', 'Changing…', `Point it at another branch: its diff becomes what's not on that one`)}
       {rights.close && b('close', 'Close', 'Closing…', `Close without merging; it can be reopened`)}
       {rights.close && rights.branch && b('closeBranch', 'Close and delete branch', 'Closing…', `Close without merging and delete ${rights.headRefName}, unless another open ${t} builds on it`)}
       {rights.reopen && b('reopen', 'Reopen', 'Reopening…', `Open it again for review`)}
+      {rights.restoreMerged && b('restoreMerged', 'Restore branch', 'Restoring…', `Its branch ${rights.headRefName} was deleted after merging: make it again at the ${t}'s last commit`)}
       {rights.restore && b('restore', 'Restore branch and reopen', 'Reopening…', `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`)}
     </>
+  );
+}
+
+// A comment's task list ticked and unticked here, as on GitHub, by whoever may edit it: its text rewritten (save), then
+// the conversation reloads. Each draw sets them up again (a ref callback), the same boxes in the same order.
+function taskBoxes(root: HTMLElement, body: string | null | undefined, can: boolean, save: (b: string) => Promise<unknown>) {
+  const boxes = [...root.querySelectorAll<HTMLInputElement>('input.task-list-item-checkbox')];
+  if (!can || body == null || !boxes.length) return;
+  boxes.forEach((b, k) => {
+    b.disabled = false;
+    b.onchange = () => {
+      const next = toggleTask(body, k, b.checked);
+      if (next == null) return void (b.checked = !b.checked);
+      boxes.forEach((x) => (x.disabled = true));
+      save(next).then(
+        () => dispatchEvent(new Event('lgtm:reload-talk')),
+        (e) => ((b.checked = !b.checked), boxes.forEach((x) => (x.disabled = false)), dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Couldn't save it: ${e.message}`, ms: 4000 } }))),
+      );
+    };
+  });
+}
+
+// Link an issue or a Jira ticket (the ⋯ menu): an issue as "Closes #12" in its description, so GitHub and GitLab link
+// it and close it on merge; a Jira key in its title, where lgtm and Jira's own integration read it: in a conventional
+// scope (feat(KEY-1): …), else first.
+function LinkDialog({ repo, pr, onClose }: { repo: string; pr: PR; onClose: () => void }) {
+  const box = useRef<HTMLDialogElement>(null);
+  const [v, setV] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => void (box.current?.showModal(), closeOnBackdrop(box.current)), []);
+  const go = (e: Event) => {
+    e.preventDefault();
+    const s = v.trim();
+    const jira = s.match(/^[A-Z][A-Z0-9]+-\d+$/)?.[0] ?? s.match(/\/browse\/([A-Z][A-Z0-9]+-\d+)/)?.[1];
+    const url = s.match(/^https?:\/\/([^/]+)\/(.+?)\/(?:-\/)?issues\/(\d+)/);
+    const at = url && (isLab(repo) ? `${url[1]}/${url[2]}` : url[2]);
+    const issue = s.match(/^#?(\d+)$/) ? `#${s.replace('#', '')}` : url ? (at === repo ? `#${url[3]}` : `${url[2]}#${url[3]}`) : null;
+    if (!jira && !issue) return setErr('An issue number (#12), an issue link, or a Jira key (SHOP-12)');
+    if (jira && jiraKeys(pr.title, pr.head.ref).includes(jira)) return setErr(`${jira} is linked already`);
+    const f = jira ? { title: withKey(pr.title, jira), body: pr.body ?? '' } : { title: pr.title, body: `${(pr.body ?? '').trimEnd()}\n\nCloses ${issue}`.trimStart() };
+    setBusy(true), setErr('');
+    updatePR(repo, pr.number, f).then(
+      () => (box.current?.close(), dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: `Linked ${jira ?? issue}.` } })), dispatchEvent(new Event('lgtm:refresh'))),
+      (e) => (setErr(e.message), setBusy(false)),
+    );
+  };
+  return (
+    <dialog ref={box} class="ask pr-dialog" aria-label="Link an issue or ticket" onClose={onClose}>
+      <p>Link an issue or ticket</p>
+      <form onSubmit={go}>
+        <input autoFocus value={v} placeholder="#12, an issue link, or SHOP-12" onInput={(e) => setV(e.currentTarget.value)} aria-label="Issue or ticket" />
+        <small class="note">An issue goes in the description as “Closes #12”: it closes when this merges. A Jira key goes in the title.</small>
+        {err && <p class="error">{err}</p>}
+        <button type="button" onClick={() => box.current?.close()}>Cancel</button>
+        <button class="primary" disabled={busy || !v.trim()}>{busy ? 'Linking…' : 'Link'}</button>
+      </form>
+    </dialog>
+  );
+}
+
+// Projects… (the ⋯ menu, GitHub): the repo owner's Projects, this PR on them with its Status, added to one.
+function ProjectDialog({ repo, pr, onClose }: { repo: string; pr: PR; onClose: () => void }) {
+  const box = useRef<HTMLDialogElement>(null);
+  const [list, setList] = useState<ProjectInfo[] | null>(null);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const load = () => prProjects(repo, pr.number).then(setList, (e) => setErr(e.message));
+  useEffect(() => void (box.current?.showModal(), closeOnBackdrop(box.current), load()), []);
+  const act = (id: string, run: () => Promise<unknown>) => (setBusy(id), setErr(''), run().then(load, (e) => setErr(e.message)).finally(() => setBusy('')));
+  return (
+    <dialog ref={box} class="ask pr-dialog" aria-label="Projects" onClose={onClose}>
+      <p>Projects</p>
+      {!list && !err && <p class="note">Loading…</p>}
+      {list && !list.length && <p class="note">{repo.split('/')[0]} has no open Projects.</p>}
+      <div class="project-list">
+        {list?.map((p) => (
+          <div class="project-row">
+            <span>{p.title}</span>
+            {!p.item ? (
+              <button disabled={!!busy} onClick={() => act(p.id, () => addToProject(p.id, pr.node_id))}>{busy === p.id ? 'Adding…' : 'Add'}</button>
+            ) : p.status ? (
+              <Select value={p.status.options.find((o) => o.name === p.item!.status)?.id ?? ''} disabled={!!busy} aria-label={`Status on ${p.title}`} onChange={(e) => act(p.id, () => setProjectStatus(p.id, p.item!.id, p.status!.field, e.currentTarget.value))}>
+                {!p.item.status && <option value="">No status</option>}
+                {p.status.options.map((o) => <option value={o.id}>{o.name}</option>)}
+              </Select>
+            ) : <small class="note">On it</small>}
+          </div>
+        ))}
+      </div>
+      {err && <p class="error">{err}</p>}
+      <form method="dialog"><button class="primary">Done</button></form>
+    </dialog>
+  );
+}
+
+// New issue or ticket… (a comment's ⋯, GitHub's "Reference in new issue"): an issue on this repo, or a Jira Task in
+// one of the PR's tickets' projects (or another), with the comment quoted and linked.
+function NewIssueDialog({ repo, keys, text, url, onClose }: { repo: string; keys: string[]; text: string; url: string; onClose: () => void }) {
+  const box = useRef<HTMLDialogElement>(null);
+  const projects = [...new Set(keys.map((k) => k.split('-')[0]))];
+  const [to, setTo] = useState(projects[0] ? `jira:${projects[0]}` : 'repo');
+  const [other, setOther] = useState('');
+  const [title, setTitle] = useState(() => text.replace(/[#>*_`]/g, '').trim().split('\n')[0].slice(0, 100));
+  const [body, setBody] = useState(() => `${text.trim().split('\n').map((l) => `> ${l}`.trimEnd()).join('\n')}\n\nFrom ${url}`);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [made, setMade] = useState<{ url: string; ref: string } | null>(null);
+  useEffect(() => void (box.current?.showModal(), closeOnBackdrop(box.current)), []);
+  const project = to === 'jira:' ? other.trim().toUpperCase() : to.slice(5);
+  const go = (e: Event) => {
+    e.preventDefault();
+    if (to.startsWith('jira:') && !/^[A-Z][A-Z0-9]+$/.test(project)) return setErr('A Jira project key, like SHOP');
+    setBusy(true), setErr('');
+    (to === 'repo' ? createIssue(repo, title.trim(), body) : createJira(project, title.trim(), body).then((t) => ({ url: t.url, ref: t.key }))).then(setMade, (e2) => setErr(e2.message)).finally(() => setBusy(false));
+  };
+  if (made)
+    return (
+      <dialog ref={box} class="ask pr-dialog" aria-label="Created" onClose={onClose}>
+        <p>Created <a href={made.url} target="_blank" rel="noopener">{made.ref}</a></p>
+        <form method="dialog"><button type="button" onClick={() => void copyText(made.url)}>Copy link</button><button class="primary">Done</button></form>
+      </dialog>
+    );
+  return (
+    <dialog ref={box} class="ask pr-dialog" aria-label="New issue or ticket" onClose={onClose}>
+      <p>New issue or ticket from this comment</p>
+      <form onSubmit={go}>
+        <Select value={to} onChange={(e) => setTo(e.currentTarget.value)} aria-label="Where">
+          <option value="repo">Issue on {repoLabel(repo)}</option>
+          {projects.map((p) => <option value={`jira:${p}`}>Jira ticket in {p}</option>)}
+          <option value="jira:">Jira ticket in another project…</option>
+        </Select>
+        {to === 'jira:' && <input value={other} placeholder="Project key, like SHOP" onInput={(e) => setOther(e.currentTarget.value)} aria-label="Jira project" />}
+        <input autoFocus value={title} onInput={(e) => setTitle(e.currentTarget.value)} aria-label="Title" placeholder="Title" />
+        <textarea value={body} onInput={(e) => setBody(e.currentTarget.value)} aria-label="Description" rows={6} />
+        {err && <p class="error">{err}</p>}
+        <button type="button" onClick={() => box.current?.close()}>Cancel</button>
+        <button class="primary" disabled={busy || !title.trim()}>{busy ? 'Creating…' : 'Create'}</button>
+      </form>
+    </dialog>
   );
 }
 
@@ -482,7 +624,12 @@ function BaseDialog({ repo, n, base, head, onClose }: { repo: string; n: number;
 
 // The bar's ⋯ (X): StateActs in a menu, its button like Agents'. merge: Merge… for a PR I may merge whose Merge button
 // isn't in the bar (someone else's): the same panel, as m opens it.
-function StateMenu({ askQa, merge, rights, ...p }: { rights: PrRights | null; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void; askQa?: boolean; merge?: boolean }) {
+// Also what any PR offers: linking an issue or ticket, its GitHub Projects, its checkout command, its .diff and .patch.
+function StateMenu({ askQa, merge, rights, repo, n, link, ...p }: { rights: PrRights | null; draft: boolean; acting: StateAct | null; act: (a: StateAct) => void; askQa?: boolean; merge?: boolean; repo: string; n: number; link?: boolean }) {
+  const dialog = (d: string) => dispatchEvent(new CustomEvent('lgtm:pr-dialog', { detail: d }));
+  const url = prWebUrl(repo, n);
+  const checkout = isLab(repo) ? `glab mr checkout ${n} -R ${repo}` : `gh pr checkout ${n} -R ${repo}`;
+  const toast = (text: string) => dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text, ms: 2500 } }));
   const [open, setOpen] = useState(false);
   const pop = useRef<HTMLDivElement>(null);
   useDismiss(open, () => setOpen(false), '.pr-acts');
@@ -502,6 +649,11 @@ function StateMenu({ askQa, merge, rights, ...p }: { rights: PrRights | null; dr
           {merge && <button title={`Merge it: its merge panel opens in the bar${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').merge)}`} onClick={() => dispatchEvent(new Event('lgtm:merge'))}><Octicon name="git-merge" /> Merge…</button>}
           {askQa && <button title={`Post a QA request for this ${pageTerm().PR} on Slack (you see it first)${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').askQa)}`} onClick={() => dispatchEvent(new Event('lgtm:ask-qa'))}><Octicon name="beaker" /> Ask QA…</button>}
           {rights && <StateActs rights={rights} {...p} skip={['reopen', 'restore']} />}
+          {link && <button title="An issue (it closes when this merges) or a Jira ticket" onClick={() => dialog('link')}><Octicon name="link" /> Link an issue or ticket…</button>}
+          {!isLab(repo) && <button title="Add it to a GitHub Project, or set its Status there" onClick={() => dialog('project')}><Octicon name="tasklist" /> Projects…</button>}
+          <button title={checkout} onClick={() => void copyText(checkout).then(() => toast('Checkout command copied'), () => toast("Couldn't copy it"))}><Octicon name="copy" /> Copy checkout command</button>
+          <button title={`${url}.diff`} onClick={() => void openExternal(`${url}.diff`)}><Octicon name="file-diff" /> Open as .diff</button>
+          <button title={`${url}.patch`} onClick={() => void openExternal(`${url}.patch`)}><Octicon name="file-diff" /> Open as .patch</button>
         </div>
       )}
     </span>
@@ -955,9 +1107,18 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     return conflicts ? 'it has conflicts' : asked.length ? `${asked.join(', ')} requested changes` : never.length ? `required checks never ran (${never.join(', ')})` : '';
   }, [mayMerge, conflicts, required, conversation, checks, me]);
   const [basePick, setBasePick] = useState(false); // Change base…: its dialog open
+  // The ⋯ menu's Link an issue or ticket… and Projects…, and a comment's New issue or ticket… (their dialogs).
+  const [prDialog, setPrDialog] = useState<'link' | 'project' | { text: string; url: string } | null>(null);
+  useEffect(() => {
+    const open = (e: Event) => setPrDialog((e as CustomEvent<'link' | 'project'>).detail);
+    const issue = (e: Event) => setPrDialog((e as CustomEvent<{ text: string; url: string }>).detail);
+    addEventListener('lgtm:pr-dialog', open);
+    addEventListener('lgtm:new-issue', issue);
+    return () => (removeEventListener('lgtm:pr-dialog', open), removeEventListener('lgtm:new-issue', issue));
+  }, []);
   useEffect(() => {
     setRights(null);
-    if (data && !data.pr.merged) prRights(repo, n).then(setRights, () => {});
+    if (data) prRights(repo, n).then(setRights, () => {}); // merged too: editing it, its branch
   }, [repo, n, data?.pr.state, data?.pr.draft, data?.pr.merged, data?.pr.head.sha]); // a push: up to date again, or not
   const stateAct = async (a: StateAct) => {
     if (!data || !rights) return;
@@ -970,17 +1131,20 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       reopen: [`Reopen this ${t}?`, 'Reopen'],
       restore: [`Make ${rights.headRefName} again at this ${t}'s last commit, and reopen it?`, 'Restore and reopen'],
       update: ['', rights.rebase ? 'Rebase' : 'Update branch'], // as on GitHub, no question: it only adds the base's commits
+      rebaseUpdate: [`Rebase ${rights.headRefName} onto its base? Its commits are rewritten, so anyone with it checked out needs to reset.`, 'Update with rebase'],
+      restoreMerged: [`Make ${rights.headRefName} again at this ${t}'s last commit?`, 'Restore branch'],
       ready: ['', 'Ready for review'],
       base: ['', ''],
     }[a];
     // Closing asks why (optional): a comment on the PR, and the review thread hears it.
-    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE, undefined, true) : a === 'update' || a === 'ready' || (await ask(q, yes)) ? { text: '' } : null;
+    const said = a === 'close' || a === 'closeBranch' ? await askText(q, yes, WHY_CLOSE, undefined, true) : a === 'update' || a === 'ready' || (await ask(q, yes, a === 'rebaseUpdate')) ? { text: '' } : null;
     if (!said) return;
     setActing(a);
     try {
       if (a === 'draft') await convertToDraft(data.pr.node_id);
       else if (a === 'ready') await markReady(data.pr.node_id).then(() => void ticketsToReview(jiraKeys(data.pr.title, data.pr.head.ref))); // as the Merge panel's does
-      else if (a === 'update') await updateBranchAndWait(repo, n, { id: data.pr.node_id, headRefOid: data.pr.head.sha }); // "Updating…" until the new head is there
+      else if (a === 'update' || a === 'rebaseUpdate') await updateBranchAndWait(repo, n, { id: data.pr.node_id, headRefOid: data.pr.head.sha }, a === 'rebaseUpdate'); // "Updating…" until the new head is there
+      else if (a === 'restoreMerged') await restoreBranch(repo, rights);
       else if (a === 'reopen') await reopenPR(repo, n);
       else if (a === 'restore') await restoreBranch(repo, rights).then(() => reopenPR(repo, n));
       else {
@@ -1955,10 +2119,12 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       setThreads(await getThreads(repo, n));
     },
     batch,
-    toggleBatch: me && pr.user.login === me ? (x) => setBatch((b) => (b.some((y) => y.id === x.id) ? b.filter((y) => y.id !== x.id) : [...b, x])) : undefined,
+    toggleBatch: me && (pr.user.login === me || rights?.push) ? (x) => setBatch((b) => (b.some((y) => y.id === x.id) ? b.filter((y) => y.id !== x.id) : [...b, x])) : undefined,
     // Committed to the branch, their threads resolved (as GitHub does), then the PR reloads with the new commit.
     applySuggestions: async (list) => {
-      await commitSuggestions(headRepo, pr.head.ref, pr.head.sha, list, me);
+      const said = await askText(`Commit ${list.length > 1 ? `${list.length} suggestions` : 'the suggestion'} to ${pr.head.ref}? Its commit message:`, 'Commit', suggestionHeadline(list.length));
+      if (!said) return;
+      await commitSuggestions(headRepo, pr.head.ref, pr.head.sha, list, me, said.text);
       await Promise.all([...new Set(list.map((x) => x.thread))].map((id) => resolveThread(id, true).catch(() => {})));
       setBatch((b) => b.filter((y) => !list.some((x) => x.id === y.id)));
       setNotice({ ok: true, text: `Committed ${list.length > 1 ? `${list.length} suggestions` : 'the suggestion'} to ${pr.head.ref}.` });
@@ -2429,15 +2595,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               onViewed={markViewed}
               slackAsk={!!me && pr.user.login === me && pr.state === 'open' && slackPeople !== null ? askOnSlack : undefined}
               slackWith={new Set(slackThreads.map((t) => t.login))}
-              reRequest={!!me && pr.user.login === me && pr.state === 'open' ? reRequest : undefined}
+              reRequest={!!me && pr.state === 'open' && (pr.user.login === me || !!rights?.label) ? reRequest : undefined}
               withdraw={(!!me && pr.user.login === me) || rights?.update ? withdraw : undefined}
-              replace={!!me && pr.user.login === me && pr.state === 'open' ? replaceReviewer : undefined}
+              replace={!!me && pr.state === 'open' && (pr.user.login === me || !!rights?.label) ? replaceReviewer : undefined}
               addMe={!!me && pr.user.login !== me && pr.state === 'open' ? () => takeReview(repo, n, (pr.requested_teams ?? []).map((t) => t.slug)).then(() => dispatchEvent(new Event('lgtm:refresh'))) : undefined}
               me={me}
               modules={view === 'all' ? shownModules : undefined}
               steps={readingOrder ? steps : undefined}
               ask={
-                !!me && pr.user.login === me && pr.state === 'open' && ( // merged or closed: nobody to ask
+                !!me && pr.state === 'open' && (pr.user.login === me || !!rights?.label) && ( // merged or closed: nobody to ask; anyone who may (triage and up), as on GitHub
                   <AskReviewer
                     findings={findings}
                     files={data.files}
@@ -2514,7 +2680,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   Tell the review thread
                 </button>
               ),
-              mine && pr.merged && <MergedActions repo={repo} n={n} tickets={jiraKeys(pr.title, pr.head.ref)} />,
+              pr.merged && (mine || !!rights?.branch) && <MergedActions repo={repo} n={n} tickets={mine ? jiraKeys(pr.title, pr.head.ref) : []} />,
             ].filter(Boolean) as ComponentChildren[],
           )}
           {/* A draft, as Merged and Closed: the tag says it, its menu has Ready for review (no banner below). */}
@@ -2581,9 +2747,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 else will). Anyone else's I may merge: from the ⋯ menu (Merge…) or m, the button showing while it's open. */}
             {(mine || !!rights?.merge) && pr.state === 'open' && !pr.draft && <MergeBox hidden={!mine && !(pr.user.type === 'Bot' || bots.has(pr.user.login))} repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
-            {((p) => (askQa || p || (rights && (rights.close || rights.updateBranch))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} merge={p} />)(
-              !mine && !!rights?.merge && pr.state === 'open' && !pr.draft && !(pr.user.type === 'Bot' || bots.has(pr.user.login)),
-            )}
+            {prDialog === 'link' && <LinkDialog repo={repo} pr={pr} onClose={() => setPrDialog(null)} />}
+            {prDialog === 'project' && <ProjectDialog repo={repo} pr={pr} onClose={() => setPrDialog(null)} />}
+            {typeof prDialog === 'object' && prDialog && <NewIssueDialog repo={repo} keys={jiraKeys(pr.title, pr.head.ref)} {...prDialog} onClose={() => setPrDialog(null)} />}
+            <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} repo={repo} n={n} link={pr.user.login === me || !!rights?.update}
+              merge={!mine && !!rights?.merge && pr.state === 'open' && !pr.draft && !(pr.user.type === 'Bot' || bots.has(pr.user.login))} />
             {submitPanel()}
           </div>
         </div>
@@ -5601,7 +5769,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           {c.state === 'SENDING' && <span class="badge"> · sending…</span>}
           <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
-          {c.state !== 'PENDING' && <><ReactPick id={c.id} /><CommentMenu id={c.id} onEdit={c.body != null ? () => setEditingC(c.databaseId) : undefined} onDelete={c.id ? () => delC(c.id!) : undefined} /></>}
+          {c.state !== 'PENDING' && <><ReactPick id={c.id} /><CommentMenu id={c.id} toIssue={() => dispatchEvent(new CustomEvent('lgtm:new-issue', { detail: { text: c.body ?? c.bodyText, url: c.url } }))} onEdit={c.body != null ? () => setEditingC(c.databaseId) : undefined} onDelete={c.id ? () => delC(c.id!) : undefined} /></>}
           {c.state === 'PENDING' && c.id ? (
             <PendingComment c={c} ctx={ctx} path={t.path} t={t} />
           ) : editingC === c.databaseId && c.id ? (
@@ -5612,7 +5780,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
               <div class="md" data-lang={ctx.langFor(t.path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(t.path), languageFor(t.path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
             </details>
           ) : (
-            <div class="md" data-lang={ctx.langFor(t.path) ?? ''} ref={(el) => void (el && highlightBlocks(el, ctx.langFor(t.path), languageFor(t.path)))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
+            <div class="md" data-lang={ctx.langFor(t.path) ?? ''} ref={(el) => void (el && (highlightBlocks(el, ctx.langFor(t.path), languageFor(t.path)), taskBoxes(el, c.body, !!social(c.id)?.canEdit, (b) => editPosted(c.id!, 'thread', b))))} dangerouslySetInnerHTML={{ __html: c.bodyHTML }} />
           )}
           {c.state !== 'PENDING' && <Reactions id={c.id} />}
           <SuggestionActions t={t} c={c} ctx={ctx} />
@@ -6747,6 +6915,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             <ReactPick id={c.node} />
             <CommentMenu
               id={c.node}
+              toIssue={() => dispatchEvent(new CustomEvent('lgtm:new-issue', { detail: { text: c.body ?? '', url: c.url } }))}
               review={canDismiss && (c.state === 'APPROVED' || c.state === 'CHANGES_REQUESTED') ? { who: c.author } : undefined}
               onEdit={c.body || c.id.startsWith('c') ? () => setEditingItem(c.id) : undefined}
               onDelete={c.id.startsWith('c') ? () => del(c) : undefined}
@@ -6758,7 +6927,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             {editingItem === c.id ? (
               <EditPosted body={c.body ?? ''} repo={repo} mentions={mentions} save={(b) => editPosted(c.node!, c.id.startsWith('c') ? 'comment' : 'review', b)} onDone={() => setEditingItem(null)} />
             ) : (
-              c.html && <div class="md" data-lang={lang ?? ''} ref={(el) => void (el && highlightBlocks(el, lang))} dangerouslySetInnerHTML={{ __html: c.html }} />
+              c.html && <div class="md" data-lang={lang ?? ''} ref={(el) => void (el && (highlightBlocks(el, lang), taskBoxes(el, c.body, !!c.node && !!social(c.node)?.canEdit, (b) => editPosted(c.node!, c.id.startsWith('c') ? 'comment' : 'review', b))))} dangerouslySetInnerHTML={{ __html: c.html }} />
             )}
             <Reactions id={c.node} />
             <ReviewThreads review={c} threads={threads} reveal={reveal} />

@@ -95,19 +95,21 @@ export function ReactPick({ id }: { id?: string }) {
 }
 
 // ⋯ on a comment or review: hide it (with GitHub's reasons) or show it again, and dismiss a review that counts.
-// onEdit, onDelete: where the comment can be (its own page's editor; deleting asks first).
-export function CommentMenu({ id, review, onEdit, onDelete }: { id?: string; review?: { who: string }; onEdit?: () => void; onDelete?: () => void }) {
+// onEdit, onDelete: where the comment can be (its own page's editor; deleting asks first). toIssue: a new issue or Jira
+// ticket from it (GitHub's "Reference in new issue"), for anyone.
+export function CommentMenu({ id, review, onEdit, onDelete, toIssue }: { id?: string; review?: { who: string }; onEdit?: () => void; onDelete?: () => void; toIssue?: () => void }) {
   const of = useSocial();
   const s = of(id);
   const ref = useRef<HTMLDetailsElement>(null);
   const edit = !!s?.canEdit && !!onEdit, del = !!s?.canDelete && !!onDelete;
-  if (!id || !s || !(s.canHide || (s.hidden && s.canUnhide) || review || edit || del)) return null;
+  if (!id || !s || !(s.canHide || (s.hidden && s.canUnhide) || review || edit || del || toIssue)) return null;
   const close = () => ref.current && (ref.current.open = false);
   return (
     <details class="comment-menu" ref={ref} data-comment-menu>
       <summary class="copy-link" title="More" aria-label="More"><Octicon name="kebab-horizontal" /></summary>
       <div class="account-menu" role="menu">
         {edit && <button role="menuitem" data-edit onClick={() => (close(), onEdit!())}>Edit</button>}
+        {toIssue && <button role="menuitem" onClick={() => (close(), toIssue())}>New issue or ticket…</button>}
         {del && <button role="menuitem" onClick={async () => (close(), (await ask("Delete this comment? It can't be undone.", 'Delete', true)) && onDelete!())}>Delete…</button>}
         {review && <button role="menuitem" onClick={() => (close(), void dismiss(id, review.who))}>Dismiss review…</button>}
         {s.hidden && s.canUnhide && <button role="menuitem" onClick={() => (close(), void hide(id, null))}>Unhide</button>}

@@ -101,3 +101,10 @@ function block(n: Node, indent = ''): string {
 }
 
 export const adfToMarkdown = (doc: Node | null) => (doc ? block(doc).trim() : '');
+
+// A Jira key put in a PR title (Link an issue or ticket…), where lgtm and Jira's integration read it: in a
+// conventional scope (feat(KEY-1): …, added to one there), else first.
+export const withKey = (title: string, key: string) => {
+  const m = title.match(/^(\w+)(\(([^)]*)\))?(!?):\s*/);
+  return m ? title.replace(m[0], `${m[1]}(${m[2] ? `${m[3]}, ` : ''}${key})${m[4]}: `) : `${key} ${title}`;
+};

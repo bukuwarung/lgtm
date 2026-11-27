@@ -370,6 +370,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ck-failure { color: var(--delfg); } .ck-pending { color: var(--modfg); } .ck-success { color: var(--addfg); } .ck-neutral { color: var(--muted); }
 .ck-sum { font-size: calc(11px * var(--ts)); font-weight: 400; }
 .ix-check { display: flex; align-items: center; }
+.ix-waiting { display: grid; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border); font-size: calc(12px * var(--ts)); } /* runs waiting on a person (shortcuts.tsx WaitingRuns) */
+.ix-wait-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ix-wait-row > span { flex: 1 1 12em; }
 .ix-check .ix-item { flex: 1; min-width: 0; }
 .ix-icon-btn { flex: none; display: inline-grid; place-items: center; width: 22px; height: 20px; margin-right: 4px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); }
 .ix-check .ix-icon-btn:last-child { margin-right: 10px; }
@@ -1515,6 +1518,11 @@ dialog.ask.danger button.primary { background: light-dark(#cf222e, #da3633); bor
 dialog.ask.danger button.primary:hover:not(:disabled) { background: light-dark(#a40e26, #b62324); border-color: light-dark(#a40e26, #b62324); }
 dialog.ask form { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 dialog.ask form > input, dialog.ask form > label { flex: 1 0 100%; margin-bottom: 4px; }
+dialog.pr-dialog { width: min(480px, calc(100vw - 32px)); }
+dialog.pr-dialog form > :is(textarea, .select, select, small, .error) { flex: 1 0 100%; }
+dialog.pr-dialog textarea { min-height: 120px; resize: vertical; font: inherit; }
+.project-list { display: grid; gap: 6px; margin-bottom: 12px; max-height: 50vh; overflow: auto; }
+.project-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 /* A spec chip's menu in a file's header: over the file (content-visibility would clip it), opening leftward */
 .file:has(> * .pill-menu[open]) { content-visibility: visible; position: relative; z-index: 5; }
 .file .pill-pop { left: auto; right: 0; }

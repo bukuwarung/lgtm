@@ -19,6 +19,7 @@
     "allow-jira-move",
     "allow-jira-statuses",
     "allow-jira-priorities",
+    "allow-jira-create",
     "allow-slack-presence",
     "allow-integrations",
     "allow-jira-issue",

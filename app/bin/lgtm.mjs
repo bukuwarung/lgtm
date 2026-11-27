@@ -918,6 +918,15 @@ async function jiraIssue(key) {
   return { key, url: `${site}/browse/${key}`, summary: f.summary, status: f.status?.name, statusCategory: f.status?.statusCategory?.key, type: f.issuetype?.name, priority: f.priority?.name, description: f.description ?? null };
 }
 
+// A new ticket (a PR comment turned into one): a Task in the project, its key and link.
+async function jiraCreate(b) {
+  const project = String(b?.project ?? ''), summary = String(b?.summary ?? '').trim(), description = String(b?.description ?? '');
+  if (!/^[A-Z][A-Z0-9]+$/.test(project) || !summary || summary.length > 250 || /[\n\r]/.test(summary) || summary.startsWith('-')) throw new Error('Bad request');
+  const [site, out] = await Promise.all([jiraSite ??= acli(['jira', 'auth', 'status']).then((o) => 'https://' + (o.match(/Site:\s*(\S+)/)?.[1] ?? '')), acli(['jira', 'workitem', 'create', '--project', project, '--type', 'Task', '--summary', summary, '--description', description || ' ', '--json'])]);
+  const key = JSON.parse(out).key;
+  return { key, url: `${site}/browse/${key}` };
+}
+
 // Tickets' priorities (the PR list's order), by key: one search for all of them.
 async function jiraPriorities(keys) {
   keys = [...new Set(keys)].filter((k) => /^[A-Z][A-Z0-9]+-\d+$/.test(k)).slice(0, 100);
@@ -1121,7 +1130,7 @@ const server = createServer(async (req, res) => {
   if (path === '/lgtm') return res.end(`lgtm ${VERSION}`);
   // /token, /slack, /job-log and /jira act with your credentials: only our own page may call them
   // (browsers set Sec-Fetch-Site on every request, so other sites' requests and form posts are refused).
-  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/agent-archive', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/agent-session', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/jira-priorities', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
+  if (['/token', '/slack', '/job-log', '/jira', '/integrations', '/slack-people', '/claude-sessions', '/agent-text', '/agent-skill', '/agent-mod', '/agent-outbox', '/agent-archive', '/claude-session', '/gh-accounts', '/glab-accounts', '/glab-token', '/agents', '/slack-emoji', '/slack-post', '/slack-done', '/slack-delete', '/agent-session', '/slack-request', '/slack-asked', '/slack-reply', '/slack-sent', '/slack-channel', '/slack-qa', '/slack-threads', '/jira-move', '/jira-statuses', '/jira-priorities', '/jira-create', '/slack-presence'].includes(path) && req.headers['sec-fetch-site'] !== 'same-origin') return res.writeHead(403).end();
   if (path === '/agent-text' && req.method === 'POST') {
     // A line of JSON per piece of the answer ({d}), then the whole of it ({text}) or why not ({error}).
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
@@ -1184,6 +1193,7 @@ const server = createServer(async (req, res) => {
     ]);
     return json(res, 200, { slack, jira });
   }
+  if (path === '/jira-create' && req.method === 'POST') return readJson(req).then(jiraCreate).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira-priorities') return jiraPriorities((new URL(req.url ?? '/', ORIGIN).searchParams.get('keys') ?? '').split(',')).then((r) => json(res, 200, r), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira-statuses') return jiraStatuses(new URL(req.url ?? '/', ORIGIN).searchParams.get('project')).then((l) => json(res, 200, l), (e) => json(res, 500, { error: e.message }));
   if (path === '/jira-move' && req.method === 'POST')

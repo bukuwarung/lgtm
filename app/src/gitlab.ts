@@ -491,7 +491,7 @@ export const reopenLab = (repo: string, n: number) => send(split(repo).host, `/p
 export async function labPrRights(repo: string, n: number) {
   const m = await getMR(repo, n, 'state sourceBranch sourceBranchExists sourceProjectId targetProjectId diffHeadSha detailedMergeStatus userPermissions{updateMergeRequest pushToSourceBranch canMerge}');
   const update = !!m.userPermissions?.updateMergeRequest;
-  return { merge: !!m.userPermissions?.canMerge, close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, restore: update && m.state === 'closed' && !m.sourceBranchExists && m.sourceProjectId === m.targetProjectId && !!m.diffHeadSha, label: update, updateBranch: m.state === 'opened' && !!m.userPermissions?.pushToSourceBranch && m.detailedMergeStatus === 'NEED_REBASE', rebase: true, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string, headSha: (m.diffHeadSha ?? '') as string };
+  return { merge: !!m.userPermissions?.canMerge, push: !!m.userPermissions?.pushToSourceBranch, restoreMerged: update && m.state === 'merged' && !m.sourceBranchExists && m.sourceProjectId === m.targetProjectId && !!m.diffHeadSha, close: update && m.state === 'opened', reopen: update && m.state === 'closed' && !!m.sourceBranchExists, restore: update && m.state === 'closed' && !m.sourceBranchExists && m.sourceProjectId === m.targetProjectId && !!m.diffHeadSha, label: update, updateBranch: m.state === 'opened' && !!m.userPermissions?.pushToSourceBranch && m.detailedMergeStatus === 'NEED_REBASE', rebase: true, update, branch: update && m.sourceProjectId === m.targetProjectId && !/^(main|master|develop|dev|staging|production|release\/|hotfix\/)/.test(m.sourceBranch), headRef: { id: `branch:${m.sourceBranch}` }, headRefName: m.sourceBranch as string, headSha: (m.diffHeadSha ?? '') as string };
 }
 export const markLabReady = (id: string) => {
   const { repo, n } = mrOf(id);
@@ -1068,6 +1068,13 @@ export async function labLinkedIssues(repo: string, n: number): Promise<{ issues
   );
   return { issues, prs: [...prs.values()] };
 }
+
+// A pipeline stopped, and a new issue on the MR's project (github.ts cancelRun, createIssue).
+export const cancelLabPipeline = (repo: string, id: string) => send(split(repo).host, `/projects/${pid(repo)}/pipelines/${id}/cancel`, 'POST').then(() => {});
+export const createLabIssue = async (repo: string, title: string, description: string) => {
+  const i = await send(split(repo).host, `/projects/${pid(repo)}/issues`, 'POST', { title, description });
+  return { url: i.web_url as string, ref: `#${i.iid}` };
+};
 
 // --- the PR list ---
 

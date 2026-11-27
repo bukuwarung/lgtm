@@ -887,6 +887,15 @@ export async function fetchJira(key: string): Promise<JiraIssue> {
   return body;
 }
 
+// A new Jira ticket (a Task) in a project, through acli: its key and link.
+export async function createJira(project: string, summary: string, description: string): Promise<{ key: string; url: string }> {
+  if (isDesktop) return command('jira_create', { project, summary, description });
+  const res = await fetch('/jira-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project, summary, description }) });
+  const body = await res.json().catch(() => ({ error: res.statusText }));
+  if (!res.ok) throw new Error(body.error || 'Could not create the ticket');
+  return body;
+}
+
 // Tickets' priorities by key (the PR list's order, Settings → PR list): known ones kept an hour, the rest asked for in
 // one search. Without acli (or Jira) it stops asking for the session. True when something new arrived.
 let noJiraPriorities = false;
