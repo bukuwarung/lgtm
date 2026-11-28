@@ -192,6 +192,48 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
     )
 }
 
+/// The menu bar's own items get SF Symbols, as macOS gives its standard ones (Copy, Minimize…); matched by title.
+#[cfg(target_os = "macos")]
+fn menu_symbols() {
+    use objc2_app_kit::{NSApplication, NSImage, NSMenu};
+    use objc2_foundation::{MainThreadMarker, NSString};
+    const SYMBOLS: &[(&str, &str)] = &[
+        ("Settings…", "gearshape"), ("Go to…", "text.magnifyingglass"), ("Start Review Mode", "play.circle"), ("Find…", "magnifyingglass"),
+        ("Back", "chevron.backward"), ("Forward", "chevron.forward"), ("Recently Viewed", "clock.arrow.circlepath"),
+        ("Refresh", "arrow.clockwise"), ("Reload LGTM", "arrow.clockwise.circle"), ("Inbox", "tray"),
+        ("Show or Hide the List", "sidebar.left"), ("Show or Hide the Index", "list.bullet.indent"), ("Ignore Whitespace", "space"),
+        ("Show or Hide Threads", "text.bubble"), ("Your Threads", "person.bubble"), ("Only Files You Own", "person.crop.square"),
+        ("Open in github.dev", "chevron.left.forwardslash.chevron.right"),
+        ("Bigger Text", "textformat.size.larger"), ("Smaller Text", "textformat.size.smaller"), ("Actual Size", "textformat.size"),
+        ("Next File", "arrow.down.doc"), ("Previous File", "arrow.up.doc"), ("Next Unviewed File", "eye.slash"),
+        ("Next Change", "arrow.down"), ("Previous Change", "arrow.up"), ("Next Thread", "arrow.down.message"), ("Previous Thread", "arrow.up.message"),
+        ("Next Agent Draft", "sparkles"), ("Specs ↔ Code", "arrow.left.arrow.right"), ("Where It's Used", "point.3.connected.trianglepath.dotted"),
+        ("Previous Commit", "arrow.left.circle"), ("Next Commit", "arrow.right.circle"), ("Commits Since Your Review", "clock"),
+        ("Next in the List", "arrow.down.square"), ("Previous in the List", "arrow.up.square"),
+        ("Previous in the Stack", "arrow.up.to.line"), ("Next in the Stack", "arrow.down.to.line"),
+        ("Skip (Review Mode)", "forward"), ("Finish Review…", "checkmark.seal"), ("Approve…", "checkmark.circle"), ("Mark File Viewed", "eye"),
+        ("Comment on File…", "square.and.pencil"), ("Comment on Line…", "plus.bubble"), ("Quote in a Reply", "quote.bubble"),
+        ("React 👍", "hand.thumbsup"), ("Edit Your Comment…", "pencil"), ("Merge…", "arrow.triangle.merge"),
+        ("Close, Reopen or Draft…", "xmark.circle"), ("Ready for Review", "paperplane"), ("Update Branch", "arrow.triangle.pull"),
+        ("Change Base…", "arrow.triangle.branch"), ("Revert Commit…", "arrow.uturn.backward"), ("Reply \"Fixed in\" and Resolve", "checkmark.bubble"),
+        ("Assign…", "person.badge.plus"), ("Milestone…", "flag"), ("Subscribe or Unsubscribe", "bell"), ("Lock or Unlock Conversation", "lock"),
+        ("Coding Agents…", "cpu"), ("Agent Review Session", "terminal"), ("Ask QA…", "ladybug"),
+        ("Keyboard Shortcuts", "keyboard"), ("LGTM on GitHub", "link"), ("Copy Diagnostics", "stethoscope"),
+    ];
+    fn walk(menu: &NSMenu) {
+        for k in 0..menu.numberOfItems() {
+            let Some(item) = menu.itemAtIndex(k) else { continue };
+            if let Some(sub) = item.submenu() { walk(&sub); continue }
+            let title = item.title().to_string();
+            if let Some((_, name)) = SYMBOLS.iter().find(|(t, _)| *t == title) {
+                item.setImage(NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None).as_deref());
+            }
+        }
+    }
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    if let Some(menu) = NSApplication::sharedApplication(mtm).mainMenu() { walk(&menu) }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri::Manager;
@@ -205,6 +247,8 @@ pub fn run() {
         // The window opens hidden and the page shows it once it has drawn, in its theme (platform.ts), so a dark app
         // never flashes white; if the page can't, it shows anyway after 3 seconds.
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            menu_symbols();
             if let Some(w) = app.get_webview_window("main") {
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(3));
