@@ -43,9 +43,11 @@ export function Select({ value, onChange, children, title, class: cls, disabled,
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const typed = useRef({ text: '', at: 0 });
+  const placed = useRef({ x: 0, y: 0 }); // where the button was when it opened
 
   const show = () => {
     const r = btn.current!.getBoundingClientRect();
+    placed.current = { x: r.left, y: r.top };
     const below = innerHeight - r.bottom - 8, above = r.top - 8;
     const up = below < 240 && above > below;
     setAt({ left: Math.max(8, Math.min(r.left, innerWidth - Math.max(r.width, 160) - 8)), ...(up ? { bottom: innerHeight - r.top + 4 } : { top: r.bottom + 4 }), minWidth: r.width, maxHeight: Math.min(360, up ? above : below) });
@@ -64,17 +66,31 @@ export function Select({ value, onChange, children, title, class: cls, disabled,
     return from;
   };
 
-  // Closes when the page scrolls or resizes under it (it's placed where the button was), or on a click elsewhere.
+  // Closes when the page scrolls the button away or resizes (it's placed where the button was), or on a click elsewhere.
+  // A scroll that leaves the button where it was is no reason: WebKit fires a scroll's event a frame late, so one
+  // finished just before opening (a click straight after scrolling) closed it again, and the next ↓ reopened it.
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => !btn.current?.contains(e.target as Node) && !list.current?.contains(e.target as Node) && setOpen(false);
-    const gone = (e: Event) => !list.current?.contains(e.target as Node) && setOpen(false);
+    const gone = (e: Event) => {
+      const r = btn.current?.getBoundingClientRect();
+      if (list.current?.contains(e.target as Node) || (r && Math.abs(r.left - placed.current.x) < 1 && Math.abs(r.top - placed.current.y) < 1)) return;
+      setOpen(false);
+    };
+    const shut = () => setOpen(false);
     addEventListener('pointerdown', away, true);
     addEventListener('scroll', gone, true);
-    addEventListener('resize', gone);
-    return () => (removeEventListener('pointerdown', away, true), removeEventListener('scroll', gone, true), removeEventListener('resize', gone));
+    addEventListener('resize', shut);
+    return () => (removeEventListener('pointerdown', away, true), removeEventListener('scroll', gone, true), removeEventListener('resize', shut));
   }, [open]);
-  useEffect(() => void (open && list.current?.querySelectorAll('[role=option]')[hi]?.scrollIntoView({ block: 'nearest' })), [open, hi]);
+  // The highlight kept in sight by scrolling the list alone: scrollIntoView scrolls the page behind too, and that scroll
+  // closes the list (gone, above), so a ↓ soon after reopened it and Enter picked what was already chosen.
+  useEffect(() => {
+    const l = list.current, o = open ? l?.querySelectorAll<HTMLElement>('[role=option]')[hi] : null;
+    if (!l || !o) return;
+    if (o.offsetTop < l.scrollTop) l.scrollTop = o.offsetTop;
+    else if (o.offsetTop + o.offsetHeight > l.scrollTop + l.clientHeight) l.scrollTop = o.offsetTop + o.offsetHeight - l.clientHeight;
+  }, [open, hi]);
 
   const key = (e: KeyboardEvent) => {
     const k = e.key;
