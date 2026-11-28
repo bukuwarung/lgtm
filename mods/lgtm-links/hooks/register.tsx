@@ -8,11 +8,18 @@ export const prsIn = (text: string): string[] =>
   [...new Set([...text.matchAll(PR_LINK)].map(m => `${m[1] ?? m[3] ?? m[5]}#${m[2] ?? m[4] ?? m[6]}`))]
 
 // lgtm (the Mac app) opens a PR from its own link. ?claude= names this session (the Claude app's ID when it hosts it,
-// else the CLI's), so the PR's ✳ Claude in lgtm comes back here, as the lgtm-review skill's links do.
+// else the CLI's), so the PR's ✳ Claude in lgtm comes back here, as the lgtm-review skill's links do: only for a PR in
+// the repository this session works in (its folder's origin remote; a GitLab one as host/group/…/project). Any other
+// PR mentioned opens unlinked, so lgtm doesn't take this session for one working on it.
 const sessionId = async ($: EngineInterface) => (await $.env.get('CLAUDE_CODE_HOST_SESSION_ID')) || (await $.session.id())
+const repoHere = async ($: EngineInterface) => {
+  const r = await $.process.run(['git', 'remote', 'get-url', 'origin']).catch(() => null)
+  const m = r?.exitCode === 0 ? r.stdout.trim().match(/^(?:[\w+.-]+:\/\/)?(?:[^@/]+@)?([^:/]+)(?::\d+)?[:/](.+?)(?:\.git)?\/?$/) : null
+  return m ? (m[1] === 'github.com' ? m[2] : `${m[1]}/${m[2]}`).toLowerCase() : null
+}
 const lgtmLink = async ($: EngineInterface, pr: string) => {
   const [repo, n] = pr.split('#')
-  return `lgtm://${repo}/pull/${n}?claude=${encodeURIComponent(await sessionId($))}`
+  return repo.toLowerCase() === (await repoHere($)) ? `lgtm://${repo}/pull/${n}?claude=${encodeURIComponent(await sessionId($))}` : `lgtm://${repo}/pull/${n}`
 }
 
 // What you send this session from lgtm (your review, a comment to address) waits in a file of lgtm's,

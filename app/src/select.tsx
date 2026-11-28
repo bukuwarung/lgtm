@@ -36,6 +36,9 @@ export function Select({ value, onChange, children, title, class: cls, disabled,
   const cur = opts.find((o) => o.value === (value ?? '')) ?? opts[0];
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
+  // The highlight as of the last key, not the last draw: ↓ then Enter faster than a redraw picks the one moved to.
+  const hiNow = useRef(0);
+  const moveHi = (to: number | ((h: number) => number)) => setHi((h) => (hiNow.current = typeof to === 'function' ? to(hiNow.current) : to));
   const [at, setAt] = useState<{ left: number; top?: number; bottom?: number; minWidth: number; maxHeight: number } | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -46,7 +49,7 @@ export function Select({ value, onChange, children, title, class: cls, disabled,
     const below = innerHeight - r.bottom - 8, above = r.top - 8;
     const up = below < 240 && above > below;
     setAt({ left: Math.max(8, Math.min(r.left, innerWidth - Math.max(r.width, 160) - 8)), ...(up ? { bottom: innerHeight - r.top + 4 } : { top: r.bottom + 4 }), minWidth: r.width, maxHeight: Math.min(360, up ? above : below) });
-    setHi(Math.max(0, cur ? opts.indexOf(cur) : 0));
+    moveHi(Math.max(0, cur ? opts.indexOf(cur) : 0));
     setOpen(true);
     btn.current!.focus({ preventScroll: true }); // a click doesn't focus a button in WebKit: the keys (Esc, ↑ ↓) go to it
   };
@@ -81,15 +84,15 @@ export function Select({ value, onChange, children, title, class: cls, disabled,
     }
     if (k === 'Escape') return void (e.preventDefault(), e.stopPropagation(), close()); // this menu only, not the panel it's in
     if (k === 'Tab') return close(false);
-    if (k === 'ArrowDown' || k === 'ArrowUp') return void (e.preventDefault(), setHi((h) => step(h, k === 'ArrowDown' ? 1 : -1)));
-    if (k === 'Home' || k === 'End') return void (e.preventDefault(), setHi(k === 'Home' ? step(-1, 1) : step(opts.length, -1)));
-    if (k === 'Enter' || k === ' ') return void (e.preventDefault(), opts[hi] && pick(opts[hi]));
+    if (k === 'ArrowDown' || k === 'ArrowUp') return void (e.preventDefault(), (hiNow.current = step(hiNow.current, k === 'ArrowDown' ? 1 : -1)), moveHi(hiNow.current));
+    if (k === 'Home' || k === 'End') return void (e.preventDefault(), moveHi((hiNow.current = k === 'Home' ? step(-1, 1) : step(opts.length, -1))));
+    if (k === 'Enter' || k === ' ') return void (e.preventDefault(), opts[hiNow.current] && pick(opts[hiNow.current]));
     if (k.length === 1 && !e.metaKey && !e.ctrlKey) {
       const t = typed.current;
       t.text = (Date.now() - t.at < 700 ? t.text : '') + k.toLowerCase();
       t.at = Date.now();
       const i = opts.findIndex((o) => !o.disabled && o.text.toLowerCase().startsWith(t.text));
-      if (i >= 0) setHi(i);
+      if (i >= 0) moveHi((hiNow.current = i));
     }
   };
 
@@ -115,7 +118,7 @@ export function Select({ value, onChange, children, title, class: cls, disabled,
               aria-selected={o === cur}
               aria-disabled={o.disabled || undefined}
               class={`select-opt${i === hi ? ' hi' : ''}${o.disabled ? ' off' : ''}`}
-              onMouseEnter={() => !o.disabled && setHi(i)}
+              onMouseEnter={() => !o.disabled && moveHi(i)}
               onClick={() => pick(o)}
             >
               <span class="select-tick">{o === cur && <Octicon name="check" />}</span>

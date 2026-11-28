@@ -1,6 +1,9 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 const ran = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+// The session works in the repo at `remote` (its folder's origin); other commands are recorded.
+const workingIn = (remote: string, runs: string[][]) => (_: unknown, e: { argv: readonly string[] }) =>
+  e.argv[0] === 'git' ? { value: { ...ran, stdout: `${remote}\n` } } : (runs.push([...e.argv]), { value: ran })
 const run = (args: string) => ({ command: 'lgtm', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } }) as const
 const reply = (text: string) =>
   ({ plugin: 'lgtm-links', component: 'AssistantMessage', props: { text, isFirstOfReply: true } }) as const
@@ -9,7 +12,7 @@ const bash = (command: string, stdout: string, isRunning = false) =>
 
 test('a reply that links a pull request gets a button that opens it in lgtm, linked to this session', async ($, on) => {
   const runs: string[][] = []
-  on('process.run', (_, e) => (runs.push([...e.argv]), { value: ran }))
+  on('process.run', workingIn('git@github.com:acme/shop.git', runs))
   on('env.get', (_, e) => ({ value: e.name === 'CLAUDE_CODE_HOST_SESSION_ID' ? 'local_abc' : undefined }))
   // The engine's own drawing of the reply, beneath the mod.
   on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
@@ -57,7 +60,7 @@ test('gh pr create gets the button once it has printed the PR; other commands do
 
 test('/lgtm opens the link given, else the last one in the conversation, with the CLI session when no app hosts it', async ($, on) => {
   const runs: string[][] = []
-  on('process.run', (_, e) => (runs.push([...e.argv]), { value: ran }))
+  on('process.run', workingIn('https://github.com/acme/shop.git', runs))
   on('env.get', () => ({ value: undefined }))
   on('session.id', () => ({ value: '1b2c3d4e-0000-4000-8000-000000000000' }))
   // The conversation so far, as $.session.messages() reads it (only the text is used).
@@ -69,7 +72,7 @@ test('/lgtm opens the link given, else the last one in the conversation, with th
   expect((await $.command.run(run(''))).text).toBe('Opened acme/app#90 in LGTM.')
   expect(runs).toEqual([
     ['open', 'lgtm://acme/shop/pull/7?claude=1b2c3d4e-0000-4000-8000-000000000000'],
-    ['open', 'lgtm://acme/app/pull/90?claude=1b2c3d4e-0000-4000-8000-000000000000'],
+    ['open', 'lgtm://acme/app/pull/90'], // another repo's: not this session's
   ])
 })
 
@@ -103,7 +106,7 @@ test('what lgtm left for this session is handed to it once, then the file is gon
 
 test('a GitLab merge request link opens in lgtm by its host and project', async ($, on) => {
   const runs: string[][] = []
-  on('process.run', (_, e) => (runs.push([...e.argv]), { value: ran }))
+  on('process.run', workingIn('ssh://git@gitlab.com:22/acme/apps/shop.git', runs))
   on('env.get', (_, e) => ({ value: e.name === 'CLAUDE_CODE_HOST_SESSION_ID' ? 'local_abc' : undefined }))
   on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
     const { Text } = $.ui.resolve(e)

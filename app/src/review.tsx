@@ -6410,6 +6410,12 @@ function AgentsMenu({ prompt, repo, prUrl, label, full }: { prompt: string; repo
                     <AgentMark id={a} /> New {place(a)} <small>⌥-click</small>
                   </button>
                 ),
+                // Linked by mistake (a link clicked in a session that isn't working on it): let it go.
+                mine && (
+                  <button key={a + '-unlink'} role="menuitem" title={`This ${pageTerm().PR} stops coming back to that ${place(a)}`} onClick={() => (setMenu(false), unlinkSession(pr.repo, pr.n), setSession(null), setTick((x) => x + 1))}>
+                    <Octicon name="x" /> Unlink its {place(a)}
+                  </button>
+                ),
               ]
             );
           })}
