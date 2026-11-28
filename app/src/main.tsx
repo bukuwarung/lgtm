@@ -18,9 +18,9 @@ import { AgentMark, CheckMark, DECISION, Octicon, Tg, Who, Time, Lines, num, Cop
 import { setRainbow } from './highlight.ts';
 import { findStacks } from './stacks.ts';
 import { estimateLabel } from './files.ts';
-import { menuKeys, setResign, claudeFolder, duration, moving, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen, jiraPriority, loadJiraPriorities } from './platform.ts';
-import { unblockPrompt } from './prompts.ts';
-import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, type AgentId } from './agents.ts';
+import { menuKeys, setResign, claudeFolder, duration, moving, setPageName, setTitleCount, ask, closeOnBackdrop, reportError, selfUpdate, composing, readSaved, readTime, addNotice, dropNotices, useRecentPRs, type RecentPR, qaSeen, qaThreads, notices, type Notice, copyText, lastLogin, usePresence, ago, since, askNotifications, slackStatus, availableUpdate, getGhAccounts, own, setAccount, type GhAccount, claudeSessionState, backToSession, agentSkill, fetchIntegrations, keepSkillCurrent, linkSession, linkedSession, newer, type Integrations, type SkillStatus, clipboardPR, copyDiagnostics, initDesktop, isDesktop, notify as notifyNative, notifySlack, openExternal, prCache, readBots, setBadge, setTray, slackEscape, useStoredFlag, useStoredValue, useDismiss, repoLabel, knowRepos, offerUndo, putBackNotices, useMedia, faceOf, glabAccounts, viewAs, personKey, type GlabAccount, term, teamLabel, shownName, shownAt, ticketsToReview, againInThread, slackAsks, knownRepos, peopleSeen, jiraPriority, loadJiraPriorities, openAppLink, linkNewClaude } from './platform.ts';
+import { openAgentSession, AGENTS, AGENT_IDS, agentIdOf, detectAgents, askAgent, useAgents, type AgentId } from './agents.ts';
+import { claudeNewLink, unblockPrompt } from './prompts.ts';
 import { CommandBar } from './palette.tsx';
 import { jiraKeys, knowJiraKeys, linkJiraKeys } from './jira.ts';
 import { FindBar } from './find.tsx';
@@ -1632,8 +1632,10 @@ function MergeAll({ items }: { items: QueueItem[] }) {
   );
 }
 
+// What's in the way, for its session, or (none linked) a new one of the agent you ask most (Claude Code's in the repo's
+// folder, then linked to the PR, so the next ask goes there too).
 async function askToFix(i: QueueItem): Promise<string> {
-  const l = linkedSession(i.repo, i.number)!;
+  const l = linkedSession(i.repo, i.number);
   const out: string[] = [];
   if (i.mergeState === 'DIRTY') out.push(`conflicts with ${i.base}: bring ${i.base} in and resolve them`);
   if (i.mergeState === 'BEHIND') out.push(`behind ${i.base}, which the branch rules don't allow: bring ${i.base} in`);
@@ -1661,7 +1663,14 @@ async function askToFix(i: QueueItem): Promise<string> {
       ].join('\n'),
     );
   }
-  return backToSession(l.id, unblockPrompt({ html_url: prWebUrl(i.repo, i.number), title: i.title, number: i.number }, out), l.agent);
+  const prompt = unblockPrompt({ html_url: prWebUrl(i.repo, i.number), title: i.title, number: i.number }, out);
+  if (l) return backToSession(l.id, prompt, l.agent);
+  const a = askAgent();
+  if (!a) throw new Error('No coding agent is on (Settings → Coding agents)');
+  if (a === 'codex') return void (await openAppLink(`codex://threads/new?prompt=${encodeURIComponent(prompt)}`)), 'Asked in a new Codex conversation';
+  await openAppLink(claudeNewLink(prompt, claudeFolder(i.repo)));
+  linkNewClaude(i.repo, i.number, prWebUrl(i.repo, i.number));
+  return 'Asked in a new Claude Code session';
 }
 // Whoever requested changes, asked to review again on GitHub, then sent the "again" message on Slack (as the PR
 // view's re-request does; none if that message is emptied or Slack isn't set up).
@@ -1838,6 +1847,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
   });
   // Settings → PR list, "Most urgent first" (byUrgency): the Jira tickets' priorities, asked for in one go, then drawn again.
   const [urgentFirst] = useStoredFlag('sortByPriority', true);
+  const { on: agentsOn } = useAgents(); // the coding agents found and on, for To fix's "ask an agent" (drawn again once found)
   useStoredFlag('reviewAssignedPeople', false); // ownsReview reads it: drawn again when it changes
   const [, prioTick] = useState(0);
   const ticketKeys = urgentFirst ? [...new Set((loaded ?? []).flatMap((i) => jiraKeys(i.title, i.head)))].sort().join(',') : '';
@@ -2299,9 +2309,18 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
           ))
         )}
         {kind === REVIEWING && <AgentPill i={i} />}
-        {kind === MINE && toFix(i).length > 0 && !!linkedSession(i.repo, i.number) && (
-          <QuickPill icon={linkedSession(i.repo, i.number)?.agent === 'codex' ? 'codex' : '✳'} tone="" idle="its session" action="Ask its session to fix it" busy="asking…" done="asked" title={`What's in the way (${stuck(i).join(', ')}), left for the ${linkedSession(i.repo, i.number)?.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'} that wrote it`} run={() => askToFix(i)} />
-        )}
+        {kind === MINE && toFix(i).length > 0 && ((l, a) => (l || a) && (
+          <QuickPill
+            icon={(l?.agent ?? a) === 'codex' ? 'codex' : '✳'}
+            tone=""
+            idle={l ? 'its session' : 'ask an agent'}
+            action={l ? 'Ask its session to fix it' : `Ask ${AGENTS[a!].name} to fix it`}
+            busy="asking…"
+            done="asked"
+            title={`What's in the way (${toFix(i).join(', ')}), left for ${l ? `the ${l.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'} that wrote it` : `a new ${a === 'codex' ? 'Codex conversation' : 'Claude Code session'}, linked to it`}`}
+            run={() => askToFix(i)}
+          />
+        ))(linkedSession(i.repo, i.number), agentsOn.length ? (agentsOn.includes(askAgent()!) ? askAgent() : agentsOn[0]) : null)}
         {claudeWaiting(i) && <span class="pill p-session-wait" title="Its Claude Code session is waiting for your answer"><Tg i="✳" t="waiting for you" /></span>}
         {clauded(i) && (linkedSession(i.repo, i.number)?.agent === 'codex'
           ? <span class="pill p-agent" title="Its Codex conversation pushed commits since you last opened it here"><Tg i="codex" t="updated" /></span>
