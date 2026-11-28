@@ -268,7 +268,7 @@ try {
   await step('the inbox lists a mention and the threads waiting on me, with their code, and j moves', async () => {
     await evaluate(`location.hash = '/inbox'`);
     await until('the inbox button counting both threads and the mention', `document.querySelector('.nav-inbox .nav-count')?.textContent === '3'`);
-    await until('a mention and two threads', `document.querySelectorAll('.inbox-thread').length === 3 && document.querySelector('.inbox .note').textContent.startsWith('2 threads and 1 mention')`);
+    await until('a mention and two threads', `document.querySelectorAll('.inbox-thread').length === 3 && document.querySelector('.inbox .inbox-count').textContent.startsWith('2 threads and 1 mention')`);
     if (!(await evaluate(`!!document.querySelector('.snippet tr.a')`))) throw new Error("the thread's code isn't shown");
     if (await evaluate(`document.querySelector('.inbox').innerText.includes('commits came after')`)) throw new Error("automation's comment (its marker) is listed as a mention");
     await key('j');
@@ -290,7 +290,7 @@ try {
     })()`);
     await sleep(100);
     await key('Enter', { metaKey: true });
-    await until('the reply sent', `document.querySelector('.inbox .note')?.textContent.startsWith('1 mention')`, 5000);
+    await until('the reply sent', `document.querySelector('.inbox .inbox-count')?.textContent.startsWith('1 mention')`, 5000);
     for (let i = 0; i < 25 && !sent.includes('reply'); i++) await sleep(200); // it leaves the list at once, then goes
     if (!sent.includes('reply')) throw new Error("the reply didn't go out");
   });
@@ -298,14 +298,16 @@ try {
     await key('e');
     await until('nothing left', `document.querySelector('.inbox .empty')?.textContent.includes('Nothing waits on your reply')`, 3000);
   });
-  await step('the bell lists a new review request, and dismisses it', async () => {
+  await step("the inbox's quick look lists a new review request, and dismisses it", async () => {
     later = true;
     await evaluate(`dispatchEvent(new Event('lgtm:list-refresh'))`);
-    await until('its count', `document.querySelector('.bell .nav-count')?.textContent === '1'`);
-    await evaluate(`document.querySelector('.bell > button').click()`);
+    await until('the update', `(localStorage.getItem('@tester/notices') ?? '').includes('Log declined cards')`);
+    await evaluate(`document.querySelector('.nav-inbox').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))`);
     await until('the entry', `[...document.querySelectorAll('.bell-row')].some((r) => r.textContent.includes('Review requested') && r.textContent.includes('Log declined cards'))`, 2000);
+    // The inbox's count is its updates and the replies waiting: one fewer once it's dismissed.
+    const before = Number(await evaluate(`document.querySelector('.inbox-btn .nav-count')?.textContent ?? '0'`));
     await evaluate(`document.querySelector('.bell-row .bell-x').click()`);
-    await until('the count gone', `!document.querySelector('.bell .nav-count')`, 2000);
+    await until('the count one fewer', `Number(document.querySelector('.inbox-btn .nav-count')?.textContent ?? '0') === ${before - 1}`, 2000);
   });
   await step("my PR's away code owner, swapped from its pill for the first free owner", async () => {
     await evaluate(`location.hash = '#/'`);

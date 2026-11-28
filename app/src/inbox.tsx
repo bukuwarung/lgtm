@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'preact/hooks';
 import { uniqueNames } from './files.ts';
 import { isLab, awaitsMe, commentOnPR, commitSuggestions, forgetThreadStatus, getMentions, getMergedAwaiting, getPR, getThreads, getViewer, markBots, reply, resolveThread, suggestionOf, type Comment, type QueueItem, type Thread } from './github.ts';
-import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel, term } from './platform.ts';
+import { ago, markReplyDone, offerUndo, readBots, reportError, unmarkReplyDone, useStoredFlag, repoLabel, term, notices, dropNotices, putBackNotices, askNotifications, isDesktop, type Notice } from './platform.ts';
+import { Octicon } from './tags.tsx';
 import { syncLabTodo } from './gitlab.ts';
-import { PageSkeleton } from './history.tsx';
-import { Empty, Tg, Who, Time, ThreadCode } from './tags.tsx';
+import { Empty, Tg, Who, Time, ThreadCode, Lines } from './tags.tsx';
 import { highlightBlocks, languageFor } from './highlight.ts';
 
 // The words of the site on show: GitHub's PRs and teams, or GitLab's MRs and groups (the avatar's menu; switching reloads).
@@ -96,15 +96,24 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
     return () => removeEventListener('keydown', onKey);
   }, []);
   useEffect(() => document.querySelectorAll('.inbox-thread')[at]?.scrollIntoView({ block: 'nearest' }), [at]);
-  if (!list) return <PageSkeleton title="threads waiting on your reply" />;
+  // Updates are kept here, so they show at once; the threads waiting on a reply load below them.
+  const head = (
+    <>
+      <NotifySwitch />
+      <h2>Updates</h2>
+      <Updates />
+    </>
+  );
+  if (!list) return <div role="main" class="page history inbox">{head}<h2>Waiting on your reply</h2><div aria-busy="true" aria-label="Loading the threads waiting on your reply"><Lines /></div></div>;
   let k = 0;
   return (
     <div role="main" class="page history inbox">
       {pending && <p class="list-updating" role="status"><span class="sk-dot" /> Updating…</p>}
+      {head}
       <h2>Waiting on your reply</h2>
       {loadErr && <Empty tone="err" action={['Retry', () => (setLoadErr(''), setList(null), setTries((t) => t + 1))]}>Couldn't load your threads. {loadErr}</Empty>}
       {!count && !loadErr && <Empty tone="ok">Nothing waits on your reply.</Empty>}
-      {count > 0 && <p class="note">
+      {count > 0 && <p class="note inbox-count">
         {`${[threadCount && `${threadCount} thread${threadCount === 1 ? '' : 's'}`, mentionCount && `${mentionCount} mention${mentionCount === 1 ? '' : 's'}`].filter(Boolean).join(' and ')} in ${open.length} ${T.PR}${open.length === 1 ? '' : 's'}.`}
         {(
           <span class="inbox-keys">
@@ -128,6 +137,71 @@ export function Inbox({ items }: { items: QueueItem[] | null }) {
           })}
         </section>
       ))}
+    </div>
+  );
+}
+
+// The inbox's Updates (once the bell's): what lgtm would have notified you about (a review requested, approved, ready to
+// merge, checks failed…) that you haven't acted on (opened its PR, or dismissed), newest first. On the page, and in the
+// inbox button's right-click quick look (main.tsx). onGo: a row opened.
+export function useNotices() {
+  const [list, setList] = useState<Notice[]>(notices);
+  useEffect(() => {
+    const h = () => setList(notices());
+    addEventListener('lgtm:notices', h);
+    addEventListener('storage', h);
+    return () => (removeEventListener('lgtm:notices', h), removeEventListener('storage', h));
+  }, []);
+  return list;
+}
+export function Updates({ onGo }: { onGo?: () => void }) {
+  const list = useNotices();
+  const go = (n: Notice) => {
+    const [repo, num] = n.pr.split('#');
+    location.hash = `/${repo}/pull/${num}`; // opening it clears what it said (main.tsx's route effect)
+    onGo?.();
+  };
+  if (!list.length) return <p class="note bell-empty">No new updates.</p>;
+  return (
+    <div class="inbox-updates">
+      {list.map((n) => (
+        <div class="bell-row">
+          <button role="menuitem" onClick={() => go(n)} title={`Open ${n.pr}`}>
+            <span class="bell-title"><b>{n.what}</b> · {n.title}</span>
+            <small>{repoLabel(n.pr.split('#')[0])}#{n.pr.split('#')[1]} · <Time at={n.at} /></small>
+          </button>
+          <button class="bell-x" title="Dismiss" aria-label="Dismiss" onClick={() => { const gone = dropNotices((x) => x.id === n.id); offerUndo('Dismissed', () => putBackNotices(gone)); }}>
+            <Octicon name="x" />
+          </button>
+        </div>
+      ))}
+      <button role="menuitem" class="bell-act bell-clear" onClick={() => { const gone = dropNotices(() => true); offerUndo(`Cleared ${gone.length}`, () => putBackNotices(gone)); }}>
+        Clear all
+      </button>
+    </div>
+  );
+}
+// Desktop notifications on or off (Settings → Notifications has it too): the inbox page's header.
+function NotifySwitch() {
+  const [notify, toggleNotify] = useStoredFlag('notifyRequests', true);
+  const [err, setErr] = useState('');
+  return (
+    <div class="bell-notify inbox-notify">
+      <Octicon name={notify ? 'bell' : 'bell-slash'} />
+      <span>Desktop notifications<small>New review requests, and what you pick in Settings</small></span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={notify}
+        aria-label="Desktop notifications"
+        class="switch"
+        onClick={async () => {
+          setErr('');
+          if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for LGTM in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
+          toggleNotify();
+        }}
+      />
+      {err && <p class="note">{err}</p>}
     </div>
   );
 }

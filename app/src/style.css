@@ -1693,6 +1693,7 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .nav-inbox { position: relative; display: inline-flex; align-items: center; }
 .nav-inbox.on { border-color: var(--accent); color: var(--accent); }
 .nav-count { position: absolute; top: -6px; right: -7px; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; background: var(--primary); color: var(--on-primary); font: 600 10px/15px var(--sans); text-align: center; }
+.inbox-btn { position: relative; } .inbox-btn > .bell-menu { left: 0; right: auto; } /* the inbox's right-click quick look */
 .bell { position: relative; }
 .bell > button { position: relative; }
 .bell-menu { left: 0; right: auto; width: 340px; max-height: 70vh; overflow: auto; }
@@ -1707,11 +1708,11 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .bell-notify > span { display: grid; flex: 1; font-size: calc(13px * var(--ts)); }
 .bell-notify small { color: var(--muted); font-size: calc(11px * var(--ts)); }
 /* The bell's rows, over the top bar's own button styles (Glass's capsules included) */
-.top .bell .bell-menu > button, .glass .top .bell .bell-menu > button:not(.primary) { display: grid; gap: 1px; justify-items: start; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none; box-shadow: none; text-align: left; white-space: normal; }
-.top .bell .bell-menu > button:hover:not(:disabled) { background: var(--soft); }
-.top .bell .bell-menu > button.bell-act, .glass .top .bell .bell-menu > button.bell-act:not(.primary) { display: flex; align-items: center; gap: 8px; }
-.top .bell .bell-menu > button small { color: var(--muted); font-size: calc(11px * var(--ts)); }
-.top .bell .bell-menu > button { height: auto; min-height: 0; line-height: 1.35; justify-content: flex-start; }
+:is(.top .bell-menu, .inbox) > button, .glass :is(.top .bell-menu, .inbox) > button:not(.primary) { display: grid; gap: 1px; justify-items: start; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none; box-shadow: none; text-align: left; white-space: normal; }
+:is(.top .bell-menu, .inbox) > button:hover:not(:disabled) { background: var(--soft); }
+:is(.top .bell-menu, .inbox) > button.bell-act, .glass :is(.top .bell-menu, .inbox) > button.bell-act:not(.primary) { display: flex; align-items: center; gap: 8px; }
+:is(.top .bell-menu, .inbox) > button small { color: var(--muted); font-size: calc(11px * var(--ts)); }
+:is(.top .bell-menu, .inbox) > button { height: auto; min-height: 0; line-height: 1.35; justify-content: flex-start; }
 /* An on/off switch (role="switch"): a track and a knob, green when on */
 .top .switch, .switch { position: relative; flex: none; width: 34px; min-width: 34px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 38%, transparent); cursor: pointer; transition: background var(--quick); box-shadow: none; }
 .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform var(--quick); }
@@ -1723,12 +1724,12 @@ html.glass .demo-solid .bar button:not(.primary) { background: var(--bg); border
 .bell-notify > span { min-width: 0; white-space: normal; }
 .bell-menu { overflow-x: hidden; }
 .bell-row { display: flex; align-items: center; }
-.top .bell .bell-menu .bell-row > button:first-child { flex: 1; min-width: 0; display: grid; gap: 1px; justify-items: start; height: auto; padding: 6px 8px; border: 0; border-radius: 6px; background: none; box-shadow: none; text-align: left; line-height: 1.35; }
-.top .bell .bell-menu .bell-row > button:first-child:hover { background: var(--soft); }
-.top .bell .bell-menu .bell-row small { color: var(--muted); font-size: calc(11px * var(--ts)); }
-.top .bell .bell-menu .bell-x { flex: none; min-width: 24px; height: 24px; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); opacity: 0; }
+:is(.top .bell-menu, .inbox) .bell-row > button:first-child { flex: 1; min-width: 0; display: grid; gap: 1px; justify-items: start; height: auto; padding: 6px 8px; border: 0; border-radius: 6px; background: none; box-shadow: none; text-align: left; line-height: 1.35; }
+:is(.top .bell-menu, .inbox) .bell-row > button:first-child:hover { background: var(--soft); }
+:is(.top .bell-menu, .inbox) .bell-row small { color: var(--muted); font-size: calc(11px * var(--ts)); }
+:is(.top .bell-menu, .inbox) .bell-x { flex: none; min-width: 24px; height: 24px; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); opacity: 0; }
 .bell-row:hover .bell-x, .bell-x:focus-visible { opacity: 1; }
-.top .bell .bell-menu > .bell-clear { justify-content: center; color: var(--muted); }
+:is(.top .bell-menu, .inbox) > .bell-clear { justify-content: center; color: var(--muted); }
 .bell-empty { margin: 4px 8px 8px; white-space: normal; }
 
 /* Settings → Files in reading order: its steps, dragged into another order */
@@ -2037,3 +2038,6 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
    cross-fade, it just is the new one. */
 ::view-transition-group(*) { animation-duration: var(--move); animation-timing-function: var(--ease); }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+.inbox-notify { margin: 0 0 12px; } .inbox-updates { display: grid; gap: 2px; margin-bottom: 16px; } /* the inbox page's header switch and its Updates */
+.top .inbox-updates > .bell-act, .glass .top .inbox-updates > .bell-act:not(.primary), .inbox-updates > .bell-act { justify-content: flex-start; display: flex; width: 100%; height: auto; padding: 6px 8px; border: 0; border-radius: 6px; background: none; box-shadow: none; text-align: left; font-weight: 400; color: var(--muted); } .inbox-updates > .bell-act:hover { background: var(--soft); color: var(--fg); } /* Clear all, as a menu row */
+.inbox-btn > .bell-menu > a.bell-act { display: block; padding: 6px 8px; border-radius: 6px; color: var(--accent); } .inbox-btn > .bell-menu > a.bell-act:hover { background: var(--soft); }

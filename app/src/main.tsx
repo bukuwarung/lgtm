@@ -27,7 +27,7 @@ import { FindBar } from './find.tsx';
 import { Settings, THEMES, useTheme } from './settings.tsx';
 import { History } from './history.tsx';
 import { PersonPage, toPerson } from './person.tsx';
-import { Inbox } from './inbox.tsx';
+import { Inbox, Updates, useNotices } from './inbox.tsx';
 import { DemoPage } from './demos.tsx';
 import { CODE_DEFAULT, TEXT_DEFAULT, saveTheme, setTrial, useCodeLook, useTrial } from './look.ts';
 import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
@@ -306,83 +306,33 @@ const stuckTip = (mine: QueueItem[]) => {
 const standing = (i: QueueItem) =>
   i.isDraft ? 'draft' : readyToMerge(i) ? 'ready to merge' : stuck(i).join(', ') || (i.reviewDecision === 'APPROVED' ? 'approved' : 'waiting for review'); // To fix's reasons, as the list
 
-// The bell: what lgtm would have notified me about and I haven't acted on yet (opened its PR, or dismissed), newest
-// first, its count on the bell; and the switch for desktop notifications.
-function BellMenu() {
-  const [open, setOpen] = useState(false);
-  const [err, setErr] = useState('');
-  const [notify, toggleNotify] = useStoredFlag('notifyRequests', true);
-  const [list, setList] = useState(notices);
+// The inbox button: the page on a click; its updates in a quick look on a right-click (a row opens its PR).
+function InboxButton({ on, replies }: { on: boolean; replies: number }) {
+  const updates = useNotices().length;
+  const [peek, setPeek] = useState(false);
+  useDismiss(peek, () => setPeek(false), '.inbox-btn');
   useEffect(() => {
-    const h = () => setList(notices());
-    addEventListener('lgtm:notices', h);
-    addEventListener('storage', h);
-    return () => (removeEventListener('lgtm:notices', h), removeEventListener('storage', h));
+    const away = () => setPeek(false); // a page opened (a row, a link, the keys): the quick look goes
+    addEventListener('hashchange', away);
+    return () => removeEventListener('hashchange', away);
   }, []);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: Event) => !(e.target as Element).closest?.('.bell') && setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    addEventListener('pointerdown', away);
-    addEventListener('keydown', esc);
-    return () => (removeEventListener('pointerdown', away), removeEventListener('keydown', esc));
-  }, [open]);
-  const go = (n: Notice) => {
-    const [repo, num] = n.pr.split('#');
-    location.hash = `/${repo}/pull/${num}`; // opening it clears what it said (the route effect)
-    setOpen(false);
-  };
+  const n = replies + updates;
   return (
-    <span class="bell">
-      <button type="button" title={list.length ? `${list.length} new` : 'Notifications'} aria-haspopup="menu" aria-expanded={open} class={open ? 'on' : ''} onClick={() => setOpen(!open)}>
-        <Octicon name={notify ? 'bell' : 'bell-slash'} />
-        {list.length > 0 && <span class="nav-count">{list.length}</span>}
-      </button>
-      {open && (
-        <div class="account-menu bell-menu" role="menu">
-          <div class="bell-notify">
-            <Octicon name={notify ? 'bell' : 'bell-slash'} />
-            <span>
-              Desktop notifications
-              <small>New review requests, and what you pick in Settings</small>
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={notify}
-              aria-label="Desktop notifications"
-              class="switch"
-              onClick={async () => {
-                setErr('');
-                if (!notify && !(await askNotifications())) return setErr(isDesktop ? 'Notifications are off for LGTM in System Settings → Notifications' : 'Notifications are blocked for this page in your browser settings');
-                toggleNotify();
-              }}
-            />
-          </div>
-          {err && <p class="note">{err}</p>}
-          <hr />
-          {list.length ? (
-            <>
-              {list.map((n) => (
-                <div class="bell-row">
-                  <button role="menuitem" onClick={() => go(n)} title={`Open ${n.pr}`}>
-                    <span class="bell-title">
-                      <b>{n.what}</b> · {n.title}
-                    </span>
-                    <small>{repoLabel(n.pr.split('#')[0])}#{n.pr.split('#')[1]} · <Time at={n.at} /></small>
-                  </button>
-                  <button class="bell-x" title="Dismiss" aria-label="Dismiss" onClick={() => { const gone = dropNotices((x) => x.id === n.id); offerUndo('Dismissed', () => putBackNotices(gone)); }}>
-                    <Octicon name="x" />
-                  </button>
-                </div>
-              ))}
-              <button role="menuitem" class="bell-act bell-clear" onClick={() => { const gone = dropNotices(() => true); offerUndo(`Cleared ${gone.length}`, () => putBackNotices(gone)); }}>
-                Clear all
-              </button>
-            </>
-          ) : (
-            <p class="note bell-empty">Nothing new.</p>
-          )}
+    <span class="inbox-btn">
+      <a
+        href="#/inbox"
+        class={`nav-btn nav-inbox${on ? ' on' : ''}`}
+        title={`Inbox: ${[updates && `${updates} update${updates === 1 ? '' : 's'}`, replies && `${replies} waiting on your reply`].filter(Boolean).join(', ') || 'nothing new'}. Right-click for a quick look at the updates`}
+        aria-label={`Inbox${n ? `: ${n} new` : ''}`}
+        onContextMenu={(e) => (e.preventDefault(), setPeek(!peek))}
+      >
+        <Octicon name="inbox" />
+        {n > 0 && <span class="nav-count">{n}</span>}
+      </a>
+      {peek && (
+        <div class="account-menu bell-menu" role="menu" onKeyDown={(e) => e.key === 'Escape' && setPeek(false)}>
+          <Updates onGo={() => setPeek(false)} />
+          <a class="bell-act" href="#/inbox" role="menuitem" onClick={() => setPeek(false)}>{replies ? `${replies} waiting on your reply · open the inbox` : 'Open the inbox'}</a>
         </div>
       )}
     </span>
@@ -963,20 +913,11 @@ function App() {
           </>
         ) : (<>
         <button class="prs-btn" title={`Show / hide the ${T.PR} list`} onClick={togglePRs}><Octicon name="three-bars" /></button>
-        {/* The inbox: threads and mentions waiting on my reply (the count is the list's open PRs; it also covers merged ones). */}
-        <a
-          href="#/inbox"
-          class={`nav-btn nav-inbox${route === '#/inbox' ? ' on' : ''}`}
-          title={`Threads and mentions waiting on your reply (in open ${T.PRs}, and ones merged lately)`}
-          aria-label={`Inbox${replies ? `: ${replies} waiting on your reply` : ''}`}
-        >
-          <Octicon name="inbox" />
-          {replies > 0 && <span class="nav-count">{replies}</span>}
-        </a>
+        {/* The inbox: updates (once the bell's) and the threads and mentions waiting on my reply; its count, both. A
+            right-click: the updates in a quick look, without leaving the page. */}
+        <InboxButton on={route === '#/inbox'} replies={replies} />
         <a href="#/settings" class={route === '#/settings' ? 'nav-btn on' : 'nav-btn'} title="Settings (⌘,)" aria-label="Settings"><Octicon name="gear" /></a>
-        <div class="top-actions" data-tauri-drag-region>
-          <BellMenu />
-        </div>
+
         <span class="spacer" data-tauri-drag-region />
         {/* Back and forward beside the search box, as a browser has them by its address bar. */}
         <span class="nav-go" data-tauri-drag-region>
