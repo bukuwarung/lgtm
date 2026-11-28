@@ -1989,6 +1989,22 @@ async function fetchLinked(repo: string, n: number): Promise<{ issues: LinkedIss
   return { issues, prs: [...prs.values()] };
 }
 
+// Where the PR runs: its head commit's deployments, the latest per environment, with its status's link (GitHub's
+// environment_url, what its "View deployment" opens) or its log. GitHub only: GitLab's environments are their own thing.
+export type Deployment = { env: string; state: string; url: string; log: string };
+export async function prDeployments(repo: string, sha: string): Promise<Deployment[]> {
+  if (isLab(repo) || !sha) return [];
+  const latest = new Map<string, any>();
+  for (const d of (await json(`/repos/${repo}/deployments?sha=${sha}&per_page=20`)) as any[]) if (!latest.has(d.environment)) latest.set(d.environment, d); // newest first
+  const out = await Promise.all(
+    [...latest.values()].map(async (d) => {
+      const s = ((await json(`/repos/${repo}/deployments/${d.id}/statuses?per_page=1`).catch(() => [])) as any[])[0];
+      return s ? { env: d.environment as string, state: s.state as string, url: (s.environment_url || '') as string, log: (s.log_url || s.target_url || '') as string } : null;
+    }),
+  );
+  return out.filter((x): x is Deployment => !!x && x.state !== 'inactive');
+}
+
 // A new issue on the PR's repo (a comment turned into one: GitHub's "Reference in new issue"): its link.
 export const createIssue = async (repo: string, title: string, body: string): Promise<{ url: string; ref: string }> =>
   isLab(repo) ? lab.createLabIssue(repo, title, body) : json(`/repos/${repo}/issues`, { method: 'POST', body: JSON.stringify({ title, body }) }).then((i: any) => ({ url: i.html_url, ref: `#${i.number}` }));

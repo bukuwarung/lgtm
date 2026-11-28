@@ -16,7 +16,7 @@ import {
   getChecks, baseChecks, onBaseOf, getStatus, requiredChecks, neverRan, getCompare, requestReview, unrequestReview, ownersToAsk, siteBusy, signRelativeImages, signRepoImages, suggestReviewers, whoWrote, type ReviewerPick, unnamedGroup, getBlobInfo, getConversation, slackRecipients, getEmojis, getFiles, getMyLastReview, getPR, getRaw, listDir, getDownloadUrl, getStack, getThreads, getViewed, getViewer,
   isStalePush, awaitsMe, commitSuggestions, getBuildRoots, getHead, getActivity, editPosted, deletePosted, getPushPoints, prCommits, revertCommit, loadPR, updatePR, type PushPoint, markReady, type LoadedPR, markBots, renderGfm, reply, resolveThread, setViewed, submitReview, suggestionOf, type Suggestion,
   discardReview, deleteReviewComment, editReviewComment, getPendingReview, type PendingReview, type Check, type PRFile, type StackLayer, type ConversationItem, type Draft, type PR, type ReviewEvent, type Thread,
-  ticketPRs, linkedIssues, type LinkedIssue, createIssue, prProjects, addToProject, setProjectStatus, type ProjectInfo, suggestionHeadline, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
+  ticketPRs, linkedIssues, prDeployments, type Deployment, type LinkedIssue, createIssue, prProjects, addToProject, setProjectStatus, type ProjectInfo, suggestionHeadline, earlierVerdicts, agentSays, repeatedFindings, type Repeat, type TicketPR, blobWebUrl, parsePrUrl, prWebUrl, site, isLab, numRef, revertPR, revertOf, revertGaps, revertedBy, prRights, reopenPR, convertToDraft, closeWithReason, restoreBranch, deleteBranch, type PrRights, postAgentFindings, updateBranchAndWait, searchBranches, changeBase, takeReview, fixedIn, myOwnedFiles, type Fix, type Comment as GhComment } from './github.ts';
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc, toggleTask } from './markdown.ts';
@@ -1064,6 +1064,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
     return conflicts ? 'it has conflicts' : asked.length ? `${asked.join(', ')} requested changes` : never.length ? `required checks never ran (${never.join(', ')})` : '';
   }, [mayMerge, conflicts, required, conversation, checks, me]);
   const [basePick, setBasePick] = useState(false); // Change base…: its dialog open
+  // Its deployments (a preview, staging): a pill each, opening it running (or its log, failed).
+  const [deploys, setDeploys] = useState<Deployment[]>([]);
+  useEffect(() => void (data ? prDeployments(repo, data.pr.head.sha).then(setDeploys, () => setDeploys([])) : setDeploys([])), [repo, n, data?.pr.head.sha]);
   // A comment's New issue or ticket… (its dialog).
   const [prDialog, setPrDialog] = useState<{ text: string; url: string } | null>(null);
   useEffect(() => {
@@ -2789,6 +2792,15 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             )}
             {/* What needs you, or blocks the merge */}
             {waitingOnMe > 0 && <span class="pill p-reply"><Tg i="reply" n={waitingOnMe} t="awaiting your reply" /></span>}
+            {deploys.map((d) =>
+              d.state === 'success' && d.url ? (
+                <a class="pill p-ok" href={d.url} target="_blank" rel="noopener" title={`Deployed to ${d.env}: open it (${d.url})`}><Tg i="deploy" t={`view ${d.env}`} /></a>
+              ) : ['failure', 'error'].includes(d.state) ? (
+                <a class="pill p-bad" href={d.log || undefined} target="_blank" rel="noopener" title={`Deploying to ${d.env} failed${d.log ? ': its log' : ''}`}><Tg i="deploy" t={`${d.env} deploy failed`} /></a>
+              ) : ['queued', 'pending', 'in_progress'].includes(d.state) ? (
+                <span class="pill" title={`Deploying to ${d.env}`}><Tg i="deploy" t={`deploying to ${d.env}`} /></span>
+              ) : null,
+            )}
             {status?.mergeStateStatus === 'DIRTY' && <ConflictPill repo={repo} pr={pr} canFix={pr.user.login === me || !!rights?.push} />}
             {failingChecks > 0 && (
               <PillMenu cls="p-bad" label={<Tg i="ci" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">

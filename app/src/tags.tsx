@@ -61,6 +61,7 @@ const ICONS: Record<string, string> = {
   mention: 'mention',
   ws: 'eye/',
   view: 'eye',
+  deploy: 'link-external',
   history: 'history',
   commit: 'git-commit',
   aging: 'hourglass',
