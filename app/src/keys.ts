@@ -21,7 +21,7 @@ export const ACTIONS = [
   ['width', 'At a reading width, or the full window', '='],
   ['merge', words('Open / close the merge box (your PRs)'), 'm'],
   ['stack', "Open / close the stack's overview", 's'],
-  ['githubDev', 'Open the file in view on github.dev', '.'],
+  ['githubDev', 'Open the file in view on github.dev, on the PR\'s branch', '.'],
   ['agents', 'Open / close the Agents menu (coding agents)', 'a'],
   ['docCode', 'Jump between the specs (Markdown) and the code', 'g'],
   ['usages', 'Where the function or class under the mouse is used', 'u'],

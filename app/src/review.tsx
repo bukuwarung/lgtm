@@ -2499,7 +2499,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         if (!sec) return;
         const row = [...sec.querySelectorAll<HTMLElement>('tr.ln:not(.d)')].find((r) => r.getBoundingClientRect().top >= top);
         const line = Number([...(row?.querySelectorAll('td.num') ?? [])].at(-1)?.textContent) || undefined; // the new number
-        void openExternal(githubDev(headRepo, pr.head.sha, sec.id.slice(2), line));
+        void openExternal(githubDev(headRepo, devRef(pr), sec.id.slice(2), line));
       },
     };
     function go(i: number) {
@@ -3478,18 +3478,31 @@ function DiffMode({ rich, set }: { rich: boolean; set: (rich: boolean) => void }
   );
 }
 
-// A file on github.dev (VS Code in the browser, with the whole repo) at the PR's commit; the . key too. GitLab's own
-// is its Web IDE.
-const githubDev = (headRepo: string, sha: string, path: string, line?: number) =>
+// A file on github.dev (VS Code in the browser, with the whole repo); the . key too. GitLab's own is its Web IDE. On an
+// open PR, at its branch, so what you edit there commits to the PR; a right-click opens it at the commit reviewed (and a
+// closed PR's, whose branch may be gone, always is).
+const enc = (p: string) => p.split('/').map(encodeURIComponent).join('/');
+const githubDev = (headRepo: string, ref: string, path: string, line?: number) =>
   isLab(headRepo)
-    ? `https://${headRepo.slice(0, headRepo.indexOf('/'))}/-/ide/project/${headRepo.slice(headRepo.indexOf('/') + 1)}/edit/${sha}/-/${path.split('/').map(encodeURIComponent).join('/')}`
-    : `https://github.dev/${headRepo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}${line ? `#L${line}` : ''}`;
-function OpenInEditor({ headRepo, sha, path, line }: { headRepo: string; sha: string; path: string; line?: number }) {
+    ? `https://${headRepo.slice(0, headRepo.indexOf('/'))}/-/ide/project/${headRepo.slice(headRepo.indexOf('/') + 1)}/edit/${enc(ref)}/-/${enc(path)}`
+    : `https://github.dev/${headRepo}/blob/${enc(ref)}/${enc(path)}${line ? `#L${line}` : ''}`;
+const devRef = (pr: PR) => (pr.state === 'open' ? pr.head.ref : pr.head.sha);
+function OpenInEditor({ headRepo, pr, path, line }: { headRepo: string; pr: PR; path: string; line?: number }) {
+  const where = isLab(headRepo) ? "in GitLab's Web IDE" : 'on github.dev';
+  const atCommit = (e: MouseEvent) => {
+    if (pr.state !== 'open') return;
+    e.preventDefault();
+    if (!isDesktop) return void openExternal(githubDev(headRepo, pr.head.sha, path, line));
+    void import('@tauri-apps/api/menu').then(async ({ Menu }) =>
+      (await Menu.new({ items: [{ text: `Open at Commit ${pr.head.sha.slice(0, 7)}`, action: () => void openExternal(githubDev(headRepo, pr.head.sha, path, line)) }] })).popup(),
+    );
+  };
   return (
     <button
       class="icon-btn"
-      title={`Open ${isLab(headRepo) ? "in GitLab's Web IDE" : 'on github.dev'}, at the ${pageTerm().PRs_} commit${line ? `, line ${line}` : ''}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').githubDev)}`}
-      onClick={() => openExternal(githubDev(headRepo, sha, path, line))}
+      title={`Open ${where}${pr.state === 'open' ? `, on ${pr.head.ref}: what you change there commits to it` : `, at the ${pageTerm().PRs_} commit`}${line ? `, line ${line}` : ''}${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').githubDev)}${pr.state === 'open' ? '. Right-click: at the commit you\'re reviewing' : ''}`}
+      onClick={() => openExternal(githubDev(headRepo, devRef(pr), path, line))}
+      onContextMenu={atCommit}
     >
       <Octicon name="link-external" />
     </button>
@@ -3785,7 +3798,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {canLint && <DiffMode rich={lint} set={setLint} />}
         {canPreview && <DiffMode rich={preview} set={setPreview} />}
         {!(canRich && rich) && !(canStrings && strings) && !(canLint && lint) && !(canPreview && preview) && hunks.length > 0 && <SplitToggle k={`${ctx.repo}#${ctx.pr.number}:${path}`} />}
-        {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
+        {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} pr={ctx.pr} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
         <button class="icon-btn" title={`Comment on this file${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fileComment)}`} aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>
           <Octicon name="comment" />
         </button>
