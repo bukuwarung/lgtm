@@ -4229,7 +4229,9 @@ function useTranslationNotes(file: File, ctx: Ctx, on: boolean) {
 function SplitToggle({ k }: { k: string }) {
   const [on, flip, all] = useSplit(k);
   return (
-    <button class={on ? 'icon-btn on' : 'icon-btn'} aria-pressed={on} title={`${on ? 'One column' : 'Side by side'} for this file${on !== all ? ` (the others: ${all ? 'side by side' : 'one column'})` : ''}`} aria-label="Side by side for this file" onClick={flip}>
+    // What a click makes it: side by side (columns), or one column (them turned on their side) when it's side by side
+    // already; lit while this file differs from the rest.
+    <button class={`icon-btn split-toggle${on ? ' to-one' : ''}`} aria-pressed={on !== all} title={`${on ? 'One column' : 'Side by side'} for this file${on !== all ? ` (the others: ${all ? 'side by side' : 'one column'})` : ''}`} aria-label={on ? 'One column for this file' : 'Side by side for this file'} onClick={flip}>
       <Octicon name="columns" />
     </button>
   );
