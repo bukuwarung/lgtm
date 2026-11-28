@@ -2063,3 +2063,7 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .edited-diff .add { background: var(--add); }
 .edited-diff .del { background: var(--del); }
 .edited-diff .gap { color: var(--muted); font-family: inherit; }
+/* A person's "assigned" in People, when you may unassign them: a chip whose × takes it off (as the Details chips) */
+.ix-assigned { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 18px; margin-right: 4px; padding: 0 4px 0 6px; border: 1px solid var(--border); border-radius: 10px; background: none; color: var(--muted); font-size: calc(11px * var(--ts)); font-weight: 400; }
+.ix-assigned:hover { color: var(--fg); background: var(--soft); }
+.ix-assigned svg { width: 10px; height: 10px; }
