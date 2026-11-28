@@ -45,6 +45,7 @@ export const ACTIONS = [
   ['copyCheckout', words("Copy the PR's checkout command (gh pr checkout)"), 'Y'],
   ['openDiff', words('Open the PR as a .diff'), 'T'],
   ['openPatch', words('Open the PR as a .patch'), 'x'],
+  ['fixConflicts', words("Ask a coding agent to resolve the PR's conflicts (its session, if it has one)"), 'z'],
   ['rebaseUpdate', words('Update the branch with rebase (GitHub)'), 'I'],
   ['subscribe', words("Subscribe to or unsubscribe from the PR's notifications"), 'S'],
   ['lock', words("Lock or unlock the PR's conversation"), 'O'],

@@ -27,7 +27,7 @@ import { StaleActions, MergeBox, MergedActions, mergeOnceApproved } from './merg
 import { StackNav } from './stacknav.tsx';
 import { AgentMark, BotMark, CheckMark, DECISION, Empty, errorAction, Octicon, Tg, Who, Time, Lines, num, CopyCode, Retry, ThreadCode, CodeSnippet } from './tags.tsx';
 import { ACTIONS, FIXED, hint, keyLabel, readBindings, useBindings, type Action } from './keys.ts';
-import { claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
+import { unblockPrompt, claudeContinueLink, claudeNewLink, askPrompt, ciPrompt, fixPrompt, reindent, prAskPrompt, reviewDonePrompt, commentPrompt, prPrompt } from './prompts.ts';
 import { vectorToSvg } from './vector.ts';
 import { mdStyleProps, useMdStyle } from './mdthemes.ts';
 import { fillSlack, firstParagraph, isAway, lateFor, prValues, QA_CHANNEL, slackTemplate, type SlackKind } from './slackmsg.ts';
@@ -577,6 +577,43 @@ function StateMenu({ askQa, merge, rights, ...p }: { rights: PrRights | null; dr
         </div>
       )}
     </span>
+  );
+}
+
+// The conflicts pill: a coding agent brings the base in and resolves them on the branch (as the list's "Ask its session
+// to fix it"): the PR's own session when it has one (that agent's), else a new one in the repo's folder, linked to it.
+function ConflictPill({ repo, pr, canFix }: { repo: string; pr: PR; canFix: boolean }) {
+  const { on: agents } = useAgents();
+  const [said, setSaid] = useState('');
+  const from = linkedSession(repo, pr.number);
+  const prompt = unblockPrompt(pr, [`conflicts with ${pr.base.ref}: bring ${pr.base.ref} into ${pr.head.ref} and resolve them, keeping what both sides meant`]);
+  const own = (a: AgentId) => !!from && (from.agent ?? 'claude') === a;
+  const go = async (a: AgentId) => {
+    if (own(a)) return setSaid(await backToSession(from!.id, prompt, from!.agent));
+    if (a === 'codex') return void (await openAppLink(`codex://threads/new?prompt=${encodeURIComponent(prompt)}`), setSaid('Asked in a new Codex conversation'));
+    await openAppLink(claudeNewLink(prompt, claudeFolder(repo)));
+    linkNewClaude(repo, pr.number, pr.html_url);
+    setSaid('Asked in a new Claude Code session');
+  };
+  // z: the same, with its session's agent (else the first on).
+  const pick = useRef(go);
+  pick.current = go;
+  useEffect(() => {
+    const on = () => canFix && agents.length && void pick.current(agents.find(own) ?? agents[0]);
+    addEventListener('lgtm:fix-conflicts', on);
+    return () => removeEventListener('lgtm:fix-conflicts', on);
+  }, [canFix, agents.join()]);
+  const label = <Tg i="conflict" t="conflicts" />;
+  if (!canFix || !agents.length) return <span class="pill p-bad" title={`Conflicts with ${pr.base.ref}`}>{label}</span>;
+  return (
+    <PillMenu cls="p-bad" label={label} head={((b) => `It conflicts with ${b}. Have a coding agent bring ${b} in and resolve them:`)(pr.base.ref.length > 30 ? 'its base branch' : pr.base.ref)}>
+      {agents.map((a) => (
+        <button onClick={() => void go(a)} title={own(a) ? `In this ${pageTerm().PR}'s ${a === 'codex' ? 'Codex conversation' : 'Claude Code session'}` : `In a new ${a === 'codex' ? 'Codex conversation' : 'Claude Code session'}, in the repo's folder`}>
+          <AgentMark id={a} /> <b>{own(a) ? `Ask its ${AGENTS[a].short} session` : `Ask ${AGENTS[a].name}`}</b> <small>to update the branch and resolve them</small>
+        </button>
+      ))}
+      {said && <p class="note">{said}</p>}
+    </PillMenu>
   );
 }
 
@@ -2423,6 +2460,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       commentMenu: () => void (menuUnderMouse() || dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: 'Point at a comment to hide, unhide or dismiss it', ms: 2500 } }))),
       assign: () => details('assign'),
       label: () => details('label'),
+      fixConflicts: () => (data?.pr && status?.mergeStateStatus === 'DIRTY' ? dispatchEvent(new Event('lgtm:fix-conflicts')) : setNotice({ ok: true, text: 'It has no conflicts.' })),
       milestone: () => details('milestone'),
       projects: () => (isLab(repo) ? setNotice({ ok: true, text: 'GitLab has no Projects like GitHub\'s.' }) : details('projects')),
       linkIssue: () => details('linkIssue'),
@@ -2753,7 +2791,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             )}
             {/* What needs you, or blocks the merge */}
             {waitingOnMe > 0 && <span class="pill p-reply"><Tg i="reply" n={waitingOnMe} t="awaiting your reply" /></span>}
-            {status?.mergeStateStatus === 'DIRTY' && <span class="pill p-bad"><Tg i="conflict" t="conflicts" /></span>}
+            {status?.mergeStateStatus === 'DIRTY' && <ConflictPill repo={repo} pr={pr} canFix={pr.user.login === me || !!rights?.push} />}
             {failingChecks > 0 && (
               <PillMenu cls="p-bad" label={<Tg i="ci" n={failingChecks} t={`check${failingChecks > 1 ? 's' : ''} failing`} />} head="CI checks that failed on the latest commit:">
                 {checks!.filter((c) => c.state === 'failure').map((c) => (
