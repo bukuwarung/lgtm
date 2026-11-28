@@ -193,9 +193,17 @@ function useDetailsKey(what: string, run: () => void) {
   });
 }
 
+// My Slack thread with someone about this PR (review.tsx slackThreads), by their name in People: Slack's mark.
+const SlackLink = ({ url, who }: { url?: string; who: string }) =>
+  url ? (
+    <a class="ix-slack" href={url} target="_blank" rel="noopener" title={`Your Slack thread with @${who} about this ${pageTerm().PR}`} aria-label={`Slack thread with @${who}`} onClick={(e) => e.stopPropagation()}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#E01E5A" d="M5 15a2 2 0 1 1-2-2h2v2zm1 0a2 2 0 1 1 4 0v5a2 2 0 1 1-4 0v-5z" /><path fill="#36C5F0" d="M9 5a2 2 0 1 1 2-2v2H9zm0 1a2 2 0 1 1 0 4H4a2 2 0 1 1 0-4h5z" /><path fill="#2EB67D" d="M19 9a2 2 0 1 1 2 2h-2V9zm-1 0a2 2 0 1 1-4 0V4a2 2 0 1 1 4 0v5z" /><path fill="#ECB22E" d="M15 19a2 2 0 1 1-2 2v-2h2zm0-1a2 2 0 1 1 0-4h5a2 2 0 1 1 0 4h-5z" /></svg>
+    </a>
+  ) : null;
+
 // The PR's assignees, as People's rows: each with × to unassign (when you may); adding, the picker of who may be.
 // skip: ones shown as reviewers (their row says assigned too).
-function AssigneeRows({ repo, n, canEdit, adding, onDone, skip }: { repo: string; n: number; canEdit: boolean; adding: boolean; onDone: () => void; skip: Set<string> }) {
+function AssigneeRows({ repo, n, canEdit, adding, onDone, skip, slack }: { repo: string; n: number; canEdit: boolean; adding: boolean; onDone: () => void; skip: Set<string>; slack?: Map<string, string> }) {
   const [meta, change] = usePrMeta(repo, n);
   if (!meta) return null;
   const set = (list: string[]) => change({ ...meta, assignees: list }, () => setAssignees(repo, n, meta.assignees, list));
@@ -213,7 +221,7 @@ function AssigneeRows({ repo, n, canEdit, adding, onDone, skip }: { repo: string
       {meta.assignees.filter((l) => !skip.has(l)).map((l) => (
         <div class="ix-check">
           <span class="ix-item ix-person dim-click" title={`@${l}: assigned`}>
-            <span class="ix-label"><img src={faceOf(l)} alt="" /> {shortLogin(l)} <span class="ix-meta"><Tg i="assigned" t="assigned" /></span></span>
+            <span class="ix-label"><img src={faceOf(l)} alt="" /> {shortLogin(l)} <span class="ix-meta"><Tg i="assigned" t="assigned" /></span><SlackLink url={slack?.get(l)} who={l} /></span>
           </span>
           {canEdit && <button class="ix-icon-btn ix-withdraw" title={`Unassign @${l}`} aria-label={`Unassign @${l}`} onClick={() => set(meta.assignees.filter((x) => x !== l))}><Icon name="x" /></button>}
         </div>
@@ -789,6 +797,7 @@ type IndexProps = {
   // On my own PR, with Slack: ask a reviewer there (one I have no Slack thread with about it yet); false if it failed.
   slackAsk?: (login: string) => Promise<boolean>;
   slackWith?: Set<string>; // reviewers I already have a Slack thread with about this PR
+  slackLinks?: Map<string, string>; // my Slack thread with each person about it: a Slack mark by their name (People)
   reRequest?: (login: string) => Promise<boolean>; // on my own PR: ask a reviewer who's reviewed to look again
   withdraw?: (login: string) => Promise<boolean>; // take back a review request not answered yet (asks first)
   addMe?: () => Promise<unknown>; // on someone else's PR: ask myself for a review (it joins my queue)
@@ -798,7 +807,7 @@ type IndexProps = {
 
 // The PR Shortcut Index: who reviews; the conversation (the description, comments and reviews, and review threads, by
 // how much they concern me); CI checks; the files.
-export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits, newFrom = -1, onNew, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, reRequest, withdraw, addMe, replace }: IndexProps) {
+export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits, newFrom = -1, onNew, onCommit, canLabel = false, checksErr, hidden = [], repo, pr, conversation, threads, settled = 0, settledShown, onToggleSettled, drafts, checks, onRefreshChecks, files, viewed, counts, me, ask, modules, steps, onViewed, slackAsk, slackWith, slackLinks, reRequest, withdraw, addMe, replace }: IndexProps) {
   const [byStep, toggleByStep] = useStoredFlag('ixByStep', true); // the files by reading step, else as folders
   const foldBots = useFoldBots(!!me && pr.user.login === me);
   const excerpts = useMemo(() => conversation.map((c) => oneLine(textOf(c.html))), [conversation]);
@@ -966,7 +975,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
         )}
         <div class="ix-check">
           <span class="ix-item ix-person dim-click" title={`@${pr.user.login} opened it`}>
-            <span class="ix-label"><img src={faceOf(pr.user.login)} alt="" /> {shortLogin(pr.user.login)}<BotMark login={pr.user.login} /> <span class="ix-meta"><Tg i="opened" t="opened it" /></span>{meta?.assignees.includes(pr.user.login) && <span class="ix-meta"> <Tg i="assigned" t="assigned" /></span>}</span>
+            <span class="ix-label"><img src={faceOf(pr.user.login)} alt="" /> {shortLogin(pr.user.login)}<BotMark login={pr.user.login} /> <span class="ix-meta"><Tg i="opened" t="opened it" /></span>{meta?.assignees.includes(pr.user.login) && <span class="ix-meta"> <Tg i="assigned" t="assigned" /></span>}<SlackLink url={slackLinks?.get(pr.user.login)} who={pr.user.login} /></span>
           </span>
           {canLabel && meta?.assignees.includes(pr.user.login) && (
             <button class="ix-icon-btn ix-withdraw" title={`Unassign @${pr.user.login}`} aria-label={`Unassign @${pr.user.login}`} onClick={() => changeMeta({ ...meta, assignees: meta.assignees.filter((x) => x !== pr.user.login) }, () => setAssignees(repo, pr.number, meta.assignees, meta.assignees.filter((x) => x !== pr.user.login)))}>
@@ -974,7 +983,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
             </button>
           )}
         </div>
-        <AssigneeRows repo={repo} n={pr.number} canEdit={canLabel} adding={peopleAdd === 'assign'} onDone={() => setPeopleAdd(null)} skip={new Set([pr.user.login, ...reviewers.keys()])} />
+        <AssigneeRows repo={repo} n={pr.number} canEdit={canLabel} adding={peopleAdd === 'assign'} onDone={() => setPeopleAdd(null)} skip={new Set([pr.user.login, ...reviewers.keys()])} slack={slackLinks} />
         {[...reviewers].map(([who, r]) => (
           <div class="ix-check">
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
@@ -985,6 +994,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
                 <StatusMark s={presence[who]} late={r.tone === 'WAITING' ? lateFor(presence[who]) : null} />
               </span>
             </button>
+            <SlackLink url={slackLinks?.get(who)} who={who} />
             {canLabel && meta?.assignees.includes(who) && (
               <button class="ix-icon-btn ix-withdraw" title={`Unassign @${who}`} aria-label={`Unassign @${who}`} onClick={() => changeMeta({ ...meta, assignees: meta.assignees.filter((x) => x !== who) }, () => setAssignees(repo, pr.number, meta.assignees, meta.assignees.filter((x) => x !== who)))}>
                 <Icon name="person" />

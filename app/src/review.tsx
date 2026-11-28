@@ -2577,6 +2577,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
               onViewed={markViewed}
               slackAsk={!!me && pr.user.login === me && pr.state === 'open' && slackPeople !== null ? askOnSlack : undefined}
               slackWith={new Set(slackThreads.map((t) => t.login))}
+              slackLinks={new Map(slackThreads.filter((t) => t.login !== '#qa').map((t) => [t.login, t.url]))}
               reRequest={!!me && pr.state === 'open' && (pr.user.login === me || !!rights?.label) ? reRequest : undefined}
               withdraw={(!!me && pr.user.login === me) || rights?.update ? withdraw : undefined}
               replace={!!me && pr.state === 'open' && (pr.user.login === me || !!rights?.label) ? replaceReviewer : undefined}
@@ -2695,11 +2696,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                   <Octicon name="beaker" />
                   {!!qa && qa.replies.filter((ts) => ts > qaSeenAt).length > 0 && <span class="qa-new">{qa.replies.filter((ts) => ts > qaSeenAt).length}</span>}
                 </a>
-              ) : (
-                <a class="bar-slack" href={t.url} target="_blank" rel="noopener" title={`Your Slack thread with ${t.name ? `${t.name} (@${t.login})` : `@${t.login}`} about this ${pageTerm().PR}`}>
-                  {t.image ? <img src={t.image} alt={t.name ?? t.login} /> : <Octicon name="comment" />}
-                </a>
-              ),
+              ) : null, // a person's thread: a Slack mark by their name in the index's People
             )}
             {reviewReplies && request?.where && request.url && (
               <a
