@@ -1076,6 +1076,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .diff.mini { margin-top: 4px; font-size: calc(12px * var(--cs)); }
 .diff.mini td.code { padding: 0 6px; }
 .since-sum { flex: 1 1 100%; }
+.since-sum:has(+ button) { flex-basis: auto; } /* "Show only those changes" beside it, wrapping only when short of room */
 .since-sum .link, .since-sum button.link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
 .since-state { flex: 1; }
 /* Ask Claude about a selection */
@@ -1315,7 +1316,11 @@ html.own-scrollbar::-webkit-scrollbar { display: none; }
 .pill-pop > :is(a, button):hover { background: var(--soft); }
 .pill-pop small { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: calc(11px * var(--ts)); }
 .pill-pop b { font-weight: 600; }
-.ix-rerun { margin: 0 0 0 2px; color: var(--pill-bad); }
+.ix-rerun { flex: none; margin: 0 0 0 2px; padding: 0 7px; border: 1px solid var(--border); border-radius: 10px; background: none; color: var(--muted); font-size: calc(11px * var(--ts)); font-weight: 400; line-height: 18px; }
+.ix-rerun:hover:not(:disabled) { color: var(--fg); background: var(--soft); }
+.ix-rerun.bad { color: var(--pill-bad); }
+.ix-rerun.done { color: var(--pill-ok); }
+.ix-rerun.failed { border-color: var(--pill-bad); }
 .slack-msg { display: grid; gap: 4px; max-width: 720px; margin: 10px 0 14px; font-size: calc(13px * var(--ts)); }
 .slack-msg > span { display: flex; align-items: center; gap: 6px; }
 .slack-msg textarea { font: calc(13px * var(--ts))/1.45 var(--mono); resize: vertical; }

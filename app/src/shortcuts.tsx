@@ -552,13 +552,12 @@ function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[
   };
   return (
     <button
-      class={`ix-icon-btn ix-rerun${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`}
+      class={`ix-rerun bad${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`}
       disabled={state === 'asking' || state === 'queued'}
       title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run the ${checks.length} failed GitHub Actions job${checks.length > 1 ? 's' : ''} again`}
-      aria-label="Run the failed jobs again"
       onClick={go}
     >
-      <Icon name={state === 'queued' ? 'dot-fill' : 'sync'} />
+      {state === 'asking' ? 'Re-running…' : state === 'queued' ? 'Queued' : 'Re-run failed'}
     </button>
   );
 }
@@ -573,8 +572,8 @@ function RerunAll({ repo, runs, onRefresh }: { repo: string; runs: string[]; onR
     Promise.all(runs.map((r) => rerunRun(repo, r))).then(() => (setState('queued'), setTimeout(onRefresh, 3000)), (err) => setState(`couldn't: ${err.message}`));
   };
   return (
-    <button class={`ix-icon-btn ix-rerun${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`} disabled={state === 'asking' || state === 'queued'} title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run all ${runs.length > 1 ? `${runs.length} runs'` : "the run's"} jobs again`} aria-label="Run all jobs again" onClick={go}>
-      <Icon name={state === 'queued' ? 'dot-fill' : 'sync'} />
+    <button class={`ix-rerun${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`} disabled={state === 'asking' || state === 'queued'} title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run all ${runs.length > 1 ? `${runs.length} runs'` : "the run's"} jobs again`} onClick={go}>
+      {state === 'asking' ? 'Re-running…' : state === 'queued' ? 'Queued' : 'Re-run all'}
     </button>
   );
 }

@@ -356,16 +356,16 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
                 <span class="ix-meta">{state[p.login] === 'asking' ? 'asking…' : <><Octicon name="clock" /> asked</>}</span>
               ) : (
                 !away && (p.load ? (
-                  <span class="ix-meta ix-load" title={`${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review`}><Octicon name="git-pull-request" />{p.load}</span>
+                  <span class="ix-meta ix-load" title={`${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review`}><Octicon name="git-pull-request" />{p.load} to review</span>
                 ) : (
-                  <span class="ix-meta ix-load free" title={`No open ${pageTerm().PRs} waiting on their review`}><Octicon name="git-pull-request" />0</span>
+                  <span class="ix-meta ix-load free" title={`No open ${pageTerm().PRs} waiting on their review`}><Octicon name="git-pull-request" />0 to review</span>
                 ))
               )}
               <StatusMark s={s} late={late} busy={p.busy} />
             </span>
           </button>
         ))}
-      {slackOk ? (
+      {slackOk && !!picks?.length ? (
         <label class="ix-ask-slack">
           <span>
             <input type="checkbox" checked={slack} onChange={(e) => setSlack(e.currentTarget.checked)} /> Also message them on Slack
