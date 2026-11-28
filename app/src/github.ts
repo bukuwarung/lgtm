@@ -1580,11 +1580,13 @@ export const onBaseOf = (base: Map<string, Check['state']>, c: Check) => base.ge
 // Running failed GitHub Actions jobs again: one job (and the jobs that wait on it), or every failed job of a run.
 // A GitLab manual job started.
 export const playJob = (repo: string, jobId: number) => lab.playLabJob(repo, jobId);
-export const rerunJob = async (repo: string, jobId: number) => isLab(repo) ? lab.retryLabJob(repo, jobId) : void (await ok(await gh(`/repos/${repo}/actions/jobs/${jobId}/rerun`, { method: 'POST' })));
-export const rerunFailedJobs = async (repo: string, runId: string) =>
-  isLab(repo) ? lab.retryLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, { method: 'POST' })));
+// debug: with GitHub's "Enable debug logging" (its re-run dialog's box): the runner's and steps' debug lines in the log.
+const rerunInit = (debug: boolean): RequestInit => ({ method: 'POST', ...(debug ? { body: JSON.stringify({ enable_debug_logging: true }) } : {}) });
+export const rerunJob = async (repo: string, jobId: number, debug = false) => isLab(repo) ? lab.retryLabJob(repo, jobId) : void (await ok(await gh(`/repos/${repo}/actions/jobs/${jobId}/rerun`, rerunInit(debug))));
+export const rerunFailedJobs = async (repo: string, runId: string, debug = false) =>
+  isLab(repo) ? lab.retryLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, rerunInit(debug))));
 // A whole run: every job again, or stopped while it runs (GitHub Actions; a GitLab pipeline retried or cancelled).
-export const rerunRun = async (repo: string, runId: string) => (isLab(repo) ? lab.retryLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun`, { method: 'POST' }))));
+export const rerunRun = async (repo: string, runId: string, debug = false) => (isLab(repo) ? lab.retryLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/rerun`, rerunInit(debug)))));
 export const cancelRun = async (repo: string, runId: string) => (isLab(repo) ? lab.cancelLabPipeline(repo, runId) : void (await ok(await gh(`/repos/${repo}/actions/runs/${runId}/cancel`, { method: 'POST' }))));
 // Runs on the PR's head waiting on a person (GitHub only): a first-time or fork contributor's, to approve before they
 // run; and deployments to an environment I'm a required reviewer of, to approve or reject.

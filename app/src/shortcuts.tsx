@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { hint, readBindings } from './keys.ts';
-import { ask, askText, composing, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm, shortLogin } from './platform.ts';
+import { ask, askText, composing, isDesktop, reportError, useFoldBots, usePresence, useStoredFlag, faceOf, pageTerm, shortLogin } from './platform.ts';
 import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { StatusMark } from './emojibox.tsx';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
@@ -537,24 +537,43 @@ function ReRequest({ login, again }: { login: string; again: (login: string) => 
   );
 }
 
+// A re-run's right-click: the same with debug logging (GitHub's re-run dialog's "Enable debug logging"); the menu bar's
+// Re-run Checks with Debug Logging and its key too. The browser build has no menu: it asks.
+function debugMenu(e: MouseEvent, repo: string, run: (debug: boolean) => void) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (isLab(repo)) return;
+  if (!isDesktop) return void ask('Re-run with debug logging?', 'Re-run').then((y) => y && run(true));
+  void import('@tauri-apps/api/menu').then(async ({ Menu }) => (await Menu.new({ items: [{ text: 'Re-run with Debug Logging', action: () => run(true) }] })).popup());
+}
+// The key or menu item for re-running the checks: Re-run failed when some failed, else Re-run all (the one shown).
+function useRerunKey(run: (debug: boolean) => void) {
+  useEffect(() => {
+    const on = (e: Event) => run(!!(e as CustomEvent<{ debug?: boolean }>).detail?.debug);
+    addEventListener('lgtm:rerun', on);
+    return () => removeEventListener('lgtm:rerun', on);
+  });
+}
+
 // Every failed GitHub Actions job run again, a run at a time (Jenkins and other CI aren't GitHub's to rerun).
 function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[]; onRefresh: () => void }) {
   const [state, setState] = useState<'' | 'asking' | 'queued' | string>('');
   const runs = [...new Set(checks.map(runOf))] as string[];
-  const go = (e: Event) => {
-    e.preventDefault(); // not the section's own click (fold it)
-    e.stopPropagation();
+  const run = (debug: boolean) => {
     setState('asking');
-    Promise.all(runs.map((r) => rerunFailedJobs(repo, r))).then(
+    Promise.all(runs.map((r) => rerunFailedJobs(repo, r, debug))).then(
       () => (setState('queued'), setTimeout(onRefresh, 3000)),
       (err) => setState(`couldn't: ${err.message}`),
     );
   };
+  const go = (e: Event) => (e.preventDefault(), e.stopPropagation(), run(false)); // not the section's own click (fold it)
+  useRerunKey(run);
   return (
     <button
+      onContextMenu={(e) => debugMenu(e, repo, run)}
       class={`ix-rerun bad${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`}
       disabled={state === 'asking' || state === 'queued'}
-      title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run the ${checks.length} failed GitHub Actions job${checks.length > 1 ? 's' : ''} again`}
+      title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run the ${checks.length} failed GitHub Actions job${checks.length > 1 ? 's' : ''} again (right-click: with debug logging)`}
       onClick={go}
     >
       {state === 'asking' ? 'Re-running…' : state === 'queued' ? 'Queued' : 'Re-run failed'}
@@ -565,14 +584,14 @@ function RerunFailed({ repo, checks, onRefresh }: { repo: string; checks: Check[
 // Every job of every GitHub Actions run on it again (the header's, when none failed: a flaky pass to confirm, say).
 function RerunAll({ repo, runs, onRefresh }: { repo: string; runs: string[]; onRefresh: () => void }) {
   const [state, setState] = useState<'' | 'asking' | 'queued' | string>('');
-  const go = (e: Event) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const run = (debug: boolean) => {
     setState('asking');
-    Promise.all(runs.map((r) => rerunRun(repo, r))).then(() => (setState('queued'), setTimeout(onRefresh, 3000)), (err) => setState(`couldn't: ${err.message}`));
+    Promise.all(runs.map((r) => rerunRun(repo, r, debug))).then(() => (setState('queued'), setTimeout(onRefresh, 3000)), (err) => setState(`couldn't: ${err.message}`));
   };
+  const go = (e: Event) => (e.preventDefault(), e.stopPropagation(), run(false));
+  useRerunKey(run);
   return (
-    <button class={`ix-rerun${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`} disabled={state === 'asking' || state === 'queued'} title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run all ${runs.length > 1 ? `${runs.length} runs'` : "the run's"} jobs again`} onClick={go}>
+    <button onContextMenu={(e) => debugMenu(e, repo, run)} class={`ix-rerun${state === 'asking' ? ' busy' : state === 'queued' ? ' done' : state ? ' failed' : ''}`} disabled={state === 'asking' || state === 'queued'} title={state === 'queued' ? 'Queued to run again' : state.startsWith('couldn') ? `${state}; click to try again` : `Run all ${runs.length > 1 ? `${runs.length} runs'` : "the run's"} jobs again (right-click: with debug logging)`} onClick={go}>
       {state === 'asking' ? 'Re-running…' : state === 'queued' ? 'Queued' : 'Re-run all'}
     </button>
   );
@@ -652,9 +671,9 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
   const [open, setOpen] = useState(false);
   const [rerun, setRerun] = useState<'' | 'asking' | 'queued' | string>('');
   // Run this job again (GitHub Actions only); the checks reload once it's queued.
-  const again = () => {
+  const again = (debug = false) => {
     setRerun('asking');
-    rerunJob(repo, c.jobId!).then(
+    rerunJob(repo, c.jobId!, debug).then(
       () => (setRerun('queued'), setTimeout(onRefresh, 3000)),
       (e) => setRerun(`couldn't: ${e.message}`),
     );
@@ -708,10 +727,11 @@ function CheckEntry({ c, repo, onRefresh, base }: { c: Check; repo: string; onRe
         {c.state !== 'pending' && !c.manual && c.jobId && (
           <button
             class={`ix-icon-btn${rerun === 'asking' ? ' busy' : rerun === 'queued' ? ' done' : rerun ? ' failed' : ''}`}
-            title={rerun === 'queued' ? 'Queued to run again' : rerun.startsWith('couldn') ? `${rerun}; click to try again` : 'Run this job again (and the jobs that wait on it)'}
+            title={rerun === 'queued' ? 'Queued to run again' : rerun.startsWith('couldn') ? `${rerun}; click to try again` : `Run this job again (and the jobs that wait on it)${isLab(repo) ? '' : '; right-click: with debug logging'}`}
             aria-label="Run this job again"
             disabled={rerun === 'asking' || rerun === 'queued'}
-            onClick={again}
+            onClick={() => again()}
+            onContextMenu={(e) => debugMenu(e, repo, again)}
           >
             <Icon name={rerun === 'queued' ? 'dot-fill' : 'sync'} />
           </button>

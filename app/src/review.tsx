@@ -2493,6 +2493,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       merge: () => dispatchEvent(new Event('lgtm:merge')),
       stack: () => dispatchEvent(new Event('lgtm:stack')),
       agents: () => dispatchEvent(new Event('lgtm:agents-menu')), // the PR bar's Agents (AgentsMenu)
+      rerun: () => dispatchEvent(new CustomEvent('lgtm:rerun', { detail: { debug: false } })), // the Checks section's Re-run failed or all
+      rerunDebug: () => dispatchEvent(new CustomEvent('lgtm:rerun', { detail: { debug: true } })),
       // The file in view on github.dev, at the first line showing below the bars.
       githubDev: () => {
         const sec = sections[Math.max(cur, 0)];
