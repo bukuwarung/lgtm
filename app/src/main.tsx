@@ -1022,15 +1022,7 @@ function App() {
             <Octicon name="arrow-up" /> {update}
           </a>
         )}
-        <button
-          class="help-btn"
-          title={`Keyboard shortcuts${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').help)}`}
-          aria-label="Keyboard shortcuts"
-          onClick={shortcuts}
-        >
-          <Octicon name="question" />
-        </button>
-        <ThemeToggle />
+        <DisplayMenu shortcuts={shortcuts} />
         <AccountMenu />
         </>)}
       </nav>
@@ -1350,15 +1342,58 @@ function AccountMenu() {
   );
 }
 
-// Cycles auto → light → dark; index.html applies the saved choice before first paint.
-function ThemeToggle() {
+// The top bar's Display menu: the theme (auto, light, dark; index.html applies it before first paint), on a PR how it's
+// shown (side by side, a reading width, whitespace changes: each its key, pressed for you; the index has its own
+// button), and the keyboard shortcuts.
+function DisplayMenu({ shortcuts }: { shortcuts: () => void }) {
   const [theme, setTheme] = useTheme();
-  const i = THEMES.findIndex(([t]) => t === theme);
-  const next = THEMES[(i + 1) % THEMES.length];
+  const [open, setOpen] = useState(false);
+  useDismiss(open, () => setOpen(false), '.display-menu');
+  const [view, setView] = useState<{ index: boolean; ws: boolean } | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setView((e as CustomEvent<{ index: boolean; ws: boolean } | null>).detail);
+    addEventListener('lgtm:view-state', on);
+    return () => removeEventListener('lgtm:view-state', on);
+  }, []);
+  const [split] = useStoredFlag('splitDiff', false);
+  const [centered] = useStoredFlag('centerDiff', true);
+  const bindings = readBindings(localStorage.getItem('shortcuts') ?? '{}');
+  const press = (a: Action) => ((k) => k && document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, shiftKey: k !== k.toLowerCase(), bubbles: true, cancelable: true })))(bindings[a]);
+  const i = Math.max(0, THEMES.findIndex(([t]) => t === theme));
   return (
-    <button class="theme-btn" title={`Theme: ${THEMES[i][1]} (click for ${next[1]})`} aria-label={`Theme: ${THEMES[i][1]}`} onClick={() => setTheme(next[0])}>
-      <Octicon name={THEMES[i][2]} />
-    </button>
+    <span class="agents-menu display-menu">
+      <button class="theme-btn" title={`Display: the theme (${THEMES[i][1]}), how a ${T.PR} is shown, keyboard shortcuts`} aria-label="Display" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Octicon name={THEMES[i][2]} />
+      </button>
+      {open && (
+        <div class="account-menu" role="menu" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+          <p class="menu-h">Theme</p>
+          {THEMES.map(([t, name, icon]) => (
+            <button role="menuitemradio" aria-checked={theme === t} class={theme === t ? 'on' : ''} onClick={() => setTheme(t)}>
+              <Octicon name={icon} /> {name}
+            </button>
+          ))}
+          {view && (
+            <>
+              <p class="menu-h">This {T.PR}</p>
+              {([
+                ['columns', 'Side by side', split, 'split'],
+                ['screen-normal', 'At a reading width', centered, 'width'],
+                ['eye', 'Whitespace changes', view.ws, 'whitespace'],
+              ] as const).map(([icon, label, on, a]) => (
+                <button role="menuitemcheckbox" aria-checked={on} onClick={() => press(a)}>
+                  <Octicon name={on ? 'check' : icon} /> {label} {bindings[a] && <small>{keyLabel(bindings[a])}</small>}
+                </button>
+              ))}
+            </>
+          )}
+          <p class="menu-h">Keys</p>
+          <button role="menuitem" onClick={() => (setOpen(false), shortcuts())}>
+            <Octicon name="command-palette" /> Keyboard shortcuts {bindings.help && <small>{keyLabel(bindings.help)}</small>}
+          </button>
+        </div>
+      )}
+    </span>
   );
 }
 

@@ -895,7 +895,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // pick something in it, click elsewhere or press Esc.
   const narrowIx = useMedia('(max-width: 1280px)');
   const [ixOver, setIxOver] = useState(false);
-  useDismiss(narrowIx && ixOver, () => setIxOver(false), '.side.tree, .pill-menu:has(> .view-menu)');
+  useDismiss(narrowIx && ixOver, () => setIxOver(false), '.side.tree, .bar-index');
   const [showIndex, toggleIndex] = narrowIx ? ([ixOver, () => setIxOver((o) => !o)] as const) : focus ? focusIndex : quiet ? ([peek, () => setPeek((p) => !p)] as const) : index;
   const [centered, toggleCentered] = useStoredFlag('centerDiff', true);
   const [split, toggleSplit] = useStoredFlag('splitDiff', false);
@@ -981,6 +981,9 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   const [wsHere, setWsHere] = useState<boolean | null>(null);
   const ignoreWs = wsHere ?? wsPref;
   const toggleWs = () => setWsHere(!ignoreWs);
+  // The top bar's Display menu (main.tsx) shows this page's index and whitespace as they are: told on each change.
+  useEffect(() => void dispatchEvent(new CustomEvent('lgtm:view-state', { detail: { index: showIndex, ws: !ignoreWs } })), [showIndex, ignoreWs]);
+  useEffect(() => () => void dispatchEvent(new CustomEvent('lgtm:view-state', { detail: null })), []);
   const [changedSinceVisit, setChangedSinceVisit] = useState<Set<string>>(new Set());
   const resumeAt = useRef<Visit['at']>(null);
   const visitKey = `visit:${repo}#${n}`;
@@ -2610,6 +2613,10 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       <div>
         {/* Where you are (index, stack), what it is, who it's with, then what you can do. */}
         <div class="bar">
+          {/* The index: its own button (the rest of how it's shown: the top bar's Display menu). */}
+          <button class="bar-index" title={`${showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`}${hint(bindings.index)}`} aria-label={showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`} onClick={toggleIndex}>
+            <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
+          </button>
           {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
           {/* Merged or closed: a small tag, in view as you scroll; who, when and the revert on hover, and its actions (Revert,
               Reopen, tell the review thread) in its menu. A draft: the tag alone (its banner below has Ready for review). */}
@@ -3026,19 +3033,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
-            {/* View: how it's shown (the index, side by side, its width, whitespace), each also a key. */}
-            <PillMenu cls="view-menu" label={<Tg i="view" t="view" />} head="How it's shown:">
-              {([
-                ['sidebar-expand', `The ${pageTerm().PR} index`, showIndex, toggleIndex, bindings.index],
-                ['columns', 'Side by side', split, toggleSplit, bindings.split],
-                ['screen-normal', 'At a reading width', centered, toggleCentered, bindings.width],
-                ['eye', 'Whitespace changes', !ignoreWs, toggleWs, bindings.whitespace],
-              ] as const).map(([icon, label, on, flip, key]) => (
-                <button role="menuitemcheckbox" aria-checked={on} onClick={() => flip()}>
-                  <Octicon name={on ? 'check' : icon} /> <b>{label}</b> {key && <small>{keyLabel(key)}</small>}
-                </button>
-              ))}
-            </PillMenu>
             {ignoreWs && (
               <button
                 class="pill"
