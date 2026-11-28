@@ -1363,7 +1363,7 @@ function DisplayMenu({ shortcuts }: { shortcuts: () => void }) {
   return (
     <span class="agents-menu display-menu">
       <button class="theme-btn" title={`Display: the theme (${THEMES[i][1]}), how a ${T.PR} is shown, keyboard shortcuts`} aria-label="Display" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Octicon name={THEMES[i][2]} />
+        <Octicon name="paintbrush" />
       </button>
       {open && (
         <div class="account-menu" role="menu" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
