@@ -2068,3 +2068,4 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .ix-assigned:hover { color: var(--fg); background: var(--soft); }
 .ix-assigned svg { width: 10px; height: 10px; }
 .ix-group-h { margin: 8px 12px 2px; font-size: calc(11px * var(--ts)); font-weight: 600; color: var(--muted); } /* People: the Reviewers group's heading */
+.jira-mark { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; fill: light-dark(#0052cc, #4c9aff); }

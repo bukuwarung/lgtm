@@ -4,7 +4,7 @@ import { ask, askText, composing, reportError, useFoldBots, usePresence, useStor
 import { isAway, lateFor, statusText } from './slackmsg.ts';
 import { StatusMark } from './emojibox.tsx';
 import { codeWithoutTests, inTests, moduleLabel, moduleName, stepIcon, type PlanStep, fileLabel } from './files.ts';
-import { AgentMark, BotMark, CheckMark, Octicon, Tg, Who, Lines, Retry, Fold, Time } from './tags.tsx';
+import { AgentMark, BotMark, CheckMark, JiraMark, Octicon, Tg, Who, Lines, Retry, Fold, Time } from './tags.tsx';
 import { AGENTS, useAgents, type AgentId } from './agents.ts';
 import { fileIcon, folderIcon, iconOf } from './fileicons.ts';
 import type { ComponentChildren } from 'preact';
@@ -370,7 +370,7 @@ function DetailsSec({ repo, pr, canEdit }: { repo: string; pr: PR; canEdit: bool
         <div class="ix-labels">
           {tickets.map((k) => (
             <span class="label-chip">
-              <button class="chip-btn" title={`${k}: its card above the conversation`} onClick={() => jumpTo(`ticket-${k}`)}><Octicon name="link" /> {k}</button>
+              <button class="chip-btn" title={`${k}: its card above the conversation`} onClick={() => jumpTo(`ticket-${k}`)}><JiraMark /> {k}</button>
               {canEdit && pr.title.includes(k) && <button class="label-x" aria-label={`Unlink ${k}`} title={`Unlink ${k}: out of the title`} onClick={() => void edit({ title: withoutKey(pr.title, k), body: pr.body ?? '' }, `Unlinked ${k}.`)}>×</button>}
             </span>
           ))}
