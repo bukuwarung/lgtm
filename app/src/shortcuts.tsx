@@ -914,7 +914,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
     : by('WAITING').length ? `Waiting on ${named(by('WAITING'))}`
     : by('CHANGES_REQUESTED').length ? `Waiting on ${shortLogin(pr.user.login)} for ${named(by('CHANGES_REQUESTED'))}'s changes`
     : by('APPROVED').length ? `Approved by ${named(by('APPROVED'))}`
-    : 'No reviewer yet';
+    : null;
 
   // Settings → Reviewing: sections with nothing in them left out (labels, assignees, milestone, checks, reviewers with
   // no one to ask), with one row to add a label, an assignee or a milestone (shortcuts.tsx useDetailsKey opens it).
@@ -951,6 +951,9 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
           )}
         </div>
         <AssigneeRows repo={repo} n={pr.number} canEdit={canLabel} adding={peopleAdd === 'assign'} onDone={() => setPeopleAdd(null)} skip={new Set([pr.user.login, ...reviewers.keys()])} slack={slackLinks} />
+        {/* Reviewers as a group of their own, as GitHub's sidebar has them: who opened it and who's assigned above. */}
+        <p class="ix-group-h">Reviewers</p>
+        {!reviewers.size && <p class="note ix-pad">No reviewer yet.</p>}
         {[...reviewers].map(([who, r]) => (
           <div class="ix-check">
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>

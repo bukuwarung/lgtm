@@ -358,7 +358,7 @@ function AskReviewer({ pr, repo, n, skip, slackOk, onAsked, findings = [], files
                 !away && (p.load ? (
                   <span class="ix-meta ix-load" title={`${p.load} open ${pageTerm().PR}${p.load === 1 ? '' : 's'} already waiting on their review`}><Octicon name="git-pull-request" />{p.load} to review</span>
                 ) : (
-                  <span class="ix-meta ix-load free" title={`No open ${pageTerm().PRs} waiting on their review`}><Octicon name="git-pull-request" />0 to review</span>
+                  <span class="ix-meta ix-load free" title={`No open ${pageTerm().PRs} waiting on their review`}>free</span>
                 ))
               )}
               <StatusMark s={s} late={late} busy={p.busy} />
