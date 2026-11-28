@@ -34,7 +34,7 @@ import { fillSlack, prValues, slackTemplate } from './slackmsg.ts';
 import { Resizer } from './resizer.tsx';
 import { GistPage } from './gist.tsx';
 import { ACTIONS, hint, keyLabel, menuAccel, readBindings, useBindings, type Action } from './keys.ts';
-import { movePending } from './merge.tsx';
+import { movePending, canMerge } from './merge.tsx';
 
 // A video's address GitHub signed for five minutes, signed again in the PR's repo when it runs out (platform.ts).
 setResign((src) => freshMedia(src, location.hash.match(/^#\/([\w.-]+\/[\w.-]+)\/pull\/\d+/)?.[1]));
@@ -1602,6 +1602,36 @@ async function autoMerge(i: QueueItem) {
 }
 // My held-up PR (To fix) back to the session that wrote it: what's in the way, with the details it needs (the failing
 // checks' log ends, what the reviewers asked for), left for it as "Send it your review" does, and the session opened.
+// Your PRs → Ready to merge, all of them: one confirmation naming each, then merged one after another, each the repo's
+// usual way and through GitHub's own rules (a PR that can't go now is skipped and named, the rest still go).
+function MergeAll({ items }: { items: QueueItem[] }) {
+  const [busy, setBusy] = useState('');
+  const go = async (e: Event) => {
+    e.preventDefault(), e.stopPropagation(); // not the group's fold
+    if (busy || !(await ask(`Merge these ${items.length} ${T.PRs}, each the repo's usual way? ${items.map((i) => `${repoLabel(i.repo)}${numRef(i.repo, i.number)}`).join(', ')}`, `Merge ${items.length}`))) return;
+    const failed: string[] = [];
+    for (const [k, i] of items.entries()) {
+      setBusy(`${k + 1} of ${items.length}`);
+      try {
+        const s = await getMergeState(i.repo, i.number);
+        if (!canMerge(s)) throw new Error("it can't merge now");
+        const m = s.methods[0];
+        await mergePR(s, m, s.message[m].title, s.message[m].body, false);
+      } catch (err) {
+        failed.push(`${numRef(i.repo, i.number)} (${(err as Error).message})`);
+      }
+    }
+    setBusy('');
+    dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: failed.length ? `Merged ${items.length - failed.length} of ${items.length}. Not merged: ${failed.join('; ')}` : `Merged all ${items.length}.`, ms: failed.length ? 8000 : 3000 } }));
+    dispatchEvent(new Event('lgtm:list-refresh'));
+  };
+  return (
+    <button class="g-act" disabled={!!busy} onClick={go} title={`Merge all ${items.length}, after one confirmation`}>
+      {busy ? `Merging ${busy}…` : 'Merge all'}
+    </button>
+  );
+}
+
 async function askToFix(i: QueueItem): Promise<string> {
   const l = linkedSession(i.repo, i.number)!;
   const out: string[] = [];
@@ -2309,6 +2339,7 @@ function PRList({ hidden, over, onReview, current, version, answeredTick, onItem
               <summary>
                 {kind.people ? <img class="g-face person-link" src={avatar(g)} alt="" title={`@${g}: their page`} onClick={toPerson(g)} /> : <span class="gdot" />} {label} <span class="count">{inGroup.length}</span>
                 {kind.people && isAway(presence[viewAs() ? `${g}@${viewAs()}` : g]) ? <span class="g-away" title={`${awayWhere(presence[viewAs() ? `${g}@${viewAs()}` : g])}: ${statusText(presence[viewAs() ? `${g}@${viewAs()}` : g])}`}><AwayMark s={presence[viewAs() ? `${g}@${viewAs()}` : g]} /> away</span> : null}
+                {kind === MINE && g === 'm-ready' && inGroup.length > 1 && <MergeAll items={inGroup} />}
                 {kind.note?.(g) && <span class="g-note" title={`Open ${T.PRs} asking this person, by name, for a review; how long their oldest ${T.PR} has waited for one`}>{kind.note(g)}</span>}
               </summary>
               {!!kind.asked?.(g) && (

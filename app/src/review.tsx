@@ -1727,7 +1727,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // step: what it's doing now, for the button. merge: an approval, then merged (or auto-merge) once it may be.
   // Moving on (the next PR, review mode): the next one opens at once and the review goes in the background; a failure
   // says so, with a way back to it, its comments and summary as they were (they're cleared once it's in).
-  async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void = () => {}, merge = false): Promise<boolean | 'sending'> {
+  // toSession: Finish review's "Send it to its session" (unset, from elsewhere: offered in a toast once it's in).
+  async function submit(event: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void = () => {}, merge = false, toSession?: boolean): Promise<boolean | 'sending'> {
     if (practice) return onSubmitted(event), onReviewed(null, event), true;
     // Comments still on their way into the pending review: wait for them, then go by what's here and what's there now.
     const k0 = `${repo}#${n}`;
@@ -1783,7 +1784,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       const from = linkedSession(repo, n);
       // Approved: its Codex conversation is done with, archived (Settings → Reviewing); else offered the review.
       if (event === 'APPROVE' && archiveLinked(repo, n)) {
-      } else if (from) {
+      } else if (from && toSession) {
+        step(`Sending it to its ${from.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'}…`);
+        const note = await backToSession(from.id, reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body }))), from.agent).catch((e: Error) => `Couldn't send it to its session: ${e.message}`);
+        dispatchEvent(new CustomEvent('lgtm:toast', { detail: { text: note, ms: 4000 } }));
+      } else if (from && toSession === undefined) {
         const text = reviewDonePrompt(pr, event, body, drafts.map((d) => ({ path: d.path, line: d.line, body: d.body })));
         dispatchEvent(
           new CustomEvent('lgtm:toast', {
@@ -2529,7 +2534,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
           : `${plural(c.commits, 'commit')} (${plural(c.files.length, 'file')}) landed since you opened it.`;
       }}
       seeLanded={() => (showSince(pr.head.sha), dispatchEvent(new Event('lgtm:refresh')))}
-      canMerge={mayMerge} mergeBlock={mergeBlock} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
+      session={((l) => l && (l.agent === 'codex' ? 'Codex conversation' : 'Claude Code session'))(linkedSession(repo, n)) || undefined} canMerge={mayMerge} mergeBlock={mergeBlock} inFlight={inFlight} saveAs={`summary:${repo}#${n}`} repo={repo} mentions={ctx.mentions} authored={(!!me && pr.user.login === me) || pr.state === 'closed'} stillOpen={stillOpen} unlooked={unlooked}
       unviewed={noMarks ? 0 : data.files.filter((f) => !viewed.has(f.filename)).length} viewAll={() => markViewed(data.files.map((f) => f.filename), true)} />
   );
   return (
@@ -3195,7 +3200,8 @@ type SubmitProps = {
   slackTo: string[] | null;
   threaded: string[];
   slackNote: string;
-  onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void, merge: boolean) => Promise<boolean | 'sending'>;
+  onSubmit: (e: ReviewEvent, body: string, notify: boolean, next: boolean, step: (s: string) => void, merge: boolean, toSession?: boolean) => Promise<boolean | 'sending'>;
+  session?: string; // the PR's linked agent session, by kind ("Claude Code session"): the review sent there, if wanted
   canMerge?: boolean; // I may merge it, and it's open and ready: approving can merge it too
   mergeBlock?: string; // why approving can't end in a merge now (then the option is off, saying so)
   inFlight?: boolean; // a review of it is still on its way (sent as you moved on)
@@ -3231,7 +3237,7 @@ export const defaultEvent = (pending: number, myOpenThreads: number): ReviewEven
 const slackWhy = (r: { login: string; error?: string }) =>
   /not_allowed_token_type/.test(r.error ?? '') ? `your Slack sign-in can't find people by email; map @${r.login} in Settings → Slack → People` : r.error;
 
-function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, mergeBlock = '', inFlight = false, checkLanded, seeLanded }: SubmitProps) {
+function SubmitPanel({ session, unviewed = 0, viewAll, discard, inline = false, count, myOpenThreads, mySummary, lineComments, slackTo, slackNote, threaded, onSubmit, saveAs, repo, mentions, authored, stillOpen = [], unlooked = 0, canMerge = false, mergeBlock = '', inFlight = false, checkLanded, seeLanded }: SubmitProps) {
   const [open, setOpen] = useState(false);
   useDismiss(open && !inline, () => setOpen(false), '.review-submit');
   const root = useRef<HTMLDivElement>(null);
@@ -3245,6 +3251,7 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
   const [notify, toggleNotify] = useStoredFlag('slackNotify', true);
   const [next] = useStoredFlag('nextAfterReview', true); // Settings → Reviewing
   const [mergeIt, toggleMergeIt] = useStoredFlag('mergeOnApprove', false);
+  const [toSession, toggleToSession] = useStoredFlag('reviewToSession', true); // its agent session gets what you asked (not an approval)
   const [viewRest] = useStoredFlag('viewAllOnSubmit', false); // Settings → Reviewing
   const viewing = viewRest && unviewed > 0;
   const merging = canMerge && mergeIt && !authored && !mergeBlock;
@@ -3337,7 +3344,7 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
     setBusy('Submitting…');
     setErr('');
     try {
-      const done = await onSubmit(event, body, notify, next && !authored, setBusy, merging && event === 'APPROVE');
+      const done = await onSubmit(event, body, notify, next && !authored, setBusy, merging && event === 'APPROVE', session && event !== 'APPROVE' ? toSession : undefined);
       if (done) {
         if (viewing) viewAll?.();
         setOpen(false);
@@ -3378,6 +3385,11 @@ function SubmitPanel({ unviewed = 0, viewAll, discard, inline = false, count, my
           {slackTo && slackTo.length > 0 && (
             <label>
               <input type="checkbox" checked={notify} onChange={toggleNotify} /> Message {slackTo.map((l) => '@' + l).join(', ')} on Slack
+            </label>
+          )}
+          {session && event !== 'APPROVE' && (
+            <label title={`What you asked (your summary and comments) goes to the ${session} that wrote it, to fix and push: then it's back for your review`}>
+              <input type="checkbox" checked={toSession} onChange={toggleToSession} /> Then send it to its {session}
             </label>
           )}
           {canMerge && !authored && event === 'APPROVE' && (

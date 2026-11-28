@@ -1050,6 +1050,7 @@ mark.wd-add { background: var(--wd-add); color: inherit; padding: 0; }
 .set-replies td:first-child { width: 120px; }
 .set-replies input, .set-replies textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .g-note { margin-left: 6px; font-weight: 400; color: var(--muted); }
+.pr-group > summary .g-act { margin-left: 6px; padding: 0 8px; height: auto; font-size: calc(11px * var(--ts)); font-weight: 500; line-height: 18px; } /* a group's own action (main.tsx MergeAll) */
 /* The app: the top bar is the title bar, with room for the traffic lights on the left. */
 .desktop .top { padding-left: 84px; -webkit-user-select: none; user-select: none; }
 /* The app's own controls and labels don't highlight when a drag crosses them, as in a Mac app; what you read (the diff,
