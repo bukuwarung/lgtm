@@ -2722,10 +2722,11 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
             {(mine || !!rights?.merge) && pr.state === 'open' && !pr.draft && <MergeBox hidden={!mine && !(pr.user.type === 'Bot' || bots.has(pr.user.login))} repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
             {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
             {prDialog && <NewIssueDialog repo={repo} keys={jiraKeys(pr.title, pr.head.ref)} {...prDialog} onClose={() => setPrDialog(null)} />}
+            {submitPanel()}
+            {/* ⋯ last, as an overflow menu sits */}
             {((p) => (askQa || p || (rights && (rights.close || rights.updateBranch || rights.restoreMerged))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} merge={p} />)(
               !mine && !!rights?.merge && pr.state === 'open' && !pr.draft && !(pr.user.type === 'Bot' || bots.has(pr.user.login)),
             )}
-            {submitPanel()}
           </div>
         </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
