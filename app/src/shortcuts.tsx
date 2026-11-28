@@ -784,7 +784,7 @@ type IndexProps = {
   viewed: Set<string>;
   counts: Counts;
   me: string;
-  commits?: PushPoint[]; // the PR's commits, oldest first: the Files section's commit icon lists them there
+  commits?: PushPoint[]; // the PR's commits, oldest first: the Files section's picker of which changes it shows
   atCommit?: string | null; // the last one on show on its own (review.tsx toSha), if any
   fromCommit?: string | null; // the first one on show (a run of them, shift-clicked), else atCommit
   readCommits?: Set<string>; // the ones I've opened
@@ -922,18 +922,11 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
   const [hideEmpty] = useStoredFlag('hideEmptyIndex', true);
   const [meta, changeMeta] = usePrMeta(repo, pr.number);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
-  // The Files section's commits (with more than one): its header's commit icon lists them in place of the files (open,
-  // in sight), as a commit picked on its own does.
-  const [commitsOn, setCommitsOn] = useState(false);
+  // The Files section's commit picker (with more than one): open or not.
+  const [pickOpen, setPickOpen] = useState(false);
   const many = commits.length > 1;
-  const listCommits = many && commitsOn;
-  useEffect(() => void (atCommit && setCommitsOn(true)), [atCommit]); // a commit on its own: its list in sight
   const onShow = [commits.findIndex((c) => c.sha === (fromCommit ?? atCommit)), commits.findIndex((c) => c.sha === atCommit)];
   const unread = commits.filter((c) => !readCommits?.has(c.sha)).length;
-  useEffect(() => {
-    const sec = commitsOn && document.querySelector<HTMLDetailsElement>('#ix-changes');
-    if (sec) (sec.open = true), sec.scrollIntoView({ block: 'nearest' });
-  }, [commitsOn]);
   return (
     <div class="index">
       <Section
@@ -1113,18 +1106,12 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
       {/* The PR's changes: its files, or (with more than one) its commits, the header's icons switching between them. */}
       <Section
         id="ix-changes"
-        title={listCommits ? 'Commits' : 'Files'}
-        count={listCommits ? commits.length : files.length}
+        title="Files"
+        count={files.length}
         extra={
           <>
-            {many && (
-              <span class="ix-head-acts">
-                <HeadBtn icon="file" label="Its files" on={!listCommits} run={(sec) => (openSec(sec), setCommitsOn(false))} />
-                <HeadBtn icon="git-commit" on={listCommits} label={`${commits.length} commits${unread && unread < commits.length ? `, ${unread} not opened yet` : ''}: one on its own${hint(keys.prevCommit)}${hint(keys.nextCommit)}`} run={(sec) => (openSec(sec), setCommitsOn(true))} />
-              </span>
-            )}
-            {!listCommits && viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}
-            {!listCommits && steps && (
+            {viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}
+            {steps && (
               <button
                 class="link ix-files-view"
                 title={byStep ? 'Show the files as folders' : "Show the files by reading step, in the diff's order"}
@@ -1136,8 +1123,19 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
           </>
         }
       >
-        {listCommits ? (
-          <>
+        {/* Which changes the files are of, as GitHub's "Changes from all commits ▾": all, one commit or a run (shift-click);
+            the list opens here, the files staying in sight under it. */}
+        {many && (
+          <details class="ix-commit-pick" open={pickOpen} onToggle={(e) => setPickOpen(e.currentTarget.open)}>
+            <summary class="ix-item" title={`Show the changes of one commit, or a run of them (shift-click)${hint(keys.prevCommit)}${hint(keys.nextCommit)}`}>
+              <span class="ix-label">
+                <Octicon name="git-commit" />{' '}
+                {!atCommit ? <>All changes <span class="ix-meta">{commits.length} commits{unread && unread < commits.length ? `, ${unread} not opened` : ''}</span></>
+                  : onShow[0] !== onShow[1] ? <>{onShow[1] - onShow[0] + 1} commits <span class="ix-meta">{commits[onShow[0]]?.sha.slice(0, 7)}…{commits[onShow[1]]?.sha.slice(0, 7)}</span></>
+                  : <><code>{atCommit.slice(0, 7)}</code> {commits[onShow[1]]?.label}</>}
+              </span>
+            </summary>
+            <div class="ix-commit-list" onClick={(e) => (e.target as Element).closest('button') && !(e as MouseEvent).shiftKey && setPickOpen(false)}>
           {newFrom >= 0 && <Entry label={<><Octicon name="history" /> {commits.length - newFrom} new since your last review, together{hint(keys.newCommits)}</>} onClick={() => onNew?.()} />}
           {unread > 0 && unread < commits.length && <p class="note ix-pad">{unread} not opened yet: Next{hint(keys.nextCommit)} goes to them.</p>}
           {atCommit && <Entry label="All changes" onClick={() => onCommit?.(null)} />}
@@ -1146,8 +1144,10 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
               <span class="ix-label"><Octicon name="git-commit" /> <code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
             </button>
           ))}
-          </>
-        ) : steps && byStep ? (
+            </div>
+          </details>
+        )}
+        {steps && byStep ? (
           <StepGroups files={files} steps={steps} counts={counts} viewed={viewed} onViewed={onViewed} />
         ) : modules?.size ? (
           <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} onViewed={onViewed} />
