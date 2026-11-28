@@ -550,7 +550,6 @@ const Thread = ({ who, when, html }: { who: string; when: string; html: string }
 
 const Bar = ({ linked, menu }: { linked?: boolean; menu?: boolean }) => (
   <div class="bar">
-    <button class="bar-index">⇤</button>
     <h1>
       <a><span class="pr-num">#412</span> Retry failed payments with backoff</a>
     </h1>
@@ -851,7 +850,6 @@ SCENES.reviewmode = {
         <button>Exit <kbd>Esc</kbd></button>
       </nav>
       <div class="bar">
-        <button class="bar-index">⇤</button>
         <h1>
           <a><span class="pr-num">#412</span> Retry failed payments with backoff</a>
         </h1>

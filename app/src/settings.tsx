@@ -573,8 +573,8 @@ export function Settings() {
         <Flag k="collapseDeleted" initial={true} label="Collapse deleted files to one row" demo />
         <Flag k="dimMoved" initial={true} label="Fold code moved without changes" hint="One row naming where it went." demo />
         <Flag k="symbolNav" initial={true} label="Where functions and classes are used" hint={`Point at a function or class the ${T.PR} declares (it underlines), then click it, or press ${keyLabel(readBindings(localStorage.getItem('shortcuts') ?? '{}').usages)}: every line naming it, and a repo search.`} demo />
-        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Also a button beside the ${T.PRs_} title.`}  demo />
-        <Flag k="centerDiff" initial={true} label={`Centre the ${T.PR} at a comfortable width`} hint={`Also a button beside the ${T.PRs_} title.`} demo>
+        <Flag k="splitDiff" initial={false} label="Show diffs side by side" hint={`Also in the View menu under the ${T.PRs_} title.`}  demo />
+        <Flag k="centerDiff" initial={true} label={`Centre the ${T.PR} at a comfortable width`} hint={`Also in the View menu under the ${T.PRs_} title.`} demo>
           <CenterCols />
           <Flag k="centerFit" initial={false} label="Fill the window when a line in the diff is wider than that"  demo />
         </Flag>

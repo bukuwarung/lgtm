@@ -60,6 +60,7 @@ const ICONS: Record<string, string> = {
   pushed: 'repo-push',
   mention: 'mention',
   ws: 'eye/',
+  view: 'eye',
   history: 'history',
   commit: 'git-commit',
   aging: 'hourglass',

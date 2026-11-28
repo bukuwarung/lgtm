@@ -895,7 +895,7 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   // pick something in it, click elsewhere or press Esc.
   const narrowIx = useMedia('(max-width: 1280px)');
   const [ixOver, setIxOver] = useState(false);
-  useDismiss(narrowIx && ixOver, () => setIxOver(false), '.side.tree, .bar-index');
+  useDismiss(narrowIx && ixOver, () => setIxOver(false), '.side.tree, .pill-menu:has(> .view-menu)');
   const [showIndex, toggleIndex] = narrowIx ? ([ixOver, () => setIxOver((o) => !o)] as const) : focus ? focusIndex : quiet ? ([peek, () => setPeek((p) => !p)] as const) : index;
   const [centered, toggleCentered] = useStoredFlag('centerDiff', true);
   const [split, toggleSplit] = useStoredFlag('splitDiff', false);
@@ -2436,6 +2436,8 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       fileComment: () => path && ctx.setTarget({ path, side: 'RIGHT' }),
       comment: () => commentAtCurrentLine() || scrollBy({ top: innerHeight * 0.85 }), // nothing to comment on: scroll as Space would
       index: toggleIndex,
+      split: toggleSplit,
+      width: toggleCentered,
       whitespace: toggleWs,
       finish: () => dispatchEvent(new Event('lgtm:finish')), // SubmitPanel opens, its summary box focused
       approve: () => dispatchEvent(new CustomEvent('lgtm:finish', { detail: { event: 'APPROVE' } })), // …with Approve picked
@@ -2605,15 +2607,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
       <div>
         {/* Where you are (index, stack), what it is, who it's with, then what you can do. */}
         <div class="bar">
-          <button class="bar-index" title={`${showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`}${hint(bindings.index)}`} aria-label={showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`} onClick={toggleIndex}>
-            <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
-          </button>
-          <button class="bar-index" title={split ? 'One column: removed lines above added ones' : 'Side by side: old and new next to each other'} aria-label="Side by side" aria-pressed={split} onClick={toggleSplit}>
-            <Octicon name="columns" />
-          </button>
-          <button class="bar-index" title={centered ? 'Fill the window' : 'Centre at a comfortable width'} aria-label={centered ? 'Fill the window' : 'Centre at a comfortable width'} onClick={toggleCentered}>
-            <Octicon name={centered ? 'screen-full' : 'screen-normal'} />
-          </button>
           {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
           {/* Merged or closed: a small tag, in view as you scroll; who, when and the revert on hover, and its actions (Revert,
               Reopen, tell the review thread) in its menu. A draft: the tag alone (its banner below has Ready for review). */}
@@ -3021,7 +3014,19 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
                 ))}
               </PillMenu>
             )}
-            {/* View */}
+            {/* View: how it's shown (the index, side by side, its width, whitespace), each also a key. */}
+            <PillMenu cls="view-menu" label={<Tg i="view" t="view" />} head="How it's shown:">
+              {([
+                ['sidebar-expand', `The ${pageTerm().PR} index`, showIndex, toggleIndex, bindings.index],
+                ['columns', 'Side by side', split, toggleSplit, bindings.split],
+                ['screen-normal', 'At a reading width', centered, toggleCentered, bindings.width],
+                ['eye', 'Whitespace changes', !ignoreWs, toggleWs, bindings.whitespace],
+              ] as const).map(([icon, label, on, flip, key]) => (
+                <button role="menuitemcheckbox" aria-checked={on} onClick={() => flip()}>
+                  <Octicon name={on ? 'check' : icon} /> <b>{label}</b> {key && <small>{keyLabel(key)}</small>}
+                </button>
+              ))}
+            </PillMenu>
             {ignoreWs && (
               <button
                 class="pill"
@@ -4448,7 +4453,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   const [renderEdited] = useStoredFlag('renderEditedDocs', true); // edited ones too, changed parts marked
   const [renderLine] = useStoredFlag('renderLineComments', true); // runs of // comments too
   const [renderSingle] = useStoredFlag('renderSingleComments', true); // and lone comment lines
-  // Side by side (Settings → Diff, or the bar's button): old and new as two halves of each row, removed lines paired
+  // Side by side (Settings → Diff, or the View menu under the title): old and new as two halves of each row, removed lines paired
   // with the added ones after them. Doc comments stay as source there.
   const [split] = useStoredFlag('splitDiff', false);
   // Each run of changed lines (removed and added, in any order) drawn at its first line, its removed and added lines
