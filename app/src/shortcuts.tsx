@@ -784,7 +784,7 @@ type IndexProps = {
   viewed: Set<string>;
   counts: Counts;
   me: string;
-  commits?: PushPoint[]; // the PR's commits, oldest first: the top row's button lists them in a section
+  commits?: PushPoint[]; // the PR's commits, oldest first: the Files section's commit icon lists them there
   atCommit?: string | null; // the last one on show on its own (review.tsx toSha), if any
   fromCommit?: string | null; // the first one on show (a run of them, shift-clicked), else atCommit
   readCommits?: Set<string>; // the ones I've opened
@@ -922,39 +922,20 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
   const [hideEmpty] = useStoredFlag('hideEmptyIndex', true);
   const [meta, changeMeta] = usePrMeta(repo, pr.number);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
-  // The index's top row: each commit on its own (the commits pill's list), and a label, an assignee or a milestone to
-  // add while their sections are hidden empty: what, its icon, its words, its key.
-  const adds: [string, string, string, string][] = []; // adding people: People's header; labels and the rest: Details'
-  // The commits section: the top row's button shows it (open, in sight); it stays while one is on its own.
+  // The Files section's commits (with more than one): its header's commit icon lists them in place of the files (open,
+  // in sight), as a commit picked on its own does.
   const [commitsOn, setCommitsOn] = useState(false);
   const many = commits.length > 1;
-  const listCommits = many && (commitsOn || !!atCommit);
+  const listCommits = many && commitsOn;
+  useEffect(() => void (atCommit && setCommitsOn(true)), [atCommit]); // a commit on its own: its list in sight
   const onShow = [commits.findIndex((c) => c.sha === (fromCommit ?? atCommit)), commits.findIndex((c) => c.sha === atCommit)];
   const unread = commits.filter((c) => !readCommits?.has(c.sha)).length;
   useEffect(() => {
-    const sec = commitsOn && document.querySelector<HTMLDetailsElement>('#ix-commits');
+    const sec = commitsOn && document.querySelector<HTMLDetailsElement>('#ix-changes');
     if (sec) (sec.open = true), sec.scrollIntoView({ block: 'nearest' });
   }, [commitsOn]);
   return (
     <div class="index">
-      {(many || adds.length > 0) && (
-        <div class="ix-top">
-          {many && <HeadBtn icon="git-commit" on={listCommits} label={`${commits.length} commits${unread && unread < commits.length ? `, ${unread} not opened yet` : ''}: one on its own${hint(keys.prevCommit)}${hint(keys.nextCommit)}, shift-click for a run of them`} run={() => setCommitsOn(!listCommits)} />}
-          {adds.map(([what, icon, label, key]) => <HeadBtn icon={icon} label={`${label}${hint(key)}`} run={() => dispatchEvent(new CustomEvent('lgtm:details', { detail: what }))} />)}
-        </div>
-      )}
-      {listCommits && (
-        <Section id="ix-commits" title="Commits" count={commits.length}>
-          {newFrom >= 0 && <Entry label={<><Octicon name="history" /> {commits.length - newFrom} new since your last review, together{hint(keys.newCommits)}</>} onClick={() => onNew?.()} />}
-          {unread > 0 && unread < commits.length && <p class="note ix-pad">{unread} not opened yet: Next{hint(keys.nextCommit)} goes to them.</p>}
-          {atCommit && <Entry label="All changes" onClick={() => onCommit?.(null)} />}
-          {commits.map((c, i) => (
-            <button class={`ix-item ix-commit${readCommits?.has(c.sha) ? ' read' : ''}${newFrom >= 0 && i >= newFrom ? ' new' : ''}`} aria-current={(i >= onShow[0] && i <= onShow[1]) || undefined} onClick={(e) => onCommit?.(c.sha, e.shiftKey)} title={`${c.sha}\n${c.label}${readCommits?.has(c.sha) ? '\nOpened' : ''}\nShift-click: from the commit on show to this one`}>
-              <span class="ix-label"><Octicon name="git-commit" /> <code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
-            </button>
-          ))}
-        </Section>
-      )}
       <Section
         id="ix-reviewers"
         title="People"
@@ -1129,13 +1110,21 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
       </Section>
       )}
 
+      {/* The PR's changes: its files, or (with more than one) its commits, the header's icons switching between them. */}
       <Section
-        title="Files"
-        count={files.length}
+        id="ix-changes"
+        title={listCommits ? 'Commits' : 'Files'}
+        count={listCommits ? commits.length : files.length}
         extra={
           <>
-            {viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}
-            {steps && (
+            {many && (
+              <span class="ix-head-acts">
+                <HeadBtn icon="file" label="Its files" on={!listCommits} run={(sec) => (openSec(sec), setCommitsOn(false))} />
+                <HeadBtn icon="git-commit" on={listCommits} label={`${commits.length} commits${unread && unread < commits.length ? `, ${unread} not opened yet` : ''}: one on its own${hint(keys.prevCommit)}${hint(keys.nextCommit)}`} run={(sec) => (openSec(sec), setCommitsOn(true))} />
+              </span>
+            )}
+            {!listCommits && viewedCount > 0 && <span class="ck-sum">{viewedCount}/{files.length} viewed</span>}
+            {!listCommits && steps && (
               <button
                 class="link ix-files-view"
                 title={byStep ? 'Show the files as folders' : "Show the files by reading step, in the diff's order"}
@@ -1147,7 +1136,18 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
           </>
         }
       >
-        {steps && byStep ? (
+        {listCommits ? (
+          <>
+          {newFrom >= 0 && <Entry label={<><Octicon name="history" /> {commits.length - newFrom} new since your last review, together{hint(keys.newCommits)}</>} onClick={() => onNew?.()} />}
+          {unread > 0 && unread < commits.length && <p class="note ix-pad">{unread} not opened yet: Next{hint(keys.nextCommit)} goes to them.</p>}
+          {atCommit && <Entry label="All changes" onClick={() => onCommit?.(null)} />}
+          {commits.map((c, i) => (
+            <button class={`ix-item ix-commit${readCommits?.has(c.sha) ? ' read' : ''}${newFrom >= 0 && i >= newFrom ? ' new' : ''}`} aria-current={(i >= onShow[0] && i <= onShow[1]) || undefined} onClick={(e) => onCommit?.(c.sha, e.shiftKey)} title={`${c.sha}\n${c.label}${readCommits?.has(c.sha) ? '\nOpened' : ''}\nShift-click: from the commit on show to this one`}>
+              <span class="ix-label"><Octicon name="git-commit" /> <code>{c.sha.slice(0, 7)}</code> {c.label} <span class="ix-meta"><Time at={c.at} /></span></span>
+            </button>
+          ))}
+          </>
+        ) : steps && byStep ? (
           <StepGroups files={files} steps={steps} counts={counts} viewed={viewed} onViewed={onViewed} />
         ) : modules?.size ? (
           <ModuleTrees files={files} modules={modules} counts={counts} viewed={viewed} onViewed={onViewed} />
