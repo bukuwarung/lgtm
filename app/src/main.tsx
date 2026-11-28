@@ -9,7 +9,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { type AgentRun, agentBusy, agentLimit, agentReviewOn, agentRunOf, retryAgent, reviewWithAgents } from './agentreview.ts';
 import { labMe } from './gitlab.ts';
-import { labelRank, priorityRank, freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, getNeverRan, getThreads, getConversation, jobLog, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, type Pushed } from './github.ts';
+import { labelRank, priorityRank, freshMedia, isOffline, offlineWhere, pingGitHub, closedPRs, forgetAllThreadStatus, getMentionStatus, getStaleBranches, deleteBranch, type StaleBranch, readyToMerge, stuck, neverRan, requiredChecks, getNeverRan, getThreads, getConversation, jobLog, setPractice, disableAutoMerge, getChecks, slackRecipients, getMergeState, markReady, mergePR, requestReview, getEstimates, rerunFailedJobs, runOf, updateBranch, renderGfm, getReviewQueue, getOwnedDrafts, getTeamPRs, getAskedPRs, getTeams, getThreadStatus, getViewer, getGitHubViewer, site, isLab, loadPR, queueNews, withAnswered, type Answered, type ReviewEvent, loadToken, type LoadedPR, type QueueItem, prWebUrl, parsePrUrl, gistId, numRef, revertsOfMine, slackAskedPRs, searchRepos, getMyTeams, myActiveRepos, browseOrgs, orgMembers, takeReview, getPushedBranches, pushedNow, prTemplate, createPR, hovercard, type Pushed } from './github.ts';
 import { Editor } from './editor.tsx';
 import { NoticeText, Review, swapReviewer } from './review.tsx';
 import { jumpTo, showReviewers } from './shortcuts.tsx';
@@ -60,6 +60,27 @@ addEventListener(
   },
   true,
 );
+
+// A link to a GitHub PR or issue in what people wrote shows what it is on hover, as GitHub's hovercards do (github.ts
+// hovercard), as its tooltip. Asked once the pointer rests on it, and kept for the session.
+const cards = new Map<string, Promise<string>>();
+let resting = 0;
+addEventListener('mouseover', (e) => {
+  clearTimeout(resting);
+  const a = (e.target as Element | null)?.closest?.('.md a[href], .slack-preview a[href]') as HTMLAnchorElement | null;
+  const m = a?.href.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/(?:pull|issues)\/(\d+)(?:[/?#].*)?$/);
+  if (!a || !m || a.dataset.card) return;
+  resting = window.setTimeout(() => {
+    const key = `${m[1]}#${m[2]}`;
+    if (!cards.has(key)) cards.set(key, hovercard(m[1], +m[2]).catch(() => ''));
+    cards.get(key)!.then((text) => {
+      if (!text || !a.isConnected) return;
+      a.dataset.card = '1';
+      a.title = text;
+      if (a.matches(':hover')) a.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); // tooltip.ts shows it
+    });
+  }, 250);
+});
 
 // Jira keys in anything rendered (descriptions, comments, threads, the inbox) link to the ticket, once Jira is set up
 // (jira.ts linkJiraKeys): what's there now, and what's drawn later.

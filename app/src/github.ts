@@ -1,5 +1,5 @@
 import { setEmojiMap } from './emoji.ts';
-import { agentsAsBots, DAY, kept, knowFace, markAppAccounts, reportUsage, fetchJobLog, fetchToken, knownRepos, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
+import { ago, agentsAsBots, DAY, kept, knowFace, markAppAccounts, reportUsage, fetchJobLog, fetchToken, knownRepos, personKey, readBots, recordError, repliesDone, viewAs } from './platform.ts';
 import { tally, touchedLines, whoKnows, type Knows } from './expertise.ts';
 import { estimate, type BuildRoot, type Estimate } from './files.ts';
 import * as lab from './gitlab.ts';
@@ -330,7 +330,7 @@ async function graphqlFull(query: string, variables: Record<string, unknown>, ag
   // Logged, but not what lgtm expects and handles: a bot or app asked for as a user (it comes back empty), a scope
   // gh's login lacks (lookups go without it; Settings → Accounts names it), and GitHub's subscriptions service down
   // (getPrMeta goes on without the bell's state).
-  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Subscriptions are currently unavailable|^Could not resolve to a User with the login|^Could not resolve head ref|^Could not resolve to a node with the global id/.test(e.message)); // …a node: a comment deleted since the page loaded (getSocial reloads the talk) // a pushed branch since deleted (getPushedBranches)
+  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Subscriptions are currently unavailable|^Could not resolve to a User with the login|^Could not resolve to an issue or pull request|^Could not resolve head ref|^Could not resolve to a node with the global id/.test(e.message)); // …a node: a comment deleted since the page loaded (getSocial reloads the talk) // a pushed branch since deleted (getPushedBranches)
   if (real?.length) recordError(`GitHub GraphQL: ${real[0].message}`);
   return r;
 }
@@ -1762,6 +1762,29 @@ const allEmojis = () =>
     }));
 export const getEmojis = (repo?: string) =>
   (repo ? isLab(repo) : !!viewAs()) ? allEmojis().then((m) => Object.fromEntries(Object.entries(m).filter(([, url]) => url.includes('/unicode/')))) : allEmojis();
+
+// What a linked PR or issue is, for hovering its link (main.tsx), as GitHub's hovercards show it: its state, repo and
+// number, title, who opened it when, and its labels. '' when it can't be seen.
+export async function hovercard(repo: string, n: number): Promise<string> {
+  const [o, r] = repo.split('/');
+  const f = 'title state author{login} createdAt labels(first:6){nodes{name}}';
+  const d = await graphql(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issueOrPullRequest(number:$n){__typename ...on PullRequest{${f} isDraft} ...on Issue{${f} stateReason}}}}`, { o, r, n }, true);
+  const x = d?.repository?.issueOrPullRequest;
+  if (!x) return '';
+  const state = x.__typename === 'PullRequest'
+    ? `${x.state === 'OPEN' ? (x.isDraft ? 'Draft' : 'Open') : x.state === 'MERGED' ? 'Merged' : 'Closed'} pull request`
+    : x.state === 'OPEN' ? 'Open issue' : `Issue closed as ${x.stateReason === 'NOT_PLANNED' ? 'not planned' : x.stateReason === 'DUPLICATE' ? 'duplicate' : 'completed'}`;
+  const labels = (x.labels?.nodes ?? []).map((l: { name: string }) => l.name);
+  return [`${state} · ${repo} #${n}`, x.title, `by ${x.author?.login ?? 'ghost'}, ${ago(x.createdAt)}`, labels.length ? labels.join(', ') : ''].filter(Boolean).join('\n');
+}
+
+// Saved replies kept on the site (GitHub: Settings → Saved replies; GitLab: comment templates), offered after lgtm's
+// own in comment boxes. Read only: GitHub has no API to change them. GitHub's need gh's read:user scope; without
+// it, none. Kept an hour, so one added there shows here soon.
+export const siteReplies = (repo: string): Promise<{ title: string; body: string }[]> =>
+  isLab(repo)
+    ? lab.savedReplies(repo)
+    : kept('ghReplies', () => graphqlFull('query{viewer{savedReplies(first:100){nodes{title body}}}}', {}).then((r) => r.data?.viewer?.savedReplies?.nodes ?? []), DAY / 24);
 
 // Markdown rendered by GitHub itself (emoji, @mentions, #refs, mermaid…), exactly as the comment will look there.
 export async function renderGfm(text: string, repo: string): Promise<string> {

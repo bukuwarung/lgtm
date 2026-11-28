@@ -145,6 +145,13 @@ const mutate = async (host: string, query: string, variables: Record<string, unk
   return d;
 };
 
+// My comment templates on this GitLab (github.ts siteReplies).
+export const savedReplies = (repo: string) => {
+  const host = repo.slice(0, repo.indexOf('/'));
+  return kept(`labReplies:${host}`, () => gql(host, '{currentUser{savedReplies(first:100){nodes{name content}}}}').then((d) =>
+    ((d?.currentUser?.savedReplies?.nodes ?? []) as { name: string; content: string }[]).map((x) => ({ title: x.name, body: x.content }))), 3_600_000);
+};
+
 // Whether a GitLab answers again (the offline bar).
 export const pingLab = (host: string) => lab(host, '/version').then(() => true, () => false);
 

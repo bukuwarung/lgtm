@@ -1454,7 +1454,7 @@ function SavedReplies() {
   return (
     <div class="set-group">
       <h4>Saved replies</h4>
-      <p class="note">Type / and the name at the start of a line in a comment box.</p>
+      <p class="note">Type / and the name at the start of a line in a comment box. Your saved replies on {T.site} are offered too, after these.</p>
       <table class="set-replies">
         <tbody>
           {list.map((r, i) => (

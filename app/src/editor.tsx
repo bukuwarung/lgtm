@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getEmojis, renderGfm } from './github.ts';
+import { getEmojis, renderGfm, siteReplies } from './github.ts';
 import { renderMermaid } from './mermaid.ts';
 import { composing, own, recentPRs, useSavedReplies } from './platform.ts';
 import { isLab } from './github.ts';
@@ -61,7 +61,10 @@ export function Editor(p: Props) {
   const [preview, setPreview] = useState<{ html?: string; error?: string } | null>(null);
   const [emojis, setEmojis] = useState<Record<string, string>>({});
   const [ac, setAc] = useState<Completion | null>(null);
-  const [replies] = useSavedReplies();
+  const [mine] = useSavedReplies();
+  const [onSite, setOnSite] = useState<{ title: string; body: string }[]>([]);
+  useEffect(() => void siteReplies(p.repo).then(setOnSite, () => {}), [p.repo]);
+  const replies = [...mine, ...onSite.filter((s) => !mine.some((r) => r.title === s.title))]; // lgtm's own first, the site's after
   const [fixing, setFixing] = useState<AgentId | 'pick' | null>(null);
   const [fixErr, setFixErr] = useState('');
 
