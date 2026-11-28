@@ -777,6 +777,8 @@ details.comment.bot[open] .bot-excerpt { display: none; }
 .new-pkgs { font-family: var(--mono); }
 .bar-group { flex: none; display: flex; align-items: center; gap: 6px; }
 .bar-index { padding: 3px 8px; }
+html.ix-right .bar > .bar-index { order: 99; } /* the index on the right (Settings → Diff): its button at the header's right end, its icon facing that way */
+html.ix-right .bar > .bar-index svg { transform: scaleX(-1); }
 .bar-slack { flex: none; display: inline-flex; align-items: center; font-size: calc(12px * var(--ts)); }
 .bar-slack img { width: 22px; height: 22px; border-radius: 6px; }
 /* Kotlin, IntelliJ-style: types plain, annotations yellow, properties/constants purple, named args blue */
