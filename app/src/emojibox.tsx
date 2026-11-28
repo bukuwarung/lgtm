@@ -124,7 +124,7 @@ export function StatusMark({ s, late, busy }: { s?: SlackPresence | null; late?:
     <span class={away ? 'ix-mark away' : 'ix-mark'} title={words}>
       {away && !img && <span title="Away">🌴</span>}
       {img ? <Emoji src={img} /> : !away && s?.text && <span class="ix-mark-text">{s.text}</span>}
-      {late && !away && '🌙'}
+      {late && !away && <>🌙 <span class="ix-mark-text">{late.replace(/ for them$/, '')}</span></>}
     </span>
   );
 }
