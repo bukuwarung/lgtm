@@ -941,12 +941,6 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
         )}
       >
         {waitingOn && <p class="ix-waiting-on">{waitingOn}</p>}
-        {(peopleAdd === 'ask' || !reviewers.size) && ask && (
-          <>
-            {pr.draft && <p class="note ix-pad">Asking someone marks it ready for review.</p>}
-            {ask}
-          </>
-        )}
         <div class="ix-check">
           <span class="ix-item ix-person dim-click" title={`@${pr.user.login} opened it`}>
             <span class="ix-label"><img src={faceOf(pr.user.login)} alt="" /> {shortLogin(pr.user.login)}<BotMark login={pr.user.login} /> <span class="ix-meta"><Tg i="opened" t="opened it" /></span>{meta?.assignees.includes(pr.user.login) && <span class="ix-meta"> <Tg i="assigned" t="assigned" /></span>}<SlackLink url={slackLinks?.get(pr.user.login)} who={pr.user.login} /></span>
@@ -984,6 +978,13 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
             {slackAsk && !who.startsWith('team ') && !slackWith?.has(who) && <SlackAsk login={who} ask={slackAsk} />}
           </div>
         ))}
+        {/* Asking someone: after the people it's with (its header's icon, or by itself while no one reviews). */}
+        {(peopleAdd === 'ask' || !reviewers.size) && ask && (
+          <>
+            {pr.draft && <p class="note ix-pad">Asking someone marks it ready for review.</p>}
+            {ask}
+          </>
+        )}
         {addMe && !reviewers.has(me) && <AddMe add={addMe} teams={(pr.requested_teams ?? []).map((t) => t.slug)} />}
       </Section>
 
