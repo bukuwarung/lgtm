@@ -327,9 +327,10 @@ async function graphqlFull(query: string, variables: Record<string, unknown>, ag
     delete r.data?.rateLimit;
   }
   if (r.errors?.some((e: GqlError) => e.type === 'RATE_LIMITED') && (limited.get('graphql')?.until ?? 0) > Date.now()) throw limitError('graphql');
-  // Logged, but not what lgtm expects and handles: a bot or app asked for as a user (it comes back empty), and a scope
-  // gh's login lacks (lookups go without it; Settings → Accounts names it).
-  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Could not resolve to a User with the login|^Could not resolve head ref|^Could not resolve to a node with the global id/.test(e.message)); // …a node: a comment deleted since the page loaded (getSocial reloads the talk) // a pushed branch since deleted (getPushedBranches)
+  // Logged, but not what lgtm expects and handles: a bot or app asked for as a user (it comes back empty), a scope
+  // gh's login lacks (lookups go without it; Settings → Accounts names it), and GitHub's subscriptions service down
+  // (getPrMeta goes on without the bell's state).
+  const real = r.errors?.filter((e: GqlError) => e.type !== 'INSUFFICIENT_SCOPES' && !/^Subscriptions are currently unavailable|^Could not resolve to a User with the login|^Could not resolve head ref|^Could not resolve to a node with the global id/.test(e.message)); // …a node: a comment deleted since the page loaded (getSocial reloads the talk) // a pushed branch since deleted (getPushedBranches)
   if (real?.length) recordError(`GitHub GraphQL: ${real[0].message}`);
   return r;
 }
@@ -1885,7 +1886,8 @@ export function requiredChecks(repo: string, branch: string): Promise<string[]> 
   if (!requiredSeen.has(key))
     requiredSeen.set(key, kept(`required:${key}`, () => Promise.all([
       json(`/repos/${repo}/branches/${b}`).then((x) => (x.protection?.required_status_checks?.contexts ?? []) as string[], () => []),
-      json(`/repos/${repo}/rules/branches/${b}`).then((rules: any[]) => rules.filter((r) => r.type === 'required_status_checks').flatMap((r) => (r.parameters?.required_status_checks ?? []).map((c: { context: string }) => c.context)) as string[], () => []),
+      // A plan without branch rules (a free private repo) answers 403: no rules, not an error worth logging.
+      gh(`/repos/${repo}/rules/branches/${b}`).then((r) => (r.ok ? r.json() : []), () => []).then((rules: any[]) => rules.filter((r) => r.type === 'required_status_checks').flatMap((r) => (r.parameters?.required_status_checks ?? []).map((c: { context: string }) => c.context)) as string[], () => []),
     ]).then(([a, c]) => [...new Set([...a, ...c])])));
   return requiredSeen.get(key)!;
 }
@@ -2605,16 +2607,20 @@ export type PrMeta = { labels: Label[]; assignees: string[]; milestone: Mileston
 export async function getPrMeta(repo: string, n: number): Promise<PrMeta> {
   if (isLab(repo)) return lab.getLabMeta(repo, n);
   const [o, r] = repo.split('/');
-  const p = (await graphql(
+  // GitHub's subscriptions service down ("Subscriptions are currently unavailable"): the rest still comes, the bell's
+  // state unknown (null) rather than the whole of it failing.
+  const res = await graphqlFull(
     `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){locked viewerCanSubscribe viewerSubscription labels(first:100){nodes{name color description}} assignees(first:50){nodes{login}} milestone{number title dueOn}}}}`,
     { o, r, n },
-  )).repository.pullRequest;
+  );
+  const p = res.data?.repository?.pullRequest;
+  if (!p || res.errors?.some((e) => !/subscription/i.test(e.message))) throw new Error(res.errors?.[0]?.message ?? `Couldn't read ${repo}#${n}`);
   return {
     labels: p.labels.nodes.map((l: any) => ({ name: l.name, color: l.color, description: l.description ?? undefined })),
     assignees: p.assignees.nodes.map((a: any) => a.login),
     milestone: p.milestone ? { id: p.milestone.number, title: p.milestone.title, due: p.milestone.dueOn } : null,
     locked: !!p.locked,
-    subscribed: p.viewerCanSubscribe ? p.viewerSubscription === 'SUBSCRIBED' : null,
+    subscribed: p.viewerCanSubscribe && p.viewerSubscription ? p.viewerSubscription === 'SUBSCRIBED' : null,
   };
 }
 export const getMilestones = async (repo: string): Promise<Milestone[]> =>

@@ -3784,6 +3784,7 @@ function FileSection({ file, ctx, threads, drafts, viewed, collapsed, onToggleVi
         {canStrings && <DiffMode rich={strings} set={setStrings} />}
         {canLint && <DiffMode rich={lint} set={setLint} />}
         {canPreview && <DiffMode rich={preview} set={setPreview} />}
+        {!(canRich && rich) && !(canStrings && strings) && !(canLint && lint) && !(canPreview && preview) && hunks.length > 0 && <SplitToggle k={`${ctx.repo}#${ctx.pr.number}:${path}`} />}
         {file.status !== 'removed' && <OpenInEditor headRepo={ctx.headRepo} sha={ctx.pr.head.sha} path={path} line={hunks.flatMap((h) => h.lines).find((l) => l.kind === '+')?.new ?? hunks[0]?.lines.find((l) => l.new)?.new} />}
         <button class="icon-btn" title={`Comment on this file${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').fileComment)}`} aria-label="Comment on this file" onClick={() => ctx.setTarget({ path, side: 'RIGHT' })}>
           <Octicon name="comment" />
@@ -4224,6 +4225,32 @@ function useTranslationNotes(file: File, ctx: Ctx, on: boolean) {
   return notes;
 }
 
+// The file header's side-by-side button: this file only (the Display menu sets it for all).
+function SplitToggle({ k }: { k: string }) {
+  const [on, flip, all] = useSplit(k);
+  return (
+    <button class={on ? 'icon-btn on' : 'icon-btn'} aria-pressed={on} title={`${on ? 'One column' : 'Side by side'} for this file${on !== all ? ` (the others: ${all ? 'side by side' : 'one column'})` : ''}`} aria-label="Side by side for this file" onClick={flip}>
+      <Octicon name="columns" />
+    </button>
+  );
+}
+
+// Side by side for one file, not the others (its header's columns button): this session's choice per PR file, over
+// the Display menu's for all. Unset: as all are.
+const splitHere = new Map<string, boolean>();
+function useSplit(key: string) {
+  const [all] = useStoredFlag('splitDiff', false);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = () => tick((x) => x + 1);
+    addEventListener('lgtm:split-file', t);
+    return () => removeEventListener('lgtm:split-file', t);
+  }, []);
+  const on = splitHere.get(key) ?? all;
+  const flip = () => (on === !all ? splitHere.delete(key) : splitHere.set(key, !on), dispatchEvent(new Event('lgtm:split-file')));
+  return [on, flip, all] as const;
+}
+
 function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyProps) {
   // One line number, the new one (a removed line shows its old one, faint), unless Settings asks for both.
   const [oldNums] = useStoredFlag('oldLineNumbers', false);
@@ -4459,7 +4486,7 @@ function DiffView({ file, hunks, ctx, threads, drafts, strings, sxNotes }: BodyP
   const [renderSingle] = useStoredFlag('renderSingleComments', true); // and lone comment lines
   // Side by side (Settings → Diff, or the View menu under the title): old and new as two halves of each row, removed lines paired
   // with the added ones after them. Doc comments stay as source there.
-  const [split] = useStoredFlag('splitDiff', false);
+  const [split] = useSplit(`${ctx.repo}#${ctx.pr.number}:${file.filename}`); // this file's, or all files'
   // Each run of changed lines (removed and added, in any order) drawn at its first line, its removed and added lines
   // lined up by likeness (diff.ts alignChanges); an unchanged line, a row of its own.
   const splitPlan = useMemo(
