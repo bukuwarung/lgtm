@@ -949,7 +949,7 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
       <Section
         id="ix-reviewers"
         title="People"
-        count={1 + (meta?.assignees.filter((a) => !reviewers.has(a)).length ?? 0) + reviewers.size}
+        count={1 + (meta?.assignees.filter((a) => a !== pr.user.login && !reviewers.has(a)).length ?? 0) + reviewers.size}
         extra={(canLabel || ask) && (
           <span class="ix-head-acts">
             {canLabel && <HeadBtn icon="person" label={`Assign someone${hint(keys.assign)}`} on={peopleAdd === 'assign'} run={(sec) => (openSec(sec), setPeopleAdd((a) => (a === 'assign' ? null : 'assign')))} />}
@@ -966,10 +966,15 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
         )}
         <div class="ix-check">
           <span class="ix-item ix-person dim-click" title={`@${pr.user.login} opened it`}>
-            <span class="ix-label"><img src={faceOf(pr.user.login)} alt="" /> {shortLogin(pr.user.login)}<BotMark login={pr.user.login} /> <span class="ix-meta"><Tg i="opened" t="opened it" /></span></span>
+            <span class="ix-label"><img src={faceOf(pr.user.login)} alt="" /> {shortLogin(pr.user.login)}<BotMark login={pr.user.login} /> <span class="ix-meta"><Tg i="opened" t="opened it" /></span>{meta?.assignees.includes(pr.user.login) && <span class="ix-meta"> <Tg i="assigned" t="assigned" /></span>}</span>
           </span>
+          {canLabel && meta?.assignees.includes(pr.user.login) && (
+            <button class="ix-icon-btn ix-withdraw" title={`Unassign @${pr.user.login}`} aria-label={`Unassign @${pr.user.login}`} onClick={() => changeMeta({ ...meta, assignees: meta.assignees.filter((x) => x !== pr.user.login) }, () => setAssignees(repo, pr.number, meta.assignees, meta.assignees.filter((x) => x !== pr.user.login)))}>
+              <Icon name="person" />
+            </button>
+          )}
         </div>
-        <AssigneeRows repo={repo} n={pr.number} canEdit={canLabel} adding={peopleAdd === 'assign'} onDone={() => setPeopleAdd(null)} skip={new Set(reviewers.keys())} />
+        <AssigneeRows repo={repo} n={pr.number} canEdit={canLabel} adding={peopleAdd === 'assign'} onDone={() => setPeopleAdd(null)} skip={new Set([pr.user.login, ...reviewers.keys()])} />
         {[...reviewers].map(([who, r]) => (
           <div class="ix-check">
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
