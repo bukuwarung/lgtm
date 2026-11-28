@@ -1,9 +1,10 @@
 // Reactions on a PR, its comments and reviews, and hiding comments or dismissing reviews, as GitHub's page has them
 // (GitHub only: lgtm.getSocial). Loaded in one ask for the page (loadSocial), kept here, and drawn where each one is.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { dismissReview, getPageSocial, hideComment, isLab, setReaction, type Social } from './github.ts';
+import { dismissReview, editHistory, getPageSocial, hideComment, isLab, setReaction, type Edit, type Social } from './github.ts';
+import { lineDiff } from './diff.ts';
 import { ask, askText, shownName } from './platform.ts';
-import { Octicon } from './tags.tsx';
+import { Octicon, Time } from './tags.tsx';
 
 export const EMOJI: [string, string][] = [['THUMBS_UP', '👍'], ['THUMBS_DOWN', '👎'], ['LAUGH', '😄'], ['HOORAY', '🎉'], ['CONFUSED', '😕'], ['HEART', '❤️'], ['ROCKET', '🚀'], ['EYES', '👀']];
 const HIDE: [string, string][] = [['OFF_TOPIC', 'Off-topic'], ['OUTDATED', 'Outdated'], ['RESOLVED', 'Resolved'], ['DUPLICATE', 'Duplicate'], ['LOW_QUALITY', 'Low quality'], ['SPAM', 'Spam'], ['ABUSE', 'Abuse']];
@@ -94,6 +95,54 @@ export function ReactPick({ id }: { id?: string }) {
   );
 }
 
+// What an edit changed, with two lines around each change; the unchanged runs between, one line saying how many.
+const folded = (d: { kind: string; text: string }[] | null) =>
+  d?.flatMap((l, k) => {
+    const near = d.slice(Math.max(0, k - 2), k + 3).some((x) => x.kind !== ' ');
+    if (near) return [l];
+    const prevNear = k > 0 && d.slice(Math.max(0, k - 3), k + 2).some((x) => x.kind !== ' ');
+    if (k > 0 && !prevNear) return []; // inside a run already counted
+    let n = 0;
+    while (k + n < d.length && !d.slice(Math.max(0, k + n - 2), k + n + 3).some((x) => x.kind !== ' ')) n++;
+    return [{ kind: 'gap', text: `⋯ ${n} unchanged line${n === 1 ? '' : 's'}` }];
+  }) ?? null;
+
+// "edited", as GitHub marks a changed comment: a click lists its versions (who, when), and one picked shows what that
+// edit changed, line by line against the version before it.
+export function Edited({ id }: { id?: string }) {
+  const s = useSocial()(id);
+  const [list, setList] = useState<{ edits: Edit[]; total: number } | string | null>(null);
+  const [pick, setPick] = useState(0);
+  if (!id || !s?.edited) return null;
+  const load = (open: boolean) => open && list == null && editHistory(id).then((h) => (setList(h), setPick(0)), (e) => setList(`Couldn't load the history: ${e.message}`));
+  const edits = typeof list === 'object' && list ? list.edits : [];
+  const e = edits[pick];
+  const before = edits.slice(pick + 1).find((x) => x.text != null)?.text;
+  const lines = e?.text == null ? null : e.created || before == null ? e.text.split('\n').map((text) => ({ kind: e.created ? ' ' : '+', text })) : folded(lineDiff(before.split('\n'), e.text.split('\n')));
+  return (
+    <details class="edited-pick" onToggle={(ev) => void load(ev.currentTarget.open)}>
+      <summary title={`Edited${s.edited.by ? ` by ${shownName(s.edited.by)}` : ''} ${new Date(s.edited.at).toLocaleString()}`}>edited <Octicon name="chevron-down" /></summary>
+      <div class="edited-menu" role="menu">
+        {typeof list === 'string' ? <p class="warn">{list}</p> : !list ? <p class="note">Loading…</p> : (
+          <>
+            <p class="menu-h">Edited {list.total} time{list.total === 1 ? '' : 's'}</p>
+            <div class="edited-list">
+              {edits.map((x, k) => (
+                <button role="menuitem" aria-pressed={k === pick} onClick={() => setPick(k)}>
+                  <b>{shownName(x.by)}</b> {x.created ? 'created' : 'edited'} <Time at={x.at} />{x.text == null && <small> · deleted from the history</small>}
+                </button>
+              ))}
+            </div>
+            {lines && (
+              <pre class="edited-diff">{lines.map((l) => <span class={l.kind === '+' ? 'add' : l.kind === '-' ? 'del' : l.kind === 'gap' ? 'gap' : ''}>{l.text || ' '}</span>)}</pre>
+            )}
+          </>
+        )}
+      </div>
+    </details>
+  );
+}
+
 // ⋯ on a comment or review: hide it (with GitHub's reasons) or show it again, and dismiss a review that counts.
 // onEdit, onDelete: where the comment can be (its own page's editor; deleting asks first). toIssue: a new issue or Jira
 // ticket from it (GitHub's "Reference in new issue"), for anyone.
@@ -144,7 +193,7 @@ export const menuUnderMouse = () => {
   return true;
 };
 // The smiley's and ⋯'s menus close on a click elsewhere, Escape, or another one opening.
-const OPEN = '.react-pick[open], .comment-menu[open]';
+const OPEN = '.react-pick[open], .comment-menu[open], .edited-pick[open]';
 addEventListener('pointerdown', (e) => document.querySelectorAll<HTMLDetailsElement>(OPEN).forEach((d) => !d.contains(e.target as Node) && (d.open = false)));
 addEventListener('keydown', (e) => e.key === 'Escape' && document.querySelectorAll<HTMLDetailsElement>(OPEN).forEach((d) => (d.open = false)));
 // E: edit the comment under the mouse, when it's one I may.

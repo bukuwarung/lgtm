@@ -20,7 +20,7 @@ import {
 import { highlightBlocks, highlightCode, highlightHunks, languageFor, majorityLanguage, splitLines } from './highlight.ts';
 import { loadLanguages } from './languages.ts';
 import { isMarkdown, md, onDocClick, renderChunks, tidyDoc, toggleTask } from './markdown.ts';
-import { CommentMenu, ReactPick, Reactions, editUnderMouse, loadSocial, menuUnderMouse, commentUnderMouse, reactUnderMouse, useSocial } from './social.tsx';
+import { CommentMenu, Edited, ReactPick, Reactions, editUnderMouse, loadSocial, menuUnderMouse, commentUnderMouse, reactUnderMouse, useSocial } from './social.tsx';
 import { renderMermaid } from './mermaid.ts';
 import { Editor, setCodeNames } from './editor.tsx';
 import { StaleActions, MergeBox, MergedActions, mergeOnceApproved } from './merge.tsx';
@@ -5783,7 +5783,7 @@ function ThreadView({ t, ctx }: { t: Thread; ctx: Ctx }) {
       <ThenNow s={ctx.sinceComment.get(t.id)} />
       {t.comments.nodes.map((c) => (
         <div class="comment" key={c.databaseId} id={'rc-' + c.databaseId} data-url={c.url} data-src={c.body ?? undefined} data-social={c.id}>
-          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)} title={`@${c.author?.login ?? 'ghost'}`}>{shownName(c.author?.login ?? 'ghost', ctx.repo)}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <CopyLink url={c.url} />
+          <Avatar login={c.author?.login ?? 'ghost'} src={c.author?.avatarUrl} /> <b class="person-link" onClick={toPerson(c.author?.login ?? 'ghost', ctx.repo)} title={`@${c.author?.login ?? 'ghost'}`}>{shownName(c.author?.login ?? 'ghost', ctx.repo)}</b> <a href={c.url} target="_blank" rel="noopener"><Time at={c.createdAt} /></a> <Edited id={c.id} /><CopyLink url={c.url} />
           {c.state === 'PENDING' && <span class="badge"> · pending</span>}
           {c.state === 'SENDING' && <span class="badge"> · sending…</span>}
           <AgentsMenu repo={ctx.repo} prUrl={ctx.pr.html_url} prompt={commentPrompt({ author: c.author?.login ?? 'ghost', text: c.bodyText, url: c.url }, ctx.pr, ctx.repo, { path: t.path, line: t.line })} />
@@ -6884,7 +6884,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
             <span class="person-link" onClick={toPerson(a.login, repo)} title={`@${a.login}`}>{shownName(a.login, repo)}</span>
           </span>
         ))}{' '}
-        <CopyLink url={pr.html_url} />
+        <Edited id={pr.node_id} /><CopyLink url={pr.html_url} />
         <ReactPick id={pr.node_id} />
         {(canEdit || me === pr.user.login) && !editing && (
           <button class="copy-link" title={`Edit the title and description${hint(readBindings(localStorage.getItem('shortcuts') ?? '{}').editPR)}`} aria-label="Edit the title and description" onClick={() => setEditing(true)}>
@@ -6940,7 +6940,7 @@ function Conversation({ pr, items, lang, repo, me, mentions, folded, ix, threads
         const head = (
           <>
             <Avatar login={c.author} src={c.avatar} /> <b class="person-link" onClick={toPerson(c.author, repo)} title={`@${c.author}`}>{shownName(c.author, repo)}</b><BotMark login={c.author} /> {c.state && <span class={'rstate r-' + c.state}><Tg i={STATE_ICON[c.state] ?? ''} t={STATE_LABEL[c.state] ?? c.state} /></span>}{' '}
-            <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <CopyLink url={c.url} />
+            <a href={c.url} target="_blank" rel="noopener"><Time at={c.at} /></a> <Edited id={c.node} /><CopyLink url={c.url} />
             {c.html && <AgentsMenu repo={repo} prUrl={pr.html_url} prompt={commentPrompt({ author: c.author, text: botExcerpt(c.html, 4000), url: c.url }, pr, repo)} />}
             <ReactPick id={c.node} />
             <CommentMenu

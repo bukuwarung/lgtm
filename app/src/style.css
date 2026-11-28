@@ -2048,3 +2048,18 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .top .inbox-updates > .bell-act, .glass .top .inbox-updates > .bell-act:not(.primary), .inbox-updates > .bell-act { justify-content: flex-start; display: flex; width: 100%; height: auto; padding: 6px 8px; border: 0; border-radius: 6px; background: none; box-shadow: none; text-align: left; font-weight: 400; color: var(--muted); } .inbox-updates > .bell-act:hover { background: var(--soft); color: var(--fg); } /* Clear all, as a menu row */
 .inbox-btn > .bell-menu > a.bell-act { display: block; padding: 6px 8px; border-radius: 6px; color: var(--accent); } .inbox-btn > .bell-menu > a.bell-act:hover { background: var(--soft); }
 .ix-commit-pick > summary { list-style: none; cursor: pointer; } .ix-commit-pick > summary::-webkit-details-marker { display: none; } .ix-commit-pick > summary .ix-label::after { content: ' ▾'; color: var(--muted); } .ix-commit-list { margin: 0 0 6px 12px; border-left: 2px solid var(--border); } /* the Files section's commit picker (shortcuts.tsx) */
+
+/* "edited" beside a comment's time, and its versions (social.tsx Edited) */
+.edited-pick { position: relative; display: inline-flex; vertical-align: middle; margin-right: 4px; }
+.edited-pick > summary { list-style: none; display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-size: calc(12px * var(--ts)); font-weight: 400; cursor: pointer; }
+.edited-pick > summary::-webkit-details-marker { display: none; }
+.edited-pick > summary:hover { color: var(--fg); }
+.edited-menu { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; display: grid; gap: 4px; width: min(calc(560px * var(--ts)), 90vw); padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); font-weight: 400; }
+.edited-list { display: grid; max-height: 180px; overflow: auto; }
+.edited-list button { display: flex; align-items: baseline; gap: 4px; padding: 4px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; font-size: calc(13px * var(--ts)); }
+.edited-list button:hover, .edited-list button[aria-pressed="true"] { background: var(--soft); }
+.edited-diff { max-height: 320px; overflow: auto; margin: 0; padding: 6px 0; border-top: 1px solid var(--border); font: calc(12px * var(--ts))/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.edited-diff span { display: block; padding: 0 8px; }
+.edited-diff .add { background: var(--add); }
+.edited-diff .del { background: var(--del); }
+.edited-diff .gap { color: var(--muted); font-family: inherit; }
