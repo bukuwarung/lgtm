@@ -193,33 +193,32 @@ function useDetailsKey(what: string, run: () => void) {
   });
 }
 
-function Assignees({ repo, n, canEdit, hideEmpty }: { repo: string; n: number; canEdit: boolean; hideEmpty: boolean }) {
+// The PR's assignees, as People's rows: each with × to unassign (when you may); adding, the picker of who may be.
+// skip: ones shown as reviewers (their row says assigned too).
+function AssigneeRows({ repo, n, canEdit, adding, onDone, skip }: { repo: string; n: number; canEdit: boolean; adding: boolean; onDone: () => void; skip: Set<string> }) {
   const [meta, change] = usePrMeta(repo, n);
-  const [adding, setAdding] = useState(false);
-  const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
-  useDetailsKey('assign', () => canEdit && (setAdding(true), toPick('ix-assignees')));
-  if (!meta || (hideEmpty && !meta.assignees.length && !adding)) return null;
+  if (!meta) return null;
   const set = (list: string[]) => change({ ...meta, assignees: list }, () => setAssignees(repo, n, meta.assignees, list));
   return (
-    <Section id="ix-assignees" title="Assignees" count={meta.assignees.length} extra={canEdit && <HeadBtn icon="plus" label={`Assign someone${hint(keys.assign)}`} on={adding} run={(s) => (openSec(s), setAdding((a) => !a))} />}>
-      {adding && (
+    <>
+      {adding && canEdit && (
         <Picker
-          placeholder="Find someone…"
+          placeholder="Find someone to assign…"
           empty="Nobody matches."
           load={async (q) => (await getAssignable(repo, q)).filter((u) => !meta.assignees.includes(u.login)).map((u) => ({ key: u.login, label: <><img class="ix-face" src={faceOf(u.login)} alt="" /> {u.login}{u.name && <small> {u.name}</small>}</> }))}
           onPick={(login) => set([...(metas.get(`${repo}#${n}`)?.assignees ?? meta.assignees), login])}
-          onClose={() => setAdding(false)}
+          onClose={onDone}
         />
       )}
-      <div class="ix-labels">
-        {meta.assignees.map((l) => (
-          <span class="label-chip person-chip" title={`@${l}`}>
-            <img src={faceOf(l)} alt="" /> {l}
-            {canEdit && <button class="label-x" aria-label={`Unassign ${l}`} title={`Unassign ${l}`} onClick={() => set(meta.assignees.filter((x) => x !== l))}>×</button>}
+      {meta.assignees.filter((l) => !skip.has(l)).map((l) => (
+        <div class="ix-check">
+          <span class="ix-item ix-person dim-click" title={`@${l}: assigned`}>
+            <span class="ix-label"><img src={faceOf(l)} alt="" /> {shortLogin(l)} <span class="ix-meta"><Tg i="assigned" t="assigned" /></span></span>
           </span>
-        ))}
-      </div>
-    </Section>
+          {canEdit && <button class="ix-icon-btn ix-withdraw" title={`Unassign @${l}`} aria-label={`Unassign @${l}`} onClick={() => set(meta.assignees.filter((x) => x !== l))}><Icon name="x" /></button>}
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -895,17 +894,28 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
   for (const t of pr.requested_teams ?? []) reviewers.set(`team ${t.slug}`, { meta: 'waiting', icon: 'waiting', tone: 'WAITING' });
   // Their Slack statuses: one waited on who's away (sick, vacation, leave) says so, and on my PR can be swapped.
   const presence = usePresence([...reviewers.keys()].filter((w) => !w.startsWith('team ')), repo);
+  // People: who it waits on now, in a line on top; its header's icons assign someone (G) and ask for a review.
+  const [peopleAdd, setPeopleAdd] = useState<'assign' | 'ask' | null>(null);
+  useEffect(() => setPeopleAdd(null), [repo, pr.number]);
+  useDetailsKey('assign', () => canLabel && (setPeopleAdd('assign'), toPick('ix-reviewers')));
+  const named = (l: string[]) => ((x) => (x.length > 1 ? `${x.slice(0, -1).join(', ')} and ${x.at(-1)}` : x[0]))(l.map((w) => (w.startsWith('team ') ? w.slice(5) : shortLogin(w))));
+  const by = (tone: string) => [...reviewers].filter(([, r]) => r.tone === tone).map(([w]) => w);
+  const waitingOn =
+    pr.state !== 'open' ? null
+    : pr.draft ? 'A draft: not asking for review yet'
+    : by('WAITING').length ? `Waiting on ${named(by('WAITING'))}`
+    : by('CHANGES_REQUESTED').length ? `Waiting on ${shortLogin(pr.user.login)} for ${named(by('CHANGES_REQUESTED'))}'s changes`
+    : by('APPROVED').length ? `Approved by ${named(by('APPROVED'))}`
+    : 'No reviewer yet';
 
   // Settings → Reviewing: sections with nothing in them left out (labels, assignees, milestone, checks, reviewers with
   // no one to ask), with one row to add a label, an assignee or a milestone (shortcuts.tsx useDetailsKey opens it).
   const [hideEmpty] = useStoredFlag('hideEmptyIndex', true);
-  const [meta] = usePrMeta(repo, pr.number);
+  const [meta, changeMeta] = usePrMeta(repo, pr.number);
   const keys = readBindings(localStorage.getItem('shortcuts') ?? '{}');
   // The index's top row: each commit on its own (the commits pill's list), and a label, an assignee or a milestone to
   // add while their sections are hidden empty: what, its icon, its words, its key.
-  const adds = !hideEmpty || !canLabel || !meta ? [] : ([
-    !meta.assignees.length && ['assign', 'person', 'Assign someone', keys.assign], // labels, milestone and the rest: the Details section's header
-  ].filter(Boolean) as [string, string, string, string][]);
+  const adds: [string, string, string, string][] = []; // adding people: People's header; labels and the rest: Details'
   // The commits section: the top row's button shows it (open, in sight); it stays while one is on its own.
   const [commitsOn, setCommitsOn] = useState(false);
   const many = commits.length > 1;
@@ -936,16 +946,45 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
           ))}
         </Section>
       )}
-      {!(hideEmpty && !reviewers.size && !ask && !(addMe && !reviewers.has(me))) && <Section id="ix-reviewers" title="Reviewers" count={reviewers.size}>
+      <Section
+        id="ix-reviewers"
+        title="People"
+        count={1 + (meta?.assignees.filter((a) => !reviewers.has(a)).length ?? 0) + reviewers.size}
+        extra={(canLabel || ask) && (
+          <span class="ix-head-acts">
+            {canLabel && <HeadBtn icon="person" label={`Assign someone${hint(keys.assign)}`} on={peopleAdd === 'assign'} run={(sec) => (openSec(sec), setPeopleAdd((a) => (a === 'assign' ? null : 'assign')))} />}
+            {ask && <HeadBtn icon="code-review" label="Ask someone to review" on={peopleAdd === 'ask'} run={(sec) => (openSec(sec), setPeopleAdd((a) => (a === 'ask' ? null : 'ask')))} />}
+          </span>
+        )}
+      >
+        {waitingOn && <p class="ix-waiting-on">{waitingOn}</p>}
+        {(peopleAdd === 'ask' || !reviewers.size) && ask && (
+          <>
+            {pr.draft && <p class="note ix-pad">Asking someone marks it ready for review.</p>}
+            {ask}
+          </>
+        )}
+        <div class="ix-check">
+          <span class="ix-item ix-person dim-click" title={`@${pr.user.login} opened it`}>
+            <span class="ix-label"><img src={faceOf(pr.user.login)} alt="" /> {shortLogin(pr.user.login)}<BotMark login={pr.user.login} /> <span class="ix-meta"><Tg i="opened" t="opened it" /></span></span>
+          </span>
+        </div>
+        <AssigneeRows repo={repo} n={pr.number} canEdit={canLabel} adding={peopleAdd === 'assign'} onDone={() => setPeopleAdd(null)} skip={new Set(reviewers.keys())} />
         {[...reviewers].map(([who, r]) => (
           <div class="ix-check">
             <button class={r.id ? 'ix-item ix-person' : 'ix-item ix-person dim-click'} onClick={() => r.id && jumpTo('cv-' + r.id)} title={r.id ? `Go to @${who}'s review` : `@${who}: ${r.meta}`}>
               <span class="ix-label">
                 {!who.startsWith('team ') && <img src={faceOf(who)} alt="" />}
                 {who.startsWith('team ') ? who : shortLogin(who)}<BotMark login={who} /> <span class={`ix-meta v-${r.tone}`}><Tg i={r.icon} t={r.meta} /></span>
+                {meta?.assignees.includes(who) && <span class="ix-meta"> <Tg i="assigned" t="assigned" /></span>}
                 <StatusMark s={presence[who]} late={r.tone === 'WAITING' ? lateFor(presence[who]) : null} />
               </span>
             </button>
+            {canLabel && meta?.assignees.includes(who) && (
+              <button class="ix-icon-btn ix-withdraw" title={`Unassign @${who}`} aria-label={`Unassign @${who}`} onClick={() => changeMeta({ ...meta, assignees: meta.assignees.filter((x) => x !== who) }, () => setAssignees(repo, pr.number, meta.assignees, meta.assignees.filter((x) => x !== who)))}>
+                <Icon name="person" />
+              </button>
+            )}
             {replace && r.tone === 'WAITING' && isAway(presence[who]) && <Replace login={who} replace={replace} />}
             {reRequest && r.id && r.tone !== 'WAITING' && !who.endsWith('[bot]') && <ReRequest login={who} again={reRequest} />}
             {withdraw && r.tone === 'WAITING' && !who.startsWith('team ') && (
@@ -956,22 +995,9 @@ export function ShortcutIndex({ commits = [], atCommit, fromCommit, readCommits,
             {slackAsk && !who.startsWith('team ') && !slackWith?.has(who) && <SlackAsk login={who} ask={slackAsk} />}
           </div>
         ))}
-        {ask &&
-          (reviewers.size ? (
-            <details class="ix-ckgroup">
-              <summary>+ Ask someone else</summary>
-              {ask}
-            </details>
-          ) : (
-            <>
-              {pr.draft && <p class="note ix-pad">Asking someone marks it ready for review.</p>}
-              {ask}
-            </>
-          ))}
         {addMe && !reviewers.has(me) && <AddMe add={addMe} teams={(pr.requested_teams ?? []).map((t) => t.slug)} />}
-      </Section>}
+      </Section>
 
-      <Assignees repo={repo} n={pr.number} canEdit={canLabel} hideEmpty={hideEmpty} />
       <DetailsSec repo={repo} pr={pr} canEdit={canLabel} />
       <Section title="Conversation" count={conversation.length - replaced.size + 1 + sortedThreads.length + drafts.length} extra={<ConvToggles repo={repo} n={pr.number} prNode={pr.node_id} canEdit={canLabel} threads={tiers.mine.length > 0} />}>
         <Entry label="Description" onClick={() => jumpTo('pr-description')} />

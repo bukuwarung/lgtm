@@ -378,6 +378,7 @@ html.ix-right .review:not(.no-index) .scroll-marks { right: calc(var(--index-w, 
 .ck-failure { color: var(--delfg); } .ck-pending { color: var(--modfg); } .ck-success { color: var(--addfg); } .ck-neutral { color: var(--muted); }
 .ck-sum { font-size: calc(11px * var(--ts)); font-weight: 400; }
 .ix-check { display: flex; align-items: center; }
+.ix-waiting-on { margin: 2px 12px 4px; font-size: calc(12px * var(--ts)); color: var(--muted); } /* People: who the PR waits on now (shortcuts.tsx) */
 .ix-waiting { display: grid; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border); font-size: calc(12px * var(--ts)); } /* runs waiting on a person (shortcuts.tsx WaitingRuns) */
 .ix-wait-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ix-wait-row > span { flex: 1 1 12em; }
