@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-display-prefs"
+description = "Enables the display_prefs command without any pre-configured scope."
+commands.allow = ["display_prefs"]
+
+[[permission]]
+identifier = "deny-display-prefs"
+description = "Denies the display_prefs command without any pre-configured scope."
+commands.deny = ["display_prefs"]
