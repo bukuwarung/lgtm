@@ -7891,8 +7891,13 @@ SOFTWARE.
 
 - dispatch2 0.3.1 (Zlib OR Apache-2.0 OR MIT)
 - objc2-app-kit 0.3.2 (Zlib OR Apache-2.0 OR MIT)
+- objc2-cloud-kit 0.3.2 (Zlib OR Apache-2.0 OR MIT)
+- objc2-core-data 0.3.2 (Zlib OR Apache-2.0 OR MIT)
 - objc2-core-foundation 0.3.2 (Zlib OR Apache-2.0 OR MIT)
 - objc2-core-graphics 0.3.2 (Zlib OR Apache-2.0 OR MIT)
+- objc2-core-image 0.3.2 (Zlib OR Apache-2.0 OR MIT)
+- objc2-core-text 0.3.2 (Zlib OR Apache-2.0 OR MIT)
+- objc2-core-video 0.3.2 (Zlib OR Apache-2.0 OR MIT)
 - objc2-exception-helper 0.1.1 (Zlib OR Apache-2.0 OR MIT)
 - objc2-io-surface 0.3.2 (Zlib OR Apache-2.0 OR MIT)
 - objc2-quartz-core 0.3.2 (Zlib OR Apache-2.0 OR MIT)
