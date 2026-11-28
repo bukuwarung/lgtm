@@ -1311,7 +1311,7 @@ function TreeChildren({ node, depth, counts, viewed, onViewed }: TreeProps) {
 export function FileName({ path }: { path: string }) {
   const segs = fileLabel(path).split('/');
   const leaf = segs.pop()!;
-  if (!segs.length) return <span class="fname" title={path}>{leaf}</span>;
+  if (!segs.length) return <span class="fname" title={path}><span class="fn-tail">{leaf}</span></span>;
   const head = segs[0] + '/', mid = segs.slice(1, -1).map((s) => s + '/').join(''), tail = (segs.length > 1 ? segs.at(-1) + '/' : '') + leaf;
   return (
     <span class="fname" title={path}>
@@ -1332,7 +1332,7 @@ function FileRow({ f, depth, counts, viewed, onViewed, folder }: { f: File; dept
         <FileIcon path={f.filename} status={f.status} untested={f.untested} />
         <span class="tree-name">
           {folder ? <FileName path={f.filename} /> : f.filename.slice(f.filename.lastIndexOf('/') + 1)}
-          {folder && dir.length > 0 && <small class="tree-folder"> {dir.length > 2 ? '…/' + dir.slice(-2).join('/') : dir.join('/')}</small>}
+          {folder && dir.length > 0 && <small class="tree-folder">{dir.length > 2 ? '…/' + dir.slice(-2).join('/') : dir.join('/')}</small>}
         </span>
         {c > 0 && <span class="badge"><Octicon name="comment" /> {c}</span>}
       </button>

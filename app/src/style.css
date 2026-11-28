@@ -735,9 +735,9 @@ code.copyable:hover { outline: 1px solid var(--border); }
 code.copyable.copied { color: var(--addfg); }
 .fname { display: inline-flex; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
 .fn-head, .fn-mid { overflow: hidden; text-overflow: ellipsis; }
-.fn-head { flex-shrink: 1; min-width: 5ch; }
+.fn-head { flex-shrink: 100; min-width: 5ch; }
 .fn-mid { flex-shrink: 1000; min-width: 1ch; }
-.fn-tail { flex-shrink: 0; }
+.fn-tail { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; } /* gives way last, with its … when it alone is too long */
 .tree-row.cur > .tree-file, .ix-item[aria-current] { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
 .ix-hidden-row { font-style: italic; }
 /* Links that leave lgtm (GitHub pages, Jira, Slack, CI logs…): a small ↗ after their words. Links to a PR in text open
@@ -1751,6 +1751,9 @@ fieldset:disabled .set-steps li { cursor: default; opacity: 0.6; }
 
 /* The index's Files by reading step: a file's folder after its name; the switch to folders in the header */
 .tree-folder { color: var(--muted); font-size: .85em; }
+/* A file's folder beside its name when both fit, else whole on the line below (not broken across the two) */
+.tree-name:has(.tree-folder) { white-space: normal; }
+.tree-name .tree-folder { display: inline-block; max-width: 100%; margin-left: .4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .ix-files-view { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: calc(11px * var(--ts)); color: var(--muted); }
 .mod-group > summary .tree-dir-name .octicon { color: var(--muted); }
 
@@ -2069,3 +2072,5 @@ dialog.ask.new-pr .new-pr-into input { flex: 1; width: auto; font-family: var(--
 .ix-assigned svg { width: 10px; height: 10px; }
 .ix-group-h { margin: 8px 12px 2px; font-size: calc(11px * var(--ts)); font-weight: 600; color: var(--muted); } /* People: the Reviewers group's heading */
 .jira-mark { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; fill: light-dark(#0052cc, #4c9aff); }
+/* A list row is a stacking context (its view-transition-name), so its open menu sits above the rows after it only if the row does */
+.pr-item:has(.quick-menu, .pill-pop) { position: relative; z-index: 5; }
