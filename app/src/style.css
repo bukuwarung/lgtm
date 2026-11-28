@@ -139,6 +139,7 @@ code, pre { font-family: var(--mono); }
 /* Layout: the document scrolls (IntersectionObserver relies on it); sidebars and bars are sticky. */
 .shell { display: grid; grid-template-columns: var(--prs-w, 300px) minmax(0, 1fr); }
 .shell.no-prs { grid-template-columns: 0px minmax(0, 1fr); }
+.shell > :not(.side) { grid-column: -2 / -1; } /* the page in the last column, so a hidden list (narrow) leaves it the width, not its 0px column */
 .empty { display: grid; justify-items: center; align-content: start; gap: 8px; max-width: 440px; margin: 48px auto; text-align: center; color: var(--muted); }
 .empty p { margin: 0; font-size: calc(14px * var(--ts)); line-height: 1.5; overflow-wrap: anywhere; }
 .empty-ok svg { color: var(--addfg); }
@@ -347,6 +348,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 .review { display: grid; grid-template-columns: var(--index-w, 280px) minmax(0, 1fr); }
 .review.no-index { grid-template-columns: 0px minmax(0, 1fr); }
+/* The PR's header across the page, the index and the PR under it (the index slides in below the header). */
+.review > .bar { grid-column: 1 / -1; grid-row: 1; }
+.review > .side { grid-row: 2; top: calc(var(--nav) + var(--bar)); height: calc(100vh - var(--nav) - var(--bar)); }
+.review > .bar ~ :not(.side) { grid-row: 2; grid-column: -2 / -1; } /* the PR in the last column (one column when narrow) */
+html.ix-right .review > .bar ~ :not(.side) { grid-column: 1 / 2; }
 /* Settings → Diff → the index on the right: its column after the page's, its border and resize handle on its left. */
 html.ix-right .review { grid-template-columns: minmax(0, 1fr) var(--index-w, 280px); }
 html.ix-right .review.no-index { grid-template-columns: minmax(0, 1fr) 0px; }
@@ -450,7 +456,7 @@ kbd { padding: 1px 6px; font: calc(12px * var(--ts)) var(--mono); background: va
 /* A narrow window: the PR list or the index laid over the page from its button (main.tsx, review.tsx), in a column of no
    width, so the diff keeps its own. */
 .side.over { width: min(320px, 85vw); z-index: 25; background: var(--bg); box-shadow: 0 8px 32px var(--shadow); }
-@media (max-width: 800px) { .side.over { position: fixed; top: var(--nav); bottom: 0; left: 0; height: auto; } html.ix-right .review > .side.over { left: auto; right: 0; } }
+@media (max-width: 800px) { .side.over { position: fixed; top: calc(var(--nav) + var(--bar)); bottom: 0; left: 0; height: auto; } html.ix-right .review > .side.over { left: auto; right: 0; } }
 
 /* macOS → Accessibility → Display → Reduce motion: no flashes, sweeps, slides or fades. */
 @media (prefers-reduced-motion: reduce) {
@@ -735,9 +741,10 @@ code.copyable:hover { outline: 1px solid var(--border); }
 code.copyable.copied { color: var(--addfg); }
 .fname { display: inline-flex; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
 .fn-head, .fn-mid { overflow: hidden; text-overflow: ellipsis; }
-.fn-head { flex-shrink: 100; min-width: 5ch; }
+.fn-head { flex-shrink: 1; min-width: 5ch; }
 .fn-mid { flex-shrink: 1000; min-width: 1ch; }
-.fn-tail { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; } /* gives way last, with its … when it alone is too long */
+.fn-tail { flex-shrink: 0; }
+.fn-tail:only-child { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; } /* a name with no folder to shorten: its own … when too long */
 .tree-row.cur > .tree-file, .ix-item[aria-current] { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
 .ix-hidden-row { font-style: italic; }
 /* Links that leave lgtm (GitHub pages, Jira, Slack, CI logs…): a small ↗ after their words. Links to a PR in text open

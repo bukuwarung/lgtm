@@ -2547,6 +2547,123 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
   );
   return (
     <div class={`review${showIndex && !narrowIx ? '' : ' no-index'}${tooWide ? ' too-wide' : ''}${noMarks ? ' no-marks' : ''}`}>
+      {/* Where you are (index, stack), what it is, who it's with, then what you can do; across the page, the index below it. */}
+      <div class="bar">
+        {/* The index: its own button (the rest of how it's shown: the top bar's Display menu). */}
+        <button class="bar-index" title={`${showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`}${hint(bindings.index)}`} aria-label={showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`} onClick={toggleIndex}>
+          <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
+        </button>
+        {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
+        {/* Merged or closed: a small tag, in view as you scroll; who, when and the revert on hover, and its actions (Revert,
+            Reopen, tell the review thread) in its menu. A draft: the tag alone (its banner below has Ready for review). */}
+        {(pr.merged || pr.state === 'closed') && ((tip, acts) => (acts.length ? (
+          <PillMenu sum={`state-chip ${pr.merged ? 'merged' : 'closed'}`} tip={tip} head={tip} label={<><Octicon name={pr.merged ? 'git-merge' : 'git-pull-request-closed'} /> {pr.merged ? (undoneBy?.merged ? 'Reverted' : 'Merged') : 'Closed'}</>}>
+            {acts}
+          </PillMenu>
+        ) : (
+          <span class={`state-chip ${pr.merged ? 'merged' : 'closed'}`} title={tip}>
+            <Octicon name={pr.merged ? 'git-merge' : 'git-pull-request-closed'} /> {pr.merged ? (undoneBy?.merged ? 'Reverted' : 'Merged') : 'Closed'}
+          </span>
+        )))(
+          pr.merged
+            ? `Merged${pr.merged_by ? ` by ${shownName(pr.merged_by.login, repo)}` : ''} into ${pr.base.ref}${pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}.${undoneBy ? ` ${undoneBy.merged ? 'Reverted' : 'Being reverted'} by ${numRef(repo, undoneBy.number)}${undoneBy.merged ? `, merged ${ago(undoneBy.at)}` : ', still open'}.` : ''}`
+            : `Closed without merging${pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}.`,
+          [
+            pr.merged && undoneBy && <a href={`#/${repo}/pull/${undoneBy.number}`}>Open the revert, {numRef(repo, undoneBy.number)}</a>,
+            pr.merged && !undoneBy && (
+              <button disabled={reverting} title={`A new ${pageTerm().PR} that undoes this one on ${pr.base.ref}, to review and merge like any other`} onClick={() => void revert(pr.node_id, pr.base.ref)}>
+                {reverting ? 'Reverting…' : 'Revert'}
+              </button>
+            ),
+            !pr.merged && (rights?.reopen || rights?.restore) && (
+              <button disabled={!!acting} title={rights.reopen ? undefined : `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`} onClick={() => void stateAct(rights.reopen ? 'reopen' : 'restore')}>
+                {acting ? 'Reopening…' : rights.reopen ? 'Reopen' : 'Restore branch and reopen'}
+              </button>
+            ),
+            !pr.merged && closeWhere && (
+              <button
+                title={`Reply in your review request's thread in ${closeWhere}, tagging the reviewers asked, that it's closed and needs no review`}
+                onClick={() =>
+                  closedOnSlack(`${repo}#${n}`, (pr.requested_reviewers ?? []).map((u) => u.login)).then(
+                    (w) => (setCloseWhere(null), w && setNotice({ ok: true, text: `Said so in your review request's thread in ${w}.` })),
+                    (e) => setNotice({ ok: false, text: `Couldn't reply on Slack: ${e.message}` }),
+                  )
+                }
+              >
+                Tell the review thread
+              </button>
+            ),
+            pr.merged && (mine || !!rights?.branch) && <MergedActions repo={repo} n={n} tickets={mine ? jiraKeys(pr.title, pr.head.ref) : []} />,
+          ].filter(Boolean) as ComponentChildren[],
+        )}
+        {/* A draft, as Merged and Closed: the tag says it, its menu has Ready for review (no banner below). */}
+        {pr.draft && !pr.merged && pr.state !== 'closed' && ((tip) => (rights?.update && rights.close ? (
+          <PillMenu sum="state-chip draft" tip={tip} head={tip} label={<><Octicon name="git-pull-request-draft" /> Draft</>}>
+            <button disabled={!!acting} title={`Reviewers are notified${hint(bindings.ready)}`} onClick={() => void stateAct('ready')}>
+              <Octicon name="git-pull-request" /> {acting === 'ready' ? 'Marking…' : 'Ready for review'}
+            </button>
+          </PillMenu>
+        ) : (
+          <span class="state-chip draft" title={tip}><Octicon name="git-pull-request-draft" /> Draft</span>
+        )))(me && pr.user.login === me ? 'A draft: reviewers aren\'t asked until it\'s ready.' : 'A draft: it may still change.')}
+        {/* Approved as its repo's rules count it (GitHub's review decision), like Draft: in view as you scroll. */}
+        {!pr.draft && pr.state === 'open' && status?.reviewDecision === 'APPROVED' && (
+          <span class="state-chip approved" title="Approved: the approvals its branch rules ask for are in">
+            <Octicon name="check" /> Approved
+          </span>
+        )}
+        <h1 onContextMenu={titleMenu}>
+          <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on ${site(repo)}`}>
+            <span class="pr-num">{numRef(repo, n)}</span> {pr.title}
+          </a>
+        </h1>
+        <div class="bar-group">
+          {slackThreads.map((t) =>
+            t.login === '#qa' ? (
+              <a
+                class={`bar-slack bar-qa${qa?.status ? ' qa-' + qa.status : ''}`}
+                href={t.url}
+                target="_blank"
+                rel="noopener"
+                title={`Your QA request${t.name ? ` in ${t.name}` : ''}, on Slack${qa?.status === 'signed' ? ': signed off' : qa?.status === 'issue' ? ': a reply mentions a bug, an error or a crash' : ''}${qa?.replies.length ? ` · ${qa.replies.length} repl${qa.replies.length === 1 ? 'y' : 'ies'}` : ''}`}
+                onClick={() => { const last = qa?.replies.at(-1); if (last) seeQa(`${repo}#${n}`, last), setQaSeenAt(last); }}
+              >
+                <Octicon name="beaker" />
+                {!!qa && qa.replies.filter((ts) => ts > qaSeenAt).length > 0 && <span class="qa-new">{qa.replies.filter((ts) => ts > qaSeenAt).length}</span>}
+              </a>
+            ) : null, // a person's thread: a Slack mark by their name in the index's People
+          )}
+          {reviewReplies && request?.where && request.url && (
+            <a
+              class="bar-slack bar-qa"
+              href={request.url}
+              target="_blank"
+              rel="noopener"
+              title={`Your review request in ${request.where}, on Slack${request.replies?.length ? ` · ${request.replies.length} repl${request.replies.length === 1 ? 'y' : 'ies'}` : ''}`}
+              onClick={() => { const last = request.replies?.at(-1); if (last) seeQa(`${repo}#${n}:review`, last), setRequestSeenAt(last); }}
+            >
+              <Octicon name="comment-discussion" />
+              {(request.replies ?? []).filter((ts) => ts > requestSeenAt).length > 0 && <span class="qa-new">{request.replies!.filter((ts) => ts > requestSeenAt).length}</span>}
+            </a>
+          )}
+          <AgentsMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Agents" full={pr} />
+        </div>
+        <div class="bar-group bar-actions">
+          {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
+          {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
+          {askQa && <AskQA inMenu pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
+          {/* Its Merge button: mine (opened or assigned to me), or a bot's I may merge (Dependabot, Renovate: no one
+              else will). Anyone else's I may merge: from the ⋯ menu (Merge…) or m, the button showing while it's open. */}
+          {(mine || !!rights?.merge) && pr.state === 'open' && !pr.draft && <MergeBox hidden={!mine && !(pr.user.type === 'Bot' || bots.has(pr.user.login))} repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
+          {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
+          {prDialog && <NewIssueDialog repo={repo} keys={jiraKeys(pr.title, pr.head.ref)} {...prDialog} onClose={() => setPrDialog(null)} />}
+          {submitPanel()}
+          {/* ⋯ last, as an overflow menu sits */}
+          {((p) => (askQa || p || (rights && (rights.close || rights.updateBranch || rights.restoreMerged))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} merge={p} />)(
+            !mine && !!rights?.merge && pr.state === 'open' && !pr.draft && !(pr.user.type === 'Bot' || bots.has(pr.user.login)),
+          )}
+        </div>
+      </div>
       {/* Always there, so showing and hiding can slide (style.css); hidden, it's out of reach of the keyboard. */}
       {(
         <aside class={`side tree${showIndex ? '' : ' collapsed'}${narrowIx && showIndex ? ' over' : ''}`} aria-hidden={!showIndex} onClick={(e) => narrowIx && (e.target as Element).closest('.ix-item, .tree-file, .ix-hidden-row') && setIxOver(false)}>
@@ -2612,123 +2729,6 @@ export function Review({ repo, n, toReview: listed, onOpened, onSubmitted, onRev
         </aside>
       )}
       <div>
-        {/* Where you are (index, stack), what it is, who it's with, then what you can do. */}
-        <div class="bar">
-          {/* The index: its own button (the rest of how it's shown: the top bar's Display menu). */}
-          <button class="bar-index" title={`${showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`}${hint(bindings.index)}`} aria-label={showIndex ? `Hide the ${pageTerm().PR} index` : `Show the ${pageTerm().PR} index`} onClick={toggleIndex}>
-            <Octicon name={showIndex ? 'sidebar-expand' : 'sidebar-collapse'} />
-          </button>
-          {layer >= 0 && <StackNav repo={repo} n={n} stack={stack} />}
-          {/* Merged or closed: a small tag, in view as you scroll; who, when and the revert on hover, and its actions (Revert,
-              Reopen, tell the review thread) in its menu. A draft: the tag alone (its banner below has Ready for review). */}
-          {(pr.merged || pr.state === 'closed') && ((tip, acts) => (acts.length ? (
-            <PillMenu sum={`state-chip ${pr.merged ? 'merged' : 'closed'}`} tip={tip} head={tip} label={<><Octicon name={pr.merged ? 'git-merge' : 'git-pull-request-closed'} /> {pr.merged ? (undoneBy?.merged ? 'Reverted' : 'Merged') : 'Closed'}</>}>
-              {acts}
-            </PillMenu>
-          ) : (
-            <span class={`state-chip ${pr.merged ? 'merged' : 'closed'}`} title={tip}>
-              <Octicon name={pr.merged ? 'git-merge' : 'git-pull-request-closed'} /> {pr.merged ? (undoneBy?.merged ? 'Reverted' : 'Merged') : 'Closed'}
-            </span>
-          )))(
-            pr.merged
-              ? `Merged${pr.merged_by ? ` by ${shownName(pr.merged_by.login, repo)}` : ''} into ${pr.base.ref}${pr.merged_at ? ` ${ago(pr.merged_at)}` : ''}.${undoneBy ? ` ${undoneBy.merged ? 'Reverted' : 'Being reverted'} by ${numRef(repo, undoneBy.number)}${undoneBy.merged ? `, merged ${ago(undoneBy.at)}` : ', still open'}.` : ''}`
-              : `Closed without merging${pr.closed_at ? ` ${ago(pr.closed_at)}` : ''}.`,
-            [
-              pr.merged && undoneBy && <a href={`#/${repo}/pull/${undoneBy.number}`}>Open the revert, {numRef(repo, undoneBy.number)}</a>,
-              pr.merged && !undoneBy && (
-                <button disabled={reverting} title={`A new ${pageTerm().PR} that undoes this one on ${pr.base.ref}, to review and merge like any other`} onClick={() => void revert(pr.node_id, pr.base.ref)}>
-                  {reverting ? 'Reverting…' : 'Revert'}
-                </button>
-              ),
-              !pr.merged && (rights?.reopen || rights?.restore) && (
-                <button disabled={!!acting} title={rights.reopen ? undefined : `Its branch ${rights.headRefName} is gone: make it again at the PR's last commit, then reopen`} onClick={() => void stateAct(rights.reopen ? 'reopen' : 'restore')}>
-                  {acting ? 'Reopening…' : rights.reopen ? 'Reopen' : 'Restore branch and reopen'}
-                </button>
-              ),
-              !pr.merged && closeWhere && (
-                <button
-                  title={`Reply in your review request's thread in ${closeWhere}, tagging the reviewers asked, that it's closed and needs no review`}
-                  onClick={() =>
-                    closedOnSlack(`${repo}#${n}`, (pr.requested_reviewers ?? []).map((u) => u.login)).then(
-                      (w) => (setCloseWhere(null), w && setNotice({ ok: true, text: `Said so in your review request's thread in ${w}.` })),
-                      (e) => setNotice({ ok: false, text: `Couldn't reply on Slack: ${e.message}` }),
-                    )
-                  }
-                >
-                  Tell the review thread
-                </button>
-              ),
-              pr.merged && (mine || !!rights?.branch) && <MergedActions repo={repo} n={n} tickets={mine ? jiraKeys(pr.title, pr.head.ref) : []} />,
-            ].filter(Boolean) as ComponentChildren[],
-          )}
-          {/* A draft, as Merged and Closed: the tag says it, its menu has Ready for review (no banner below). */}
-          {pr.draft && !pr.merged && pr.state !== 'closed' && ((tip) => (rights?.update && rights.close ? (
-            <PillMenu sum="state-chip draft" tip={tip} head={tip} label={<><Octicon name="git-pull-request-draft" /> Draft</>}>
-              <button disabled={!!acting} title={`Reviewers are notified${hint(bindings.ready)}`} onClick={() => void stateAct('ready')}>
-                <Octicon name="git-pull-request" /> {acting === 'ready' ? 'Marking…' : 'Ready for review'}
-              </button>
-            </PillMenu>
-          ) : (
-            <span class="state-chip draft" title={tip}><Octicon name="git-pull-request-draft" /> Draft</span>
-          )))(me && pr.user.login === me ? 'A draft: reviewers aren\'t asked until it\'s ready.' : 'A draft: it may still change.')}
-          {/* Approved as its repo's rules count it (GitHub's review decision), like Draft: in view as you scroll. */}
-          {!pr.draft && pr.state === 'open' && status?.reviewDecision === 'APPROVED' && (
-            <span class="state-chip approved" title="Approved: the approvals its branch rules ask for are in">
-              <Octicon name="check" /> Approved
-            </span>
-          )}
-          <h1 onContextMenu={titleMenu}>
-            <a href={pr.html_url} target="_blank" rel="noopener" title={`${repo}#${n} ${pr.title}\nOpen on ${site(repo)}`}>
-              <span class="pr-num">{numRef(repo, n)}</span> {pr.title}
-            </a>
-          </h1>
-          <div class="bar-group">
-            {slackThreads.map((t) =>
-              t.login === '#qa' ? (
-                <a
-                  class={`bar-slack bar-qa${qa?.status ? ' qa-' + qa.status : ''}`}
-                  href={t.url}
-                  target="_blank"
-                  rel="noopener"
-                  title={`Your QA request${t.name ? ` in ${t.name}` : ''}, on Slack${qa?.status === 'signed' ? ': signed off' : qa?.status === 'issue' ? ': a reply mentions a bug, an error or a crash' : ''}${qa?.replies.length ? ` · ${qa.replies.length} repl${qa.replies.length === 1 ? 'y' : 'ies'}` : ''}`}
-                  onClick={() => { const last = qa?.replies.at(-1); if (last) seeQa(`${repo}#${n}`, last), setQaSeenAt(last); }}
-                >
-                  <Octicon name="beaker" />
-                  {!!qa && qa.replies.filter((ts) => ts > qaSeenAt).length > 0 && <span class="qa-new">{qa.replies.filter((ts) => ts > qaSeenAt).length}</span>}
-                </a>
-              ) : null, // a person's thread: a Slack mark by their name in the index's People
-            )}
-            {reviewReplies && request?.where && request.url && (
-              <a
-                class="bar-slack bar-qa"
-                href={request.url}
-                target="_blank"
-                rel="noopener"
-                title={`Your review request in ${request.where}, on Slack${request.replies?.length ? ` · ${request.replies.length} repl${request.replies.length === 1 ? 'y' : 'ies'}` : ''}`}
-                onClick={() => { const last = request.replies?.at(-1); if (last) seeQa(`${repo}#${n}:review`, last), setRequestSeenAt(last); }}
-              >
-                <Octicon name="comment-discussion" />
-                {(request.replies ?? []).filter((ts) => ts > requestSeenAt).length > 0 && <span class="qa-new">{request.replies!.filter((ts) => ts > requestSeenAt).length}</span>}
-              </a>
-            )}
-            <AgentsMenu prompt={prPrompt(pr, repo)} repo={repo} prUrl={pr.html_url} label="Agents" full={pr} />
-          </div>
-          <div class="bar-group bar-actions">
-            {batch.length > 0 && <CommitBatch batch={batch} apply={ctx.applySuggestions} onError={(text) => setNotice({ ok: false, text })} />}
-            {myOpenPR && reviewAsk && request && !request.where && !pr.draft && <AskQA kind="channel" pr={pr} repo={repo} n={n} onPosted={() => slackRequest(`${repo}#${n}`, undefined, undefined, true).then((r) => setRequest(r.where ? r : { where: 'the review channel' }), () => setRequest({ where: 'the review channel' }))} />}
-            {askQa && <AskQA inMenu pr={pr} repo={repo} n={n} onPosted={() => slackStatus(`${repo}#${n}`).then((s) => setSlackThreads(s.threads), () => {})} />}
-            {/* Its Merge button: mine (opened or assigned to me), or a bot's I may merge (Dependabot, Renovate: no one
-                else will). Anyone else's I may merge: from the ⋯ menu (Merge…) or m, the button showing while it's open. */}
-            {(mine || !!rights?.merge) && pr.state === 'open' && !pr.draft && <MergeBox hidden={!mine && !(pr.user.type === 'Bot' || bots.has(pr.user.login))} repo={repo} n={n} revert={!!undoes} asked={(pr.requested_reviewers ?? []).map((u) => u.login)} url={pr.html_url} checks={checks} onChange={() => onSubmitted()} tickets={jiraKeys(pr.title, pr.head.ref)} openThreads={openThreads} qa={((t) => t && { url: t.url, thread: qa })(slackThreads.find((t) => t.login === '#qa'))} />}
-            {basePick && <BaseDialog repo={repo} n={n} base={pr.base.ref} head={pr.head.ref} onClose={() => setBasePick(false)} />}
-            {prDialog && <NewIssueDialog repo={repo} keys={jiraKeys(pr.title, pr.head.ref)} {...prDialog} onClose={() => setPrDialog(null)} />}
-            {submitPanel()}
-            {/* ⋯ last, as an overflow menu sits */}
-            {((p) => (askQa || p || (rights && (rights.close || rights.updateBranch || rights.restoreMerged))) && <StateMenu rights={rights} draft={!!pr.draft} acting={acting} act={stateAct} askQa={askQa} merge={p} />)(
-              !mine && !!rights?.merge && pr.state === 'open' && !pr.draft && !(pr.user.type === 'Bot' || bots.has(pr.user.login)),
-            )}
-          </div>
-        </div>
         {help && <Help onClose={() => setHelp(false)} ignoreWs={ignoreWs} toggleWs={toggleWs} />}
         <ScrollMarks files={shown} />
         <DocCodeJump files={shown} />
